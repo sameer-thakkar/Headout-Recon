@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Upload, FileSpreadsheet, X, AlertCircle, Play } from "lucide-react";
+import { Upload, FileSpreadsheet, X, AlertCircle, Play, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -132,6 +132,18 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles }: Uploa
               <p className="text-sm text-muted-foreground">
                 Supports .xlsx and .csv files
               </p>
+            </div>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <span className="text-sm text-muted-foreground">Need a template?</span>
+              <a
+                href="/sample-reconciliation-template.csv"
+                download="sample-reconciliation-template.csv"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                data-testid="link-download-template"
+              >
+                <Download className="h-4 w-4" />
+                Download sample CSV
+              </a>
             </div>
           </CardContent>
         </Card>
