@@ -275,6 +275,7 @@ export async function registerRoutes(
       const parsedFiles: (ParsedFile & { type: string })[] = [];
       const allHeaders = new Set<string>();
       const unsupportedFiles: string[] = [];
+      const emptyFiles: string[] = [];
 
       for (const file of uploadedFiles) {
         const ext = file.originalname.split(".").pop()?.toLowerCase() || "";
@@ -292,6 +293,12 @@ export async function registerRoutes(
           rows = result.rows;
         } else {
           unsupportedFiles.push(file.originalname);
+          continue;
+        }
+
+        // Reject empty files (no headers or no data rows)
+        if (headers.length === 0 || rows.length === 0) {
+          emptyFiles.push(file.originalname);
           continue;
         }
 
@@ -320,12 +327,20 @@ export async function registerRoutes(
         });
       }
 
+      // Return error if all files were empty
+      if (parsedFiles.length === 0 && emptyFiles.length > 0) {
+        return res.status(400).json({ 
+          error: `Empty file(s) with no data: ${emptyFiles.join(", ")}. Please upload files containing data rows.` 
+        });
+      }
+
       const combinedHeaders = Array.from(allHeaders).sort();
 
       res.json({ 
         files: parsedFiles, 
         combinedHeaders,
-        ...(unsupportedFiles.length > 0 && { skippedFiles: unsupportedFiles })
+        ...(unsupportedFiles.length > 0 && { skippedFiles: unsupportedFiles }),
+        ...(emptyFiles.length > 0 && { skippedEmptyFiles: emptyFiles })
       });
     } catch (error) {
       console.error("Upload parsing error:", error);
