@@ -72,13 +72,24 @@ function AppContent() {
       });
       const data = await response.json();
       
-      setUploadedFiles((prev) => [...prev, ...data.files]);
-      setAvailableHeaders(data.headers);
+      // Check for error response from server
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Upload failed");
+      }
       
-      // Auto-detect mappings
+      // Ensure we have valid files array
+      if (!data.files || !Array.isArray(data.files)) {
+        throw new Error("Invalid response from server");
+      }
+      
+      setUploadedFiles((prev) => [...prev, ...data.files]);
+      setAvailableHeaders(data.combinedHeaders || []);
+      
+      // Auto-detect mappings using combinedHeaders
+      const headers = data.combinedHeaders || [];
       const newMappings = [...requiredFields, ...optionalFields].map((field) => {
         const aliases = headerAliases[field] || [field];
-        const detected = data.headers.find((h: string) =>
+        const detected = headers.find((h: string) =>
           aliases.some((alias) => h.toLowerCase().includes(alias.toLowerCase()))
         );
         return {
