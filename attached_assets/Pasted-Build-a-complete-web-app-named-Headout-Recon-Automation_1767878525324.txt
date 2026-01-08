@@ -1,0 +1,94 @@
+Build a complete web app named "Headout Recon Automation" with a proper Landing page and a multi-step workflow UI. This is a full UI + backend app, not Apps Script.
+0) Hard requirement: App must start on a Landing page
+The default route MUST be a Landing page at / that is visible even with no data uploaded.
+Landing page must include:
+App name + one-line value prop
+3-step "How it works" strip (Upload → Run → Export)
+Primary CTA button: "Start reconciliation" → routes to /upload
+Secondary CTA: "Try demo with sample file" → loads a bundled demo dataset and routes to /results
+A "Recent runs" empty-state card (shows "No runs yet" until user runs)
+Footer with version + last FX refresh timestamp (if available)
+1) Global navigation shell (must exist on every page)
+Create an App Layout with:
+• Left sidebar nav items (always visible):
+Home
+Upload & Import
+Column Mapping
+Run
+Results Dashboard
+Draft Messages
+DRI Views
+Export
+• Top bar:
+Current file/run selector dropdown (disabled until runs exist)
+FX refresh button
+Status pill (Idle / Processing / Done / Error)
+Routing must work: clicking sidebar items navigates pages.
+2) Pages (must implement all)
+A) /upload Upload & Import
+Upload multiple .xlsx and .csv
+Also show "Demo dataset" button
+After upload: show file list and "Continue" button → /mapping
+B) /mapping Column Detection & Mapping
+• Auto-detect required columns using header aliases
+• Show mapping table with:
+Field name (bid, creationDate, experienceDate, tid, currency, hoNet, spNet, bookingStatus…)
+Detected column
+Dropdown override
+• "Save mapping" and "Continue" → /run
+C) /run Run Reconciliation
+• Button: "Run reconciliation"
+• Progress UI:
+Parsing files
+Fetching FX
+Computing reasons
+Building summaries
+Building drafts
+Building DRI views
+• On success → /results
+D) /results Results Dashboard
+Tabs:
+• Overall reconciliation summary
+• MTB summary
+• NPD summary
+• Charge loss summary
+Each table sortable, default sort = Discrepancy USD ascending.
+E) /drafts Draft Messages
+• Show 3 sections:
+MTB combined messages (Tech/Supply @BAR + DBP sentence, Selenium @selenium without DBP, ResOps @reservation_ops)
+Charge loss templates (API vs non-API)
+NPD per-group drafts (Inventory Ops includes "price sync setup" sentence)
+• Each message has copy button + export button.
+F) /dri DRI Views
+Dropdowns: DRI team, Reason, Currency, TID
+Booking-level table with required columns
+Default sort Difference USD ascending
+Export current filtered view button
+G) /export Export
+• Export options:
+Download ZIP (CSV bundle)
+Download XLSX with tabs: Summary, Draft Messages, FX_Rates, DRI views
+• Show last export timestamp
+3) Backend + Data flow requirements
+• Backend must support:
+parsing XLSX/CSV
+computing normalized rows
+FX fetch
+summaries + drafts + DRI views
+• Store run results by runId in memory (or local lightweight DB) so navigation works.
+• The landing page "Recent runs" reads from stored runs.
+4) Demo mode (required so Landing page works end-to-end)
+Bundle a small demo dataset inside the app (mock RECONCILIATION_REPORT + SP_INVOICE_REPORT)
+"Try demo" button loads it and creates a run immediately so user can see results without uploading.
+5) Business logic (must match)
+(Keep all your earlier business rules exactly as-is here: Primary/Secondary, reasons, FX conversion, summaries, draft messages, DRI views, sorting, exclusion of Duplicate Fulfillment.)
+6) Non-functional
+Never crash on empty state
+Every page must have an empty state UI
+All routes must be reachable from sidebar
+Landing page must be the default route and must render even with no runs.
+DELIVERABLE
+Generate the full working app with routing, layout shell, and all pages above. Do not generate Apps Script.
+
+If you paste that, App Builder should stop "starting from results" and will be forced to build / as the entry point + sidebar routing.
+If you still don't see the landing page after this, tell me what framework it generated (Next.js / Vite / etc.) and what route it opens on by default — I'll adjust the routing instruction to match that exact stack.
