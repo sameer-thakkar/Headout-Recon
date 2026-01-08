@@ -2,6 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { randomUUID } from "crypto";
+import multer from "multer";
+import * as XLSX from "xlsx";
+import Papa from "papaparse";
 import type {
   UploadedFile,
   ColumnMapping,
@@ -11,6 +14,44 @@ import type {
   FxRate,
 } from "@shared/schema";
 import { requiredFields, optionalFields, headerAliases, driTeams, reasonCodes } from "@shared/schema";
+
+// Multer memory storage for file uploads
+const upload = multer({ storage: multer.memoryStorage() });
+
+interface ParsedFile {
+  id: string;
+  name: string;
+  size: number;
+  ext: string;
+  headers: string[];
+  rowCount: number;
+  sampleRows: Record<string, unknown>[];
+}
+
+function parseXlsx(buffer: Buffer): { headers: string[]; rows: Record<string, unknown>[] } {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+    return { headers: [], rows: [] };
+  }
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    return { headers: [], rows: [] };
+  }
+  const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+  const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+  return { headers, rows: jsonData };
+}
+
+function parseCsv(content: string): { headers: string[]; rows: Record<string, unknown>[] } {
+  const result = Papa.parse<Record<string, unknown>>(content, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: true,
+  });
+  const headers = result.meta.fields || [];
+  return { headers, rows: result.data };
+}
 
 // Demo data
 const demoReconData = [
@@ -222,23 +263,74 @@ export async function registerRoutes(
     res.json(runs);
   });
 
-  // Upload files
-  app.post("/api/upload", async (req, res) => {
-    // For simplicity in demo, return mock parsed data
-    const files: UploadedFile[] = [
-      {
-        id: randomUUID(),
-        name: "sample_recon.xlsx",
-        size: 1024,
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        rowCount: 10,
-        headers: ["bid", "tid", "currency", "hoNet", "spNet", "bookingStatus", "experienceName", "supplierName"],
-      },
-    ];
+  // Upload files with real parsing
+  app.post("/api/upload", upload.array("files"), async (req, res) => {
+    try {
+      const uploadedFiles = req.files as Express.Multer.File[];
+      
+      if (!uploadedFiles || uploadedFiles.length === 0) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
 
-    const headers = ["bid", "tid", "currency", "hoNet", "spNet", "bookingStatus", "experienceName", "supplierName", "creationDate", "experienceDate"];
+      const parsedFiles: (ParsedFile & { type: string })[] = [];
+      const allHeaders = new Set<string>();
+      const unsupportedFiles: string[] = [];
 
-    res.json({ files, headers });
+      for (const file of uploadedFiles) {
+        const ext = file.originalname.split(".").pop()?.toLowerCase() || "";
+        let headers: string[] = [];
+        let rows: Record<string, unknown>[] = [];
+
+        if (ext === "xlsx" || ext === "xls") {
+          const result = parseXlsx(file.buffer);
+          headers = result.headers;
+          rows = result.rows;
+        } else if (ext === "csv") {
+          const content = file.buffer.toString("utf-8");
+          const result = parseCsv(content);
+          headers = result.headers;
+          rows = result.rows;
+        } else {
+          unsupportedFiles.push(file.originalname);
+          continue;
+        }
+
+        // Add headers to combined set
+        headers.forEach((h) => allHeaders.add(h));
+
+        // Get sample rows (first 5)
+        const sampleRows = rows.slice(0, 5);
+
+        parsedFiles.push({
+          id: randomUUID(),
+          name: file.originalname,
+          size: file.size,
+          ext,
+          type: file.mimetype,
+          headers,
+          rowCount: rows.length,
+          sampleRows,
+        });
+      }
+
+      // Return error if all files were unsupported
+      if (parsedFiles.length === 0 && unsupportedFiles.length > 0) {
+        return res.status(400).json({ 
+          error: `Unsupported file format(s): ${unsupportedFiles.join(", ")}. Please upload .xlsx or .csv files.` 
+        });
+      }
+
+      const combinedHeaders = Array.from(allHeaders).sort();
+
+      res.json({ 
+        files: parsedFiles, 
+        combinedHeaders,
+        ...(unsupportedFiles.length > 0 && { skippedFiles: unsupportedFiles })
+      });
+    } catch (error) {
+      console.error("Upload parsing error:", error);
+      res.status(500).json({ error: "Failed to parse uploaded files" });
+    }
   });
 
   // Demo mode - load sample data and run full reconciliation
