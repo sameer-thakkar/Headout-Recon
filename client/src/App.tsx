@@ -130,13 +130,12 @@ function AppContent() {
 
       const newRun: RunRecord = {
         id: data.runId,
-        name: "Demo Run",
+        uploadId: data.uploadId || "demo-upload",
         status: "done",
+        progressStep: null,
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
-        fileCount: data.files.length,
-        totalBookings: data.results.length,
-        totalDiscrepancyUsd: data.results.reduce((sum: number, r: ReconResult) => sum + Math.abs(r.differenceUsd), 0),
+        error: null,
       };
       setRuns((prev) => [newRun, ...prev]);
       setCurrentRunId(newRun.id);
@@ -193,13 +192,12 @@ function AppContent() {
       // Create run record
       const newRun: RunRecord = {
         id: `run-${Date.now()}`,
-        name: `Run ${new Date().toLocaleDateString()}`,
+        uploadId: uploadedFiles[0]?.id || "unknown",
         status: "done",
+        progressStep: null,
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
-        fileCount: uploadedFiles.length,
-        totalBookings: results.length,
-        totalDiscrepancyUsd: results.reduce((sum, r) => sum + Math.abs(r.differenceUsd), 0),
+        error: null,
       };
       setRuns((prev) => [newRun, ...prev]);
       setCurrentRunId(newRun.id);
@@ -326,13 +324,7 @@ function AppContent() {
                 />
               </Route>
               <Route path="/results">
-                <ResultsPage
-                  overallSummary={overallSummary}
-                  mtbSummary={mtbSummary}
-                  npdSummary={npdSummary}
-                  chargeLossSummary={chargeLossSummary}
-                  hasResults={hasResults}
-                />
+                <ResultsPage runId={currentRunId} />
               </Route>
               <Route path="/drafts">
                 <DraftsPage draftMessages={draftMessages} hasResults={hasResults} />
