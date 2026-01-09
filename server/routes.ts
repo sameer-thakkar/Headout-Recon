@@ -5,6 +5,8 @@ import { randomUUID } from "crypto";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
+import path from "path";
+import fs from "fs";
 import type {
   UploadedFile,
   ColumnMapping,
@@ -15,8 +17,24 @@ import type {
 } from "@shared/schema";
 import { requiredFields, optionalFields, headerAliases, driTeams, reasonCodes } from "@shared/schema";
 
-// Multer memory storage for file uploads
-const upload = multer({ storage: multer.memoryStorage() });
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), "server", "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Multer disk storage for file uploads
+const diskStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueId = randomUUID();
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueId}${ext}`);
+  },
+});
+const upload = multer({ storage: diskStorage });
 
 interface ParsedFile {
   id: string;
@@ -263,7 +281,7 @@ export async function registerRoutes(
     res.json(runs);
   });
 
-  // Upload files with real parsing
+  // Upload files with real parsing - saves to disk
   app.post("/api/upload", upload.array("files"), async (req, res) => {
     try {
       const uploadedFiles = req.files as Express.Multer.File[];
@@ -272,7 +290,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No files uploaded" });
       }
 
-      const parsedFiles: (ParsedFile & { type: string })[] = [];
+      const parsedFiles: (ParsedFile & { type: string; filePath: string })[] = [];
       const allHeaders = new Set<string>();
       const unsupportedFiles: string[] = [];
       const emptyFiles: string[] = [];
@@ -282,22 +300,29 @@ export async function registerRoutes(
         let headers: string[] = [];
         let rows: Record<string, unknown>[] = [];
 
+        // Read file from disk (saved by multer)
+        const fileBuffer = fs.readFileSync(file.path);
+
         if (ext === "xlsx" || ext === "xls") {
-          const result = parseXlsx(file.buffer);
+          const result = parseXlsx(fileBuffer);
           headers = result.headers;
           rows = result.rows;
         } else if (ext === "csv") {
-          const content = file.buffer.toString("utf-8");
+          const content = fileBuffer.toString("utf-8");
           const result = parseCsv(content);
           headers = result.headers;
           rows = result.rows;
         } else {
+          // Delete unsupported file from disk
+          fs.unlinkSync(file.path);
           unsupportedFiles.push(file.originalname);
           continue;
         }
 
         // Reject empty files (no headers or no data rows)
         if (headers.length === 0 || rows.length === 0) {
+          // Delete empty file from disk
+          fs.unlinkSync(file.path);
           emptyFiles.push(file.originalname);
           continue;
         }
@@ -308,8 +333,9 @@ export async function registerRoutes(
         // Get sample rows (first 5)
         const sampleRows = rows.slice(0, 5);
 
+        const fileId = randomUUID();
         parsedFiles.push({
-          id: randomUUID(),
+          id: fileId,
           name: file.originalname,
           size: file.size,
           ext,
@@ -317,7 +343,11 @@ export async function registerRoutes(
           headers,
           rowCount: rows.length,
           sampleRows,
+          filePath: file.path,
         });
+
+        // Store the full parsed data for later use in reconciliation
+        await storage.setTempFileData(fileId, headers, rows);
       }
 
       // Return error if all files were unsupported
