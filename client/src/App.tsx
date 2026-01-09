@@ -116,21 +116,10 @@ function AppContent() {
       const response = await apiRequest("POST", "/api/demo");
       const data = await response.json();
       
-      setUploadedFiles(data.files);
-      setAvailableHeaders(data.headers);
-      setMappings(data.mappings);
-      setResults(data.results);
-      setFxRates(data.fxRates);
-      setOverallSummary(data.overallSummary);
-      setMtbSummary(data.mtbSummary);
-      setNpdSummary(data.npdSummary);
-      setChargeLossSummary(data.chargeLossSummary);
-      setDraftMessages(data.draftMessages);
-      setLastFxRefresh(data.lastFxRefresh);
-
+      // New API returns { runId, uploadId, fx, overallSummary, primaryRows, allRows, spFxDebugRows }
       const newRun: RunRecord = {
         id: data.runId,
-        uploadId: data.uploadId || "demo-upload",
+        uploadId: data.uploadId,
         status: "done",
         progressStep: null,
         createdAt: new Date().toISOString(),
@@ -139,6 +128,7 @@ function AppContent() {
       };
       setRuns((prev) => [newRun, ...prev]);
       setCurrentRunId(newRun.id);
+      setLastFxRefresh(data.fx?.refreshedAt || new Date().toISOString());
       setStatus("done");
       setLocation("/results");
     } catch (error) {
