@@ -4,23 +4,125 @@ import { z } from "zod";
 export const runStatusSchema = z.enum(["idle", "processing", "done", "error"]);
 export type RunStatus = z.infer<typeof runStatusSchema>;
 
-// Booking record from uploaded files
-export const bookingRecordSchema = z.object({
-  bid: z.string(),
-  tid: z.string(),
-  creationDate: z.string(),
-  experienceDate: z.string(),
-  currency: z.string(),
+// FX Rate data from API (USD base)
+export const fxDataSchema = z.object({
+  usdToCcy: z.record(z.string(), z.number()),
+  refreshedAt: z.string(),
+});
+export type FxData = z.infer<typeof fxDataSchema>;
+
+// SP row augmented with FX debug info
+export const spFxDebugRowSchema = z.object({
+  bookingId: z.string(),
+  spCurrency: z.string(),
+  hoCurrencyUsed: z.string().nullable(),
+  fxRateUsed: z.number().nullable(),
+  spNetOriginal: z.number(),
+  spNetInHo: z.number().nullable(),
+});
+export type SpFxDebugRow = z.infer<typeof spFxDebugRowSchema>;
+
+// Primary reconciliation row (HO-based)
+export const primaryRowSchema = z.object({
+  bookingId: z.string(),
+  fulfillmentIdentifier: z.enum(["Primary", "Secondary"]),
+  
+  // HO fields
   hoNet: z.number(),
-  spNet: z.number(),
+  hoCurrency: z.string(),
+  bookingCreationDate: z.string().nullable(),
   bookingStatus: z.string(),
+  cancellable: z.string().nullable(),
+  cancellationInsurance: z.string().nullable(),
+  
+  // SP fields (from bundle)
+  spNetOriginal: z.number(),
+  spCurrency: z.string(),
+  spNetInHo: z.number(),
+  fxRateUsed: z.number(),
+  sameCurrency: z.boolean(),
+  
+  // Computed fields
+  differenceLc: z.number(),
+  differencePct: z.number().nullable(),
+  differenceUsd: z.number(),
+  
+  // Reason assignment
+  reason: z.string(),
+  
+  // Optional fields for display
   experienceName: z.string().optional(),
   supplierName: z.string().optional(),
-  cityName: z.string().optional(),
 });
-export type BookingRecord = z.infer<typeof bookingRecordSchema>;
+export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
-// Column mapping
+// Overall summary row (with currency column)
+export const overallSummaryRowSchema = z.object({
+  reason: z.string(),
+  currency: z.string(),
+  discrepancyLc: z.number(),
+  discrepancyUsd: z.number(),
+  countBid: z.number(),
+});
+export type OverallSummaryRow = z.infer<typeof overallSummaryRowSchema>;
+
+// Run result structure
+export const runResultSchema = z.object({
+  fx: fxDataSchema,
+  overallSummary: z.array(overallSummaryRowSchema),
+  primaryRows: z.array(primaryRowSchema),
+  spFxDebugRows: z.array(spFxDebugRowSchema),
+});
+export type RunResult = z.infer<typeof runResultSchema>;
+
+// Run record with status tracking
+export const runRecordSchema = z.object({
+  id: z.string(),
+  uploadId: z.string(),
+  status: runStatusSchema,
+  progressStep: z.string().nullable(),
+  createdAt: z.string(),
+  completedAt: z.string().nullable(),
+  error: z.string().nullable(),
+});
+export type RunRecord = z.infer<typeof runRecordSchema>;
+
+// Uploaded file info
+export const uploadedFileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  size: z.number(),
+  type: z.string(),
+  filePath: z.string().optional(),
+  sheetNames: z.array(z.string()).optional(),
+});
+export type UploadedFile = z.infer<typeof uploadedFileSchema>;
+
+// Sheet data
+export const sheetDataSchema = z.object({
+  name: z.string(),
+  headers: z.array(z.string()),
+  rows: z.array(z.record(z.string(), z.unknown())),
+});
+export type SheetData = z.infer<typeof sheetDataSchema>;
+
+// Upload record with parsed sheets
+export const uploadRecordSchema = z.object({
+  id: z.string(),
+  file: uploadedFileSchema,
+  hoData: sheetDataSchema.nullable(),
+  spData: sheetDataSchema.nullable(),
+  createdAt: z.string(),
+});
+export type UploadRecord = z.infer<typeof uploadRecordSchema>;
+
+// API request schemas
+export const createRunFromUploadRequestSchema = z.object({
+  uploadId: z.string(),
+});
+export type CreateRunFromUploadRequest = z.infer<typeof createRunFromUploadRequestSchema>;
+
+// Column mapping (kept for backward compatibility)
 export const columnMappingSchema = z.object({
   fieldName: z.string(),
   detectedColumn: z.string().nullable(),
@@ -29,41 +131,6 @@ export const columnMappingSchema = z.object({
   isMatched: z.boolean(),
 });
 export type ColumnMapping = z.infer<typeof columnMappingSchema>;
-
-// FX Rate
-export const fxRateSchema = z.object({
-  currency: z.string(),
-  rateToUsd: z.number(),
-  lastUpdated: z.string(),
-});
-export type FxRate = z.infer<typeof fxRateSchema>;
-
-// Reconciliation result per booking
-export const reconResultSchema = z.object({
-  bid: z.string(),
-  tid: z.string(),
-  currency: z.string(),
-  hoNet: z.number(),
-  spNet: z.number(),
-  difference: z.number(),
-  differenceUsd: z.number(),
-  reason: z.string(),
-  driTeam: z.string(),
-  isPrimary: z.boolean(),
-  bookingStatus: z.string(),
-  experienceName: z.string().optional(),
-  supplierName: z.string().optional(),
-});
-export type ReconResult = z.infer<typeof reconResultSchema>;
-
-// Summary row
-export const summaryRowSchema = z.object({
-  category: z.string(),
-  count: z.number(),
-  totalDiscrepancyUsd: z.number(),
-  percentage: z.number(),
-});
-export type SummaryRow = z.infer<typeof summaryRowSchema>;
 
 // Draft message
 export const draftMessageSchema = z.object({
@@ -82,66 +149,8 @@ export const driFilterSchema = z.object({
   driTeam: z.string().nullable(),
   reason: z.string().nullable(),
   currency: z.string().nullable(),
-  tid: z.string().nullable(),
 });
 export type DriFilter = z.infer<typeof driFilterSchema>;
-
-// Uploaded file info
-export const uploadedFileSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  size: z.number(),
-  type: z.string(),
-  rowCount: z.number().optional(),
-  headers: z.array(z.string()).optional(),
-});
-export type UploadedFile = z.infer<typeof uploadedFileSchema>;
-
-// Run record
-export const runRecordSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  status: runStatusSchema,
-  createdAt: z.string(),
-  completedAt: z.string().nullable(),
-  fileCount: z.number(),
-  totalBookings: z.number(),
-  totalDiscrepancyUsd: z.number().nullable(),
-});
-export type RunRecord = z.infer<typeof runRecordSchema>;
-
-// Full run data
-export const runDataSchema = z.object({
-  run: runRecordSchema,
-  files: z.array(uploadedFileSchema),
-  mappings: z.array(columnMappingSchema),
-  fxRates: z.array(fxRateSchema),
-  results: z.array(reconResultSchema),
-  overallSummary: z.array(summaryRowSchema),
-  mtbSummary: z.array(summaryRowSchema),
-  npdSummary: z.array(summaryRowSchema),
-  chargeLossSummary: z.array(summaryRowSchema),
-  draftMessages: z.array(draftMessageSchema),
-});
-export type RunData = z.infer<typeof runDataSchema>;
-
-// API request/response schemas
-export const uploadFilesResponseSchema = z.object({
-  files: z.array(uploadedFileSchema),
-  headers: z.array(z.string()),
-});
-export type UploadFilesResponse = z.infer<typeof uploadFilesResponseSchema>;
-
-export const saveMappingRequestSchema = z.object({
-  runId: z.string(),
-  mappings: z.array(columnMappingSchema),
-});
-export type SaveMappingRequest = z.infer<typeof saveMappingRequestSchema>;
-
-export const runReconRequestSchema = z.object({
-  runId: z.string(),
-});
-export type RunReconRequest = z.infer<typeof runReconRequestSchema>;
 
 // Progress step
 export const progressStepSchema = z.object({
@@ -151,7 +160,40 @@ export const progressStepSchema = z.object({
 });
 export type ProgressStep = z.infer<typeof progressStepSchema>;
 
-// Required field names for column mapping
+// Legacy types for backward compatibility
+export const fxRateSchema = z.object({
+  currency: z.string(),
+  rateToUsd: z.number(),
+  lastUpdated: z.string(),
+});
+export type FxRate = z.infer<typeof fxRateSchema>;
+
+export const reconResultSchema = z.object({
+  bid: z.string(),
+  tid: z.string(),
+  currency: z.string(),
+  hoNet: z.number(),
+  spNet: z.number(),
+  difference: z.number(),
+  differenceUsd: z.number(),
+  reason: z.string(),
+  driTeam: z.string(),
+  isPrimary: z.boolean(),
+  bookingStatus: z.string(),
+  experienceName: z.string().optional(),
+  supplierName: z.string().optional(),
+});
+export type ReconResult = z.infer<typeof reconResultSchema>;
+
+export const summaryRowSchema = z.object({
+  category: z.string(),
+  count: z.number(),
+  totalDiscrepancyUsd: z.number(),
+  percentage: z.number(),
+});
+export type SummaryRow = z.infer<typeof summaryRowSchema>;
+
+// Required field names for column mapping (not used with new pipeline)
 export const requiredFields = [
   "bid",
   "tid", 
@@ -202,6 +244,18 @@ export const headerAliases: Record<string, string[]> = {
   bnpl: ["BNPL", "bnpl", "buy_now_pay_later"],
 };
 
+// Reason codes for new pipeline
+export const reasonCodes = [
+  "Reconciled",
+  "Net Price Discrepancy",
+  "Multiple Tickets Booked",
+  "Charge loss",
+  "Cancellation Insurance",
+  "HO policy cancellation",
+  "Duplicate Fulfillment",
+  "Unmapped",
+] as const;
+
 // DRI Teams
 export const driTeams = [
   "Tech",
@@ -210,18 +264,6 @@ export const driTeams = [
   "Reservation Ops",
   "Finance",
   "Selenium",
-] as const;
-
-// Reason codes
-export const reasonCodes = [
-  "MTB - Missing in Supplier",
-  "MTB - Duplicate Booking",
-  "NPD - Price Mismatch",
-  "NPD - Currency Mismatch",
-  "Charge Loss - API Error",
-  "Charge Loss - Non-API",
-  "Status Mismatch",
-  "Unknown",
 ] as const;
 
 // Placeholder for users table (keeping existing structure)

@@ -2,69 +2,63 @@ import { randomUUID } from "crypto";
 import type {
   RunRecord,
   UploadedFile,
+  UploadRecord,
+  SheetData,
+  RunResult,
+  FxRate,
   ColumnMapping,
   ReconResult,
   SummaryRow,
   DraftMessage,
-  FxRate,
-  RunData,
 } from "@shared/schema";
 
 export interface IStorage {
+  // Uploads
+  createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord>;
+  getUpload(id: string): Promise<UploadRecord | undefined>;
+  
   // Runs
   getRuns(): Promise<RunRecord[]>;
   getRun(id: string): Promise<RunRecord | undefined>;
   createRun(run: Omit<RunRecord, "id">): Promise<RunRecord>;
   updateRun(id: string, updates: Partial<RunRecord>): Promise<RunRecord | undefined>;
+  
+  // Run results
+  setRunResult(runId: string, result: RunResult): Promise<void>;
+  getRunResult(runId: string): Promise<RunResult | undefined>;
 
-  // Run data
-  getRunData(runId: string): Promise<RunData | undefined>;
-  setRunData(runId: string, data: Partial<RunData>): Promise<void>;
-
-  // Files
-  addFiles(runId: string, files: UploadedFile[]): Promise<void>;
-  getFiles(runId: string): Promise<UploadedFile[]>;
-
-  // Mappings
-  setMappings(runId: string, mappings: ColumnMapping[]): Promise<void>;
-  getMappings(runId: string): Promise<ColumnMapping[]>;
-
-  // Results
-  setResults(runId: string, results: ReconResult[]): Promise<void>;
-  getResults(runId: string): Promise<ReconResult[]>;
-
-  // Summaries
-  setSummaries(
-    runId: string,
-    overall: SummaryRow[],
-    mtb: SummaryRow[],
-    npd: SummaryRow[],
-    chargeLoss: SummaryRow[]
-  ): Promise<void>;
-
-  // Drafts
-  setDraftMessages(runId: string, messages: DraftMessage[]): Promise<void>;
-  getDraftMessages(runId: string): Promise<DraftMessage[]>;
-
-  // FX Rates
+  // Legacy: FX Rates
   setFxRates(rates: FxRate[]): Promise<void>;
   getFxRates(): Promise<FxRate[]>;
 
-  // Temp file data (for upload processing)
-  setTempFileData(runId: string, headers: string[], rawData: Record<string, unknown>[]): Promise<void>;
-  getTempFileData(runId: string): Promise<{ headers: string[]; rawData: Record<string, unknown>[] } | undefined>;
+  // Legacy: Temp file data (for upload processing)
+  setTempFileData(id: string, headers: string[], rawData: Record<string, unknown>[]): Promise<void>;
+  getTempFileData(id: string): Promise<{ headers: string[]; rawData: Record<string, unknown>[] } | undefined>;
 }
 
 export class MemStorage implements IStorage {
+  private uploads: Map<string, UploadRecord> = new Map();
   private runs: Map<string, RunRecord> = new Map();
-  private runData: Map<string, RunData> = new Map();
-  private files: Map<string, UploadedFile[]> = new Map();
-  private mappings: Map<string, ColumnMapping[]> = new Map();
-  private results: Map<string, ReconResult[]> = new Map();
-  private summaries: Map<string, { overall: SummaryRow[]; mtb: SummaryRow[]; npd: SummaryRow[]; chargeLoss: SummaryRow[] }> = new Map();
-  private draftMessages: Map<string, DraftMessage[]> = new Map();
+  private runResults: Map<string, RunResult> = new Map();
   private fxRates: FxRate[] = [];
   private tempFileData: Map<string, { headers: string[]; rawData: Record<string, unknown>[] }> = new Map();
+
+  async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
+    const id = randomUUID();
+    const upload: UploadRecord = {
+      id,
+      file,
+      hoData,
+      spData,
+      createdAt: new Date().toISOString(),
+    };
+    this.uploads.set(id, upload);
+    return upload;
+  }
+
+  async getUpload(id: string): Promise<UploadRecord | undefined> {
+    return this.uploads.get(id);
+  }
 
   async getRuns(): Promise<RunRecord[]> {
     return Array.from(this.runs.values()).sort(
@@ -91,56 +85,12 @@ export class MemStorage implements IStorage {
     return updated;
   }
 
-  async getRunData(runId: string): Promise<RunData | undefined> {
-    return this.runData.get(runId);
+  async setRunResult(runId: string, result: RunResult): Promise<void> {
+    this.runResults.set(runId, result);
   }
 
-  async setRunData(runId: string, data: Partial<RunData>): Promise<void> {
-    const existing = this.runData.get(runId) || {} as RunData;
-    this.runData.set(runId, { ...existing, ...data } as RunData);
-  }
-
-  async addFiles(runId: string, newFiles: UploadedFile[]): Promise<void> {
-    const existing = this.files.get(runId) || [];
-    this.files.set(runId, [...existing, ...newFiles]);
-  }
-
-  async getFiles(runId: string): Promise<UploadedFile[]> {
-    return this.files.get(runId) || [];
-  }
-
-  async setMappings(runId: string, newMappings: ColumnMapping[]): Promise<void> {
-    this.mappings.set(runId, newMappings);
-  }
-
-  async getMappings(runId: string): Promise<ColumnMapping[]> {
-    return this.mappings.get(runId) || [];
-  }
-
-  async setResults(runId: string, newResults: ReconResult[]): Promise<void> {
-    this.results.set(runId, newResults);
-  }
-
-  async getResults(runId: string): Promise<ReconResult[]> {
-    return this.results.get(runId) || [];
-  }
-
-  async setSummaries(
-    runId: string,
-    overall: SummaryRow[],
-    mtb: SummaryRow[],
-    npd: SummaryRow[],
-    chargeLoss: SummaryRow[]
-  ): Promise<void> {
-    this.summaries.set(runId, { overall, mtb, npd, chargeLoss });
-  }
-
-  async setDraftMessages(runId: string, messages: DraftMessage[]): Promise<void> {
-    this.draftMessages.set(runId, messages);
-  }
-
-  async getDraftMessages(runId: string): Promise<DraftMessage[]> {
-    return this.draftMessages.get(runId) || [];
+  async getRunResult(runId: string): Promise<RunResult | undefined> {
+    return this.runResults.get(runId);
   }
 
   async setFxRates(rates: FxRate[]): Promise<void> {
@@ -151,12 +101,12 @@ export class MemStorage implements IStorage {
     return this.fxRates;
   }
 
-  async setTempFileData(runId: string, headers: string[], rawData: Record<string, unknown>[]): Promise<void> {
-    this.tempFileData.set(runId, { headers, rawData });
+  async setTempFileData(id: string, headers: string[], rawData: Record<string, unknown>[]): Promise<void> {
+    this.tempFileData.set(id, { headers, rawData });
   }
 
-  async getTempFileData(runId: string): Promise<{ headers: string[]; rawData: Record<string, unknown>[] } | undefined> {
-    return this.tempFileData.get(runId);
+  async getTempFileData(id: string): Promise<{ headers: string[]; rawData: Record<string, unknown>[] } | undefined> {
+    return this.tempFileData.get(id);
   }
 }
 

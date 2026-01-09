@@ -4,18 +4,10 @@ import { storage } from "./storage";
 import { randomUUID } from "crypto";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import Papa from "papaparse";
 import path from "path";
 import fs from "fs";
-import type {
-  UploadedFile,
-  ColumnMapping,
-  ReconResult,
-  SummaryRow,
-  DraftMessage,
-  FxRate,
-} from "@shared/schema";
-import { requiredFields, optionalFields, headerAliases, driTeams, reasonCodes } from "@shared/schema";
+import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
+import { runReconciliation } from "./reconciliation";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "server", "uploads");
@@ -36,55 +28,31 @@ const diskStorage = multer.diskStorage({
 });
 const upload = multer({ storage: diskStorage });
 
-interface ParsedFile {
-  id: string;
-  name: string;
-  size: number;
-  ext: string;
-  headers: string[];
-  rowCount: number;
-  sampleRows: Record<string, unknown>[];
-}
-
-function parseXlsx(buffer: Buffer): { headers: string[]; rows: Record<string, unknown>[] } {
+/**
+ * Parse Excel file with multiple sheets
+ */
+function parseXlsxWithSheets(buffer: Buffer): Map<string, SheetData> {
   const workbook = XLSX.read(buffer, { type: "buffer" });
-  if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-    return { headers: [], rows: [] };
+  const sheets = new Map<string, SheetData>();
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    
+    const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+    
+    sheets.set(sheetName, {
+      name: sheetName,
+      headers,
+      rows: jsonData,
+    });
   }
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) {
-    return { headers: [], rows: [] };
-  }
-  const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-  const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
-  return { headers, rows: jsonData };
+
+  return sheets;
 }
 
-function parseCsv(content: string): { headers: string[]; rows: Record<string, unknown>[] } {
-  const result = Papa.parse<Record<string, unknown>>(content, {
-    header: true,
-    skipEmptyLines: true,
-    dynamicTyping: true,
-  });
-  const headers = result.meta.fields || [];
-  return { headers, rows: result.data };
-}
-
-// Demo data
-const demoReconData = [
-  { bid: "BK001", tid: "TID-001", currency: "USD", hoNet: 100.00, spNet: 95.00, bookingStatus: "CONFIRMED", experienceName: "City Tour", supplierName: "TourCo" },
-  { bid: "BK002", tid: "TID-001", currency: "EUR", hoNet: 150.00, spNet: 150.00, bookingStatus: "CONFIRMED", experienceName: "City Tour", supplierName: "TourCo" },
-  { bid: "BK003", tid: "TID-002", currency: "USD", hoNet: 200.00, spNet: 0.00, bookingStatus: "CONFIRMED", experienceName: "Museum Pass", supplierName: "MuseumInc" },
-  { bid: "BK004", tid: "TID-002", currency: "GBP", hoNet: 75.00, spNet: 80.00, bookingStatus: "CANCELLED", experienceName: "Museum Pass", supplierName: "MuseumInc" },
-  { bid: "BK005", tid: "TID-003", currency: "USD", hoNet: 300.00, spNet: 290.00, bookingStatus: "CONFIRMED", experienceName: "Theme Park", supplierName: "FunPark" },
-  { bid: "BK006", tid: "TID-003", currency: "USD", hoNet: 125.00, spNet: 125.00, bookingStatus: "CONFIRMED", experienceName: "Theme Park", supplierName: "FunPark" },
-  { bid: "BK007", tid: "TID-004", currency: "EUR", hoNet: 50.00, spNet: 45.00, bookingStatus: "CONFIRMED", experienceName: "Walking Tour", supplierName: "WalkGuide" },
-  { bid: "BK008", tid: "TID-004", currency: "USD", hoNet: 180.00, spNet: 0.00, bookingStatus: "PENDING", experienceName: "Walking Tour", supplierName: "WalkGuide" },
-  { bid: "BK009", tid: "TID-005", currency: "USD", hoNet: 220.00, spNet: 215.00, bookingStatus: "CONFIRMED", experienceName: "Food Tour", supplierName: "FoodieInc" },
-  { bid: "BK010", tid: "TID-005", currency: "GBP", hoNet: 90.00, spNet: 100.00, bookingStatus: "CONFIRMED", experienceName: "Food Tour", supplierName: "FoodieInc" },
-];
-
+// Default FX rates (legacy)
 const defaultFxRates: FxRate[] = [
   { currency: "USD", rateToUsd: 1.0, lastUpdated: new Date().toISOString() },
   { currency: "EUR", rateToUsd: 1.08, lastUpdated: new Date().toISOString() },
@@ -94,180 +62,6 @@ const defaultFxRates: FxRate[] = [
   { currency: "SGD", rateToUsd: 0.75, lastUpdated: new Date().toISOString() },
 ];
 
-function computeReconResults(
-  rawData: Record<string, unknown>[],
-  fxRates: FxRate[]
-): ReconResult[] {
-  const fxMap = new Map(fxRates.map(r => [r.currency, r.rateToUsd]));
-
-  return rawData.map((row) => {
-    const bid = String(row.bid || "");
-    const tid = String(row.tid || "");
-    const currency = String(row.currency || "USD");
-    const hoNet = Number(row.hoNet) || 0;
-    const spNet = Number(row.spNet) || 0;
-    const bookingStatus = String(row.bookingStatus || "");
-    const experienceName = String(row.experienceName || "");
-    const supplierName = String(row.supplierName || "");
-
-    const difference = hoNet - spNet;
-    const fxRate = fxMap.get(currency) || 1;
-    const differenceUsd = difference * fxRate;
-
-    // Determine reason and DRI team
-    let reason = "Unknown";
-    let driTeam = "Finance";
-    let isPrimary = true;
-
-    if (spNet === 0 && hoNet > 0) {
-      reason = "MTB - Missing in Supplier";
-      driTeam = "Tech";
-    } else if (Math.abs(difference) > 0.01 && spNet > 0) {
-      if (Math.abs(differenceUsd) > 10) {
-        reason = "NPD - Price Mismatch";
-        driTeam = "Inventory Ops";
-      } else {
-        reason = "Charge Loss - Non-API";
-        driTeam = "Reservation Ops";
-      }
-    } else if (bookingStatus === "CANCELLED" && spNet !== 0) {
-      reason = "Status Mismatch";
-      driTeam = "Supply";
-    }
-
-    return {
-      bid,
-      tid,
-      currency,
-      hoNet,
-      spNet,
-      difference,
-      differenceUsd,
-      reason,
-      driTeam,
-      isPrimary,
-      bookingStatus,
-      experienceName,
-      supplierName,
-    };
-  });
-}
-
-function computeSummaries(results: ReconResult[]): {
-  overall: SummaryRow[];
-  mtb: SummaryRow[];
-  npd: SummaryRow[];
-  chargeLoss: SummaryRow[];
-} {
-  const total = results.length;
-  const groupByReason = new Map<string, ReconResult[]>();
-
-  results.forEach((r) => {
-    const existing = groupByReason.get(r.reason) || [];
-    groupByReason.set(r.reason, [...existing, r]);
-  });
-
-  const overall: SummaryRow[] = [];
-  const mtb: SummaryRow[] = [];
-  const npd: SummaryRow[] = [];
-  const chargeLoss: SummaryRow[] = [];
-
-  groupByReason.forEach((items, category) => {
-    const count = items.length;
-    const totalDiscrepancyUsd = items.reduce((sum, r) => sum + Math.abs(r.differenceUsd), 0);
-    const percentage = total > 0 ? (count / total) * 100 : 0;
-
-    const row: SummaryRow = { category, count, totalDiscrepancyUsd, percentage };
-    overall.push(row);
-
-    if (category.startsWith("MTB")) {
-      mtb.push(row);
-    } else if (category.startsWith("NPD")) {
-      npd.push(row);
-    } else if (category.startsWith("Charge Loss")) {
-      chargeLoss.push(row);
-    }
-  });
-
-  return { overall, mtb, npd, chargeLoss };
-}
-
-function generateDraftMessages(results: ReconResult[]): DraftMessage[] {
-  const messages: DraftMessage[] = [];
-  const groupByTeam = new Map<string, ReconResult[]>();
-
-  results.forEach((r) => {
-    const existing = groupByTeam.get(r.driTeam) || [];
-    groupByTeam.set(r.driTeam, [...existing, r]);
-  });
-
-  groupByTeam.forEach((items, driTeam) => {
-    const mtbItems = items.filter(i => i.reason.startsWith("MTB"));
-    const npdItems = items.filter(i => i.reason.startsWith("NPD"));
-    const clItems = items.filter(i => i.reason.startsWith("Charge Loss"));
-
-    if (mtbItems.length > 0) {
-      const totalUsd = mtbItems.reduce((sum, r) => sum + Math.abs(r.differenceUsd), 0);
-      messages.push({
-        id: randomUUID(),
-        driTeam,
-        category: "MTB Combined",
-        subject: `MTB Discrepancies - ${mtbItems.length} bookings`,
-        body: `Hi ${driTeam} Team,\n\nWe have identified ${mtbItems.length} bookings with Missing to Bill (MTB) discrepancies totaling $${totalUsd.toFixed(2)} USD.\n\nBooking IDs:\n${mtbItems.map(i => `- ${i.bid} (${i.currency} ${i.difference.toFixed(2)})`).join('\n')}\n\nPlease review and take necessary action.\n\nBest regards,\nRecon Team`,
-        bookingCount: mtbItems.length,
-        totalDiscrepancyUsd: totalUsd,
-      });
-    }
-
-    if (npdItems.length > 0) {
-      const totalUsd = npdItems.reduce((sum, r) => sum + Math.abs(r.differenceUsd), 0);
-      const includesPriceSync = driTeam === "Inventory Ops";
-      messages.push({
-        id: randomUUID(),
-        driTeam,
-        category: "NPD Per-Group",
-        subject: `NPD Discrepancies - ${npdItems.length} bookings`,
-        body: `Hi ${driTeam} Team,\n\nWe have identified ${npdItems.length} bookings with Non-Price Discrepancies (NPD) totaling $${totalUsd.toFixed(2)} USD.\n\nBooking IDs:\n${npdItems.map(i => `- ${i.bid}: HO ${i.currency} ${i.hoNet.toFixed(2)} vs SP ${i.spNet.toFixed(2)}`).join('\n')}${includesPriceSync ? '\n\nPlease check if price sync setup is needed.' : ''}\n\nBest regards,\nRecon Team`,
-        bookingCount: npdItems.length,
-        totalDiscrepancyUsd: totalUsd,
-      });
-    }
-
-    if (clItems.length > 0) {
-      const apiItems = clItems.filter(i => i.reason.includes("API"));
-      const nonApiItems = clItems.filter(i => !i.reason.includes("API"));
-
-      if (apiItems.length > 0) {
-        const totalUsd = apiItems.reduce((sum, r) => sum + Math.abs(r.differenceUsd), 0);
-        messages.push({
-          id: randomUUID(),
-          driTeam,
-          category: "Charge Loss - API",
-          subject: `API Charge Loss - ${apiItems.length} bookings`,
-          body: `Hi ${driTeam} Team,\n\nWe have identified ${apiItems.length} API-related charge losses totaling $${totalUsd.toFixed(2)} USD.\n\nBooking IDs:\n${apiItems.map(i => `- ${i.bid}`).join('\n')}\n\nBest regards,\nRecon Team`,
-          bookingCount: apiItems.length,
-          totalDiscrepancyUsd: totalUsd,
-        });
-      }
-
-      if (nonApiItems.length > 0) {
-        const totalUsd = nonApiItems.reduce((sum, r) => sum + Math.abs(r.differenceUsd), 0);
-        messages.push({
-          id: randomUUID(),
-          driTeam,
-          category: "Charge Loss - Non-API",
-          subject: `Non-API Charge Loss - ${nonApiItems.length} bookings`,
-          body: `Hi ${driTeam} Team,\n\nWe have identified ${nonApiItems.length} non-API charge losses totaling $${totalUsd.toFixed(2)} USD.\n\nBooking IDs:\n${nonApiItems.map(i => `- ${i.bid}`).join('\n')}\n\nBest regards,\nRecon Team`,
-          bookingCount: nonApiItems.length,
-          totalDiscrepancyUsd: totalUsd,
-        });
-      }
-    }
-  });
-
-  return messages;
-}
-
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -275,225 +69,321 @@ export async function registerRoutes(
   // Initialize FX rates
   await storage.setFxRates(defaultFxRates);
 
-  // Get all runs
-  app.get("/api/runs", async (req, res) => {
-    const runs = await storage.getRuns();
-    res.json(runs);
-  });
+  // ==========================================
+  // NEW API ENDPOINTS (per specification)
+  // ==========================================
 
-  // Upload files with real parsing - saves to disk
-  app.post("/api/upload", upload.array("files"), async (req, res) => {
+  /**
+   * Upload single XLSX file with HO Data and SP Invoice Report tabs
+   * Returns uploadId for use with /api/runs/from-upload
+   */
+  app.post("/api/upload", upload.single("file"), async (req, res) => {
     try {
-      const uploadedFiles = req.files as Express.Multer.File[];
-      
-      if (!uploadedFiles || uploadedFiles.length === 0) {
-        return res.status(400).json({ error: "No files uploaded" });
+      const uploadedFile = req.file;
+
+      if (!uploadedFile) {
+        return res.status(400).json({ error: "No file uploaded" });
       }
 
-      const parsedFiles: (ParsedFile & { type: string; filePath: string })[] = [];
-      const allHeaders = new Set<string>();
-      const unsupportedFiles: string[] = [];
-      const emptyFiles: string[] = [];
+      const ext = uploadedFile.originalname.split(".").pop()?.toLowerCase() || "";
 
-      for (const file of uploadedFiles) {
-        const ext = file.originalname.split(".").pop()?.toLowerCase() || "";
-        let headers: string[] = [];
-        let rows: Record<string, unknown>[] = [];
+      if (ext !== "xlsx" && ext !== "xls") {
+        // Delete unsupported file
+        fs.unlinkSync(uploadedFile.path);
+        return res.status(400).json({
+          error: `Unsupported file format: ${ext}. Please upload an .xlsx file.`,
+        });
+      }
 
-        // Read file from disk (saved by multer)
-        const fileBuffer = fs.readFileSync(file.path);
+      // Read and parse file
+      const fileBuffer = fs.readFileSync(uploadedFile.path);
+      const sheets = parseXlsxWithSheets(fileBuffer);
 
-        if (ext === "xlsx" || ext === "xls") {
-          const result = parseXlsx(fileBuffer);
-          headers = result.headers;
-          rows = result.rows;
-        } else if (ext === "csv") {
-          const content = fileBuffer.toString("utf-8");
-          const result = parseCsv(content);
-          headers = result.headers;
-          rows = result.rows;
-        } else {
-          // Delete unsupported file from disk
-          fs.unlinkSync(file.path);
-          unsupportedFiles.push(file.originalname);
-          continue;
+      if (sheets.size === 0) {
+        fs.unlinkSync(uploadedFile.path);
+        return res.status(400).json({ error: "Empty file with no data sheets." });
+      }
+
+      // Find HO Data and SP Invoice Report tabs
+      let hoData: SheetData | null = null;
+      let spData: SheetData | null = null;
+
+      for (const [name, data] of sheets) {
+        const normalizedName = name.toLowerCase().trim();
+        if (normalizedName.includes("ho data") || normalizedName === "ho data") {
+          hoData = data;
+        } else if (
+          normalizedName.includes("sp invoice") ||
+          normalizedName === "sp invoice report"
+        ) {
+          spData = data;
         }
-
-        // Reject empty files (no headers or no data rows)
-        if (headers.length === 0 || rows.length === 0) {
-          // Delete empty file from disk
-          fs.unlinkSync(file.path);
-          emptyFiles.push(file.originalname);
-          continue;
-        }
-
-        // Add headers to combined set
-        headers.forEach((h) => allHeaders.add(h));
-
-        // Get sample rows (first 5)
-        const sampleRows = rows.slice(0, 5);
-
-        const fileId = randomUUID();
-        parsedFiles.push({
-          id: fileId,
-          name: file.originalname,
-          size: file.size,
-          ext,
-          type: file.mimetype,
-          headers,
-          rowCount: rows.length,
-          sampleRows,
-          filePath: file.path,
-        });
-
-        // Store the full parsed data for later use in reconciliation
-        await storage.setTempFileData(fileId, headers, rows);
       }
 
-      // Return error if all files were unsupported
-      if (parsedFiles.length === 0 && unsupportedFiles.length > 0) {
-        return res.status(400).json({ 
-          error: `Unsupported file format(s): ${unsupportedFiles.join(", ")}. Please upload .xlsx or .csv files.` 
+      if (!hoData) {
+        fs.unlinkSync(uploadedFile.path);
+        return res.status(400).json({
+          error: 'Missing required sheet "HO Data". Please check your file.',
         });
       }
 
-      // Return error if all files were empty
-      if (parsedFiles.length === 0 && emptyFiles.length > 0) {
-        return res.status(400).json({ 
-          error: `Empty file(s) with no data: ${emptyFiles.join(", ")}. Please upload files containing data rows.` 
+      if (!spData) {
+        fs.unlinkSync(uploadedFile.path);
+        return res.status(400).json({
+          error: 'Missing required sheet "SP Invoice Report". Please check your file.',
         });
       }
 
-      const combinedHeaders = Array.from(allHeaders).sort();
+      // Create file info
+      const fileInfo: UploadedFile = {
+        id: randomUUID(),
+        name: uploadedFile.originalname,
+        size: uploadedFile.size,
+        type: uploadedFile.mimetype,
+        filePath: uploadedFile.path,
+        sheetNames: Array.from(sheets.keys()),
+      };
 
-      res.json({ 
-        files: parsedFiles, 
-        combinedHeaders,
-        ...(unsupportedFiles.length > 0 && { skippedFiles: unsupportedFiles }),
-        ...(emptyFiles.length > 0 && { skippedEmptyFiles: emptyFiles })
+      // Store upload with parsed data
+      const uploadRecord = await storage.createUpload(fileInfo, hoData, spData);
+
+      res.json({
+        uploadId: uploadRecord.id,
+        file: fileInfo,
+        hoDataRowCount: hoData.rows.length,
+        spDataRowCount: spData.rows.length,
+        sheetNames: Array.from(sheets.keys()),
       });
     } catch (error) {
       console.error("Upload parsing error:", error);
-      res.status(500).json({ error: "Failed to parse uploaded files" });
+      res.status(500).json({ error: "Failed to parse uploaded file" });
     }
   });
 
-  // Demo mode - load sample data and run full reconciliation
-  app.post("/api/demo", async (req, res) => {
-    const runId = randomUUID();
-    const fxRates = await storage.getFxRates();
+  /**
+   * POST /api/runs/from-upload
+   * Create a new run from an uploaded file and start reconciliation
+   */
+  app.post("/api/runs/from-upload", async (req, res) => {
+    try {
+      const { uploadId } = req.body;
 
-    const files: UploadedFile[] = [
-      {
+      if (!uploadId) {
+        return res.status(400).json({ error: "Missing uploadId" });
+      }
+
+      // Get upload record
+      const upload = await storage.getUpload(uploadId);
+      if (!upload) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+
+      if (!upload.hoData || !upload.spData) {
+        return res.status(400).json({ error: "Upload missing required data sheets" });
+      }
+
+      // Create run record
+      const run = await storage.createRun({
+        uploadId,
+        status: "processing",
+        progressStep: "Fetching FX rates",
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        error: null,
+      });
+
+      // Start reconciliation in background
+      (async () => {
+        try {
+          await storage.updateRun(run.id, { progressStep: "Processing HO Data" });
+          await storage.updateRun(run.id, { progressStep: "Processing SP Data" });
+          await storage.updateRun(run.id, { progressStep: "Computing reconciliation" });
+
+          const result = await runReconciliation(upload.hoData!, upload.spData!);
+
+          await storage.setRunResult(run.id, result);
+          await storage.updateRun(run.id, {
+            status: "done",
+            progressStep: "Complete",
+            completedAt: new Date().toISOString(),
+          });
+        } catch (error) {
+          console.error("Reconciliation error:", error);
+          await storage.updateRun(run.id, {
+            status: "error",
+            progressStep: "Failed",
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      })();
+
+      res.json({ runId: run.id });
+    } catch (error) {
+      console.error("Run creation error:", error);
+      res.status(500).json({ error: "Failed to create run" });
+    }
+  });
+
+  /**
+   * GET /api/runs/:runId/status
+   * Get run status and progress
+   */
+  app.get("/api/runs/:runId/status", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const run = await storage.getRun(runId);
+
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+
+      res.json({
+        status: run.status,
+        progressStep: run.progressStep,
+        error: run.error,
+      });
+    } catch (error) {
+      console.error("Status fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch run status" });
+    }
+  });
+
+  /**
+   * GET /api/runs/:runId/results
+   * Get full reconciliation results
+   */
+  app.get("/api/runs/:runId/results", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const run = await storage.getRun(runId);
+
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+
+      if (run.status !== "done") {
+        return res.status(400).json({
+          error: "Run not complete",
+          status: run.status,
+          progressStep: run.progressStep,
+        });
+      }
+
+      const result = await storage.getRunResult(runId);
+
+      if (!result) {
+        return res.status(404).json({ error: "Results not found" });
+      }
+
+      res.json(result);
+    } catch (error) {
+      console.error("Results fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch results" });
+    }
+  });
+
+  /**
+   * GET /api/runs
+   * List all runs
+   */
+  app.get("/api/runs", async (req, res) => {
+    try {
+      const runs = await storage.getRuns();
+      res.json(runs);
+    } catch (error) {
+      console.error("Runs fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch runs" });
+    }
+  });
+
+  // ==========================================
+  // LEGACY ENDPOINTS (for backward compatibility)
+  // ==========================================
+
+  /**
+   * Demo mode - create demo run with sample data
+   */
+  app.post("/api/demo", async (req, res) => {
+    try {
+      // Create demo HO and SP data
+      const hoData: SheetData = {
+        name: "HO Data",
+        headers: ["bookingId", "netPrice", "currency", "bookingCreationDate", "bookingStatus", "Cancellable", "Cancellation Insurance"],
+        rows: [
+          { bookingId: "BK001", netPrice: 100, currency: "USD", bookingCreationDate: "2024-01-15", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No" },
+          { bookingId: "BK002", netPrice: 150, currency: "EUR", bookingCreationDate: "2024-01-16", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "Yes" },
+          { bookingId: "BK003", netPrice: 200, currency: "USD", bookingCreationDate: "2024-01-17", bookingStatus: "CANCELLED", Cancellable: "Yes", "Cancellation Insurance": "No" },
+          { bookingId: "BK004", netPrice: 75, currency: "GBP", bookingCreationDate: "2024-01-18", bookingStatus: "CANCELLED", Cancellable: "No", "Cancellation Insurance": "No" },
+          { bookingId: "BK005", netPrice: 300, currency: "USD", bookingCreationDate: "2024-01-19", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No" },
+          { bookingId: "BK006", netPrice: 125, currency: "USD", bookingCreationDate: "2024-01-20", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "No" },
+          { bookingId: "BK007", netPrice: 50, currency: "EUR", bookingCreationDate: "2024-01-21", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "Yes" },
+          { bookingId: "BK008", netPrice: 180, currency: "USD", bookingCreationDate: "2024-01-22", bookingStatus: "PENDING", Cancellable: "No", "Cancellation Insurance": "No" },
+          { bookingId: "BK009", netPrice: 220, currency: "USD", bookingCreationDate: "2024-01-23", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No" },
+          { bookingId: "BK010", netPrice: 90, currency: "GBP", bookingCreationDate: "2024-01-24", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "Yes" },
+        ],
+      };
+
+      const spData: SheetData = {
+        name: "SP Invoice Report",
+        headers: ["bookingId", "netPrice", "Billing Currency", "fulfilmentDate"],
+        rows: [
+          { bookingId: "BK001", netPrice: 95, "Billing Currency": "USD", fulfilmentDate: "2024-01-16" },
+          { bookingId: "BK002", netPrice: 150, "Billing Currency": "EUR", fulfilmentDate: "2024-01-17" },
+          { bookingId: "BK003", netPrice: 50, "Billing Currency": "USD", fulfilmentDate: "2024-01-18" },
+          { bookingId: "BK005", netPrice: 290, "Billing Currency": "USD", fulfilmentDate: "2024-01-20" },
+          { bookingId: "BK006", netPrice: 125, "Billing Currency": "USD", fulfilmentDate: "2024-01-21" },
+          { bookingId: "BK007", netPrice: 48, "Billing Currency": "EUR", fulfilmentDate: "2024-01-22" },
+          { bookingId: "BK009", netPrice: 215, "Billing Currency": "USD", fulfilmentDate: "2024-01-24" },
+          { bookingId: "BK010", netPrice: 85, "Billing Currency": "GBP", fulfilmentDate: "2024-01-25" },
+          { bookingId: "BK999", netPrice: 500, "Billing Currency": "USD", fulfilmentDate: "2024-01-26" }, // Unmapped
+        ],
+      };
+
+      // Create upload record
+      const fileInfo: UploadedFile = {
         id: randomUUID(),
-        name: "demo_recon_report.xlsx",
+        name: "demo_reconciliation.xlsx",
         size: 2048,
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        rowCount: demoReconData.length,
-        headers: Object.keys(demoReconData[0]),
-      },
-    ];
-
-    const headers = Object.keys(demoReconData[0]);
-
-    // Auto-detect mappings
-    const mappings: ColumnMapping[] = [...requiredFields, ...optionalFields].map((field) => {
-      const aliases = headerAliases[field] || [field];
-      const detected = headers.find((h) =>
-        aliases.some((alias) => h.toLowerCase().includes(alias.toLowerCase()))
-      );
-      return {
-        fieldName: field,
-        detectedColumn: detected || null,
-        overrideColumn: null,
-        isRequired: requiredFields.includes(field as typeof requiredFields[number]),
-        isMatched: !!detected,
+        sheetNames: ["HO Data", "SP Invoice Report"],
       };
-    });
 
-    // Compute results
-    const results = computeReconResults(demoReconData, fxRates);
-    const summaries = computeSummaries(results);
-    const draftMessages = generateDraftMessages(results);
+      const uploadRecord = await storage.createUpload(fileInfo, hoData, spData);
 
-    // Store data
-    await storage.createRun({
-      name: "Demo Run",
-      status: "done",
-      createdAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-      fileCount: files.length,
-      totalBookings: results.length,
-      totalDiscrepancyUsd: results.reduce((sum, r) => sum + Math.abs(r.differenceUsd), 0),
-    });
+      // Create run
+      const run = await storage.createRun({
+        uploadId: uploadRecord.id,
+        status: "processing",
+        progressStep: "Computing reconciliation",
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        error: null,
+      });
 
-    res.json({
-      runId,
-      files,
-      headers,
-      mappings,
-      results,
-      fxRates,
-      overallSummary: summaries.overall,
-      mtbSummary: summaries.mtb,
-      npdSummary: summaries.npd,
-      chargeLossSummary: summaries.chargeLoss,
-      draftMessages,
-      lastFxRefresh: new Date().toISOString(),
-    });
-  });
+      // Run reconciliation
+      const result = await runReconciliation(hoData, spData);
 
-  // Run reconciliation steps
-  app.post("/api/run/:step", async (req, res) => {
-    const { step } = req.params;
-    const fxRates = await storage.getFxRates();
+      // Store results
+      await storage.setRunResult(run.id, result);
+      await storage.updateRun(run.id, {
+        status: "done",
+        progressStep: "Complete",
+        completedAt: new Date().toISOString(),
+      });
 
-    // Simulate processing delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    switch (step) {
-      case "parse":
-        res.json({ success: true });
-        break;
-
-      case "fx":
-        res.json({ fxRates });
-        break;
-
-      case "compute":
-        const results = computeReconResults(demoReconData, fxRates);
-        res.json({ results });
-        break;
-
-      case "summaries":
-        const computedResults = computeReconResults(demoReconData, fxRates);
-        const summaries = computeSummaries(computedResults);
-        res.json({
-          overallSummary: summaries.overall,
-          mtbSummary: summaries.mtb,
-          npdSummary: summaries.npd,
-          chargeLossSummary: summaries.chargeLoss,
-        });
-        break;
-
-      case "drafts":
-        const allResults = computeReconResults(demoReconData, fxRates);
-        const draftMessages = generateDraftMessages(allResults);
-        res.json({ draftMessages });
-        break;
-
-      case "dri":
-        res.json({ success: true });
-        break;
-
-      default:
-        res.status(400).json({ error: "Unknown step" });
+      res.json({
+        runId: run.id,
+        uploadId: uploadRecord.id,
+        ...result,
+      });
+    } catch (error) {
+      console.error("Demo error:", error);
+      res.status(500).json({ error: "Failed to run demo" });
     }
   });
 
-  // Refresh FX rates
+  // Refresh FX rates (legacy)
   app.post("/api/fx/refresh", async (req, res) => {
-    // In production, this would fetch from an external API
     const refreshedRates = defaultFxRates.map((rate) => ({
       ...rate,
       lastUpdated: new Date().toISOString(),
@@ -502,17 +392,8 @@ export async function registerRoutes(
     res.json({ fxRates: refreshedRates });
   });
 
-  // Export as ZIP (mock)
-  app.get("/api/export/zip", async (req, res) => {
-    // In production, we'd create an actual ZIP file
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", "attachment; filename=reconciliation.zip");
-    res.send(Buffer.from("Mock ZIP content"));
-  });
-
-  // Export as XLSX (mock)
+  // Export as XLSX
   app.get("/api/export/xlsx", async (req, res) => {
-    // In production, we'd create an actual XLSX file using a library
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", "attachment; filename=reconciliation.xlsx");
     res.send(Buffer.from("Mock XLSX content"));
