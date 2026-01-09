@@ -167,21 +167,31 @@ export const optionalFields = [
   "experienceName",
   "supplierName",
   "cityName",
+  "spBookingRef",
+  "beId",
+  "chargedLoss",
+  "errorTeam",
+  "errorBucket",
 ] as const;
 
 // Header aliases for auto-detection
 export const headerAliases: Record<string, string[]> = {
-  bid: ["bid", "booking_id", "bookingid", "booking id"],
-  tid: ["tid", "tour_id", "tourid", "tour id", "experience_id"],
-  creationDate: ["creation_date", "creationdate", "created_at", "booking_date"],
-  experienceDate: ["experience_date", "experiencedate", "tour_date", "travel_date"],
-  currency: ["currency", "curr", "ccy"],
-  hoNet: ["ho_net", "honet", "ho net", "headout_net"],
-  spNet: ["sp_net", "spnet", "sp net", "supplier_net"],
-  bookingStatus: ["booking_status", "bookingstatus", "status"],
-  experienceName: ["experience_name", "experiencename", "tour_name"],
-  supplierName: ["supplier_name", "suppliername", "supplier"],
+  bid: ["bid", "booking_id", "bookingid", "booking id", "bookingId"],
+  tid: ["tid", "tour_id", "tourid", "tour id", "experience_id", "tgid", "ticket id"],
+  creationDate: ["creation_date", "creationdate", "created_at", "booking_date", "bookingCreationDate"],
+  experienceDate: ["experience_date", "experiencedate", "tour_date", "travel_date", "experienceDate", "fulfilmentDate"],
+  currency: ["currency", "curr", "ccy", "billing currency", "billingCurrency"],
+  hoNet: ["ho_net", "honet", "ho net", "headout_net", "headoutSellingPrice", "finalNetPrice", "headout_selling_price"],
+  spNet: ["sp_net", "spnet", "sp net", "supplier_net", "netPrice", "net_price", "supplierNetPrice"],
+  bookingStatus: ["booking_status", "bookingstatus", "status", "bookingStatus", "fulfilmentStatus"],
+  experienceName: ["experience_name", "experiencename", "tour_name", "experienceName", "tourName"],
+  supplierName: ["supplier_name", "suppliername", "supplier", "vendorName", "vendor"],
   cityName: ["city_name", "cityname", "city"],
+  spBookingRef: ["spBookingRefNumber", "sp_booking_ref", "supplier_ref"],
+  beId: ["beId", "be_id", "billing_entity_id", "billingEntityName"],
+  chargedLoss: ["chargedLoss", "charged_loss", "charge_loss"],
+  errorTeam: ["errorTeamAttribution", "error_team", "dri_team"],
+  errorBucket: ["errorBucket", "error_bucket", "reason_code"],
 };
 
 // DRI Teams
