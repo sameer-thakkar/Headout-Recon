@@ -60,54 +60,61 @@ function AppContent() {
   const hasMapping = mappings.length > 0 && mappings.filter(m => m.isRequired && m.isMatched).length === mappings.filter(m => m.isRequired).length;
   const hasResults = results.length > 0;
 
-  // File upload handler
+  // File upload handler - uploads file and auto-runs reconciliation
   const handleFilesUploaded = useCallback(async (files: File[]): Promise<UploadedFile[]> => {
+    if (files.length === 0) {
+      throw new Error("No files provided");
+    }
+
     const formData = new FormData();
-    files.forEach((file) => formData.append("files", file));
+    formData.append("file", files[0]);
 
     try {
-      const response = await fetch("/api/upload", {
+      setStatus("processing");
+      
+      // Step 1: Upload file
+      const uploadResponse = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
-      const data = await response.json();
+      const uploadData = await uploadResponse.json();
       
-      // Check for error response from server
-      if (!response.ok || data.error) {
-        throw new Error(data.error || "Upload failed");
+      if (!uploadResponse.ok || uploadData.error) {
+        throw new Error(uploadData.error || "Upload failed");
       }
       
-      // Ensure we have valid files array
-      if (!data.files || !Array.isArray(data.files)) {
-        throw new Error("Invalid response from server");
-      }
+      const uploadedFile: UploadedFile = uploadData.file;
+      setUploadedFiles([uploadedFile]);
       
-      setUploadedFiles((prev) => [...prev, ...data.files]);
-      setAvailableHeaders(data.combinedHeaders || []);
-      
-      // Auto-detect mappings using combinedHeaders
-      const headers = data.combinedHeaders || [];
-      const newMappings = [...requiredFields, ...optionalFields].map((field) => {
-        const aliases = headerAliases[field] || [field];
-        const detected = headers.find((h: string) =>
-          aliases.some((alias) => h.toLowerCase().includes(alias.toLowerCase()))
-        );
-        return {
-          fieldName: field,
-          detectedColumn: detected || null,
-          overrideColumn: null,
-          isRequired: requiredFields.includes(field as typeof requiredFields[number]),
-          isMatched: !!detected,
-        };
+      // Step 2: Automatically run reconciliation
+      const runResponse = await apiRequest("POST", "/api/runs/from-upload", {
+        uploadId: uploadData.uploadId,
       });
-      setMappings(newMappings);
+      const runData = await runResponse.json();
+      
+      // Step 3: Store run and navigate to results
+      const newRun: RunRecord = {
+        id: runData.runId,
+        uploadId: uploadData.uploadId,
+        status: "done",
+        progressStep: null,
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        error: null,
+      };
+      setRuns((prev) => [newRun, ...prev]);
+      setCurrentRunId(newRun.id);
+      setLastFxRefresh(runData.fx?.refreshedAt || new Date().toISOString());
+      setStatus("done");
+      setLocation("/results");
 
-      return data.files;
+      return [uploadedFile];
     } catch (error) {
       console.error("Upload error:", error);
+      setStatus("error");
       throw error;
     }
-  }, []);
+  }, [setLocation]);
 
   // Demo mode handler
   const handleLoadDemo = useCallback(async () => {

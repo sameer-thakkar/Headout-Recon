@@ -108,7 +108,7 @@ export async function registerRoutes(
       let hoData: SheetData | null = null;
       let spData: SheetData | null = null;
 
-      for (const [name, data] of sheets) {
+      Array.from(sheets.entries()).forEach(([name, data]) => {
         const normalizedName = name.toLowerCase().trim();
         if (normalizedName.includes("ho data") || normalizedName === "ho data") {
           hoData = data;
@@ -118,7 +118,7 @@ export async function registerRoutes(
         ) {
           spData = data;
         }
-      }
+      });
 
       if (!hoData) {
         fs.unlinkSync(uploadedFile.path);

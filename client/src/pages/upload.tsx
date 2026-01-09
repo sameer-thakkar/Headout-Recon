@@ -168,7 +168,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles }: Uploa
                         <p className="font-medium">{file.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {(file.size / 1024).toFixed(1)} KB
-                          {file.rowCount && ` · ${file.rowCount} rows`}
+                          {file.sheetNames && ` · ${file.sheetNames.length} sheet(s)`}
                         </p>
                       </div>
                     </div>
