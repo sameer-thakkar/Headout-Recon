@@ -541,11 +541,12 @@ export async function runReconciliation(
     usdToCcy
   );
   
-  // STEP H: Filter to Primary only for output
+  // STEP H: Filter to Primary only for main tables
   const primaryRows = allRows.filter(r => r.fulfillmentIdentifier === "Primary");
   
-  // Sort primaryRows by differenceUsd ascending
+  // Sort both arrays by differenceUsd ascending
   primaryRows.sort((a, b) => a.differenceUsd - b.differenceUsd);
+  allRows.sort((a, b) => a.differenceUsd - b.differenceUsd);
   
   // Build overall summary
   const overallSummary = buildOverallSummary(allRows, unmappedSP, usdToCcy);
@@ -554,6 +555,7 @@ export async function runReconciliation(
     fx,
     overallSummary,
     primaryRows,
+    allRows,
     spFxDebugRows: augmentedSP,
   };
 }

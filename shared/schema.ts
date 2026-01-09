@@ -70,7 +70,8 @@ export type OverallSummaryRow = z.infer<typeof overallSummaryRowSchema>;
 export const runResultSchema = z.object({
   fx: fxDataSchema,
   overallSummary: z.array(overallSummaryRowSchema),
-  primaryRows: z.array(primaryRowSchema),
+  primaryRows: z.array(primaryRowSchema),       // Primary only for main tables
+  allRows: z.array(primaryRowSchema),           // All rows including Secondary (for DRI/drafts)
   spFxDebugRows: z.array(spFxDebugRowSchema),
 });
 export type RunResult = z.infer<typeof runResultSchema>;
