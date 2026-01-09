@@ -1,0 +1,111 @@
+Implement backend reconciliation pipeline for one XLSX upload with two tabs: `HO Data` and `SP Invoice Report`. No column mapping UI. Join key is always `bookingId`.
+
+INPUT HEADERS (exact):
+- HO Data: `bookingId`, `netPrice`, `currency`, `bookingCreationDate`, `bookingStatus`, `Cancellable`, `Cancellation Insurance` (+ optional fields)
+- SP Invoice Report: `bookingId`, `netPrice`, `Billing Currency` (+ optional `fulfilmentDate`)
+
+FX:
+1) Fetch FX map from USD base once per run: `USD_to_CCY` from https://open.er-api.com/v6/latest/USD.
+2) Conversion SP currency -> HO currency uses:
+   fxRateUsed = USD_to_CCY[hoCurrencyUsed] / USD_to_CCY[spCurrency]
+   spNetInHo = spNetOriginal * fxRateUsed
+   If currencies same, fxRateUsed = 1.
+
+STEP B (Primary candidate + HO currency per bookingId):
+- Group HO rows by bookingId.
+- Determine Primary candidate = row with max `bookingCreationDate` (parse dates safely).
+- Build:
+  primaryHoCurrencyByBookingId[bookingId] = PrimaryRow.currency
+  primaryHoNetByBookingId[bookingId] = PrimaryRow.netPrice (optional)
+  primaryHoRowByBookingId[bookingId] = PrimaryRow (optional)
+- This map MUST be based ONLY on Primary candidate currency (ignore Secondary currencies).
+
+STEP C (Augment SP rows for debugging using Primary HO currency):
+- For each SP row:
+  spNetOriginal = SP.netPrice
+  spCurrency = SP["Billing Currency"]
+  hoCurrencyUsed = primaryHoCurrencyByBookingId[bookingId] (if missing => mark as Unmapped; do NOT fallback)
+  fxRateUsed = USD_to_CCY[hoCurrencyUsed] / USD_to_CCY[spCurrency] (if hoCurrencyUsed exists; else null)
+  spNetInHo = spNetOriginal * fxRateUsed (if hoCurrencyUsed exists; else null)
+- Store augmented SP rows in run results under `spFxDebugRows` with fields:
+  bookingId, spCurrency, hoCurrencyUsed, fxRateUsed, spNetOriginal, spNetInHo
+
+UNMAPPED SP HANDLING (bookingId in SP but not in primary map):
+- Identify SP rows where bookingId not in primaryHoCurrencyByBookingId.
+- These rows must contribute to Overall reconciliation summary as Reason="Unmapped".
+- For Unmapped rows:
+  currency = spCurrency
+  discrepancyLc = 0 - spNetOriginal  (HO base is 0)
+  discrepancyUsd = discrepancyLc / USD_to_CCY[spCurrency]
+  countBid = unique bookingId count
+- Aggregate Unmapped by currency (since Overall summary will include Currency column).
+
+STEP D (Build SP lookup by bookingId from augmented SP rows):
+- For bookingIds that exist in primary map only:
+  build spByBookingId[bookingId] = best SP record bundle:
+    { spNetInHo, spNetOriginal, spCurrency, hoCurrencyUsed, fxRateUsed }
+- If multiple SP rows per bookingId:
+  pick latest by `fulfilmentDate` if present else first.
+
+STEP E (Compute reconciliation fields on HO rows):
+- For each HO row:
+  hoNet = HO.netPrice
+  hoCurrency = HO.currency
+  find SP bundle via bookingId:
+    if present: use spNetInHo from bundle
+    if missing SP bundle: treat spNetInHo = 0, spCurrency = hoCurrency, fxRateUsed = 1
+  differenceLc = hoNet - spNetInHo   (HO base)
+  differencePct = differenceLc / hoNet (if hoNet == 0 => null)
+  sameCurrency = (spCurrency == hoCurrency)
+  store also: spNetOriginal, spCurrency, spNetInHo, fxRateUsed, hoCurrency
+
+STEP F (Primary/Secondary):
+- Using grouping by bookingId and max bookingCreationDate:
+  Primary row: fulfillmentIdentifier="Primary"
+  Others: fulfillmentIdentifier="Secondary"
+- Secondary rows reason = "Duplicate Fulfillment"
+
+STEP G (Reason logic — Primary only):
+1) If bookingStatus == "Cancelled":
+   a) If Cancellable == "Yes" AND spNetInHo > 0 => reason "Charge loss"
+   b) Else if Cancellable == "No" AND Cancellation Insurance == "Yes" => reason "Cancellation Insurance"
+   c) Else if Cancellable == "No" AND Cancellation Insurance == "No" => reason "HO policy cancellation"
+   d) Else default => "HO policy cancellation"
+2) Else (not Cancelled):
+   a) MTB rule (replicate Apps Script intent):
+      - abs(differencePct) >= 0.95 AND (abs(differencePct*100 - round(differencePct*100, -2)) <= 5)
+      => reason "Multiple Tickets Booked"
+   b) Reconciled rules:
+      - if sameCurrency:
+           reconciled if abs(differenceLc) < 1 AND abs(differencePct) < 0.01
+      - if different currency:
+           reconciled if abs(differencePct) < 0.03
+      If reconciled => reason "Reconciled"
+   c) Else => reason "Net Price Discrepancy"
+
+STEP H (Global exclusion):
+- All summaries/drafts/DRI views must use ONLY rows where fulfillmentIdentifier == "Primary".
+- Duplicate Fulfillment must be excluded from denominators and all reporting.
+
+STEP I (USD for sorting/reporting):
+- differenceUsd = differenceLc / USD_to_CCY[hoCurrency]
+- Default sort ascending by differenceUsd in outputs.
+
+OUTPUTS (Milestone 1 required):
+1) Overall reconciliation summary MUST include Currency column (Option A):
+   Columns: Reason | Currency | Discrepancy LC | Discrepancy USD | Count of BID
+   - For Primary HO rows: group by (reason, hoCurrency)
+     Discrepancy LC = sum(differenceLc)
+     Discrepancy USD = sum(differenceUsd)
+     Count of BID = unique bookingId count
+   - Add Unmapped groups by (Reason="Unmapped", spCurrency) using the Unmapped logic above.
+   - Sort rows by Discrepancy USD ascending.
+2) Also return booking-level rows (primary only) as `primaryRows` for future tables.
+
+API:
+- Implement `POST /api/runs/from-upload` with body { uploadId } returning { runId }.
+- Implement `GET /api/runs/:runId/status` returning { status, progressStep }.
+- Implement `GET /api/runs/:runId/results` returning:
+   { fx: { usdToCcy, refreshedAt }, overallSummary, primaryRows, spFxDebugRows }
+- Store run results in-memory by runId so navigation works.
+- Do not change frontend yet.
