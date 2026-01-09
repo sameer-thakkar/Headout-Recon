@@ -136,13 +136,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles }: Uploa
             <div className="mt-4 flex items-center justify-center gap-2">
               <span className="text-sm text-muted-foreground">Need a template?</span>
               <a
-                href="/sample-reconciliation-template.csv"
-                download="sample-reconciliation-template.csv"
+                href="/sample-reconciliation-template.xlsx"
+                download="sample-reconciliation-template.xlsx"
                 className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                 data-testid="link-download-template"
               >
                 <Download className="h-4 w-4" />
-                Download sample CSV
+                Download sample template
               </a>
             </div>
           </CardContent>
