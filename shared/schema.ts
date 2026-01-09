@@ -172,6 +172,10 @@ export const optionalFields = [
   "chargedLoss",
   "errorTeam",
   "errorBucket",
+  "priceSync",
+  "cancellable",
+  "cancellationInsurance",
+  "bnpl",
 ] as const;
 
 // Header aliases for auto-detection
@@ -192,6 +196,10 @@ export const headerAliases: Record<string, string[]> = {
   chargedLoss: ["chargedLoss", "charged_loss", "charge_loss"],
   errorTeam: ["errorTeamAttribution", "error_team", "dri_team"],
   errorBucket: ["errorBucket", "error_bucket", "reason_code"],
+  priceSync: ["Price sync", "priceSync", "price_sync"],
+  cancellable: ["Cancellable", "cancellable", "is_cancellable"],
+  cancellationInsurance: ["Cancellation Insurance", "cancellationInsurance", "cancellation_insurance"],
+  bnpl: ["BNPL", "bnpl", "buy_now_pay_later"],
 };
 
 // DRI Teams
