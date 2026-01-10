@@ -393,11 +393,87 @@ export async function registerRoutes(
     res.json({ fxRates: refreshedRates });
   });
 
-  // Export as XLSX
-  app.get("/api/export/xlsx", async (req, res) => {
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", "attachment; filename=reconciliation.xlsx");
-    res.send(Buffer.from("Mock XLSX content"));
+  /**
+   * Export reconciliation results as XLSX
+   * GET /api/runs/:runId/export
+   */
+  app.get("/api/runs/:runId/export", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const run = await storage.getRun(runId);
+
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+
+      if (run.status !== "done") {
+        return res.status(400).json({ error: "Run not complete" });
+      }
+
+      const result = await storage.getRunResult(runId);
+      if (!result) {
+        return res.status(404).json({ error: "Results not found" });
+      }
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+
+      // Sheet 1: Overall Summary
+      const summaryData = result.overallSummary.map(row => ({
+        "Reason": row.reason,
+        "Currency": row.currency,
+        "Discrepancy (LC)": row.discrepancyLc,
+        "Discrepancy (USD)": row.discrepancyUsd,
+        "Count of Bookings": row.countBid,
+      }));
+      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+
+      // Sheet 2: All Booking Details
+      const detailsData = result.primaryRows.map(row => ({
+        "Booking ID": row.bookingId,
+        "Type": row.fulfillmentIdentifier,
+        "Creation Date": row.bookingCreationDate || "",
+        "Booking Status": row.bookingStatus,
+        "Cancellable": row.cancellable,
+        "Cancellation Insurance": row.cancellationInsurance,
+        "HO Currency": row.hoCurrency,
+        "HO Net": row.hoNet,
+        "SP Currency": row.spCurrency,
+        "SP Net (Original)": row.spNetOriginal,
+        "SP Net (HO Currency)": row.spNetInHo,
+        "FX Rate Used": row.fxRateUsed,
+        "Same Currency": row.sameCurrency ? "Yes" : "No",
+        "Difference (LC)": row.differenceLc,
+        "Difference (%)": row.differencePct !== null ? row.differencePct : "",
+        "Difference (USD)": row.differenceUsd,
+        "Reason": row.reason,
+        "Experience Name": row.experienceName || "",
+        "Supplier Name": row.supplierName || "",
+      }));
+      const detailsSheet = XLSX.utils.json_to_sheet(detailsData);
+      XLSX.utils.book_append_sheet(workbook, detailsSheet, "Booking Details");
+
+      // Sheet 3: FX Rates
+      const fxData = Object.entries(result.fx.usdToCcy).map(([currency, rate]) => ({
+        "Currency": currency,
+        "USD Rate": rate,
+      }));
+      const fxSheet = XLSX.utils.json_to_sheet(fxData);
+      XLSX.utils.book_append_sheet(workbook, fxSheet, "FX Rates");
+
+      // Generate buffer
+      const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+      // Set response headers
+      const filename = `reconciliation_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("Export error:", error);
+      res.status(500).json({ error: "Failed to export results" });
+    }
   });
 
   return httpServer;

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, RefreshCw, Calendar } from "lucide-react";
+import { LayoutDashboard, RefreshCw, Calendar, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, Column } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
@@ -191,6 +192,10 @@ export function ResultsPage({ runId }: ResultsPageProps) {
   const totalDiscrepancyUsd = data.overallSummary.reduce((sum, row) => sum + row.discrepancyUsd, 0);
   const totalBookings = data.overallSummary.reduce((sum, row) => sum + row.countBid, 0);
 
+  const handleExport = () => {
+    window.open(`/api/runs/${runId}/export`, "_blank");
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-8 py-8 space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -200,14 +205,20 @@ export function ResultsPage({ runId }: ResultsPageProps) {
             Reconciliation summary and booking details
           </p>
         </div>
-        <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
-            <span>Run ID: <code className="font-mono text-foreground">{runId}</code></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span>FX Refreshed: <code className="font-mono text-foreground">{data.fx.refreshedAt}</code></span>
+        <div className="flex flex-col items-end gap-3">
+          <Button onClick={handleExport} data-testid="button-export">
+            <Download className="h-4 w-4 mr-2" />
+            Export to Excel
+          </Button>
+          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" />
+              <span>Run ID: <code className="font-mono text-foreground">{runId}</code></span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              <span>FX Refreshed: <code className="font-mono text-foreground">{data.fx.refreshedAt}</code></span>
+            </div>
           </div>
         </div>
       </div>
