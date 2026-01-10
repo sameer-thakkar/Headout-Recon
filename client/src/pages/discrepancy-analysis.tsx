@@ -9,6 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState, useMemo } from "react";
 import type { DiscrepancyAnalysisRow } from "@shared/schema";
 
+function formatDateDDMMYYYY(value: unknown): string | null {
+  if (!value) return null;
+  const dateStr = String(value).split("T")[0];
+  const [year, month, day] = dateStr.split("-");
+  if (year && month && day) {
+    return `${day}/${month}/${year}`;
+  }
+  return dateStr;
+}
+
 interface DiscrepancyAnalysisPageProps {
   runId: string | null;
 }
@@ -57,13 +67,19 @@ const mtbColumns: Column<DiscrepancyAnalysisRow>[] = [
     key: "startDate", 
     header: "Start Date", 
     sortable: true,
-    render: (value) => value ? String(value).split("T")[0] : <span className="text-muted-foreground">N/A</span>,
+    render: (value) => {
+      const formatted = formatDateDDMMYYYY(value);
+      return formatted ? formatted : <span className="text-muted-foreground">N/A</span>;
+    },
   },
   { 
     key: "endDate", 
     header: "End Date", 
     sortable: true,
-    render: (value) => value ? String(value).split("T")[0] : <span className="text-muted-foreground">N/A</span>,
+    render: (value) => {
+      const formatted = formatDateDDMMYYYY(value);
+      return formatted ? formatted : <span className="text-muted-foreground">N/A</span>;
+    },
   },
   { 
     key: "countBidWithDiscrepancy", 
@@ -125,13 +141,19 @@ const npdColumns: Column<DiscrepancyAnalysisRow>[] = [
     key: "startDate", 
     header: "Start Date", 
     sortable: true,
-    render: (value) => value ? String(value).split("T")[0] : <span className="text-muted-foreground">N/A</span>,
+    render: (value) => {
+      const formatted = formatDateDDMMYYYY(value);
+      return formatted ? formatted : <span className="text-muted-foreground">N/A</span>;
+    },
   },
   { 
     key: "endDate", 
     header: "End Date", 
     sortable: true,
-    render: (value) => value ? String(value).split("T")[0] : <span className="text-muted-foreground">N/A</span>,
+    render: (value) => {
+      const formatted = formatDateDDMMYYYY(value);
+      return formatted ? formatted : <span className="text-muted-foreground">N/A</span>;
+    },
   },
   { 
     key: "countBidWithDiscrepancy", 
