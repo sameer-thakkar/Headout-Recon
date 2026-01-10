@@ -62,6 +62,9 @@ interface HORow {
   cancellationInsurance: string | null;
   experienceName?: string;
   supplierName?: string;
+  tid?: string;
+  fulfillmentMethod?: string;
+  driTeam?: string;
 }
 
 // SP Row from parsed sheet
@@ -125,6 +128,9 @@ function parseHOData(sheet: SheetData): HORow[] {
       cancellationInsurance: getRowValue(row, "Cancellation Insurance", "cancellationInsurance") ? String(getRowValue(row, "Cancellation Insurance", "cancellationInsurance")) : null,
       experienceName: getRowValue(row, "experienceName", "Experience Name") ? String(getRowValue(row, "experienceName", "Experience Name")) : undefined,
       supplierName: getRowValue(row, "vendorName", "supplierName", "Vendor Name", "Supplier Name") ? String(getRowValue(row, "vendorName", "supplierName", "Vendor Name", "Supplier Name")) : undefined,
+      tid: getRowValue(row, "tid", "TID", "tourId", "Tour ID", "tour_id") ? String(getRowValue(row, "tid", "TID", "tourId", "Tour ID", "tour_id")) : undefined,
+      fulfillmentMethod: getRowValue(row, "fulfillmentMethod", "Fulfillment Method", "fulfilmentMethod", "Fulfilment Method") ? String(getRowValue(row, "fulfillmentMethod", "Fulfillment Method", "fulfilmentMethod", "Fulfilment Method")) : undefined,
+      driTeam: getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI") ? String(getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI")) : undefined,
     };
   });
 }
@@ -513,6 +519,9 @@ function computeReconciliationRows(
       reason,
       experienceName: ho.experienceName,
       supplierName: ho.supplierName,
+      tid: ho.tid,
+      fulfillmentMethod: ho.fulfillmentMethod,
+      driTeam: ho.driTeam,
     });
   });
   

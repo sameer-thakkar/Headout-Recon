@@ -3,6 +3,7 @@ import {
   Home,
   Upload,
   LayoutDashboard,
+  Search,
 } from "lucide-react";
 import {
   Sidebar,
@@ -21,6 +22,7 @@ const navItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Upload & Import", url: "/upload", icon: Upload },
   { title: "Results Dashboard", url: "/results", icon: LayoutDashboard },
+  { title: "Discrepancy Analysis", url: "/discrepancy-analysis", icon: Search },
 ];
 
 export function AppSidebar() {

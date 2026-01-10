@@ -14,6 +14,7 @@ import { UploadPage } from "@/pages/upload";
 import { MappingPage } from "@/pages/mapping";
 import { RunPage } from "@/pages/run";
 import { ResultsPage } from "@/pages/results";
+import { DiscrepancyAnalysisPage } from "@/pages/discrepancy-analysis";
 import { DraftsPage } from "@/pages/drafts";
 import { DriPage } from "@/pages/dri";
 import { ExportPage } from "@/pages/export";
@@ -322,6 +323,9 @@ function AppContent() {
               </Route>
               <Route path="/results">
                 <ResultsPage runId={currentRunId} />
+              </Route>
+              <Route path="/discrepancy-analysis">
+                <DiscrepancyAnalysisPage runId={currentRunId} />
               </Route>
               <Route path="/drafts">
                 <DraftsPage draftMessages={draftMessages} hasResults={hasResults} />

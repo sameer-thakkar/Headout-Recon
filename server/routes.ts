@@ -476,5 +476,153 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * GET /api/runs/:runId/discrepancy-analysis
+   * Get discrepancy analysis grouped by TID for all reasons except "Reconciled"
+   */
+  app.get("/api/runs/:runId/discrepancy-analysis", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const { reason } = req.query; // Optional filter by reason
+      
+      const run = await storage.getRun(runId);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+
+      if (run.status !== "done") {
+        return res.status(400).json({ error: "Run not complete" });
+      }
+
+      const result = await storage.getRunResult(runId);
+      if (!result) {
+        return res.status(404).json({ error: "Results not found" });
+      }
+
+      // Filter to discrepancy rows (exclude "Reconciled") and optionally by reason
+      let discrepancyRows = result.primaryRows.filter(r => r.reason !== "Reconciled");
+      if (reason && typeof reason === "string") {
+        discrepancyRows = discrepancyRows.filter(r => r.reason === reason);
+      }
+
+      // Get all primary rows for counting total BIDs per TID
+      const allPrimaryRows = result.primaryRows;
+
+      // Group by TID
+      const tidGroups = new Map<string, {
+        tid: string;
+        currency: string;
+        discrepancyLc: number;
+        discrepancyUsd: number;
+        fulfillmentMethod: string;
+        spNetTotal: number;
+        hoNetTotal: number;
+        dates: string[];
+        bookingIds: Set<string>;
+        driTeam: string;
+        reason: string;
+      }>();
+
+      for (const row of discrepancyRows) {
+        const tid = row.tid || "Unknown";
+        
+        if (!tidGroups.has(tid)) {
+          tidGroups.set(tid, {
+            tid,
+            currency: row.hoCurrency,
+            discrepancyLc: 0,
+            discrepancyUsd: 0,
+            fulfillmentMethod: row.fulfillmentMethod || "Unknown",
+            spNetTotal: 0,
+            hoNetTotal: 0,
+            dates: [],
+            bookingIds: new Set(),
+            driTeam: row.driTeam || "Unknown",
+            reason: row.reason,
+          });
+        }
+
+        const group = tidGroups.get(tid)!;
+        group.discrepancyLc += row.differenceLc;
+        group.discrepancyUsd += row.differenceUsd;
+        group.spNetTotal += row.spNetInHo;
+        group.hoNetTotal += row.hoNet;
+        if (row.bookingCreationDate) {
+          group.dates.push(row.bookingCreationDate);
+        }
+        group.bookingIds.add(row.bookingId);
+      }
+
+      // Build analysis rows
+      const analysisRows = Array.from(tidGroups.values()).map(group => {
+        // Sort dates to find start and end
+        const sortedDates = group.dates.sort();
+        const startDate = sortedDates.length > 0 ? sortedDates[0] : null;
+        const endDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : null;
+
+        // Calculate times charged
+        const timesCharged = group.hoNetTotal !== 0
+          ? Math.round((group.spNetTotal / group.hoNetTotal) * 100) / 100 + "x"
+          : "N/A";
+
+        // Count of BIDs with this discrepancy
+        const countBidWithDiscrepancy = group.bookingIds.size;
+
+        // Count BIDs in duration (all primary rows for this TID between start and end date)
+        let countBidsInDuration = 0;
+        if (startDate && endDate) {
+          countBidsInDuration = allPrimaryRows.filter(r => {
+            if (r.tid !== group.tid) return false;
+            if (!r.bookingCreationDate) return false;
+            return r.bookingCreationDate >= startDate && r.bookingCreationDate <= endDate;
+          }).length;
+        } else {
+          countBidsInDuration = countBidWithDiscrepancy;
+        }
+
+        // Total BIDs in report for this TID
+        const totalBidsInReport = allPrimaryRows.filter(r => r.tid === group.tid).length;
+
+        // Discrepancy coverage
+        const discrepancyCoveragePercent = countBidsInDuration > 0
+          ? Math.round((countBidWithDiscrepancy / countBidsInDuration) * 10000) / 100
+          : 0;
+
+        // Frequency classification
+        const frequency = countBidWithDiscrepancy >= 5 ? "Recurring" : "One-Off";
+
+        return {
+          tid: group.tid,
+          currency: group.currency,
+          discrepancyLc: group.discrepancyLc,
+          discrepancyUsd: group.discrepancyUsd,
+          fulfillmentMethod: group.fulfillmentMethod,
+          timesCharged,
+          startDate,
+          endDate,
+          countBidWithDiscrepancy,
+          countBidsInDuration,
+          totalBidsInReport,
+          discrepancyCoveragePercent,
+          frequency,
+          driTeam: group.driTeam,
+          reason: group.reason,
+        };
+      });
+
+      // Get unique reasons for filtering
+      const reasonsSet = new Set(result.primaryRows.filter(r => r.reason !== "Reconciled").map(r => r.reason));
+      const reasons = Array.from(reasonsSet);
+
+      res.json({
+        analysisRows,
+        reasons,
+      });
+    } catch (error) {
+      console.error("Discrepancy analysis error:", error);
+      res.status(500).json({ error: "Failed to compute discrepancy analysis" });
+    }
+  });
+
   return httpServer;
 }

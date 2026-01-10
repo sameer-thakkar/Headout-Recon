@@ -53,8 +53,33 @@ export const primaryRowSchema = z.object({
   // Optional fields for display
   experienceName: z.string().optional(),
   supplierName: z.string().optional(),
+  
+  // Additional fields for discrepancy analysis
+  tid: z.string().optional(),
+  fulfillmentMethod: z.string().optional(),
+  driTeam: z.string().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
+
+// Discrepancy analysis row (grouped by TID for a specific reason)
+export const discrepancyAnalysisRowSchema = z.object({
+  tid: z.string(),
+  currency: z.string(),
+  discrepancyLc: z.number(),
+  discrepancyUsd: z.number(),
+  fulfillmentMethod: z.string(),
+  timesCharged: z.string(),
+  startDate: z.string().nullable(),
+  endDate: z.string().nullable(),
+  countBidWithDiscrepancy: z.number(),
+  countBidsInDuration: z.number(),
+  totalBidsInReport: z.number(),
+  discrepancyCoveragePercent: z.number(),
+  frequency: z.enum(["Recurring", "One-Off"]),
+  driTeam: z.string(),
+  reason: z.string(),
+});
+export type DiscrepancyAnalysisRow = z.infer<typeof discrepancyAnalysisRowSchema>;
 
 // Overall summary row (with currency column)
 export const overallSummaryRowSchema = z.object({
