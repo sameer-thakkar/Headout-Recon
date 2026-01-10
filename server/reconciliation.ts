@@ -3,6 +3,7 @@
  * Implements Steps B through I from the specification
  */
 
+import fs from 'fs';
 import type {
   FxData,
   SpFxDebugRow,
@@ -100,7 +101,6 @@ function getRowValue(row: Record<string, unknown>, ...columnNames: string[]): un
  */
 function parseHOData(sheet: SheetData): HORow[] {
   // Write debug info to a file for troubleshooting
-  const fs = require('fs');
   const debugInfo = {
     headers: sheet.headers,
     sampleRowKeys: sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : [],
@@ -134,7 +134,6 @@ function parseHOData(sheet: SheetData): HORow[] {
  */
 function parseSPData(sheet: SheetData): SPRow[] {
   // Write debug info to a file for troubleshooting
-  const fs = require('fs');
   const debugInfo = {
     headers: sheet.headers,
     sampleRowKeys: sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : [],
