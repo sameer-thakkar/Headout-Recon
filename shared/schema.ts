@@ -58,6 +58,7 @@ export const primaryRowSchema = z.object({
   tid: z.string().optional(),
   fulfillmentMethod: z.string().optional(),
   driTeam: z.string().optional(),
+  headoutSellingPrice: z.number().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
@@ -78,6 +79,14 @@ export const discrepancyAnalysisRowSchema = z.object({
   frequency: z.enum(["Recurring", "One-Off"]),
   driTeam: z.string(),
   reason: z.string(),
+  // NPD-specific fields (optional - only for Net Price Discrepancy)
+  hoTakeRatePercent: z.number().optional(),
+  actualTakeRatePercent: z.number().optional(),
+  discrepancyPercentRange: z.string().optional(),
+  pattern: z.enum(["Consistent", "Scattered"]).optional(),
+  soldAtLoss: z.enum(["Yes", "No"]).optional(),
+  lossLc: z.number().optional(),
+  lossUsd: z.number().optional(),
 });
 export type DiscrepancyAnalysisRow = z.infer<typeof discrepancyAnalysisRowSchema>;
 

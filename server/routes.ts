@@ -521,6 +521,13 @@ export async function registerRoutes(
         bookingIds: Set<string>;
         driTeam: string;
         reason: string;
+        // NPD-specific tracking
+        hoTakeRates: number[];
+        actualTakeRates: number[];
+        discrepancyPercents: number[];
+        headoutSellingPriceTotal: number;
+        lossLcTotal: number;
+        hasSoldAtLoss: boolean;
       }>();
 
       for (const row of discrepancyRows) {
@@ -539,6 +546,12 @@ export async function registerRoutes(
             bookingIds: new Set(),
             driTeam: row.driTeam || "Unknown",
             reason: row.reason,
+            hoTakeRates: [],
+            actualTakeRates: [],
+            discrepancyPercents: [],
+            headoutSellingPriceTotal: 0,
+            lossLcTotal: 0,
+            hasSoldAtLoss: false,
           });
         }
 
@@ -551,6 +564,28 @@ export async function registerRoutes(
           group.dates.push(row.bookingCreationDate);
         }
         group.bookingIds.add(row.bookingId);
+
+        // NPD-specific calculations
+        const hsp = row.headoutSellingPrice;
+        if (hsp && hsp > 0) {
+          group.headoutSellingPriceTotal += hsp;
+          // HO take rate: (hsp - hoNet) / hsp
+          const hoTakeRate = (hsp - row.hoNet) / hsp * 100;
+          group.hoTakeRates.push(hoTakeRate);
+          // Actual take rate: (hsp - spNet) / hsp
+          const actualTakeRate = (hsp - row.spNetInHo) / hsp * 100;
+          group.actualTakeRates.push(actualTakeRate);
+          // Check if sold at loss
+          if (hsp < row.spNetInHo) {
+            group.hasSoldAtLoss = true;
+            group.lossLcTotal += hsp - row.spNetInHo;
+          }
+        }
+        // Discrepancy %: (hoNet - spNet) / hoNet
+        if (row.hoNet !== 0) {
+          const discPct = ((row.hoNet - row.spNetInHo) / row.hoNet) * 100;
+          group.discrepancyPercents.push(discPct);
+        }
       }
 
       // Build analysis rows
@@ -591,6 +626,39 @@ export async function registerRoutes(
         // Frequency classification
         const frequency = countBidWithDiscrepancy >= 5 ? "Recurring" : "One-Off";
 
+        // NPD-specific metrics
+        const hoTakeRatePercent = group.hoTakeRates.length > 0
+          ? Math.round(group.hoTakeRates.reduce((a, b) => a + b, 0) / group.hoTakeRates.length * 100) / 100
+          : undefined;
+        
+        const actualTakeRatePercent = group.actualTakeRates.length > 0
+          ? Math.round(group.actualTakeRates.reduce((a, b) => a + b, 0) / group.actualTakeRates.length * 100) / 100
+          : undefined;
+
+        // Discrepancy % range
+        let discrepancyPercentRange: string | undefined;
+        let pattern: "Consistent" | "Scattered" | undefined;
+        if (group.discrepancyPercents.length > 0) {
+          const uniquePercents = Array.from(new Set(group.discrepancyPercents.map(p => Math.round(p * 100) / 100)));
+          if (uniquePercents.length === 1) {
+            discrepancyPercentRange = `${uniquePercents[0].toFixed(2)}%`;
+            pattern = "Scattered";
+          } else {
+            const minPct = Math.min(...group.discrepancyPercents);
+            const maxPct = Math.max(...group.discrepancyPercents);
+            discrepancyPercentRange = `${minPct.toFixed(2)}% - ${maxPct.toFixed(2)}%`;
+            pattern = "Consistent";
+          }
+        }
+
+        // Loss calculations (only if sold at loss)
+        const soldAtLoss = group.hasSoldAtLoss ? "Yes" as const : "No" as const;
+        const lossLc = group.hasSoldAtLoss ? group.lossLcTotal : undefined;
+        // Convert loss to USD using the same FX logic
+        const lossUsd = lossLc !== undefined && result.fx?.usdToCcy?.[group.currency]
+          ? lossLc / result.fx.usdToCcy[group.currency]
+          : undefined;
+
         return {
           tid: group.tid,
           currency: group.currency,
@@ -607,6 +675,14 @@ export async function registerRoutes(
           frequency,
           driTeam: group.driTeam,
           reason: group.reason,
+          // NPD-specific fields
+          hoTakeRatePercent,
+          actualTakeRatePercent,
+          discrepancyPercentRange,
+          pattern,
+          soldAtLoss,
+          lossLc,
+          lossUsd,
         };
       });
 

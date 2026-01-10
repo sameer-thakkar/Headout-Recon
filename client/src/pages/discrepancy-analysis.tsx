@@ -6,7 +6,7 @@ import { DataTable, Column } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { DiscrepancyAnalysisRow } from "@shared/schema";
 
 interface DiscrepancyAnalysisPageProps {
@@ -18,7 +18,7 @@ interface DiscrepancyAnalysisResponse {
   reasons: string[];
 }
 
-const mtbColumns: Column<DiscrepancyAnalysisRow>[] = [
+const baseColumns: Column<DiscrepancyAnalysisRow>[] = [
   { key: "tid", header: "TID", sortable: true },
   { key: "currency", header: "Currency", sortable: true },
   {
@@ -47,6 +47,10 @@ const mtbColumns: Column<DiscrepancyAnalysisRow>[] = [
       return <span className={color}>{formatted}</span>;
     },
   },
+];
+
+const mtbColumns: Column<DiscrepancyAnalysisRow>[] = [
+  ...baseColumns,
   { key: "fulfillmentMethod", header: "Fulfillment Method", sortable: true },
   { key: "timesCharged", header: "Times Charged", sortable: true, align: "right", className: "font-mono" },
   { 
@@ -75,13 +79,6 @@ const mtbColumns: Column<DiscrepancyAnalysisRow>[] = [
     align: "right", 
     className: "font-mono" 
   },
-  { 
-    key: "totalBidsInReport", 
-    header: "Total BIDs", 
-    sortable: true, 
-    align: "right", 
-    className: "font-mono" 
-  },
   {
     key: "discrepancyCoveragePercent",
     header: "Coverage %",
@@ -104,6 +101,133 @@ const mtbColumns: Column<DiscrepancyAnalysisRow>[] = [
     },
   },
   { key: "driTeam", header: "DRI Team", sortable: true },
+];
+
+const npdColumns: Column<DiscrepancyAnalysisRow>[] = [
+  ...baseColumns,
+  {
+    key: "hoTakeRatePercent",
+    header: "HO Take Rate",
+    sortable: true,
+    align: "right",
+    className: "font-mono",
+    render: (value) => value != null ? `${(value as number).toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>,
+  },
+  {
+    key: "actualTakeRatePercent",
+    header: "Actual Take Rate",
+    sortable: true,
+    align: "right",
+    className: "font-mono",
+    render: (value) => value != null ? `${(value as number).toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>,
+  },
+  { 
+    key: "startDate", 
+    header: "Start Date", 
+    sortable: true,
+    render: (value) => value ? String(value).split("T")[0] : <span className="text-muted-foreground">N/A</span>,
+  },
+  { 
+    key: "endDate", 
+    header: "End Date", 
+    sortable: true,
+    render: (value) => value ? String(value).split("T")[0] : <span className="text-muted-foreground">N/A</span>,
+  },
+  { 
+    key: "countBidWithDiscrepancy", 
+    header: "BIDs w/ Discrepancy", 
+    sortable: true, 
+    align: "right", 
+    className: "font-mono" 
+  },
+  { 
+    key: "countBidsInDuration", 
+    header: "BIDs in Duration", 
+    sortable: true, 
+    align: "right", 
+    className: "font-mono" 
+  },
+  {
+    key: "discrepancyCoveragePercent",
+    header: "Coverage %",
+    sortable: true,
+    align: "right",
+    className: "font-mono",
+    render: (value) => `${(value as number).toFixed(1)}%`,
+  },
+  {
+    key: "discrepancyPercentRange",
+    header: "Discrepancy %",
+    sortable: true,
+    render: (value) => value || <span className="text-muted-foreground">N/A</span>,
+  },
+  {
+    key: "pattern",
+    header: "Pattern",
+    sortable: true,
+    render: (value) => {
+      if (!value) return <span className="text-muted-foreground">N/A</span>;
+      const pat = value as string;
+      return (
+        <Badge variant={pat === "Consistent" ? "outline" : "secondary"}>
+          {pat}
+        </Badge>
+      );
+    },
+  },
+  {
+    key: "frequency",
+    header: "Frequency",
+    sortable: true,
+    render: (value) => {
+      const freq = value as string;
+      return (
+        <Badge variant={freq === "Recurring" ? "destructive" : "secondary"}>
+          {freq}
+        </Badge>
+      );
+    },
+  },
+  { key: "fulfillmentMethod", header: "Fulfillment Method", sortable: true },
+  { key: "driTeam", header: "DRI Team", sortable: true },
+  {
+    key: "soldAtLoss",
+    header: "Sold at Loss?",
+    sortable: true,
+    render: (value) => {
+      if (!value) return <span className="text-muted-foreground">N/A</span>;
+      const isLoss = value === "Yes";
+      return (
+        <Badge variant={isLoss ? "destructive" : "outline"}>
+          {value as string}
+        </Badge>
+      );
+    },
+  },
+  {
+    key: "lossLc",
+    header: "Loss LC",
+    sortable: true,
+    align: "right",
+    className: "font-mono",
+    render: (value) => {
+      if (value == null) return <span className="text-muted-foreground">-</span>;
+      const num = value as number;
+      return <span className="text-red-600 dark:text-red-400">{num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
+    },
+  },
+  {
+    key: "lossUsd",
+    header: "Loss USD",
+    sortable: true,
+    align: "right",
+    className: "font-mono",
+    render: (value) => {
+      if (value == null) return <span className="text-muted-foreground">-</span>;
+      const num = value as number;
+      return <span className="text-red-600 dark:text-red-400">${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
+    },
+  },
 ];
 
 function LoadingSkeleton() {
@@ -145,6 +269,13 @@ export function DiscrepancyAnalysisPage({ runId }: DiscrepancyAnalysisPageProps)
     enabled: !!runId,
   });
 
+  const columns = useMemo(() => {
+    if (selectedReason === "Net Price Discrepancy") {
+      return npdColumns;
+    }
+    return mtbColumns;
+  }, [selectedReason]);
+
   if (!runId) {
     return (
       <div className="max-w-7xl mx-auto px-8 py-8">
@@ -173,11 +304,11 @@ export function DiscrepancyAnalysisPage({ runId }: DiscrepancyAnalysisPageProps)
     );
   }
 
-  const mtbRows = data?.analysisRows || [];
+  const rows = data?.analysisRows || [];
   const reasons = data?.reasons || [];
 
   return (
-    <div className="max-w-7xl mx-auto px-8 py-8 space-y-8">
+    <div className="max-w-[95vw] mx-auto px-8 py-8 space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Discrepancy Analysis</h1>
@@ -207,26 +338,28 @@ export function DiscrepancyAnalysisPage({ runId }: DiscrepancyAnalysisPageProps)
           <CardTitle className="text-lg flex items-center gap-2">
             {selectedReason} Analysis
             <Badge variant="outline" className="ml-2">
-              {mtbRows.length} TIDs
+              {rows.length} TIDs
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {mtbRows.length === 0 ? (
+          {rows.length === 0 ? (
             <EmptyState
               icon={Search}
               title={`No ${selectedReason} discrepancies found`}
               description="Try selecting a different reason or running a new reconciliation"
             />
           ) : (
-            <DataTable
-              columns={mtbColumns}
-              data={mtbRows}
-              defaultSortKey="discrepancyUsd"
-              defaultSortDir="desc"
-              testIdPrefix="table-mtb"
-              emptyMessage="No discrepancy data available"
-            />
+            <div className="overflow-x-auto">
+              <DataTable
+                columns={columns}
+                data={rows}
+                defaultSortKey="discrepancyUsd"
+                defaultSortDir="desc"
+                testIdPrefix="table-analysis"
+                emptyMessage="No discrepancy data available"
+              />
+            </div>
           )}
         </CardContent>
       </Card>

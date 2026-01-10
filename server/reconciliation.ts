@@ -65,6 +65,7 @@ interface HORow {
   tid?: string;
   fulfillmentMethod?: string;
   driTeam?: string;
+  headoutSellingPrice?: number;
 }
 
 // SP Row from parsed sheet
@@ -131,6 +132,7 @@ function parseHOData(sheet: SheetData): HORow[] {
       tid: getRowValue(row, "tid", "TID", "tourId", "Tour ID", "tour_id") ? String(getRowValue(row, "tid", "TID", "tourId", "Tour ID", "tour_id")) : undefined,
       fulfillmentMethod: getRowValue(row, "fulfillmentMethod", "Fulfillment Method", "fulfilmentMethod", "Fulfilment Method") ? String(getRowValue(row, "fulfillmentMethod", "Fulfillment Method", "fulfilmentMethod", "Fulfilment Method")) : undefined,
       driTeam: getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI") ? String(getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI")) : undefined,
+      headoutSellingPrice: Number(getRowValue(row, "headoutSellingPrice", "Headout Selling Price", "headout_selling_price", "sellingPrice", "Selling Price")) || undefined,
     };
   });
 }
@@ -522,6 +524,7 @@ function computeReconciliationRows(
       tid: ho.tid,
       fulfillmentMethod: ho.fulfillmentMethod,
       driTeam: ho.driTeam,
+      headoutSellingPrice: ho.headoutSellingPrice,
     });
   });
   
