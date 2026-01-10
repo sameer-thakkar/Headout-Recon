@@ -99,22 +99,32 @@ function getRowValue(row: Record<string, unknown>, ...columnNames: string[]): un
  * Parse HO Data sheet into typed rows
  */
 function parseHOData(sheet: SheetData): HORow[] {
-  // DEBUG: Log column headers from the sheet
-  console.log(`\n[DEBUG] HO Data sheet headers: ${sheet.headers.join(", ")}`);
-  console.log(`[DEBUG] Sample row keys (first row): ${sheet.rows.length > 0 ? Object.keys(sheet.rows[0]).join(", ") : "no rows"}`);
+  // Write debug info to a file for troubleshooting
+  const fs = require('fs');
+  const debugInfo = {
+    headers: sheet.headers,
+    sampleRowKeys: sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : [],
+    sampleRow: sheet.rows.length > 0 ? sheet.rows[0] : null,
+  };
+  fs.writeFileSync('/tmp/ho_data_debug.json', JSON.stringify(debugInfo, null, 2));
   
   return sheet.rows.map((row) => {
     const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
+    const bookingId = getRowValue(row, "bookingId", "Booking ID", "booking_id");
+    const netPrice = getRowValue(row, "netPrice", "Net Price", "net_price", "finalNetPrice", "Final Net Price");
+    const currency = getRowValue(row, "currency", "Currency", "Billing Currency");
+    const bookingStatus = getRowValue(row, "bookingStatus", "Booking Status", "booking_status", "status");
+    
     return {
-      bookingId: String(row["bookingId"] || getRowValue(row, "bookingId", "Booking ID", "booking_id") || ""),
-      netPrice: Number(row["netPrice"] || getRowValue(row, "netPrice", "Net Price", "net_price")) || 0,
-      currency: String(row["currency"] || getRowValue(row, "currency", "Currency") || "USD"),
+      bookingId: String(bookingId || ""),
+      netPrice: Number(netPrice) || 0,
+      currency: String(currency || "USD"),
       bookingCreationDate: bookingCreationDate ? String(bookingCreationDate) : null,
-      bookingStatus: String(row["bookingStatus"] || getRowValue(row, "bookingStatus", "Booking Status", "booking_status") || ""),
-      cancellable: row["Cancellable"] ? String(row["Cancellable"]) : null,
-      cancellationInsurance: row["Cancellation Insurance"] ? String(row["Cancellation Insurance"]) : null,
-      experienceName: row["experienceName"] ? String(row["experienceName"]) : undefined,
-      supplierName: row["vendorName"] || row["supplierName"] ? String(row["vendorName"] || row["supplierName"]) : undefined,
+      bookingStatus: String(bookingStatus || ""),
+      cancellable: getRowValue(row, "Cancellable", "cancellable") ? String(getRowValue(row, "Cancellable", "cancellable")) : null,
+      cancellationInsurance: getRowValue(row, "Cancellation Insurance", "cancellationInsurance") ? String(getRowValue(row, "Cancellation Insurance", "cancellationInsurance")) : null,
+      experienceName: getRowValue(row, "experienceName", "Experience Name") ? String(getRowValue(row, "experienceName", "Experience Name")) : undefined,
+      supplierName: getRowValue(row, "vendorName", "supplierName", "Vendor Name", "Supplier Name") ? String(getRowValue(row, "vendorName", "supplierName", "Vendor Name", "Supplier Name")) : undefined,
     };
   });
 }
@@ -123,12 +133,28 @@ function parseHOData(sheet: SheetData): HORow[] {
  * Parse SP Invoice Report sheet into typed rows
  */
 function parseSPData(sheet: SheetData): SPRow[] {
-  return sheet.rows.map((row) => ({
-    bookingId: String(row["bookingId"] || ""),
-    netPrice: Number(row["netPrice"]) || 0,
-    billingCurrency: String(row["Billing Currency"] || row["billingCurrency"] || "USD"),
-    fulfilmentDate: row["fulfilmentDate"] ? String(row["fulfilmentDate"]) : null,
-  }));
+  // Write debug info to a file for troubleshooting
+  const fs = require('fs');
+  const debugInfo = {
+    headers: sheet.headers,
+    sampleRowKeys: sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : [],
+    sampleRow: sheet.rows.length > 0 ? sheet.rows[0] : null,
+  };
+  fs.writeFileSync('/tmp/sp_data_debug.json', JSON.stringify(debugInfo, null, 2));
+  
+  return sheet.rows.map((row) => {
+    const bookingId = getRowValue(row, "bookingId", "Booking ID", "booking_id");
+    const netPrice = getRowValue(row, "netPrice", "Net Price", "net_price");
+    const billingCurrency = getRowValue(row, "Billing Currency", "billingCurrency", "currency", "Currency");
+    const fulfilmentDate = getRowValue(row, "fulfilmentDate", "Fulfilment Date", "fulfilment_date");
+    
+    return {
+      bookingId: String(bookingId || ""),
+      netPrice: Number(netPrice) || 0,
+      billingCurrency: String(billingCurrency || "USD"),
+      fulfilmentDate: fulfilmentDate ? String(fulfilmentDate) : null,
+    };
+  });
 }
 
 /**
