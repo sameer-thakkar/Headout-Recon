@@ -2,12 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   Home,
   Upload,
-  Columns,
-  Play,
   LayoutDashboard,
-  MessageSquare,
-  Users,
-  Download,
 } from "lucide-react";
 import {
   Sidebar,
@@ -25,12 +20,7 @@ import {
 const navItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Upload & Import", url: "/upload", icon: Upload },
-  { title: "Column Mapping", url: "/mapping", icon: Columns },
-  { title: "Run", url: "/run", icon: Play },
   { title: "Results Dashboard", url: "/results", icon: LayoutDashboard },
-  { title: "Draft Messages", url: "/drafts", icon: MessageSquare },
-  { title: "DRI Views", url: "/dri", icon: Users },
-  { title: "Export", url: "/export", icon: Download },
 ];
 
 export function AppSidebar() {
