@@ -157,12 +157,58 @@ function parseSPData(sheet: SheetData): SPRow[] {
 }
 
 /**
- * Parse date string safely, returns timestamp for comparison
+ * Parse date value safely, handles:
+ * - ISO date strings like "2025-11-18 18:20:43"
+ * - Excel serial numbers (days since 1899-12-30)
+ * - Various date formats
+ * Returns timestamp for comparison (higher = more recent)
  */
-function parseDate(dateStr: string | null): number {
-  if (!dateStr) return 0;
-  const parsed = new Date(dateStr);
-  return isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+function parseDate(dateValue: string | number | null | undefined): number {
+  if (dateValue === null || dateValue === undefined || dateValue === "") return 0;
+  
+  // Handle Excel serial numbers (numeric values)
+  if (typeof dateValue === "number" || !isNaN(Number(dateValue))) {
+    const numValue = Number(dateValue);
+    // Excel dates are days since 1899-12-30 (with a bug for 1900 leap year)
+    // Only treat as Excel serial if it looks like a reasonable date serial (> 40000 = ~2009+)
+    if (numValue > 40000 && numValue < 60000) {
+      // Convert Excel serial to JS timestamp
+      // Excel epoch: Dec 30, 1899 (accounting for the 1900 leap year bug)
+      const excelEpoch = new Date(1899, 11, 30).getTime();
+      const msPerDay = 24 * 60 * 60 * 1000;
+      return excelEpoch + numValue * msPerDay;
+    }
+    // Could also be a Unix timestamp in seconds or ms
+    if (numValue > 1000000000000) {
+      // Looks like milliseconds timestamp
+      return numValue;
+    }
+    if (numValue > 1000000000) {
+      // Looks like seconds timestamp
+      return numValue * 1000;
+    }
+  }
+  
+  // Handle string dates
+  const strValue = String(dateValue);
+  const parsed = new Date(strValue);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.getTime();
+  }
+  
+  // Try some common formats
+  // "DD/MM/YYYY HH:MM:SS" format
+  const dmyMatch = strValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(.*)$/);
+  if (dmyMatch) {
+    const [, day, month, year, time] = dmyMatch;
+    const isoStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}${time ? 'T' + time : ''}`;
+    const parsed2 = new Date(isoStr);
+    if (!isNaN(parsed2.getTime())) {
+      return parsed2.getTime();
+    }
+  }
+  
+  return 0;
 }
 
 /**
@@ -393,96 +439,84 @@ function assignReason(
 }
 
 /**
- * STEP E-F: Compute reconciliation fields on HO rows and assign Primary/Secondary
+ * STEP E-F: Compute reconciliation fields on Primary HO rows only
+ * Secondary rows are completely excluded from analysis
  */
 function computeReconciliationRows(
-  hoRowsByBookingId: Map<string, HORow[]>,
   primaryHoRowByBookingId: Map<string, HORow>,
   spByBookingId: Map<string, SPBundle>,
   usdToCcy: Record<string, number>
 ): PrimaryRow[] {
-  const allRows: PrimaryRow[] = [];
+  const primaryRows: PrimaryRow[] = [];
   
-  Array.from(hoRowsByBookingId.entries()).forEach(([bookingId, hoRows]) => {
-    const primaryHoRow = primaryHoRowByBookingId.get(bookingId);
+  Array.from(primaryHoRowByBookingId.entries()).forEach(([bookingId, ho]) => {
+    // Get SP bundle
+    const spBundle = spByBookingId.get(bookingId);
     
-    for (const ho of hoRows) {
-      const isPrimary = ho === primaryHoRow;
-      const fulfillmentIdentifier = isPrimary ? "Primary" : "Secondary";
-      
-      // Get SP bundle
-      const spBundle = spByBookingId.get(bookingId);
-      
-      let spNetOriginal: number;
-      let spCurrency: string;
-      let spNetInHo: number;
-      let fxRateUsed: number;
-      let sameCurrency: boolean;
-      
-      if (spBundle) {
-        spNetOriginal = spBundle.spNetOriginal;
-        spCurrency = spBundle.spCurrency;
-        spNetInHo = spBundle.spNetInHo;
-        fxRateUsed = spBundle.fxRateUsed;
-        sameCurrency = spBundle.spCurrency === ho.currency;
-      } else {
-        // Missing SP bundle: treat spNetInHo = 0
-        spNetOriginal = 0;
-        spCurrency = ho.currency;
-        spNetInHo = 0;
-        fxRateUsed = 1;
-        sameCurrency = true;
-      }
-      
-      // Compute differences
-      const differenceLc = ho.netPrice - spNetInHo;
-      const differencePct = ho.netPrice !== 0 ? differenceLc / ho.netPrice : null;
-      
-      // STEP I: Convert to USD
-      const hoRate = usdToCcy[ho.currency] || 1;
-      const differenceUsd = differenceLc / hoRate;
-      
-      // STEP G: Assign reason (only matters for Primary, Secondary always gets "Duplicate Fulfillment")
-      let reason: string;
-      if (!isPrimary) {
-        reason = "Duplicate Fulfillment";
-      } else {
-        reason = assignReason(
-          ho.bookingStatus,
-          ho.cancellable,
-          ho.cancellationInsurance,
-          differenceLc,
-          differencePct,
-          sameCurrency,
-          spNetInHo
-        );
-      }
-      
-      allRows.push({
-        bookingId,
-        fulfillmentIdentifier,
-        hoNet: ho.netPrice,
-        hoCurrency: ho.currency,
-        bookingCreationDate: ho.bookingCreationDate,
-        bookingStatus: ho.bookingStatus,
-        cancellable: ho.cancellable,
-        cancellationInsurance: ho.cancellationInsurance,
-        spNetOriginal,
-        spCurrency,
-        spNetInHo,
-        fxRateUsed,
-        sameCurrency,
-        differenceLc,
-        differencePct,
-        differenceUsd,
-        reason,
-        experienceName: ho.experienceName,
-        supplierName: ho.supplierName,
-      });
+    let spNetOriginal: number;
+    let spCurrency: string;
+    let spNetInHo: number;
+    let fxRateUsed: number;
+    let sameCurrency: boolean;
+    
+    if (spBundle) {
+      spNetOriginal = spBundle.spNetOriginal;
+      spCurrency = spBundle.spCurrency;
+      spNetInHo = spBundle.spNetInHo;
+      fxRateUsed = spBundle.fxRateUsed;
+      sameCurrency = spBundle.spCurrency === ho.currency;
+    } else {
+      // Missing SP bundle: treat spNetInHo = 0
+      spNetOriginal = 0;
+      spCurrency = ho.currency;
+      spNetInHo = 0;
+      fxRateUsed = 1;
+      sameCurrency = true;
     }
+    
+    // Compute differences
+    const differenceLc = ho.netPrice - spNetInHo;
+    const differencePct = ho.netPrice !== 0 ? differenceLc / ho.netPrice : null;
+    
+    // STEP I: Convert to USD
+    const hoRate = usdToCcy[ho.currency] || 1;
+    const differenceUsd = differenceLc / hoRate;
+    
+    // STEP G: Assign reason
+    const reason = assignReason(
+      ho.bookingStatus,
+      ho.cancellable,
+      ho.cancellationInsurance,
+      differenceLc,
+      differencePct,
+      sameCurrency,
+      spNetInHo
+    );
+    
+    primaryRows.push({
+      bookingId,
+      fulfillmentIdentifier: "Primary",
+      hoNet: ho.netPrice,
+      hoCurrency: ho.currency,
+      bookingCreationDate: ho.bookingCreationDate,
+      bookingStatus: ho.bookingStatus,
+      cancellable: ho.cancellable,
+      cancellationInsurance: ho.cancellationInsurance,
+      spNetOriginal,
+      spCurrency,
+      spNetInHo,
+      fxRateUsed,
+      sameCurrency,
+      differenceLc,
+      differencePct,
+      differenceUsd,
+      reason,
+      experienceName: ho.experienceName,
+      supplierName: ho.supplierName,
+    });
   });
   
-  return allRows;
+  return primaryRows;
 }
 
 /**
@@ -493,14 +527,13 @@ function buildOverallSummary(
   unmappedSP: SPRow[],
   usdToCcy: Record<string, number>
 ): OverallSummaryRow[] {
-  // STEP H: Filter to Primary only
-  const primaryOnly = primaryRows.filter(r => r.fulfillmentIdentifier === "Primary");
+  // All rows passed in are already Primary only (no filtering needed)
   
   // Group Primary rows by (reason, hoCurrency)
   const summaryMap = new Map<string, OverallSummaryRow>();
   const bidsByKey = new Map<string, Set<string>>();
   
-  for (const row of primaryOnly) {
+  for (const row of primaryRows) {
     const key = `${row.reason}|${row.hoCurrency}`;
     
     if (!summaryMap.has(key)) {
@@ -604,29 +637,24 @@ export async function runReconciliation(
     primaryHoCurrencyByBookingId
   );
   
-  // STEP E-G: Compute reconciliation rows
-  const allRows = computeReconciliationRows(
-    hoRowsByBookingId,
+  // STEP E-G: Compute reconciliation rows (Primary only, Secondary excluded)
+  const primaryRows = computeReconciliationRows(
     primaryHoRowByBookingId,
     spByBookingId,
     usdToCcy
   );
   
-  // STEP H: Filter to Primary only for main tables
-  const primaryRows = allRows.filter(r => r.fulfillmentIdentifier === "Primary");
-  
-  // Sort both arrays by differenceUsd ascending
+  // Sort by differenceUsd ascending
   primaryRows.sort((a, b) => a.differenceUsd - b.differenceUsd);
-  allRows.sort((a, b) => a.differenceUsd - b.differenceUsd);
   
-  // Build overall summary
-  const overallSummary = buildOverallSummary(allRows, unmappedSP, usdToCcy);
+  // Build overall summary (Primary only + Unmapped)
+  const overallSummary = buildOverallSummary(primaryRows, unmappedSP, usdToCcy);
   
   return {
     fx,
     overallSummary,
     primaryRows,
-    allRows,
+    allRows: primaryRows, // allRows now same as primaryRows (no Secondary)
     spFxDebugRows: augmentedSP,
   };
 }
