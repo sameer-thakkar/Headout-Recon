@@ -145,7 +145,7 @@ export function LandingPage({ runs, lastFxRefresh, onStartDemo }: LandingPagePro
                         >
                           {run.status}
                         </Badge>
-                        {run.totalDiscrepancyUsd !== null && (
+                        {run.totalDiscrepancyUsd != null && (
                           <span className="font-mono text-sm">
                             ${run.totalDiscrepancyUsd.toLocaleString()}
                           </span>
