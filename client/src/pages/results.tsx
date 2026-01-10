@@ -46,6 +46,16 @@ const summaryColumns: Column<OverallSummaryRow>[] = [
 
 const bookingColumns: Column<PrimaryRow>[] = [
   { key: "bookingId", header: "Booking ID", sortable: true },
+  { key: "fulfillmentIdentifier", header: "Type", sortable: true },
+  { 
+    key: "bookingCreationDate", 
+    header: "Creation Date", 
+    sortable: true,
+    render: (value) => {
+      if (!value) return <span className="text-muted-foreground">N/A</span>;
+      return String(value);
+    },
+  },
   { key: "hoCurrency", header: "Currency", sortable: true },
   {
     key: "hoNet",
@@ -239,13 +249,13 @@ export function ResultsPage({ runId }: ResultsPageProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Booking-Level Details</CardTitle>
+          <CardTitle className="text-lg">Booking-Level Details (All Rows)</CardTitle>
         </CardHeader>
         <CardContent>
           <DataTable
             columns={bookingColumns}
-            data={data.primaryRows}
-            defaultSortKey="differenceUsd"
+            data={data.allRows}
+            defaultSortKey="bookingId"
             defaultSortDir="asc"
             testIdPrefix="table-bookings"
             emptyMessage="No booking data available"

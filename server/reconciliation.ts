@@ -72,6 +72,30 @@ interface SPRow {
 }
 
 /**
+ * Helper to get value from row with fallback column names (case-insensitive)
+ */
+function getRowValue(row: Record<string, unknown>, ...columnNames: string[]): unknown {
+  // First try exact match
+  for (const name of columnNames) {
+    if (row[name] !== undefined && row[name] !== null && row[name] !== "") {
+      return row[name];
+    }
+  }
+  // Then try case-insensitive match (and with/without spaces)
+  const rowKeys = Object.keys(row);
+  for (const name of columnNames) {
+    const normalizedName = name.toLowerCase().replace(/\s+/g, "");
+    for (const key of rowKeys) {
+      const normalizedKey = key.toLowerCase().replace(/\s+/g, "");
+      if (normalizedKey === normalizedName && row[key] !== undefined && row[key] !== null && row[key] !== "") {
+        return row[key];
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Parse HO Data sheet into typed rows
  */
 function parseHOData(sheet: SheetData): HORow[] {
@@ -79,17 +103,20 @@ function parseHOData(sheet: SheetData): HORow[] {
   console.log(`\n[DEBUG] HO Data sheet headers: ${sheet.headers.join(", ")}`);
   console.log(`[DEBUG] Sample row keys (first row): ${sheet.rows.length > 0 ? Object.keys(sheet.rows[0]).join(", ") : "no rows"}`);
   
-  return sheet.rows.map((row) => ({
-    bookingId: String(row["bookingId"] || ""),
-    netPrice: Number(row["netPrice"]) || 0,
-    currency: String(row["currency"] || "USD"),
-    bookingCreationDate: row["bookingCreationDate"] ? String(row["bookingCreationDate"]) : null,
-    bookingStatus: String(row["bookingStatus"] || ""),
-    cancellable: row["Cancellable"] ? String(row["Cancellable"]) : null,
-    cancellationInsurance: row["Cancellation Insurance"] ? String(row["Cancellation Insurance"]) : null,
-    experienceName: row["experienceName"] ? String(row["experienceName"]) : undefined,
-    supplierName: row["vendorName"] || row["supplierName"] ? String(row["vendorName"] || row["supplierName"]) : undefined,
-  }));
+  return sheet.rows.map((row) => {
+    const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
+    return {
+      bookingId: String(row["bookingId"] || getRowValue(row, "bookingId", "Booking ID", "booking_id") || ""),
+      netPrice: Number(row["netPrice"] || getRowValue(row, "netPrice", "Net Price", "net_price")) || 0,
+      currency: String(row["currency"] || getRowValue(row, "currency", "Currency") || "USD"),
+      bookingCreationDate: bookingCreationDate ? String(bookingCreationDate) : null,
+      bookingStatus: String(row["bookingStatus"] || getRowValue(row, "bookingStatus", "Booking Status", "booking_status") || ""),
+      cancellable: row["Cancellable"] ? String(row["Cancellable"]) : null,
+      cancellationInsurance: row["Cancellation Insurance"] ? String(row["Cancellation Insurance"]) : null,
+      experienceName: row["experienceName"] ? String(row["experienceName"]) : undefined,
+      supplierName: row["vendorName"] || row["supplierName"] ? String(row["vendorName"] || row["supplierName"]) : undefined,
+    };
+  });
 }
 
 /**
