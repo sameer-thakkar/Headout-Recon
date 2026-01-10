@@ -75,6 +75,10 @@ interface SPRow {
  * Parse HO Data sheet into typed rows
  */
 function parseHOData(sheet: SheetData): HORow[] {
+  // DEBUG: Log column headers from the sheet
+  console.log(`\n[DEBUG] HO Data sheet headers: ${sheet.headers.join(", ")}`);
+  console.log(`[DEBUG] Sample row keys (first row): ${sheet.rows.length > 0 ? Object.keys(sheet.rows[0]).join(", ") : "no rows"}`);
+  
   return sheet.rows.map((row) => ({
     bookingId: String(row["bookingId"] || ""),
     netPrice: Number(row["netPrice"]) || 0,
@@ -136,12 +140,27 @@ function buildPrimaryHOMap(hoRows: HORow[]): {
   Array.from(hoRowsByBookingId.entries()).forEach(([bookingId, rows]) => {
     if (rows.length === 0) return;
     
+    // DEBUG: Log when there are multiple rows for a bookingId
+    if (rows.length > 1) {
+      console.log(`\n[DEBUG] BookingId ${bookingId} has ${rows.length} rows:`);
+      rows.forEach((r, idx) => {
+        const parsedTs = parseDate(r.bookingCreationDate);
+        console.log(`  Row ${idx + 1}: bookingCreationDate="${r.bookingCreationDate}" -> parsed timestamp=${parsedTs} (${parsedTs ? new Date(parsedTs).toISOString() : 'INVALID'}), netPrice=${r.netPrice}`);
+      });
+    }
+    
     // Sort by bookingCreationDate descending
     const sorted = [...rows].sort((a, b) => 
       parseDate(b.bookingCreationDate) - parseDate(a.bookingCreationDate)
     );
     
     const primary = sorted[0];
+    
+    // DEBUG: Log which row was selected as Primary
+    if (rows.length > 1) {
+      console.log(`  -> Selected PRIMARY: bookingCreationDate="${primary.bookingCreationDate}", netPrice=${primary.netPrice}`);
+    }
+    
     primaryHoCurrencyByBookingId.set(bookingId, primary.currency);
     primaryHoNetByBookingId.set(bookingId, primary.netPrice);
     primaryHoRowByBookingId.set(bookingId, primary);
