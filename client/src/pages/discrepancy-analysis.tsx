@@ -11,12 +11,30 @@ import type { DiscrepancyAnalysisRow } from "@shared/schema";
 
 function formatDateDDMMYYYY(value: unknown): string | null {
   if (!value) return null;
-  const dateStr = String(value).split("T")[0];
-  const [year, month, day] = dateStr.split("-");
-  if (year && month && day) {
+  
+  const strValue = String(value);
+  
+  // Check if it's an Excel serial number (numeric value like 45929.83)
+  const numValue = Number(strValue);
+  if (!isNaN(numValue) && numValue > 1000 && numValue < 100000) {
+    // Excel serial number: days since Jan 1, 1900 (with Excel's leap year bug)
+    // Excel incorrectly treats 1900 as a leap year, so we adjust for dates after Feb 28, 1900
+    const excelEpoch = new Date(1899, 11, 30); // Dec 30, 1899 (Excel epoch adjusted)
+    const date = new Date(excelEpoch.getTime() + numValue * 24 * 60 * 60 * 1000);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
     return `${day}/${month}/${year}`;
   }
-  return dateStr;
+  
+  // Check if it's already in ISO format (YYYY-MM-DD)
+  const dateStr = strValue.split("T")[0];
+  const [year, month, day] = dateStr.split("-");
+  if (year && month && day && year.length === 4) {
+    return `${day}/${month}/${year}`;
+  }
+  
+  return strValue;
 }
 
 interface DiscrepancyAnalysisPageProps {
