@@ -179,8 +179,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     setAmountPayable(prev => ({ ...prev, [currency]: numValue }));
   };
 
-  const handleExportExcel = useCallback(() => {
-    if (primaryRows.length === 0) {
+  const handleExportExcel = useCallback(async () => {
+    if (!currentRunId || primaryRows.length === 0) {
       toast({
         title: "No data to export",
         description: "Please run a reconciliation first",
@@ -189,43 +189,41 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       return;
     }
 
-    const exportData = primaryRows.map((row) => ({
-      "Booking ID": row.bookingId,
-      "Reason": row.reason,
-      "Currency": row.hoCurrency,
-      "HO Net": row.hoNet,
-      "SP Net (Original)": row.spNetOriginal,
-      "SP Currency": row.spCurrency,
-      "SP Net (Converted)": row.spNetInHo,
-      "Difference (LC)": row.differenceLc,
-      "Difference (%)": row.differencePct != null ? `${row.differencePct.toFixed(2)}%` : "-",
-      "Difference (USD)": row.differenceUsd,
-      "FX Rate Used": row.fxRateUsed,
-      "Booking Status": row.bookingStatus,
-      "TID": row.tid || "-",
-      "Fulfillment Method": row.fulfillmentMethod || "-",
-      "DRI Team": row.driTeam || "-",
-    }));
+    try {
+      toast({
+        title: "Generating export...",
+        description: "Please wait while the export file is being prepared",
+      });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Booking Summary");
+      const response = await fetch(`/api/runs/${currentRunId}/export`);
+      if (!response.ok) {
+        throw new Error("Failed to generate export");
+      }
 
-    const colWidths = [
-      { wch: 15 }, { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 15 },
-      { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
-      { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 15 },
-    ];
-    worksheet["!cols"] = colWidths;
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const timestamp = new Date().toISOString().slice(0, 10);
+      a.download = `reconciliation_export_${timestamp}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
 
-    const timestamp = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(workbook, `booking-summary-${timestamp}.xlsx`);
-
-    toast({
-      title: "Export complete",
-      description: `Exported ${primaryRows.length} bookings to Excel`,
-    });
-  }, [primaryRows, toast]);
+      toast({
+        title: "Export complete",
+        description: "Your reconciliation report has been downloaded",
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "Export failed",
+        description: "Failed to generate export file",
+        variant: "destructive",
+      });
+    }
+  }, [currentRunId, primaryRows.length, toast]);
 
   const hasResults = currentRunId && overallSummary.length > 0;
   const isMTBReason = selectedReason === "Multiple Tickets Booked";

@@ -429,7 +429,11 @@ export async function registerRoutes(
   });
 
   /**
-   * Export reconciliation results as XLSX
+   * Export reconciliation results as XLSX with 4 tabs:
+   * 1. Payable Summary - SP total and HO total (Primary only)
+   * 2. Discrepancy Analysis - Overall summary + TID-level breakdowns
+   * 3. SP Invoice Report - Original data + converted values + FX rate
+   * 4. HO Report Updated - Original HO data with SP net, Difference, Difference %, Secondary updates
    * GET /api/runs/:runId/export
    */
   app.get("/api/runs/:runId/export", async (req, res) => {
@@ -450,58 +454,306 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Results not found" });
       }
 
+      // Get original upload data
+      const upload = await storage.getUpload(run.uploadId);
+      const originalHoData = upload?.hoData?.rows || [];
+      const originalSpData = upload?.spData?.rows || [];
+
+      // Create lookup maps for reconciled rows
+      // For HO report, we need to match by bookingId AND fulfillmentIdentifier
+      // to correctly handle cases where same bookingId has both Primary and Secondary
+      const allRowsMap = new Map<string, typeof result.allRows[0][]>();
+      for (const r of result.allRows) {
+        const existing = allRowsMap.get(r.bookingId) || [];
+        existing.push(r);
+        allRowsMap.set(r.bookingId, existing);
+      }
+      const spFxMap = new Map(result.spFxDebugRows.map(r => [r.bookingId, r]));
+
       // Create workbook
       const workbook = XLSX.utils.book_new();
 
-      // Sheet 1: Overall Summary
-      const summaryData = result.overallSummary.map(row => ({
+      // =====================================================
+      // SHEET 1: Payable Summary
+      // =====================================================
+      // Group totals by currency for accuracy
+      const spTotalByCurrency = new Map<string, number>();
+      for (const r of result.spFxDebugRows) {
+        const ccy = r.spCurrency;
+        spTotalByCurrency.set(ccy, (spTotalByCurrency.get(ccy) || 0) + r.spNetOriginal);
+      }
+      
+      const hoTotalByCurrency = new Map<string, number>();
+      for (const r of result.primaryRows) {
+        const ccy = r.hoCurrency;
+        hoTotalByCurrency.set(ccy, (hoTotalByCurrency.get(ccy) || 0) + r.hoNet);
+      }
+      
+      const payableSummaryData: { Description: string; Currency: string; Amount: number; Note: string }[] = [];
+      
+      // Add SP totals by currency
+      Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+        payableSummaryData.push({
+          "Description": "Payable as per SP",
+          "Currency": ccy,
+          "Amount": amount,
+          "Note": "Sum of SP Invoice",
+        });
+      });
+      
+      // Add HO totals by currency
+      Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+        payableSummaryData.push({
+          "Description": "Payable as per HO",
+          "Currency": ccy,
+          "Amount": amount,
+          "Note": "Sum of HO Net (Primary only)",
+        });
+      });
+      
+      const payableSheet = XLSX.utils.json_to_sheet(payableSummaryData);
+      payableSheet["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(workbook, payableSheet, "Payable Summary");
+
+      // =====================================================
+      // SHEET 2: Discrepancy Analysis
+      // =====================================================
+      // Part A: Overall Summary (excluding Reconciled)
+      const discrepancySummary = result.overallSummary.filter(r => r.reason !== "Reconciled").map(row => ({
         "Reason": row.reason,
         "Currency": row.currency,
         "Discrepancy (LC)": row.discrepancyLc,
         "Discrepancy (USD)": row.discrepancyUsd,
-        "Count of Bookings": row.countBid,
+        "Count BID": row.countBid,
       }));
-      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
 
-      // Sheet 2: All Booking Details
-      const detailsData = result.primaryRows.map(row => ({
-        "Booking ID": row.bookingId,
-        "Type": row.fulfillmentIdentifier,
-        "Creation Date": row.bookingCreationDate || "",
-        "Booking Status": row.bookingStatus,
-        "Cancellable": row.cancellable,
-        "Cancellation Insurance": row.cancellationInsurance,
-        "HO Currency": row.hoCurrency,
-        "HO Net": row.hoNet,
-        "SP Currency": row.spCurrency,
-        "SP Net (Original)": row.spNetOriginal,
-        "SP Net (HO Currency)": row.spNetInHo,
-        "FX Rate Used": row.fxRateUsed,
-        "Same Currency": row.sameCurrency ? "Yes" : "No",
-        "Difference (LC)": row.differenceLc,
-        "Difference (%)": row.differencePct !== null ? row.differencePct : "",
-        "Difference (USD)": row.differenceUsd,
-        "Reason": row.reason,
-        "Experience Name": row.experienceName || "",
-        "Supplier Name": row.supplierName || "",
-      }));
-      const detailsSheet = XLSX.utils.json_to_sheet(detailsData);
-      XLSX.utils.book_append_sheet(workbook, detailsSheet, "Booking Details");
+      // Part B: TID-level breakdown for each reason
+      const discrepancyRows = result.primaryRows.filter(r => r.reason !== "Reconciled");
+      const allPrimaryRows = result.primaryRows;
+      
+      // Group by TID
+      const tidGroups = new Map<string, {
+        tid: string;
+        currency: string;
+        discrepancyLc: number;
+        discrepancyUsd: number;
+        fulfillmentMethod: string;
+        spNetTotal: number;
+        hoNetTotal: number;
+        dates: string[];
+        bookingIds: Set<string>;
+        driTeam: string;
+        reason: string;
+        hoTakeRates: number[];
+        actualTakeRates: number[];
+        discrepancyPercents: number[];
+        headoutSellingPriceTotal: number;
+        lossLcTotal: number;
+        hasSoldAtLoss: boolean;
+      }>();
 
-      // Sheet 3: FX Rates
-      const fxData = Object.entries(result.fx.usdToCcy).map(([currency, rate]) => ({
-        "Currency": currency,
-        "USD Rate": rate,
-      }));
-      const fxSheet = XLSX.utils.json_to_sheet(fxData);
-      XLSX.utils.book_append_sheet(workbook, fxSheet, "FX Rates");
+      for (const row of discrepancyRows) {
+        const tid = row.tid || "Unknown";
+        
+        if (!tidGroups.has(tid)) {
+          tidGroups.set(tid, {
+            tid,
+            currency: row.hoCurrency,
+            discrepancyLc: 0,
+            discrepancyUsd: 0,
+            fulfillmentMethod: row.fulfillmentMethod || "Unknown",
+            spNetTotal: 0,
+            hoNetTotal: 0,
+            dates: [],
+            bookingIds: new Set(),
+            driTeam: row.driTeam || "Unknown",
+            reason: row.reason,
+            hoTakeRates: [],
+            actualTakeRates: [],
+            discrepancyPercents: [],
+            headoutSellingPriceTotal: 0,
+            lossLcTotal: 0,
+            hasSoldAtLoss: false,
+          });
+        }
+
+        const group = tidGroups.get(tid)!;
+        group.discrepancyLc += row.differenceLc;
+        group.discrepancyUsd += row.differenceUsd;
+        group.spNetTotal += row.spNetInHo;
+        group.hoNetTotal += row.hoNet;
+        if (row.bookingCreationDate) group.dates.push(row.bookingCreationDate);
+        group.bookingIds.add(row.bookingId);
+
+        const hsp = row.headoutSellingPrice;
+        if (hsp && hsp > 0) {
+          group.headoutSellingPriceTotal += hsp;
+          const hoTakeRate = (hsp - row.hoNet) / hsp * 100;
+          group.hoTakeRates.push(hoTakeRate);
+          const actualTakeRate = (hsp - row.spNetInHo) / hsp * 100;
+          group.actualTakeRates.push(actualTakeRate);
+          if (hsp < row.spNetInHo) {
+            group.hasSoldAtLoss = true;
+            group.lossLcTotal += hsp - row.spNetInHo;
+          }
+        }
+        if (row.hoNet !== 0) {
+          const discPct = ((row.hoNet - row.spNetInHo) / row.hoNet) * 100;
+          group.discrepancyPercents.push(discPct);
+        }
+      }
+
+      // Build TID-level analysis rows
+      const tidAnalysisData = Array.from(tidGroups.values()).map(group => {
+        const sortedDates = group.dates.sort();
+        const startDate = sortedDates.length > 0 ? sortedDates[0] : "";
+        const endDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : "";
+        const timesCharged = group.hoNetTotal !== 0
+          ? (group.spNetTotal / group.hoNetTotal).toFixed(2) + "x"
+          : "N/A";
+        const countBidWithDiscrepancy = group.bookingIds.size;
+        let countBidsInDuration = countBidWithDiscrepancy;
+        if (startDate && endDate) {
+          countBidsInDuration = allPrimaryRows.filter(r => 
+            r.tid === group.tid && r.bookingCreationDate && 
+            r.bookingCreationDate >= startDate && r.bookingCreationDate <= endDate
+          ).length;
+        }
+        const totalBidsInReport = allPrimaryRows.filter(r => r.tid === group.tid).length;
+        const discrepancyCoveragePercent = countBidsInDuration > 0
+          ? (countBidWithDiscrepancy / countBidsInDuration * 100).toFixed(2) + "%"
+          : "0%";
+        const frequency = countBidWithDiscrepancy >= 5 ? "Recurring" : "One-Off";
+
+        let discrepancyPercentRange = "";
+        let pattern = "";
+        if (group.discrepancyPercents.length > 0) {
+          const minPct = Math.min(...group.discrepancyPercents);
+          const maxPct = Math.max(...group.discrepancyPercents);
+          if (Math.abs(maxPct - minPct) < 0.5) {
+            discrepancyPercentRange = minPct.toFixed(2) + "%";
+            pattern = "Scattered";
+          } else {
+            discrepancyPercentRange = minPct.toFixed(2) + "% - " + maxPct.toFixed(2) + "%";
+            pattern = "Consistent";
+          }
+        }
+
+        return {
+          "Reason": group.reason,
+          "TID": group.tid,
+          "Currency": group.currency,
+          "Discrepancy (LC)": group.discrepancyLc,
+          "Discrepancy (USD)": group.discrepancyUsd,
+          "Fulfillment Method": group.fulfillmentMethod,
+          "Times Charged": timesCharged,
+          "Start Date": startDate,
+          "End Date": endDate,
+          "BID Count": countBidWithDiscrepancy,
+          "BIDs in Duration": countBidsInDuration,
+          "Total BIDs": totalBidsInReport,
+          "Coverage %": discrepancyCoveragePercent,
+          "Frequency": frequency,
+          "Discrepancy % Range": discrepancyPercentRange,
+          "Pattern": pattern,
+          "Sold at Loss": group.hasSoldAtLoss ? "Yes" : "No",
+          "Loss (LC)": group.hasSoldAtLoss ? group.lossLcTotal : "",
+          "DRI Team": group.driTeam,
+        };
+      });
+
+      // Sort TID analysis by reason then TID
+      tidAnalysisData.sort((a, b) => {
+        if (a["Reason"] !== b["Reason"]) return a["Reason"].localeCompare(b["Reason"]);
+        return a["TID"].localeCompare(b["TID"]);
+      });
+      
+      // Create Discrepancy Analysis sheet with both sections
+      const discrepancySheet = XLSX.utils.json_to_sheet([]);
+      
+      // Add header for Overall Summary section
+      XLSX.utils.sheet_add_aoa(discrepancySheet, [["=== OVERALL DISCREPANCY SUMMARY ==="]], { origin: "A1" });
+      XLSX.utils.sheet_add_json(discrepancySheet, discrepancySummary, { origin: "A3", skipHeader: false });
+      
+      // Add header for TID Analysis section
+      const tidStartRow = discrepancySummary.length + 6;
+      XLSX.utils.sheet_add_aoa(discrepancySheet, [["=== TID-LEVEL DISCREPANCY ANALYSIS (Grouped by Reason) ==="]], { origin: `A${tidStartRow}` });
+      XLSX.utils.sheet_add_json(discrepancySheet, tidAnalysisData, { origin: `A${tidStartRow + 2}`, skipHeader: false });
+      
+      XLSX.utils.book_append_sheet(workbook, discrepancySheet, "Discrepancy Analysis");
+
+      // =====================================================
+      // SHEET 3: SP Invoice Report
+      // =====================================================
+      // Original SP data + SP Net converted to HO currency + FX rate used
+      const spReportData = originalSpData.map((row: Record<string, unknown>) => {
+        const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        const spFxRow = spFxMap.get(bookingId);
+        
+        return {
+          ...row,
+          "SP Net (HO Currency)": spFxRow?.spNetInHo ?? "",
+          "FX Rate Used": spFxRow?.fxRateUsed ?? "",
+        };
+      });
+      const spReportSheet = XLSX.utils.json_to_sheet(spReportData);
+      XLSX.utils.book_append_sheet(workbook, spReportSheet, "SP Invoice Report");
+
+      // =====================================================
+      // SHEET 4: HO Report Updated
+      // =====================================================
+      // Original HO data + SP Net + Difference + Difference % + Secondary updates
+      const hoReportData = originalHoData.map((row: Record<string, unknown>) => {
+        const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        
+        // Get all reconciliation rows for this bookingId
+        const reconRows = allRowsMap.get(bookingId) || [];
+        
+        // Determine if this HO row is Primary or Secondary based on the original data
+        // Look for fulfillment identifier in original row (common field names)
+        const hoFulfillment = String(row["fulfillmentIdentifier"] || row["Fulfillment Identifier"] || row["Type"] || "Primary");
+        const isSecondary = hoFulfillment === "Secondary" || hoFulfillment.toLowerCase().includes("secondary");
+        
+        // Find matching reconciliation row (prefer matching by fulfillment type, otherwise take first)
+        const reconRow = reconRows.find(r => 
+          (isSecondary && r.fulfillmentIdentifier === "Secondary") ||
+          (!isSecondary && r.fulfillmentIdentifier === "Primary")
+        ) || reconRows[0];
+        
+        if (isSecondary) {
+          // Secondary bookings: Final net = 0, Comments = "Duplicate Fulfilment"
+          return {
+            ...row,
+            "SP Net": reconRow?.spNetInHo ?? "",
+            "Difference": reconRow ? reconRow.hoNet - reconRow.spNetInHo : "",
+            "Difference %": reconRow && reconRow.hoNet !== 0 
+              ? ((reconRow.hoNet - reconRow.spNetInHo) / reconRow.hoNet * 100).toFixed(2) + "%" 
+              : "",
+            "Final Net": 0,
+            "Comments": "Duplicate Fulfilment",
+          };
+        } else {
+          // Primary bookings: Normal columns with Final Net = HO Net
+          return {
+            ...row,
+            "SP Net": reconRow?.spNetInHo ?? "",
+            "Difference": reconRow ? reconRow.hoNet - reconRow.spNetInHo : "",
+            "Difference %": reconRow && reconRow.hoNet !== 0 
+              ? ((reconRow.hoNet - reconRow.spNetInHo) / reconRow.hoNet * 100).toFixed(2) + "%" 
+              : "",
+            "Final Net": reconRow?.hoNet ?? "",
+            "Comments": "",
+          };
+        }
+      });
+      const hoReportSheet = XLSX.utils.json_to_sheet(hoReportData);
+      XLSX.utils.book_append_sheet(workbook, hoReportSheet, "HO Report Updated");
 
       // Generate buffer
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
       // Set response headers
-      const filename = `reconciliation_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      const filename = `reconciliation_export_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
