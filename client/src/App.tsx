@@ -110,9 +110,10 @@ function AppContent() {
 
       return [uploadedFile];
     } catch (error) {
-      console.error("Upload error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Upload error:", errorMessage);
       setStatus("error");
-      throw error;
+      throw new Error(errorMessage);
     }
   }, []);
 

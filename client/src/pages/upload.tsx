@@ -146,9 +146,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         description: `Successfully uploaded ${uploaded.length} file(s)`,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "There was an error uploading your files";
       toast({
         title: "Upload failed",
-        description: "There was an error uploading your files",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

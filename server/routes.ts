@@ -150,8 +150,8 @@ export async function registerRoutes(
       res.json({
         uploadId: uploadRecord.id,
         file: fileInfo,
-        hoDataRowCount: hoData.rows.length,
-        spDataRowCount: spData.rows.length,
+        hoDataRowCount: (hoData as SheetData).rows.length,
+        spDataRowCount: (spData as SheetData).rows.length,
         sheetNames: Array.from(sheets.keys()),
       });
     } catch (error) {
