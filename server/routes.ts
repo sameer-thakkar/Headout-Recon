@@ -771,26 +771,24 @@ export async function registerRoutes(
             // Apply number/date formats (skip header row)
             if (r > 0 && columns[c]) {
               const colName = columns[c].toLowerCase();
-              // Number format for discrepancy and loss columns
+              // Number format for discrepancy and loss columns - use cell.z for xlsx-js-style
               if (colName.includes("discrepancy") && !colName.includes("%") && !colName.includes("range")) {
-                sheet[cellRef].s.numFmt = "#,##0.00";
-                if (sheet[cellRef].t !== "n" && typeof sheet[cellRef].v === "number") {
+                if (typeof sheet[cellRef].v === "number") {
                   sheet[cellRef].t = "n";
+                  sheet[cellRef].z = "#,##0.00";
                 }
               }
               if (colName.includes("loss") && !colName.includes("?")) {
-                sheet[cellRef].s.numFmt = "#,##0.00";
-                if (sheet[cellRef].t !== "n" && typeof sheet[cellRef].v === "number") {
+                if (typeof sheet[cellRef].v === "number") {
                   sheet[cellRef].t = "n";
+                  sheet[cellRef].z = "#,##0.00";
                 }
               }
-              // Date format for start/end date columns
+              // Date format for start/end date columns - use cell.z for xlsx-js-style
               if (colName === "start date" || colName === "end date") {
                 if (typeof sheet[cellRef].v === "number") {
-                  // Truncate to remove time portion and set as date
-                  sheet[cellRef].v = Math.floor(sheet[cellRef].v as number);
-                  sheet[cellRef].t = "d";
-                  sheet[cellRef].s.numFmt = "dd/mm/yyyy";
+                  sheet[cellRef].t = "n";
+                  sheet[cellRef].z = "dd/mm/yyyy";
                 }
               }
             }
