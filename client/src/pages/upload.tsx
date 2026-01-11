@@ -66,7 +66,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     enabled: !!currentRunId,
   });
 
-  const { data: discrepancyData, isLoading: isDiscrepancyLoading } = useQuery<{ rows: DiscrepancyAnalysisRow[] }>({
+  const { data: discrepancyData, isLoading: isDiscrepancyLoading } = useQuery<{ analysisRows: DiscrepancyAnalysisRow[] }>({
     queryKey: ["/api/runs", currentRunId, "discrepancy-analysis", selectedReason],
     enabled: !!currentRunId && !!selectedReason && isModalOpen,
   });
@@ -95,9 +95,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   }, [primaryRows, amountPayable]);
 
   const filteredDiscrepancyRows = useMemo(() => {
-    if (!discrepancyData?.rows || !selectedReason) return [];
-    return discrepancyData.rows.filter(row => row.reason === selectedReason);
-  }, [discrepancyData?.rows, selectedReason]);
+    if (!discrepancyData?.analysisRows || !selectedReason) return [];
+    return discrepancyData.analysisRows.filter(row => row.reason === selectedReason);
+  }, [discrepancyData?.analysisRows, selectedReason]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
