@@ -463,14 +463,14 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       </ScrollArea>
 
       <Dialog open={isModalOpen} onOpenChange={handleModalClose}>
-        <DialogContent className="max-w-6xl max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-[95vw] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Discrepancy Analysis: {selectedReason}
             </DialogTitle>
           </DialogHeader>
-          <ScrollArea className="flex-1">
-            <Table>
+          <div className="flex-1 overflow-auto">
+            <Table className="min-w-max">
               <TableHeader>
                 <TableRow>
                   <TableHead>TID</TableHead>
@@ -582,7 +582,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 )}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
