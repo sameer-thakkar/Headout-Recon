@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -9,20 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
-import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow } from "@shared/schema";
+import * as XLSX from "xlsx";
+import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 
 interface UploadPageProps {
   onFilesUploaded: (files: File[]) => Promise<UploadedFile[]>;
   onLoadDemo: () => void;
   uploadedFiles: UploadedFile[];
   currentRunId: string | null;
-}
-
-interface AmountPayableRow {
-  currency: string;
-  asPerSP: number;
-  asPerHO: number;
-  finalPayable: number;
 }
 
 function formatDateDDMMYYYY(value: unknown): string | null {
@@ -48,15 +42,6 @@ function formatDateDDMMYYYY(value: unknown): string | null {
   return strValue;
 }
 
-function formatCurrency(value: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency || "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
@@ -75,14 +60,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const { data: runResult } = useQuery<{
     overallSummary: OverallSummaryRow[];
-    primaryRows: Array<{
-      bookingId: string;
-      hoCurrency: string;
-      hoNet: number;
-      spNetOriginal: number;
-      spCurrency: string;
-      reason: string;
-    }>;
+    primaryRows: PrimaryRow[];
   }>({
     queryKey: ["/api/runs", currentRunId, "result"],
     enabled: !!currentRunId,
@@ -200,193 +178,235 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     setAmountPayable(prev => ({ ...prev, [currency]: numValue }));
   };
 
+  const handleExportExcel = useCallback(() => {
+    if (primaryRows.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "Please run a reconciliation first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const exportData = primaryRows.map((row) => ({
+      "Booking ID": row.bookingId,
+      "Reason": row.reason,
+      "Currency": row.hoCurrency,
+      "HO Net": row.hoNet,
+      "SP Net (Original)": row.spNetOriginal,
+      "SP Currency": row.spCurrency,
+      "SP Net (Converted)": row.spNetInHo,
+      "Difference (LC)": row.differenceLc,
+      "Difference (%)": row.differencePct != null ? `${row.differencePct.toFixed(2)}%` : "-",
+      "Difference (USD)": row.differenceUsd,
+      "FX Rate Used": row.fxRateUsed,
+      "Booking Status": row.bookingStatus,
+      "TID": row.tid || "-",
+      "Fulfillment Method": row.fulfillmentMethod || "-",
+      "DRI Team": row.driTeam || "-",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Booking Summary");
+
+    const colWidths = [
+      { wch: 15 }, { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 15 },
+      { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 15 },
+      { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 18 }, { wch: 15 },
+    ];
+    worksheet["!cols"] = colWidths;
+
+    const timestamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `booking-summary-${timestamp}.xlsx`);
+
+    toast({
+      title: "Export complete",
+      description: `Exported ${primaryRows.length} bookings to Excel`,
+    });
+  }, [primaryRows, toast]);
+
   const hasResults = currentRunId && overallSummary.length > 0;
   const isMTBReason = selectedReason === "Multiple Tickets Booked";
   const isNPDReason = selectedReason === "Net Price Discrepancy";
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="p-4 border-b">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="p-4 border-b flex-shrink-0">
         <h1 className="text-2xl font-bold">Reconciliation</h1>
         <p className="text-sm text-muted-foreground">
           Upload files and view reconciliation results
         </p>
       </div>
 
-      <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        <div className="w-[20%] flex flex-col gap-4">
-          <Card className="flex-1">
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Upload Files</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div
-                className={`border-2 border-dashed rounded-lg h-32 flex flex-col items-center justify-center cursor-pointer transition-colors ${
-                  isDragging
-                    ? "border-primary bg-primary/5"
-                    : "border-muted-foreground/25 hover:border-primary/50"
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => document.getElementById("file-input")?.click()}
-                data-testid="dropzone"
-              >
-                <input
-                  id="file-input"
-                  type="file"
-                  accept=".xlsx,.csv"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileSelect}
-                  data-testid="input-file"
-                />
-                <Upload className={`h-8 w-8 mb-2 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
-                <p className="text-xs text-center font-medium">
-                  {isUploading ? "Uploading..." : "Drop files or click"}
-                </p>
-                <p className="text-xs text-muted-foreground">.xlsx, .csv</p>
-              </div>
-
-              <a
-                href="/sample-reconciliation-template.xlsx"
-                download="sample-reconciliation-template.xlsx"
-                className="flex items-center justify-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                data-testid="link-download-template"
-              >
-                <Download className="h-3 w-3" />
-                Download template
-              </a>
-
-              {files.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {files.length} file(s) uploaded
-                  </p>
-                  <ScrollArea className="h-32">
-                    <div className="space-y-2">
-                      {files.map((file) => (
-                        <div
-                          key={file.id}
-                          className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-xs"
-                          data-testid={`file-item-${file.id}`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <FileSpreadsheet className="h-4 w-4 flex-shrink-0 text-chart-2" />
-                            <span className="truncate">{file.name}</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 flex-shrink-0"
-                            onClick={() => removeFile(file.id)}
-                            data-testid={`button-remove-${file.id}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
-
-              <div className="pt-2 border-t">
-                <p className="text-xs text-muted-foreground mb-2">Or try demo mode</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onLoadDemo}
-                  className="w-full"
-                  data-testid="button-load-demo"
+            <CardContent>
+              <div className="flex gap-4 items-start">
+                <div
+                  className={`flex-1 border-2 border-dashed rounded-lg h-24 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                    isDragging
+                      ? "border-primary bg-primary/5"
+                      : "border-muted-foreground/25 hover:border-primary/50"
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => document.getElementById("file-input")?.click()}
+                  data-testid="dropzone"
                 >
-                  <Play className="h-3 w-3 mr-1" />
-                  Load Demo
-                </Button>
+                  <input
+                    id="file-input"
+                    type="file"
+                    accept=".xlsx,.csv"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileSelect}
+                    data-testid="input-file"
+                  />
+                  <Upload className={`h-6 w-6 mb-1 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+                  <p className="text-xs text-center font-medium">
+                    {isUploading ? "Uploading..." : "Drop files or click to upload"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">.xlsx, .csv</p>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <a
+                    href="/sample-reconciliation-template.xlsx"
+                    download="sample-reconciliation-template.xlsx"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                    data-testid="link-download-template"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download template
+                  </a>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onLoadDemo}
+                    data-testid="button-load-demo"
+                  >
+                    <Play className="h-3 w-3 mr-1" />
+                    Load Demo
+                  </Button>
+                </div>
+
+                {files.length > 0 && (
+                  <div className="flex gap-2 flex-wrap">
+                    {files.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50 text-xs"
+                        data-testid={`file-item-${file.id}`}
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-chart-2" />
+                        <span className="max-w-[120px] truncate">{file.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          onClick={() => removeFile(file.id)}
+                          data-testid={`button-remove-${file.id}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
-        </div>
 
-        <div className="w-[50%] flex flex-col gap-4">
-          <Card className="flex-1 flex flex-col">
-            <CardHeader className="pb-3 flex-shrink-0">
-              <CardTitle className="text-base">Overall Reconciliation Summary</CardTitle>
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-4">
+                <CardTitle className="text-base">Overall Reconciliation Summary</CardTitle>
+                {hasResults && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportExcel}
+                    data-testid="button-export-excel"
+                  >
+                    <FileDown className="h-4 w-4 mr-1" />
+                    Export Excel
+                  </Button>
+                )}
+              </div>
               {!hasResults && (
                 <CardDescription>
                   Upload a file to see reconciliation summary
                 </CardDescription>
               )}
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
+            <CardContent>
               {hasResults ? (
-                <ScrollArea className="h-full">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Reason</TableHead>
-                        <TableHead>Currency</TableHead>
-                        <TableHead className="text-right">Discrepancy (LC)</TableHead>
-                        <TableHead className="text-right">Discrepancy (USD)</TableHead>
-                        <TableHead className="text-right">Count BID</TableHead>
-                        <TableHead className="w-8"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {overallSummary.map((row, index) => {
-                        const isClickable = row.reason !== "Reconciled";
-                        return (
-                          <TableRow
-                            key={`${row.reason}-${row.currency}-${index}`}
-                            className={isClickable ? "cursor-pointer hover-elevate" : ""}
-                            onClick={() => isClickable && handleReasonClick(row.reason)}
-                            data-testid={`summary-row-${row.reason}-${row.currency}`}
-                          >
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Badge 
-                                  variant={row.reason === "Reconciled" ? "default" : "secondary"}
-                                  className="text-xs"
-                                >
-                                  {row.reason}
-                                </Badge>
-                              </div>
-                            </TableCell>
-                            <TableCell>{row.currency}</TableCell>
-                            <TableCell className="text-right font-mono">
-                              {formatNumber(row.discrepancyLc)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                              {formatNumber(row.discrepancyUsd)}
-                            </TableCell>
-                            <TableCell className="text-right">{row.countBid}</TableCell>
-                            <TableCell>
-                              {isClickable && (
-                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Currency</TableHead>
+                      <TableHead className="text-right">Discrepancy (LC)</TableHead>
+                      <TableHead className="text-right">Discrepancy (USD)</TableHead>
+                      <TableHead className="text-right">Count BID</TableHead>
+                      <TableHead className="w-8"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {overallSummary.map((row, index) => {
+                      const isClickable = row.reason !== "Reconciled";
+                      return (
+                        <TableRow
+                          key={`${row.reason}-${row.currency}-${index}`}
+                          className={isClickable ? "cursor-pointer hover-elevate" : ""}
+                          onClick={() => isClickable && handleReasonClick(row.reason)}
+                          data-testid={`summary-row-${row.reason}-${row.currency}`}
+                        >
+                          <TableCell>
+                            <Badge 
+                              variant={row.reason === "Reconciled" ? "default" : "secondary"}
+                              className="text-xs"
+                            >
+                              {row.reason}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{row.currency}</TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatNumber(row.discrepancyLc)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatNumber(row.discrepancyUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">{row.countBid}</TableCell>
+                          <TableCell>
+                            {isClickable && (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
+                <div className="h-24 flex items-center justify-center text-muted-foreground">
                   <div className="text-center">
-                    <FileSpreadsheet className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p className="text-sm">No data yet</p>
-                    <p className="text-xs">Upload a file to get started</p>
+                    <FileSpreadsheet className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No data yet - upload a file to get started</p>
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
-        </div>
 
-        <div className="w-[30%] flex flex-col gap-4">
-          <Card className="flex-1 flex flex-col">
-            <CardHeader className="pb-3 flex-shrink-0">
+          <Card>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <DollarSign className="h-4 w-4" />
                 Amount Payable
@@ -397,54 +417,49 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 </CardDescription>
               )}
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
+            <CardContent>
               {hasResults ? (
-                <ScrollArea className="h-full">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Currency</TableHead>
-                        <TableHead className="text-right">As per SP</TableHead>
-                        <TableHead className="text-right">As per HO</TableHead>
-                        <TableHead className="text-right">Final Payable</TableHead>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Currency</TableHead>
+                      <TableHead className="text-right">As per SP</TableHead>
+                      <TableHead className="text-right">As per HO</TableHead>
+                      <TableHead className="text-right">Final Payable</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {amountPayableData.map((row) => (
+                      <TableRow key={row.currency} data-testid={`payable-row-${row.currency}`}>
+                        <TableCell className="font-medium">{row.currency}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(row.asPerSP)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(row.asPerHO)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            value={amountPayable[row.currency] ?? row.asPerSP}
+                            onChange={(e) => handleFinalPayableChange(row.currency, e.target.value)}
+                            className="w-32 h-8 text-right font-mono ml-auto"
+                            data-testid={`input-payable-${row.currency}`}
+                          />
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {amountPayableData.map((row) => (
-                        <TableRow key={row.currency} data-testid={`payable-row-${row.currency}`}>
-                          <TableCell className="font-medium">{row.currency}</TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatNumber(row.asPerSP)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatNumber(row.asPerHO)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              value={amountPayable[row.currency] ?? row.asPerSP}
-                              onChange={(e) => handleFinalPayableChange(row.currency, e.target.value)}
-                              className="w-28 h-8 text-right font-mono ml-auto"
-                              data-testid={`input-payable-${row.currency}`}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
+                    ))}
+                  </TableBody>
+                </Table>
               ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <DollarSign className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p className="text-sm">No data yet</p>
-                  </div>
+                <div className="h-16 flex items-center justify-center text-muted-foreground">
+                  <p className="text-sm">No data yet</p>
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
-      </div>
+      </ScrollArea>
 
       <Dialog open={isModalOpen} onOpenChange={handleModalClose}>
         <DialogContent className="max-w-6xl max-h-[80vh] flex flex-col">
