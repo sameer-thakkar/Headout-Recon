@@ -304,6 +304,7 @@ function AppContent() {
                   onFilesUploaded={handleFilesUploaded}
                   onLoadDemo={handleLoadDemo}
                   uploadedFiles={uploadedFiles}
+                  currentRunId={currentRunId}
                 />
               </Route>
               <Route path="/mapping">
