@@ -62,7 +62,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     overallSummary: OverallSummaryRow[];
     primaryRows: PrimaryRow[];
   }>({
-    queryKey: ["/api/runs", currentRunId, "result"],
+    queryKey: ["/api/runs", currentRunId, "results"],
     enabled: !!currentRunId,
   });
 
