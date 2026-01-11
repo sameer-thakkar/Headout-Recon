@@ -892,15 +892,28 @@ export async function registerRoutes(
         // Get all reconciliation rows for this bookingId
         const reconRows = allRowsMap.get(bookingId) || [];
         
-        // Determine if this HO row is Primary or Secondary based on the original data
-        const hoFulfillment = String(row["fulfillmentIdentifier"] || row["Fulfillment Identifier"] || row["Type"] || "Primary");
-        const isSecondary = hoFulfillment === "Secondary" || hoFulfillment.toLowerCase().includes("secondary");
+        // Find matching reconciliation row - try to match by row index or booking characteristics
+        // First check if there's a Secondary row in the reconciliation results
+        const hasSecondaryRecon = reconRows.some(r => r.fulfillmentIdentifier === "Secondary");
+        const hasPrimaryRecon = reconRows.some(r => r.fulfillmentIdentifier === "Primary");
         
-        // Find matching reconciliation row
-        const reconRow = reconRows.find(r => 
-          (isSecondary && r.fulfillmentIdentifier === "Secondary") ||
-          (!isSecondary && r.fulfillmentIdentifier === "Primary")
-        ) || reconRows[0];
+        // Determine if this HO row is Secondary based on:
+        // 1. Check original HO data for fulfillmentIdentifier field
+        // 2. If not found, infer from reconciliation data (if duplicate booking IDs exist)
+        const hoFulfillment = String(row["fulfillmentIdentifier"] || row["Fulfillment Identifier"] || row["Type"] || "");
+        let isSecondary = hoFulfillment.toLowerCase() === "secondary" || hoFulfillment.toLowerCase().includes("secondary");
+        
+        // If we have both Primary and Secondary recon rows for same bookingId, 
+        // we need to determine which HO row this is
+        // Use the row's position or other identifying factors
+        const reconRow = isSecondary 
+          ? (reconRows.find(r => r.fulfillmentIdentifier === "Secondary") || reconRows[0])
+          : (reconRows.find(r => r.fulfillmentIdentifier === "Primary") || reconRows[0]);
+        
+        // If reconRow itself is marked Secondary, treat this as a secondary row
+        if (reconRow?.fulfillmentIdentifier === "Secondary") {
+          isSecondary = true;
+        }
         
         // Get original row keys to preserve order and find finalNetPrice position
         const originalKeys = Object.keys(row);
