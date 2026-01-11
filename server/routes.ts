@@ -26,7 +26,20 @@ const diskStorage = multer.diskStorage({
     cb(null, `${uniqueId}${ext}`);
   },
 });
-const upload = multer({ storage: diskStorage });
+const upload = multer({ 
+  storage: diskStorage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only .xlsx, .xls, and .csv files are allowed'));
+    }
+  }
+});
 
 /**
  * Parse Excel file with multiple sheets
@@ -77,7 +90,15 @@ export async function registerRoutes(
    * Upload single XLSX file with HO Data and SP Invoice Report tabs
    * Returns uploadId for use with /api/runs/from-upload
    */
-  app.post("/api/upload", upload.single("file"), async (req, res) => {
+  app.post("/api/upload", (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        console.error("Multer error:", err);
+        return res.status(400).json({ error: err.message || "File upload failed" });
+      }
+      next();
+    });
+  }, async (req, res) => {
     try {
       const uploadedFile = req.file;
 
@@ -85,19 +106,33 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No file uploaded" });
       }
 
+      console.log("Processing file:", uploadedFile.originalname);
+      
       const ext = uploadedFile.originalname.split(".").pop()?.toLowerCase() || "";
 
       if (ext !== "xlsx" && ext !== "xls") {
-        // Delete unsupported file
         fs.unlinkSync(uploadedFile.path);
         return res.status(400).json({
           error: `Unsupported file format: ${ext}. Please upload an .xlsx file.`,
         });
       }
 
-      // Read and parse file
-      const fileBuffer = fs.readFileSync(uploadedFile.path);
-      const sheets = parseXlsxWithSheets(fileBuffer);
+      // Read and parse file with explicit error handling
+      let fileBuffer: Buffer;
+      let sheets: Map<string, SheetData>;
+      
+      try {
+        fileBuffer = fs.readFileSync(uploadedFile.path);
+        console.log("File read successfully, size:", fileBuffer.length);
+        sheets = parseXlsxWithSheets(fileBuffer);
+        console.log("Parsed sheets:", Array.from(sheets.keys()));
+      } catch (parseError) {
+        console.error("File parsing error:", parseError);
+        fs.unlinkSync(uploadedFile.path);
+        return res.status(400).json({ 
+          error: "Failed to parse Excel file. Please ensure it's a valid .xlsx file." 
+        });
+      }
 
       if (sheets.size === 0) {
         fs.unlinkSync(uploadedFile.path);
