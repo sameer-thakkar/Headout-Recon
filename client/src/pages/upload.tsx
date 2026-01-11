@@ -496,6 +496,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       <TableHead>Fulfilment Method</TableHead>
                       <TableHead className="text-right">HO Take Rate</TableHead>
                       <TableHead className="text-right">Actual Rate</TableHead>
+                      <TableHead>Start Date</TableHead>
+                      <TableHead>End Date</TableHead>
                       <TableHead className="text-right">Discrepancy %</TableHead>
                       <TableHead className="text-right">BID Count with Discrepancy</TableHead>
                       <TableHead className="text-right">BID Count in Duration</TableHead>
@@ -536,6 +538,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         <TableCell className="text-right font-mono">
                           {row.actualTakeRatePercent?.toFixed(2) ?? "-"}%
                         </TableCell>
+                        <TableCell>{formatDateDDMMYYYY(row.startDate) || "-"}</TableCell>
+                        <TableCell>{formatDateDDMMYYYY(row.endDate) || "-"}</TableCell>
                         <TableCell className={`text-right font-mono ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
                           {row.discrepancyPercentRange || "-"}
                         </TableCell>
@@ -556,7 +560,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 {isDiscrepancyLoading && (
                   <TableRow>
                     <TableCell 
-                      colSpan={isMTBReason ? 10 : isNPDReason ? 10 : 6} 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 12 : 6} 
                       className="text-center py-8 text-muted-foreground"
                     >
                       Loading discrepancy data...
@@ -566,7 +570,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 {!isDiscrepancyLoading && filteredDiscrepancyRows.length === 0 && (
                   <TableRow>
                     <TableCell 
-                      colSpan={isMTBReason ? 10 : isNPDReason ? 10 : 6} 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 12 : 6} 
                       className="text-center py-8 text-muted-foreground"
                     >
                       No discrepancy data available for this reason
