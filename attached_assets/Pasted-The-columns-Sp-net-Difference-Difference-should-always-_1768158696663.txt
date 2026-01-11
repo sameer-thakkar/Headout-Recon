@@ -1,0 +1,13 @@
+The columns Sp net, Difference, Difference % should always be on the left to the column “finalNetPrice”.
+We have to update the column header “finalNetPrice” based on the reconciliation done.
+For all the rows that have been identified as secondary finalNetPrice will be 0 & the column header “comments” will be for this secondary rows will be “Duplicate Fulfillment”.
+For all the rows that are classified as primary we will update the following in following order of reason. No need to add new columns
+Reconciled - finalNetPrice will be Spnet & comments will be “Reconciled”
+Multiple tickets booked- finalNetPrice will be Spnet. “errorTeamAttribution, errorBucket & comments” will be updated based on the following logic.
+If fulfilmentMethod is Vendor API- errorTeamAttribution will be “Tech” errorBucket would be “Multiple Tickets Booked” & comments will be “Multiple Tickets Booked”
+If fulfilmentMethod is Manual- errorTeamAttribution will be “Reservation Ops” errorBucket would be “Multiple Tickets Booked” & comments will be “Multiple Tickets Booked”
+If fulfilmentMethod is Selenium- errorTeamAttribution will be “Selenium” errorBucket would be “Multiple Tickets Booked” & comments will be “Multiple Tickets Booked”
+Price Mismatch- finalNetPrice will be Spnet. “errorTeamAttribution, errorBucket & comments” will be updated based on the following logic.
+If fulfilmentMethod is Vendor API & Price sync is “Yes”- errorTeamAttribution will be “Inventory” errorBucket would be “Price Mismatch” & comments will be “Negative Variance” if HO net<Sp net else comments will be “Positive Variance”. 
+If fulfilmentMethod is Manual & Price sync is “No” or blank cell value- errorTeamAttribution will be “BizOps” errorBucket would be “Price Mismatch” & comments will be “Negative Variance” if HO net<Sp net else comments will be “Positive Variance”.
+If fulfilmentMethod is Selenium & - errorTeamAttribution will be “Selenium” errorBucket would be “Price Mismatch” & comments will be “Negative Variance” if HO net<Sp net else comments will be “Positive Variance”.
