@@ -884,7 +884,8 @@ export async function registerRoutes(
       // =====================================================
       // SHEET 4: HO Report Updated
       // =====================================================
-      // Original HO data + SP Net + Difference + Difference % + Secondary updates
+      // Original HO data with SP Net, Difference, Difference % inserted before finalNetPrice
+      // Update finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
       const hoReportData = originalHoData.map((row: Record<string, unknown>) => {
         const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
         
@@ -892,41 +893,131 @@ export async function registerRoutes(
         const reconRows = allRowsMap.get(bookingId) || [];
         
         // Determine if this HO row is Primary or Secondary based on the original data
-        // Look for fulfillment identifier in original row (common field names)
         const hoFulfillment = String(row["fulfillmentIdentifier"] || row["Fulfillment Identifier"] || row["Type"] || "Primary");
         const isSecondary = hoFulfillment === "Secondary" || hoFulfillment.toLowerCase().includes("secondary");
         
-        // Find matching reconciliation row (prefer matching by fulfillment type, otherwise take first)
+        // Find matching reconciliation row
         const reconRow = reconRows.find(r => 
           (isSecondary && r.fulfillmentIdentifier === "Secondary") ||
           (!isSecondary && r.fulfillmentIdentifier === "Primary")
         ) || reconRows[0];
         
+        // Get original row keys to preserve order and find finalNetPrice position
+        const originalKeys = Object.keys(row);
+        const finalNetPriceKey = originalKeys.find(k => {
+          const kLower = k.toLowerCase();
+          return kLower === "finalnetprice" || kLower === "final net price" || 
+                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable";
+        }) || "finalNetPrice";
+        
+        // Calculate values
+        const spNet = reconRow?.spNetInHo ?? "";
+        const hoNet = reconRow?.hoNet ?? 0;
+        const difference = reconRow ? hoNet - reconRow.spNetInHo : "";
+        const differencePercent = reconRow && hoNet !== 0 
+          ? ((hoNet - reconRow.spNetInHo) / hoNet * 100).toFixed(2) + "%" 
+          : "";
+        
+        // Determine finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
+        let finalNetPrice: number | string = "";
+        let errorTeamAttribution = row["errorTeamAttribution"] || row["Error Team Attribution"] || "";
+        let errorBucket = row["errorBucket"] || row["Error Bucket"] || "";
+        let comments = row["comments"] || row["Comments"] || "";
+        
+        const reason = reconRow?.reason || "Reconciled";
+        const fulfillmentMethod = String(reconRow?.fulfillmentMethod || row["fulfillmentMethod"] || row["Fulfillment Method"] || "");
+        const priceSync = String(row["priceSync"] || row["Price Sync"] || row["PriceSync"] || "");
+        
         if (isSecondary) {
-          // Secondary bookings: Final net = 0, Comments = "Duplicate Fulfilment"
-          return {
-            ...row,
-            "SP Net": reconRow?.spNetInHo ?? "",
-            "Difference": reconRow ? reconRow.hoNet - reconRow.spNetInHo : "",
-            "Difference %": reconRow && reconRow.hoNet !== 0 
-              ? ((reconRow.hoNet - reconRow.spNetInHo) / reconRow.hoNet * 100).toFixed(2) + "%" 
-              : "",
-            "Final Net": 0,
-            "Comments": "Duplicate Fulfilment",
-          };
+          // Secondary rows: finalNetPrice = 0, comments = "Duplicate Fulfillment"
+          finalNetPrice = 0;
+          comments = "Duplicate Fulfillment";
+        } else if (reason === "Reconciled") {
+          // Reconciled: finalNetPrice = SP Net, comments = "Reconciled"
+          finalNetPrice = spNet;
+          comments = "Reconciled";
+        } else if (reason.toLowerCase().includes("multiple") || reason === "MTB") {
+          // Multiple Tickets Booked
+          finalNetPrice = spNet;
+          errorBucket = "Multiple Tickets Booked";
+          comments = "Multiple Tickets Booked";
+          
+          if (fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") {
+            errorTeamAttribution = "Tech";
+          } else if (fulfillmentMethod.toLowerCase() === "manual") {
+            errorTeamAttribution = "Reservation Ops";
+          } else if (fulfillmentMethod.toLowerCase() === "selenium") {
+            errorTeamAttribution = "Selenium";
+          }
+        } else if (reason.toLowerCase().includes("price") || reason === "NPD") {
+          // Price Mismatch / Net Price Difference
+          finalNetPrice = spNet;
+          errorBucket = "Price Mismatch";
+          
+          // Determine variance direction
+          const varianceComment = hoNet < (reconRow?.spNetInHo || 0) ? "Negative Variance" : "Positive Variance";
+          comments = varianceComment;
+          
+          if ((fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") && 
+              priceSync.toLowerCase() === "yes") {
+            errorTeamAttribution = "Inventory";
+          } else if (fulfillmentMethod.toLowerCase() === "manual" && 
+                     (priceSync.toLowerCase() === "no" || priceSync === "")) {
+            errorTeamAttribution = "BizOps";
+          } else if (fulfillmentMethod.toLowerCase() === "selenium") {
+            errorTeamAttribution = "Selenium";
+          }
         } else {
-          // Primary bookings: Normal columns with Final Net = HO Net
-          return {
-            ...row,
-            "SP Net": reconRow?.spNetInHo ?? "",
-            "Difference": reconRow ? reconRow.hoNet - reconRow.spNetInHo : "",
-            "Difference %": reconRow && reconRow.hoNet !== 0 
-              ? ((reconRow.hoNet - reconRow.spNetInHo) / reconRow.hoNet * 100).toFixed(2) + "%" 
-              : "",
-            "Final Net": reconRow?.hoNet ?? "",
-            "Comments": "",
-          };
+          // Other reasons: finalNetPrice = SP Net
+          finalNetPrice = spNet;
         }
+        
+        // Helper to check if a key is the finalNetPrice column
+        const isFinalNetCol = (k: string) => {
+          const kLower = k.toLowerCase();
+          return kLower === "finalnetprice" || kLower === "final net price" || 
+                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable";
+        };
+        
+        // Build new row with SP Net, Difference, Difference % inserted before finalNetPrice
+        const newRow: Record<string, unknown> = {};
+        for (const key of originalKeys) {
+          const keyLower = key.toLowerCase();
+          
+          // Insert SP Net, Difference, Difference % just before finalNetPrice
+          if (isFinalNetCol(key)) {
+            newRow["SP Net"] = spNet;
+            newRow["Difference"] = difference;
+            newRow["Difference %"] = differencePercent;
+          }
+          
+          // Update specific columns
+          if (isFinalNetCol(key)) {
+            newRow[key] = finalNetPrice;
+          } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
+            newRow[key] = errorTeamAttribution;
+          } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
+            newRow[key] = errorBucket;
+          } else if (keyLower === "comments") {
+            newRow[key] = comments;
+          } else {
+            newRow[key] = row[key];
+          }
+        }
+        
+        // If finalNetPrice/Final Net column wasn't found in original, append the new columns at end
+        const hasFinalNetColInOriginal = originalKeys.some(k => isFinalNetCol(k));
+        if (!hasFinalNetColInOriginal) {
+          newRow["SP Net"] = spNet;
+          newRow["Difference"] = difference;
+          newRow["Difference %"] = differencePercent;
+          newRow["finalNetPrice"] = finalNetPrice;
+          newRow["errorTeamAttribution"] = errorTeamAttribution;
+          newRow["errorBucket"] = errorBucket;
+          newRow["comments"] = comments;
+        }
+        
+        return newRow;
       });
       const hoReportSheet = XLSX.utils.json_to_sheet(hoReportData);
       XLSX.utils.book_append_sheet(workbook, hoReportSheet, "HO Report Updated");
