@@ -786,7 +786,12 @@ export async function registerRoutes(
               }
               // Date format for start/end date columns - use cell.z for xlsx-js-style
               if (colName === "start date" || colName === "end date") {
-                if (typeof sheet[cellRef].v === "number") {
+                const val = sheet[cellRef].v;
+                // Convert to number if it's a numeric string or already a number
+                const numVal = typeof val === "number" ? val : parseFloat(String(val));
+                if (!isNaN(numVal) && numVal > 25000) {
+                  // Truncate to date only (remove time portion) and set as number with date format
+                  sheet[cellRef].v = Math.floor(numVal);
                   sheet[cellRef].t = "n";
                   sheet[cellRef].z = "dd/mm/yyyy";
                 }
