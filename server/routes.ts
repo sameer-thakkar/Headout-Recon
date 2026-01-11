@@ -786,9 +786,11 @@ export async function registerRoutes(
               }
               // Date format for start/end date columns
               if (colName === "start date" || colName === "end date") {
-                sheet[cellRef].s.numFmt = "dd/mm/yyyy";
                 if (typeof sheet[cellRef].v === "number") {
-                  sheet[cellRef].t = "n"; // Date serial numbers are stored as numbers
+                  // Truncate to remove time portion and set as date
+                  sheet[cellRef].v = Math.floor(sheet[cellRef].v as number);
+                  sheet[cellRef].t = "d";
+                  sheet[cellRef].s.numFmt = "dd/mm/yyyy";
                 }
               }
             }
@@ -809,7 +811,7 @@ export async function registerRoutes(
       // Style the section header
       const summaryHeaderCell = XLSX.utils.encode_cell({ r: currentRow, c: 0 });
       discrepancySheet[summaryHeaderCell].s = { font: { bold: true, sz: 14 } };
-      currentRow += 2;
+      currentRow += 1;
       
       // Add summary table (write raw values, let cell formatting handle display)
       const summaryHeaders = Object.keys(discrepancySummary[0] || {});
@@ -817,7 +819,7 @@ export async function registerRoutes(
       const summaryData = discrepancySummary.map(row => summaryHeaders.map(h => row[h as keyof typeof row]));
       XLSX.utils.sheet_add_aoa(discrepancySheet, summaryData, { origin: { r: currentRow + 1, c: 0 } });
       applyTableStyles(discrepancySheet, currentRow, 0, discrepancySummary.length + 1, summaryHeaders.length, summaryHeaders);
-      currentRow += discrepancySummary.length + 4;
+      currentRow += discrepancySummary.length + 2;
       
       // Add separate table for each reason
       for (const [reason, rows] of Array.from(tidByReason.entries())) {
@@ -827,7 +829,7 @@ export async function registerRoutes(
         XLSX.utils.sheet_add_aoa(discrepancySheet, [[`${reason.toUpperCase()} ANALYSIS`]], { origin: { r: currentRow, c: 0 } });
         const reasonHeaderCell = XLSX.utils.encode_cell({ r: currentRow, c: 0 });
         discrepancySheet[reasonHeaderCell].s = { font: { bold: true, sz: 12 } };
-        currentRow += 2;
+        currentRow += 1;
         
         // Get columns for this reason
         const columns = getColumnsForReason(reason);
@@ -854,7 +856,7 @@ export async function registerRoutes(
         // Apply table styling
         applyTableStyles(discrepancySheet, currentRow, 0, rows.length + 1, columns.length, columns);
         
-        currentRow += rows.length + 4;
+        currentRow += rows.length + 2;
       }
       
       XLSX.utils.book_append_sheet(workbook, discrepancySheet, "Discrepancy Analysis");
