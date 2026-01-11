@@ -886,34 +886,54 @@ export async function registerRoutes(
       // =====================================================
       // Original HO data with SP Net, Difference, Difference % inserted before finalNetPrice
       // Update finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
-      const hoReportData = originalHoData.map((row: Record<string, unknown>) => {
+      
+      // Build a set of Secondary row indices by analyzing duplicate bookingIds
+      // Same logic as reconciliation: Primary = row with max bookingCreationDate
+      const secondaryRowIndices = new Set<number>();
+      const hoRowsByBookingId = new Map<string, { index: number; row: Record<string, unknown>; date: number }[]>();
+      
+      originalHoData.forEach((row: Record<string, unknown>, index: number) => {
+        const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        if (!bookingId) return;
+        
+        // Parse bookingCreationDate for comparison
+        const dateStr = String(row["bookingCreationDate"] || row["Booking Creation Date"] || row["BookingCreationDate"] || "");
+        let dateNum = 0;
+        if (dateStr) {
+          const parsed = new Date(dateStr);
+          if (!isNaN(parsed.getTime())) {
+            dateNum = parsed.getTime();
+          }
+        }
+        
+        if (!hoRowsByBookingId.has(bookingId)) {
+          hoRowsByBookingId.set(bookingId, []);
+        }
+        hoRowsByBookingId.get(bookingId)!.push({ index, row, date: dateNum });
+      });
+      
+      // For each bookingId with multiple rows, mark non-Primary rows as Secondary
+      hoRowsByBookingId.forEach((rows) => {
+        if (rows.length <= 1) return;
+        
+        // Sort by date descending - first one is Primary (max date)
+        rows.sort((a, b) => b.date - a.date);
+        
+        // All except the first are Secondary
+        for (let i = 1; i < rows.length; i++) {
+          secondaryRowIndices.add(rows[i].index);
+        }
+      });
+      
+      const hoReportData = originalHoData.map((row: Record<string, unknown>, rowIndex: number) => {
         const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
         
-        // Get all reconciliation rows for this bookingId
+        // Get reconciliation row for this bookingId (only Primary exists in recon results)
         const reconRows = allRowsMap.get(bookingId) || [];
+        const reconRow = reconRows[0];
         
-        // Find matching reconciliation row - try to match by row index or booking characteristics
-        // First check if there's a Secondary row in the reconciliation results
-        const hasSecondaryRecon = reconRows.some(r => r.fulfillmentIdentifier === "Secondary");
-        const hasPrimaryRecon = reconRows.some(r => r.fulfillmentIdentifier === "Primary");
-        
-        // Determine if this HO row is Secondary based on:
-        // 1. Check original HO data for fulfillmentIdentifier field
-        // 2. If not found, infer from reconciliation data (if duplicate booking IDs exist)
-        const hoFulfillment = String(row["fulfillmentIdentifier"] || row["Fulfillment Identifier"] || row["Type"] || "");
-        let isSecondary = hoFulfillment.toLowerCase() === "secondary" || hoFulfillment.toLowerCase().includes("secondary");
-        
-        // If we have both Primary and Secondary recon rows for same bookingId, 
-        // we need to determine which HO row this is
-        // Use the row's position or other identifying factors
-        const reconRow = isSecondary 
-          ? (reconRows.find(r => r.fulfillmentIdentifier === "Secondary") || reconRows[0])
-          : (reconRows.find(r => r.fulfillmentIdentifier === "Primary") || reconRows[0]);
-        
-        // If reconRow itself is marked Secondary, treat this as a secondary row
-        if (reconRow?.fulfillmentIdentifier === "Secondary") {
-          isSecondary = true;
-        }
+        // Check if this row is Secondary based on our pre-computed set
+        const isSecondary = secondaryRowIndices.has(rowIndex);
         
         // Get original row keys to preserve order and find finalNetPrice position
         const originalKeys = Object.keys(row);
