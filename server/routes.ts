@@ -887,6 +887,47 @@ export async function registerRoutes(
       // Original HO data with SP Net, Difference, Difference % inserted before finalNetPrice
       // Update finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
       
+      // Parse date value safely - same logic as reconciliation.ts
+      // Handles ISO dates, Excel serial numbers, and DD/MM/YYYY format
+      const parseDate = (dateValue: string | number | null | undefined): number => {
+        if (dateValue === null || dateValue === undefined || dateValue === "") return 0;
+        
+        // Handle Excel serial numbers (numeric values)
+        if (typeof dateValue === "number" || !isNaN(Number(dateValue))) {
+          const numValue = Number(dateValue);
+          // Excel dates are days since 1899-12-30
+          if (numValue > 40000 && numValue < 60000) {
+            const excelEpoch = new Date(1899, 11, 30).getTime();
+            const msPerDay = 24 * 60 * 60 * 1000;
+            return excelEpoch + numValue * msPerDay;
+          }
+          if (numValue > 1000000000000) return numValue; // milliseconds timestamp
+          if (numValue > 1000000000) return numValue * 1000; // seconds timestamp
+        }
+        
+        // Handle string dates
+        const strValue = String(dateValue);
+        
+        // Try DD/MM/YYYY format first (common in this application)
+        const dmyMatch = strValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(.*)$/);
+        if (dmyMatch) {
+          const [, day, month, year, time] = dmyMatch;
+          const isoStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}${time ? 'T' + time : ''}`;
+          const parsed2 = new Date(isoStr);
+          if (!isNaN(parsed2.getTime())) {
+            return parsed2.getTime();
+          }
+        }
+        
+        // Try native JS Date parsing
+        const parsed = new Date(strValue);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.getTime();
+        }
+        
+        return 0;
+      };
+      
       // Build a set of Secondary row indices by analyzing duplicate bookingIds
       // Same logic as reconciliation: Primary = row with max bookingCreationDate
       const secondaryRowIndices = new Set<number>();
@@ -896,15 +937,9 @@ export async function registerRoutes(
         const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
         if (!bookingId) return;
         
-        // Parse bookingCreationDate for comparison
-        const dateStr = String(row["bookingCreationDate"] || row["Booking Creation Date"] || row["BookingCreationDate"] || "");
-        let dateNum = 0;
-        if (dateStr) {
-          const parsed = new Date(dateStr);
-          if (!isNaN(parsed.getTime())) {
-            dateNum = parsed.getTime();
-          }
-        }
+        // Parse bookingCreationDate for comparison using robust parseDate function
+        const dateValue = row["bookingCreationDate"] || row["Booking Creation Date"] || row["BookingCreationDate"] || "";
+        const dateNum = parseDate(dateValue as string | number);
         
         if (!hoRowsByBookingId.has(bookingId)) {
           hoRowsByBookingId.set(bookingId, []);
