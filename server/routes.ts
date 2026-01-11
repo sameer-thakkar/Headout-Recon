@@ -531,7 +531,7 @@ export async function registerRoutes(
       const discrepancyRows = result.primaryRows.filter(r => r.reason !== "Reconciled");
       const allPrimaryRows = result.primaryRows;
       
-      // Group by TID
+      // Group by REASON + TID (composite key) to preserve all TIDs per reason
       const tidGroups = new Map<string, {
         tid: string;
         currency: string;
@@ -554,9 +554,11 @@ export async function registerRoutes(
 
       for (const row of discrepancyRows) {
         const tid = row.tid || "Unknown";
+        // Use composite key: reason + TID to prevent overwriting when same TID appears under different reasons
+        const compositeKey = `${row.reason}:${tid}`;
         
-        if (!tidGroups.has(tid)) {
-          tidGroups.set(tid, {
+        if (!tidGroups.has(compositeKey)) {
+          tidGroups.set(compositeKey, {
             tid,
             currency: row.hoCurrency,
             discrepancyLc: 0,
@@ -577,7 +579,7 @@ export async function registerRoutes(
           });
         }
 
-        const group = tidGroups.get(tid)!;
+        const group = tidGroups.get(compositeKey)!;
         group.discrepancyLc += row.differenceLc;
         group.discrepancyUsd += row.differenceUsd;
         group.spNetTotal += row.spNetInHo;
@@ -718,13 +720,31 @@ export async function registerRoutes(
         return defaultColumns;
       };
 
-      // Helper to apply cell styles (borders, bold headers)
+      // Helper to convert value to Excel serial date number
+      const toExcelDate = (dateVal: string | number): number | string => {
+        if (typeof dateVal === "number" && dateVal > 25000) {
+          // Already an Excel serial date
+          return dateVal;
+        }
+        if (typeof dateVal === "string" && dateVal) {
+          // Try parsing as date string
+          const parsed = new Date(dateVal);
+          if (!isNaN(parsed.getTime())) {
+            // Convert JS Date to Excel serial (days since Jan 1, 1900)
+            return Math.floor((parsed.getTime() / 86400000) + 25569);
+          }
+        }
+        return dateVal; // Return as-is if can't convert
+      };
+
+      // Helper to apply cell styles (borders, bold headers) and number/date formats
       const applyTableStyles = (
         sheet: XLSX.WorkSheet,
         startRow: number,
         startCol: number,
         numRows: number,
-        numCols: number
+        numCols: number,
+        columns: string[]
       ) => {
         const borderStyle = { style: "thin", color: { rgb: "000000" } };
         const border = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
@@ -747,6 +767,31 @@ export async function registerRoutes(
             if (c === 0) {
               sheet[cellRef].s.alignment = { horizontal: "left" };
             }
+            
+            // Apply number/date formats (skip header row)
+            if (r > 0 && columns[c]) {
+              const colName = columns[c].toLowerCase();
+              // Number format for discrepancy and loss columns
+              if (colName.includes("discrepancy") && !colName.includes("%") && !colName.includes("range")) {
+                sheet[cellRef].s.numFmt = "#,##0.00";
+                if (sheet[cellRef].t !== "n" && typeof sheet[cellRef].v === "number") {
+                  sheet[cellRef].t = "n";
+                }
+              }
+              if (colName.includes("loss") && !colName.includes("?")) {
+                sheet[cellRef].s.numFmt = "#,##0.00";
+                if (sheet[cellRef].t !== "n" && typeof sheet[cellRef].v === "number") {
+                  sheet[cellRef].t = "n";
+                }
+              }
+              // Date format for start/end date columns
+              if (colName === "start date" || colName === "end date") {
+                sheet[cellRef].s.numFmt = "dd/mm/yyyy";
+                if (typeof sheet[cellRef].v === "number") {
+                  sheet[cellRef].t = "n"; // Date serial numbers are stored as numbers
+                }
+              }
+            }
           }
         }
       };
@@ -766,12 +811,12 @@ export async function registerRoutes(
       discrepancySheet[summaryHeaderCell].s = { font: { bold: true, sz: 14 } };
       currentRow += 2;
       
-      // Add summary table
+      // Add summary table (write raw values, let cell formatting handle display)
       const summaryHeaders = Object.keys(discrepancySummary[0] || {});
       XLSX.utils.sheet_add_aoa(discrepancySheet, [summaryHeaders], { origin: { r: currentRow, c: 0 } });
       const summaryData = discrepancySummary.map(row => summaryHeaders.map(h => row[h as keyof typeof row]));
       XLSX.utils.sheet_add_aoa(discrepancySheet, summaryData, { origin: { r: currentRow + 1, c: 0 } });
-      applyTableStyles(discrepancySheet, currentRow, 0, discrepancySummary.length + 1, summaryHeaders.length);
+      applyTableStyles(discrepancySheet, currentRow, 0, discrepancySummary.length + 1, summaryHeaders.length, summaryHeaders);
       currentRow += discrepancySummary.length + 4;
       
       // Add separate table for each reason
@@ -790,17 +835,24 @@ export async function registerRoutes(
         // Add column headers
         XLSX.utils.sheet_add_aoa(discrepancySheet, [columns], { origin: { r: currentRow, c: 0 } });
         
-        // Add data rows (map to the specific columns)
+        // Add data rows (write raw values, cell formatting applied after)
         const tableData = rows.map((row: Record<string, unknown>) => 
           columns.map(col => {
             const value = row[col];
-            return value !== undefined ? value : "";
+            if (value === undefined) return "";
+            
+            // Convert dates to Excel serial numbers for proper date formatting
+            if (col === "Start Date" || col === "End Date") {
+              return toExcelDate(value as string | number);
+            }
+            
+            return value;
           })
         );
         XLSX.utils.sheet_add_aoa(discrepancySheet, tableData, { origin: { r: currentRow + 1, c: 0 } });
         
         // Apply table styling
-        applyTableStyles(discrepancySheet, currentRow, 0, rows.length + 1, columns.length);
+        applyTableStyles(discrepancySheet, currentRow, 0, rows.length + 1, columns.length, columns);
         
         currentRow += rows.length + 4;
       }
