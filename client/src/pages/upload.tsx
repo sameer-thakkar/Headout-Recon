@@ -472,22 +472,25 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               <TableHeader>
                 <TableRow>
                   <TableHead>TID</TableHead>
-                  <TableHead>Currency</TableHead>
-                  <TableHead className="text-right">Discrepancy (LC)</TableHead>
-                  <TableHead className="text-right">Discrepancy (USD)</TableHead>
-                  <TableHead>Fulfillment Method</TableHead>
                   {isMTBReason && (
                     <>
+                      <TableHead className="text-right">Discrepancy USD</TableHead>
+                      <TableHead>Fulfilment Method</TableHead>
                       <TableHead>Times Charged</TableHead>
                       <TableHead>Start Date</TableHead>
                       <TableHead>End Date</TableHead>
                       <TableHead className="text-right">BID Count</TableHead>
-                      <TableHead className="text-right">Coverage %</TableHead>
-                      <TableHead>Frequency</TableHead>
+                      <TableHead className="text-right">BID Count Duration</TableHead>
+                      <TableHead className="text-right">Total BIDs</TableHead>
+                      <TableHead>DRI Team</TableHead>
                     </>
                   )}
                   {isNPDReason && (
                     <>
+                      <TableHead>Currency</TableHead>
+                      <TableHead className="text-right">Discrepancy (LC)</TableHead>
+                      <TableHead className="text-right">Discrepancy (USD)</TableHead>
+                      <TableHead>Fulfillment Method</TableHead>
                       <TableHead className="text-right">HO Take Rate %</TableHead>
                       <TableHead className="text-right">Actual Take Rate %</TableHead>
                       <TableHead>Discrepancy % Range</TableHead>
@@ -495,41 +498,40 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       <TableHead>Sold at Loss</TableHead>
                       <TableHead className="text-right">Loss (LC)</TableHead>
                       <TableHead className="text-right">Loss (USD)</TableHead>
+                      <TableHead>DRI Team</TableHead>
                     </>
                   )}
-                  <TableHead>DRI Team</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredDiscrepancyRows.map((row, index) => (
                   <TableRow key={`${row.tid}-${index}`} data-testid={`modal-row-${row.tid}`}>
                     <TableCell className="font-mono">{row.tid}</TableCell>
-                    <TableCell>{row.currency}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatNumber(row.discrepancyLc)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatNumber(row.discrepancyUsd)}
-                    </TableCell>
-                    <TableCell>{row.fulfillmentMethod}</TableCell>
                     {isMTBReason && (
                       <>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(row.discrepancyUsd)}
+                        </TableCell>
+                        <TableCell>{row.fulfillmentMethod}</TableCell>
                         <TableCell>{row.timesCharged}</TableCell>
                         <TableCell>{formatDateDDMMYYYY(row.startDate) || "-"}</TableCell>
                         <TableCell>{formatDateDDMMYYYY(row.endDate) || "-"}</TableCell>
                         <TableCell className="text-right">{row.countBidWithDiscrepancy}</TableCell>
-                        <TableCell className="text-right">
-                          {row.discrepancyCoveragePercent.toFixed(1)}%
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={row.frequency === "Recurring" ? "default" : "secondary"}>
-                            {row.frequency}
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="text-right">{row.countBidsInDuration}</TableCell>
+                        <TableCell className="text-right">{row.totalBidsInReport}</TableCell>
+                        <TableCell>{row.driTeam}</TableCell>
                       </>
                     )}
                     {isNPDReason && (
                       <>
+                        <TableCell>{row.currency}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(row.discrepancyLc)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(row.discrepancyUsd)}
+                        </TableCell>
+                        <TableCell>{row.fulfillmentMethod}</TableCell>
                         <TableCell className="text-right font-mono">
                           {row.hoTakeRatePercent?.toFixed(2) ?? "-"}%
                         </TableCell>
@@ -553,15 +555,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         <TableCell className="text-right font-mono">
                           {row.lossUsd != null ? formatNumber(row.lossUsd) : "-"}
                         </TableCell>
+                        <TableCell>{row.driTeam}</TableCell>
                       </>
                     )}
-                    <TableCell>{row.driTeam}</TableCell>
                   </TableRow>
                 ))}
                 {isDiscrepancyLoading && (
                   <TableRow>
                     <TableCell 
-                      colSpan={isMTBReason ? 12 : isNPDReason ? 14 : 6} 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 13 : 6} 
                       className="text-center py-8 text-muted-foreground"
                     >
                       Loading discrepancy data...
@@ -571,7 +573,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 {!isDiscrepancyLoading && filteredDiscrepancyRows.length === 0 && (
                   <TableRow>
                     <TableCell 
-                      colSpan={isMTBReason ? 12 : isNPDReason ? 14 : 6} 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 13 : 6} 
                       className="text-center py-8 text-muted-foreground"
                     >
                       No discrepancy data available for this reason
