@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -35,7 +35,6 @@ import { requiredFields, optionalFields, headerAliases } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 
 function AppContent() {
-  const [, setLocation] = useLocation();
   
   // Global state
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -107,7 +106,7 @@ function AppContent() {
       setCurrentRunId(newRun.id);
       setLastFxRefresh(runData.fx?.refreshedAt || new Date().toISOString());
       setStatus("done");
-      setLocation("/results");
+      // Stay on current page - summary will show inline
 
       return [uploadedFile];
     } catch (error) {
@@ -115,7 +114,7 @@ function AppContent() {
       setStatus("error");
       throw error;
     }
-  }, [setLocation]);
+  }, []);
 
   // Demo mode handler
   const handleLoadDemo = useCallback(async () => {
@@ -138,12 +137,12 @@ function AppContent() {
       setCurrentRunId(newRun.id);
       setLastFxRefresh(data.fx?.refreshedAt || new Date().toISOString());
       setStatus("done");
-      setLocation("/results");
+      // Stay on current page - summary will show inline
     } catch (error) {
       console.error("Demo load error:", error);
       setStatus("error");
     }
-  }, [setLocation]);
+  }, []);
 
   // Save mappings handler
   const handleSaveMappings = useCallback((newMappings: ColumnMapping[]) => {
