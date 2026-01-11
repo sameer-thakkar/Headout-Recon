@@ -20,7 +20,7 @@ import {
 
 const navItems = [
   { title: "Home", url: "/", icon: Home },
-  { title: "Upload & Import", url: "/upload", icon: Upload },
+  { title: "Reconciliation", url: "/upload", icon: Upload },
   { title: "Results Dashboard", url: "/results", icon: LayoutDashboard },
   { title: "Discrepancy Analysis", url: "/discrepancy-analysis", icon: Search },
 ];
