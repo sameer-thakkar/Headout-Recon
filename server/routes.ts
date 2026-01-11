@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { randomUUID } from "crypto";
 import multer from "multer";
-import * as XLSX from "xlsx";
+import XLSX from "xlsx-js-style";
 import path from "path";
 import fs from "fs";
 import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
@@ -639,6 +639,19 @@ export async function registerRoutes(
           }
         }
 
+        // Calculate average take rates
+        const avgHoTakeRate = group.hoTakeRates.length > 0 
+          ? (group.hoTakeRates.reduce((a, b) => a + b, 0) / group.hoTakeRates.length).toFixed(2) + "%"
+          : "";
+        const avgActualTakeRate = group.actualTakeRates.length > 0
+          ? (group.actualTakeRates.reduce((a, b) => a + b, 0) / group.actualTakeRates.length).toFixed(2) + "%"
+          : "";
+        
+        // Approximate Loss USD (using discrepancy USD ratio as proxy)
+        const lossUsd = group.hasSoldAtLoss && group.discrepancyLc !== 0
+          ? (group.lossLcTotal * group.discrepancyUsd / group.discrepancyLc)
+          : "";
+
         return {
           "Reason": group.reason,
           "TID": group.tid,
@@ -658,7 +671,10 @@ export async function registerRoutes(
           "Pattern": pattern,
           "Sold at Loss": group.hasSoldAtLoss ? "Yes" : "No",
           "Loss (LC)": group.hasSoldAtLoss ? group.lossLcTotal : "",
+          "Loss (USD)": lossUsd,
           "DRI Team": group.driTeam,
+          "HO Take Rate": avgHoTakeRate,
+          "Actual Take Rate": avgActualTakeRate,
         };
       });
 
@@ -667,18 +683,127 @@ export async function registerRoutes(
         if (a["Reason"] !== b["Reason"]) return a["Reason"].localeCompare(b["Reason"]);
         return a["TID"].localeCompare(b["TID"]);
       });
+
+      // Group TID data by reason for separate tables
+      const tidByReason = new Map<string, typeof tidAnalysisData>();
+      for (const row of tidAnalysisData) {
+        const reason = row["Reason"];
+        if (!tidByReason.has(reason)) {
+          tidByReason.set(reason, []);
+        }
+        tidByReason.get(reason)!.push(row);
+      }
+
+      // Define columns per reason type
+      const mtbColumns = [
+        "TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Fulfillment Method", 
+        "Times Charged", "Start Date", "End Date", "BID Count", "BIDs in Duration",
+        "Total BIDs", "Coverage %", "Frequency", "DRI Team"
+      ];
+      const npdColumns = [
+        "TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "HO Take Rate", 
+        "Actual Take Rate", "Start Date", "End Date", "BID Count", "BIDs in Duration",
+        "Coverage %", "Discrepancy % Range", "Pattern", "Frequency", "Fulfillment Method",
+        "DRI Team", "Sold at Loss", "Loss (LC)", "Loss (USD)"
+      ];
+      const defaultColumns = [
+        "TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Fulfillment Method",
+        "Start Date", "End Date", "BID Count", "Coverage %", "Frequency", "DRI Team"
+      ];
+
+      // Helper to get columns for a reason
+      const getColumnsForReason = (reason: string): string[] => {
+        if (reason.toLowerCase().includes("multiple") || reason === "MTB") return mtbColumns;
+        if (reason.toLowerCase().includes("net price") || reason === "NPD") return npdColumns;
+        return defaultColumns;
+      };
+
+      // Helper to apply cell styles (borders, bold headers)
+      const applyTableStyles = (
+        sheet: XLSX.WorkSheet,
+        startRow: number,
+        startCol: number,
+        numRows: number,
+        numCols: number
+      ) => {
+        const borderStyle = { style: "thin", color: { rgb: "000000" } };
+        const border = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
+        
+        for (let r = 0; r < numRows; r++) {
+          for (let c = 0; c < numCols; c++) {
+            const cellRef = XLSX.utils.encode_cell({ r: startRow + r, c: startCol + c });
+            if (!sheet[cellRef]) sheet[cellRef] = { v: "", t: "s" };
+            
+            // Apply border
+            sheet[cellRef].s = sheet[cellRef].s || {};
+            sheet[cellRef].s.border = border;
+            
+            // Bold for header row (first row of table)
+            if (r === 0) {
+              sheet[cellRef].s.font = { bold: true };
+            }
+            
+            // Left align first column
+            if (c === 0) {
+              sheet[cellRef].s.alignment = { horizontal: "left" };
+            }
+          }
+        }
+      };
       
-      // Create Discrepancy Analysis sheet with both sections
+      // Create Discrepancy Analysis sheet with separate tables per reason
       const discrepancySheet = XLSX.utils.json_to_sheet([]);
       
-      // Add header for Overall Summary section
-      XLSX.utils.sheet_add_aoa(discrepancySheet, [["=== OVERALL DISCREPANCY SUMMARY ==="]], { origin: "A1" });
-      XLSX.utils.sheet_add_json(discrepancySheet, discrepancySummary, { origin: "A3", skipHeader: false });
+      // Disable gridlines (set in sheet views)
+      discrepancySheet["!sheetViews"] = [{ showGridLines: false }];
       
-      // Add header for TID Analysis section
-      const tidStartRow = discrepancySummary.length + 6;
-      XLSX.utils.sheet_add_aoa(discrepancySheet, [["=== TID-LEVEL DISCREPANCY ANALYSIS (Grouped by Reason) ==="]], { origin: `A${tidStartRow}` });
-      XLSX.utils.sheet_add_json(discrepancySheet, tidAnalysisData, { origin: `A${tidStartRow + 2}`, skipHeader: false });
+      // Add header for Overall Summary section
+      let currentRow = 0;
+      XLSX.utils.sheet_add_aoa(discrepancySheet, [["OVERALL DISCREPANCY SUMMARY"]], { origin: { r: currentRow, c: 0 } });
+      
+      // Style the section header
+      const summaryHeaderCell = XLSX.utils.encode_cell({ r: currentRow, c: 0 });
+      discrepancySheet[summaryHeaderCell].s = { font: { bold: true, sz: 14 } };
+      currentRow += 2;
+      
+      // Add summary table
+      const summaryHeaders = Object.keys(discrepancySummary[0] || {});
+      XLSX.utils.sheet_add_aoa(discrepancySheet, [summaryHeaders], { origin: { r: currentRow, c: 0 } });
+      const summaryData = discrepancySummary.map(row => summaryHeaders.map(h => row[h as keyof typeof row]));
+      XLSX.utils.sheet_add_aoa(discrepancySheet, summaryData, { origin: { r: currentRow + 1, c: 0 } });
+      applyTableStyles(discrepancySheet, currentRow, 0, discrepancySummary.length + 1, summaryHeaders.length);
+      currentRow += discrepancySummary.length + 4;
+      
+      // Add separate table for each reason
+      for (const [reason, rows] of Array.from(tidByReason.entries())) {
+        if (rows.length === 0) continue;
+        
+        // Add reason section header
+        XLSX.utils.sheet_add_aoa(discrepancySheet, [[`${reason.toUpperCase()} ANALYSIS`]], { origin: { r: currentRow, c: 0 } });
+        const reasonHeaderCell = XLSX.utils.encode_cell({ r: currentRow, c: 0 });
+        discrepancySheet[reasonHeaderCell].s = { font: { bold: true, sz: 12 } };
+        currentRow += 2;
+        
+        // Get columns for this reason
+        const columns = getColumnsForReason(reason);
+        
+        // Add column headers
+        XLSX.utils.sheet_add_aoa(discrepancySheet, [columns], { origin: { r: currentRow, c: 0 } });
+        
+        // Add data rows (map to the specific columns)
+        const tableData = rows.map((row: Record<string, unknown>) => 
+          columns.map(col => {
+            const value = row[col];
+            return value !== undefined ? value : "";
+          })
+        );
+        XLSX.utils.sheet_add_aoa(discrepancySheet, tableData, { origin: { r: currentRow + 1, c: 0 } });
+        
+        // Apply table styling
+        applyTableStyles(discrepancySheet, currentRow, 0, rows.length + 1, columns.length);
+        
+        currentRow += rows.length + 4;
+      }
       
       XLSX.utils.book_append_sheet(workbook, discrepancySheet, "Discrepancy Analysis");
 
