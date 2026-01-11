@@ -512,13 +512,15 @@ export async function registerRoutes(
   });
 
   /**
-   * GET /api/runs/:runId/discrepancy-analysis
+   * GET /api/runs/:runId/discrepancy-analysis/:reason?
    * Get discrepancy analysis grouped by TID for all reasons except "Reconciled"
+   * Reason can be passed as path param or query param
    */
-  app.get("/api/runs/:runId/discrepancy-analysis", async (req, res) => {
+  app.get("/api/runs/:runId/discrepancy-analysis/:reason?", async (req, res) => {
     try {
-      const { runId } = req.params;
-      const { reason } = req.query; // Optional filter by reason
+      const { runId, reason: pathReason } = req.params;
+      const { reason: queryReason } = req.query;
+      const reason = pathReason || queryReason; // Support both path and query param
       
       const run = await storage.getRun(runId);
       if (!run) {
