@@ -96,7 +96,12 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const filteredDiscrepancyRows = useMemo(() => {
     if (!discrepancyData?.analysisRows || !selectedReason) return [];
-    return discrepancyData.analysisRows.filter(row => row.reason === selectedReason);
+    const filtered = discrepancyData.analysisRows.filter(row => row.reason === selectedReason);
+    // For NPD, sort by discrepancy USD from low (most negative) to high
+    if (selectedReason === "Net Price Discrepancy") {
+      return [...filtered].sort((a, b) => (a.discrepancyUsd ?? 0) - (b.discrepancyUsd ?? 0));
+    }
+    return filtered;
   }, [discrepancyData?.analysisRows, selectedReason]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -487,18 +492,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                   )}
                   {isNPDReason && (
                     <>
-                      <TableHead>Currency</TableHead>
-                      <TableHead className="text-right">Discrepancy (LC)</TableHead>
-                      <TableHead className="text-right">Discrepancy (USD)</TableHead>
-                      <TableHead>Fulfillment Method</TableHead>
-                      <TableHead className="text-right">HO Take Rate %</TableHead>
-                      <TableHead className="text-right">Actual Take Rate %</TableHead>
-                      <TableHead>Discrepancy % Range</TableHead>
-                      <TableHead>Pattern</TableHead>
+                      <TableHead className="text-right">Discrepancy USD</TableHead>
+                      <TableHead>Fulfilment Method</TableHead>
+                      <TableHead className="text-right">HO Take Rate</TableHead>
+                      <TableHead className="text-right">Actual Rate</TableHead>
+                      <TableHead className="text-right">Discrepancy %</TableHead>
+                      <TableHead className="text-right">BID Count with Discrepancy</TableHead>
+                      <TableHead className="text-right">BID Count in Duration</TableHead>
                       <TableHead>Sold at Loss</TableHead>
-                      <TableHead className="text-right">Loss (LC)</TableHead>
-                      <TableHead className="text-right">Loss (USD)</TableHead>
-                      <TableHead>DRI Team</TableHead>
+                      <TableHead className="text-right">Loss USD</TableHead>
                     </>
                   )}
                 </TableRow>
@@ -524,11 +526,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     )}
                     {isNPDReason && (
                       <>
-                        <TableCell>{row.currency}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatNumber(row.discrepancyLc)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
+                        <TableCell className={`text-right font-mono ${(row.discrepancyUsd ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
                           {formatNumber(row.discrepancyUsd)}
                         </TableCell>
                         <TableCell>{row.fulfillmentMethod}</TableCell>
@@ -538,24 +536,19 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         <TableCell className="text-right font-mono">
                           {row.actualTakeRatePercent?.toFixed(2) ?? "-"}%
                         </TableCell>
-                        <TableCell>{row.discrepancyPercentRange || "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant={row.pattern === "Consistent" ? "default" : "secondary"}>
-                            {row.pattern || "-"}
-                          </Badge>
+                        <TableCell className={`text-right font-mono ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {row.discrepancyPercentRange || "-"}
                         </TableCell>
+                        <TableCell className="text-right">{row.countBidWithDiscrepancy}</TableCell>
+                        <TableCell className="text-right">{row.countBidsInDuration}</TableCell>
                         <TableCell>
                           <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"}>
                             {row.soldAtLoss || "-"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {row.lossLc != null ? formatNumber(row.lossLc) : "-"}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
+                        <TableCell className={`text-right font-mono ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400" : ""}`}>
                           {row.lossUsd != null ? formatNumber(row.lossUsd) : "-"}
                         </TableCell>
-                        <TableCell>{row.driTeam}</TableCell>
                       </>
                     )}
                   </TableRow>
@@ -563,7 +556,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 {isDiscrepancyLoading && (
                   <TableRow>
                     <TableCell 
-                      colSpan={isMTBReason ? 10 : isNPDReason ? 13 : 6} 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 10 : 6} 
                       className="text-center py-8 text-muted-foreground"
                     >
                       Loading discrepancy data...
@@ -573,7 +566,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 {!isDiscrepancyLoading && filteredDiscrepancyRows.length === 0 && (
                   <TableRow>
                     <TableCell 
-                      colSpan={isMTBReason ? 10 : isNPDReason ? 13 : 6} 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 10 : 6} 
                       className="text-center py-8 text-muted-foreground"
                     >
                       No discrepancy data available for this reason

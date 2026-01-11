@@ -630,14 +630,15 @@ export async function registerRoutes(
         let discrepancyPercentRange = "";
         let pattern = "";
         if (group.discrepancyPercents.length > 0) {
+          const uniquePercents = Array.from(new Set(group.discrepancyPercents.map(p => Math.round(p * 100) / 100)));
           const minPct = Math.min(...group.discrepancyPercents);
           const maxPct = Math.max(...group.discrepancyPercents);
-          if (Math.abs(maxPct - minPct) < 0.5) {
+          if (uniquePercents.length === 1) {
             discrepancyPercentRange = minPct.toFixed(2) + "%";
-            pattern = "Scattered";
-          } else {
-            discrepancyPercentRange = minPct.toFixed(2) + "% - " + maxPct.toFixed(2) + "%";
             pattern = "Consistent";
+          } else {
+            discrepancyPercentRange = minPct.toFixed(2) + "% to " + maxPct.toFixed(2) + "%";
+            pattern = "Scattered";
           }
         }
 
@@ -1270,14 +1271,14 @@ export async function registerRoutes(
         let pattern: "Consistent" | "Scattered" | undefined;
         if (group.discrepancyPercents.length > 0) {
           const uniquePercents = Array.from(new Set(group.discrepancyPercents.map(p => Math.round(p * 100) / 100)));
+          const minPct = Math.min(...group.discrepancyPercents);
+          const maxPct = Math.max(...group.discrepancyPercents);
           if (uniquePercents.length === 1) {
-            discrepancyPercentRange = `${uniquePercents[0].toFixed(2)}%`;
-            pattern = "Scattered";
-          } else {
-            const minPct = Math.min(...group.discrepancyPercents);
-            const maxPct = Math.max(...group.discrepancyPercents);
-            discrepancyPercentRange = `${minPct.toFixed(2)}% - ${maxPct.toFixed(2)}%`;
+            discrepancyPercentRange = `${minPct.toFixed(2)}%`;
             pattern = "Consistent";
+          } else {
+            discrepancyPercentRange = `${minPct.toFixed(2)}% to ${maxPct.toFixed(2)}%`;
+            pattern = "Scattered";
           }
         }
 
