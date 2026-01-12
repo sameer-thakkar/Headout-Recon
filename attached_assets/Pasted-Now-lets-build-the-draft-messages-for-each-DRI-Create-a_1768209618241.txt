@@ -1,0 +1,80 @@
+Now lets build the draft messages for each DRI, Create a new tab in the excel export called as “Draft Messages” and below should be the content
+BizOps (Slack draft):
+
+Hey BizOps — we’ve observed a price discrepancy for TID <<TID>>.
+
+Total discrepancy: <<Discrepancy LC>> (<<Discrepancy USD>> USD)
+
+Period: <<Start Date>> to <<End Date>>
+
+Bookings impacted: <<Count of BID with discrepancy>>/<<Denominator BIDs (excl dup FF)>> (<<Discrepancy Coverage %>> in this window)
+
+Issue with Pax type: <<Issue (Pax type)>>
+
+HO net per pax: <<HO net per pax>> | SP charged per pax: <<SP charged per pax>>
+
+This has also impacted take rate: HO expected: <<HO take rate>> → effective (basis SP charge): <<Actual take rate>>.
+
+Can you please investigate, share what went wrong, and provide an RCA?
+
+
+Inventory Ops (Slack draft):
+
+Draft Message for Net price discrepancy for DRI team “Inventory Ops”
+Please review the attached sheet for price discrepancies for << mention billing entity name>> during <<mention the starting date and ending date of the discrepancy for all the TIDs>>. Total discrepancy: <<mention the discrepancy USD amount for all the TIDs for the respective DRI>>. Since these are API products, can you confirm the price-sync status for the TIDs listed?
+<<Insert this line if any TID has sold at loss “Yes” & mention the <loss usd> & give a aggregate Loss USD amount >> We also incurred a loss on sale of <> (USD)—can you confirm whether the RP is correct for these TIDs?
+Summary screenshot is attached; booking-level details are in the Google Sheet.
+<< Here we have to add a table for all the TIDs that have a net price discrepancy for the respective DRI, the table contents are as follows>>
+
+TID
+Discrepancy USD
+Start Date
+End date
+Count of BID with discrepancy
+Count BIDs in duration
+Discrepancy %
+Pattern
+Frequency
+Fulfillment method
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Multiple tickets booked Slack Draft-
+
+Tech-  
+
+Hey booking management/supply management- We have observed multiple tickets booked for TID <<>>, We have been charged <<mention multiplier>> for the amount of the charged we should have been charged.
+
+The amount of discrepancy is <<Discrepancy USD>>.
+
+The double bookings happened between the duration <<Start date>> & << End date>>.
+
+During this period we received <<Count BIDs in duration>>, out of which <<Count of BIDs with discrepancy>> have been booked multiple times. Can you please check what went wrong here?
+
+Since, the product is on API. Can you tell about the status of DBP implemented on this TID/API
+
+Reservation Ops -  
+
+Hey Reservation Ops - We have observed multiple tickets booked for TID <<>>, Can you please confirm what went wrong here? We have been charged <<mention multiplier>> for the amount of the charged we should have been charged.
+Hey Biz Ops, We have observed price discrepancy for TIDs <<mention TIDs>. The total amount of discrepancy is <>. Count of bookings impacted is <>. Additionally we have sold it a loss lower than our net price. Attached is the table for your reference. Booking level data has been attached for your reference.
