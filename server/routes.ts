@@ -1094,9 +1094,6 @@ export async function registerRoutes(
       // =====================================================
       // SHEET 5: Draft Messages
       // =====================================================
-      // Group TID data by DRI team and reason for draft messages
-      const draftMessagesData: { DRI: string; Type: string; Message: string }[] = [];
-      
       // Build TID summary groups for each DRI + reason combo
       type TidSummary = {
         tid: string;
@@ -1152,7 +1149,7 @@ export async function registerRoutes(
           const minPct = Math.min(...group.discrepancyPercents);
           const maxPct = Math.max(...group.discrepancyPercents);
           if (uniquePercents.length === 1) {
-            discrepancyPercent = minPct.toFixed(2) + "%";
+            discrepancyPercent = minPct.toFixed(4);
             pattern = "Consistent";
           } else {
             discrepancyPercent = minPct.toFixed(2) + "% to " + maxPct.toFixed(2) + "%";
@@ -1160,7 +1157,7 @@ export async function registerRoutes(
           }
         }
         
-        const frequency = countBidWithDiscrepancy >= 5 ? "Recurring" : "One-Off";
+        const frequency = countBidWithDiscrepancy >= 5 ? "Recurring" : "One-off";
         
         const avgHoTakeRate = group.hoTakeRates.length > 0 
           ? (group.hoTakeRates.reduce((a: number, b: number) => a + b, 0) / group.hoTakeRates.length).toFixed(2) + "%"
@@ -1199,174 +1196,149 @@ export async function registerRoutes(
         });
       }
       
-      // Generate BizOps NPD drafts
-      const bizOpsNpdTids = driReasonGroups.get("Biz Ops:Net Price Discrepancy") || [];
-      for (const tid of bizOpsNpdTids) {
-        const discCoverage = tid.countBidsInDuration > 0 
-          ? ((tid.countBidWithDiscrepancy / tid.countBidsInDuration) * 100).toFixed(2) + "%"
-          : "N/A";
-        
-        const message = `Hey BizOps - we've observed a price discrepancy for TID ${tid.tid}.
-
-Total discrepancy: ${tid.discrepancyLc.toFixed(2)} ${tid.currency} (${tid.discrepancyUsd.toFixed(2)} USD)
-
-Period: ${tid.startDate} to ${tid.endDate}
-
-Bookings impacted: ${tid.countBidWithDiscrepancy}/${tid.countBidsInDuration} (${discCoverage} in this window)
-
-Issue with Pax type: [To be filled]
-
-HO net per pax: ${tid.hoNetPerPax.toFixed(2)} ${tid.currency} | SP charged per pax: ${tid.spChargedPerPax.toFixed(2)} ${tid.currency}
-
-This has also impacted take rate: HO expected: ${tid.hoTakeRate} -> effective (basis SP charge): ${tid.actualTakeRate}.
-
-Can you please investigate, share what went wrong, and provide an RCA?`;
-        
-        draftMessagesData.push({ DRI: "Biz Ops", Type: "Net Price Discrepancy", Message: message });
-      }
+      // Build the sheet as array of arrays for custom layout
+      const draftRows: (string | number | null)[][] = [];
       
-      // Generate Inventory Ops NPD drafts
-      const inventoryOpsNpdTids = driReasonGroups.get("Inventory Ops:Net Price Discrepancy") || [];
-      if (inventoryOpsNpdTids.length > 0) {
-        const allDates = inventoryOpsNpdTids.flatMap(t => [t.startDate, t.endDate]).filter(d => d).sort();
+      // Helper to add a DRI message block with optional TID table
+      const addNpdBlock = (driTeam: string, tids: TidSummary[]) => {
+        if (tids.length === 0) return;
+        
+        // Calculate aggregates
+        const allDates = tids.flatMap(t => [t.startDate, t.endDate]).filter(d => d).sort();
         const overallStart = allDates.length > 0 ? allDates[0] : "";
         const overallEnd = allDates.length > 0 ? allDates[allDates.length - 1] : "";
-        const totalDiscrepancyUsd = inventoryOpsNpdTids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
-        const totalLossUsd = inventoryOpsNpdTids.filter(t => t.soldAtLoss).reduce((sum, t) => sum + t.lossUsd, 0);
-        const hasSoldAtLoss = inventoryOpsNpdTids.some(t => t.soldAtLoss);
+        const totalDiscrepancyUsd = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
+        const totalBidCount = tids.reduce((sum, t) => sum + t.countBidWithDiscrepancy, 0);
+        const totalBidsInDuration = tids.reduce((sum, t) => sum + t.countBidsInDuration, 0);
+        const discCoverage = totalBidsInDuration > 0 
+          ? ((totalBidCount / totalBidsInDuration) * 100).toFixed(2) + "%"
+          : "N/A";
         
-        const tidList = inventoryOpsNpdTids.map(t => t.tid).join(", ");
-        
-        let lossLine = "";
-        if (hasSoldAtLoss && totalLossUsd > 0) {
-          lossLine = `\n\nWe also incurred a loss on sale of ${totalLossUsd.toFixed(2)} USD - can you confirm whether the RP is correct for these TIDs?`;
+        let message = "";
+        if (driTeam === "BizOps" || driTeam === "Biz Ops") {
+          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${overallStart} to ${overallEnd}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please share with RCA what went wrong here?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+        } else if (driTeam === "Inventory Ops") {
+          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${overallStart} to ${overallEnd}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Since these are API products, can you confirm the price-sync status for the TIDs listed?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+        } else {
+          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${overallStart} to ${overallEnd}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please investigate and provide an RCA?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
         }
         
-        const tableHeader = "TID | Discrepancy USD | Start Date | End Date | BID Count | BIDs in Duration | Discrepancy % | Pattern | Frequency | Fulfillment Method";
-        const tableDivider = "--- | --- | --- | --- | --- | --- | --- | --- | --- | ---";
-        const tableRows = inventoryOpsNpdTids.map(t => 
-          `${t.tid} | ${t.discrepancyUsd.toFixed(2)} | ${t.startDate} | ${t.endDate} | ${t.countBidWithDiscrepancy} | ${t.countBidsInDuration} | ${t.discrepancyPercent} | ${t.pattern} | ${t.frequency} | ${t.fulfillmentMethod}`
-        ).join("\n");
+        // Header row
+        draftRows.push(["DRI team", "Slack draft"]);
+        draftRows.push([driTeam, message]);
+        draftRows.push([]);
         
-        const message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${overallStart} to ${overallEnd}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Since these are API products, can you confirm the price-sync status for the TIDs listed?${lossLine}
-
-Summary screenshot is attached; booking-level details are in the Google Sheet.
-
-${tableHeader}
-${tableDivider}
-${tableRows}`;
+        // TID table header
+        draftRows.push(["TID", "Discrepancy USD", "Start Date", "End date", "Count of BID with discrepancy", "Count BIDs in duration", "Discrepancy %", "Pattern", "Frequency", "Fulfillment method"]);
         
-        draftMessagesData.push({ DRI: "Inventory Ops", Type: "Net Price Discrepancy", Message: message });
-      }
+        // TID table rows
+        for (const t of tids) {
+          draftRows.push([
+            t.tid,
+            t.discrepancyUsd,
+            t.startDate,
+            t.endDate,
+            t.countBidWithDiscrepancy,
+            t.countBidsInDuration,
+            t.discrepancyPercent,
+            t.pattern,
+            t.frequency,
+            t.fulfillmentMethod
+          ]);
+        }
+        
+        draftRows.push([]);
+        draftRows.push([]);
+      };
       
-      // Generate Tech MTB drafts
-      const techMtbTids = driReasonGroups.get("Tech:Multiple Tickets Booked") || [];
-      for (const tid of techMtbTids) {
-        const message = `Hey booking management/supply management - We have observed multiple tickets booked for TID ${tid.tid}. We have been charged ${tid.timesCharged} for the amount we should have been charged.
-
-The amount of discrepancy is ${tid.discrepancyUsd.toFixed(2)} USD.
-
-The double bookings happened between the duration ${tid.startDate} & ${tid.endDate}.
-
-During this period we received ${tid.countBidsInDuration} bookings, out of which ${tid.countBidWithDiscrepancy} have been booked multiple times. Can you please check what went wrong here?
-
-Since the product is on API, can you tell about the status of DBP implemented on this TID/API?`;
+      const addMtbBlock = (driTeam: string, tids: TidSummary[]) => {
+        if (tids.length === 0) return;
         
-        draftMessagesData.push({ DRI: "Tech", Type: "Multiple Tickets Booked", Message: message });
-      }
-      
-      // Generate Reservation Ops MTB drafts
-      const reservationOpsMtbTids = driReasonGroups.get("Reservation Ops:Multiple Tickets Booked") || [];
-      for (const tid of reservationOpsMtbTids) {
-        const message = `Hey Reservation Ops - We have observed multiple tickets booked for TID ${tid.tid}. Can you please confirm what went wrong here? We have been charged ${tid.timesCharged} for the amount we should have been charged.
-
-The amount of discrepancy is ${tid.discrepancyUsd.toFixed(2)} USD.
-
-The bookings impacted are between ${tid.startDate} & ${tid.endDate}.
-
-Count of bookings impacted: ${tid.countBidWithDiscrepancy} out of ${tid.countBidsInDuration} in this period.`;
-        
-        draftMessagesData.push({ DRI: "Reservation Ops", Type: "Multiple Tickets Booked", Message: message });
-      }
-      
-      // Generate Selenium MTB drafts
-      const seleniumMtbTids = driReasonGroups.get("Selenium:Multiple Tickets Booked") || [];
-      for (const tid of seleniumMtbTids) {
-        const message = `Hey Selenium Team - We have observed multiple tickets booked for TID ${tid.tid}. We have been charged ${tid.timesCharged} for the amount we should have been charged.
-
-The amount of discrepancy is ${tid.discrepancyUsd.toFixed(2)} USD.
-
-The double bookings happened between ${tid.startDate} & ${tid.endDate}.
-
-During this period we received ${tid.countBidsInDuration} bookings, out of which ${tid.countBidWithDiscrepancy} have been booked multiple times. Can you please investigate?`;
-        
-        draftMessagesData.push({ DRI: "Selenium", Type: "Multiple Tickets Booked", Message: message });
-      }
-      
-      // Generate Inventory Ops MTB drafts
-      const inventoryOpsMtbTids = driReasonGroups.get("Inventory Ops:Multiple Tickets Booked") || [];
-      for (const tid of inventoryOpsMtbTids) {
-        const message = `Hey Inventory Ops - We have observed multiple tickets booked for TID ${tid.tid} (Pre Purchase). We have been charged ${tid.timesCharged} for the amount we should have been charged.
-
-The amount of discrepancy is ${tid.discrepancyUsd.toFixed(2)} USD.
-
-The double bookings happened between ${tid.startDate} & ${tid.endDate}.
-
-During this period we received ${tid.countBidsInDuration} bookings, out of which ${tid.countBidWithDiscrepancy} have been booked multiple times. Can you please check the inventory allocation?`;
-        
-        draftMessagesData.push({ DRI: "Inventory Ops", Type: "Multiple Tickets Booked", Message: message });
-      }
-      
-      // Generate Selenium NPD drafts  
-      const seleniumNpdTids = driReasonGroups.get("Selenium:Net Price Discrepancy") || [];
-      for (const tid of seleniumNpdTids) {
-        const discCoverage = tid.countBidsInDuration > 0 
-          ? ((tid.countBidWithDiscrepancy / tid.countBidsInDuration) * 100).toFixed(2) + "%"
+        // Calculate aggregates
+        const allDates = tids.flatMap(t => [t.startDate, t.endDate]).filter(d => d).sort();
+        const overallStart = allDates.length > 0 ? allDates[0] : "";
+        const overallEnd = allDates.length > 0 ? allDates[allDates.length - 1] : "";
+        const totalDiscrepancyUsd = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
+        const tidList = tids.map(t => t.tid).join(", ");
+        const totalBidCount = tids.reduce((sum, t) => sum + t.countBidWithDiscrepancy, 0);
+        const totalBidsInDuration = tids.reduce((sum, t) => sum + t.countBidsInDuration, 0);
+        const discCoverage = totalBidsInDuration > 0 
+          ? ((totalBidCount / totalBidsInDuration) * 100).toFixed(2) + "%"
           : "N/A";
         
-        const message = `Hey Selenium Team - we've observed a price discrepancy for TID ${tid.tid}.
-
-Total discrepancy: ${tid.discrepancyLc.toFixed(2)} ${tid.currency} (${tid.discrepancyUsd.toFixed(2)} USD)
-
-Period: ${tid.startDate} to ${tid.endDate}
-
-Bookings impacted: ${tid.countBidWithDiscrepancy}/${tid.countBidsInDuration} (${discCoverage} in this window)
-
-HO net per pax: ${tid.hoNetPerPax.toFixed(2)} ${tid.currency} | SP charged per pax: ${tid.spChargedPerPax.toFixed(2)} ${tid.currency}
-
-This has also impacted take rate: HO expected: ${tid.hoTakeRate} -> effective (basis SP charge): ${tid.actualTakeRate}.
-
-Can you please investigate and provide an RCA?`;
+        let message = "";
+        if (driTeam === "Tech" || driTeam === "Tech (BAR)") {
+          message = `Hey @bar, we have observed multiple uncancelled tickets for products on API. The TIDs involved here are ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). The booking level data has been attached below. Can you check the issue and share RCA and fix for this?`;
+        } else if (driTeam === "Reservation Ops") {
+          message = `Hey Reservation Ops - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please confirm what went wrong here?`;
+        } else if (driTeam === "Selenium") {
+          message = `Hey Selenium Team - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please investigate?`;
+        } else if (driTeam === "Inventory Ops") {
+          message = `Hey Inventory Ops - We have observed multiple tickets booked for TIDs ${tidList} (Pre Purchase). The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please check the inventory allocation?`;
+        } else {
+          message = `Hey ${driTeam} - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please investigate?`;
+        }
         
-        draftMessagesData.push({ DRI: "Selenium", Type: "Net Price Discrepancy", Message: message });
+        // Header row
+        draftRows.push(["DRI team", "Slack draft"]);
+        draftRows.push([driTeam, message]);
+        draftRows.push([]);
+        draftRows.push([]);
+      };
+      
+      // Section: Multiple Tickets Booked
+      const mtbDriTeams = ["Tech", "Reservation Ops", "Selenium", "Inventory Ops"];
+      const hasMtb = mtbDriTeams.some(dri => (driReasonGroups.get(`${dri}:Multiple Tickets Booked`) || []).length > 0);
+      
+      if (hasMtb) {
+        draftRows.push(["Draft messages - Multiple Tickets Booked"]);
+        draftRows.push(["DRI team", "Slack draft"]);
+        draftRows.push([]);
+        draftRows.push([]);
+        
+        // Tech MTB (Check for Charge Loss section)
+        const techMtbTids = driReasonGroups.get("Tech:Multiple Tickets Booked") || [];
+        if (techMtbTids.length > 0) {
+          draftRows.push(["Draft messages - Check for Charge Loss"]);
+          addMtbBlock("Tech (BAR)", techMtbTids);
+        }
+        
+        // Other MTB teams
+        for (const dri of ["Reservation Ops", "Selenium", "Inventory Ops"]) {
+          const tids = driReasonGroups.get(`${dri}:Multiple Tickets Booked`) || [];
+          addMtbBlock(dri, tids);
+        }
       }
       
-      // Generate Tech NPD drafts (Vendor Request)
-      const techNpdTids = driReasonGroups.get("Tech:Net Price Discrepancy") || [];
-      for (const tid of techNpdTids) {
-        const discCoverage = tid.countBidsInDuration > 0 
-          ? ((tid.countBidWithDiscrepancy / tid.countBidsInDuration) * 100).toFixed(2) + "%"
-          : "N/A";
+      // Section: Net Price Discrepancy
+      const npdDriTeams = ["Biz Ops", "Inventory Ops", "Selenium", "Tech"];
+      const hasNpd = npdDriTeams.some(dri => (driReasonGroups.get(`${dri}:Net Price Discrepancy`) || []).length > 0);
+      
+      if (hasNpd) {
+        draftRows.push(["Draft messages - Net Price Discrepancy"]);
         
-        const message = `Hey Tech Team - we've observed a price discrepancy for TID ${tid.tid} (Vendor Request).
-
-Total discrepancy: ${tid.discrepancyLc.toFixed(2)} ${tid.currency} (${tid.discrepancyUsd.toFixed(2)} USD)
-
-Period: ${tid.startDate} to ${tid.endDate}
-
-Bookings impacted: ${tid.countBidWithDiscrepancy}/${tid.countBidsInDuration} (${discCoverage} in this window)
-
-HO net per pax: ${tid.hoNetPerPax.toFixed(2)} ${tid.currency} | SP charged per pax: ${tid.spChargedPerPax.toFixed(2)} ${tid.currency}
-
-This has also impacted take rate: HO expected: ${tid.hoTakeRate} -> effective (basis SP charge): ${tid.actualTakeRate}.
-
-Can you please investigate the vendor request handling and provide an RCA?`;
+        // BizOps NPD
+        const bizOpsNpdTids = driReasonGroups.get("Biz Ops:Net Price Discrepancy") || [];
+        addNpdBlock("BizOps", bizOpsNpdTids);
         
-        draftMessagesData.push({ DRI: "Tech", Type: "Net Price Discrepancy", Message: message });
+        // Inventory Ops NPD
+        const inventoryOpsNpdTids = driReasonGroups.get("Inventory Ops:Net Price Discrepancy") || [];
+        addNpdBlock("Inventory Ops", inventoryOpsNpdTids);
+        
+        // Selenium NPD
+        const seleniumNpdTids = driReasonGroups.get("Selenium:Net Price Discrepancy") || [];
+        addNpdBlock("Selenium", seleniumNpdTids);
+        
+        // Tech NPD
+        const techNpdTids = driReasonGroups.get("Tech:Net Price Discrepancy") || [];
+        addNpdBlock("Tech", techNpdTids);
       }
       
-      const draftMessagesSheet = XLSX.utils.json_to_sheet(draftMessagesData);
-      draftMessagesSheet["!cols"] = [{ wch: 20 }, { wch: 25 }, { wch: 120 }];
+      const draftMessagesSheet = XLSX.utils.aoa_to_sheet(draftRows);
+      draftMessagesSheet["!cols"] = [
+        { wch: 15 }, { wch: 150 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, 
+        { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 18 }
+      ];
       XLSX.utils.book_append_sheet(workbook, draftMessagesSheet, "Draft Messages");
 
       // Generate buffer
