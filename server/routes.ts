@@ -1094,6 +1094,12 @@ export async function registerRoutes(
       // =====================================================
       // SHEET 5: Draft Messages
       // =====================================================
+      // Get billing entity name from first HO row (all rows in a file typically share the same billing entity)
+      const firstHoRow = originalHoData[0] as Record<string, unknown> | undefined;
+      const billingEntityName = firstHoRow 
+        ? String(firstHoRow["billingEntityName"] || firstHoRow["beId"] || firstHoRow["be_id"] || firstHoRow["billing_entity_id"] || "[Billing Entity]")
+        : "[Billing Entity]";
+      
       // Build TID summary groups for each DRI + reason combo
       type TidSummary = {
         tid: string;
@@ -1211,12 +1217,27 @@ export async function registerRoutes(
         return Math.floor((date.getTime() / 86400000) + 25569);
       };
       
-      // Helper to format date for display in message text
-      const formatDateForMessage = (dateStr: string): string => {
-        if (!dateStr) return "";
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return dateStr;
-        return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      // Helper to format date for display in message text (handles both string dates and Excel serial numbers)
+      const formatDateForMessage = (dateVal: string | number): string => {
+        if (!dateVal && dateVal !== 0) return "";
+        
+        // If it's an Excel serial number (numeric and > 25000)
+        if (typeof dateVal === "number" || (typeof dateVal === "string" && !isNaN(parseFloat(dateVal)) && parseFloat(dateVal) > 25000)) {
+          const serial = typeof dateVal === "number" ? dateVal : parseFloat(dateVal);
+          // Convert Excel serial to JS Date: (serial - 25569) * 86400000
+          const jsDate = new Date((serial - 25569) * 86400000);
+          if (!isNaN(jsDate.getTime())) {
+            return jsDate.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+          }
+        }
+        
+        // Try parsing as regular date string
+        const date = new Date(String(dateVal));
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+        }
+        
+        return String(dateVal);
       };
       
       // Helper to add a DRI message block with optional TID table
@@ -1239,11 +1260,11 @@ export async function registerRoutes(
         
         let message = "";
         if (driTeam === "BizOps" || driTeam === "Biz Ops") {
-          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please share with RCA what went wrong here?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+          message = `Please review the attached sheet for price discrepancies for ${billingEntityName} during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please share with RCA what went wrong here?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
         } else if (driTeam === "Inventory Ops") {
-          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Since these are API products, can you confirm the price-sync status for the TIDs listed?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+          message = `Please review the attached sheet for price discrepancies for ${billingEntityName} during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Since these are API products, can you confirm the price-sync status for the TIDs listed?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
         } else {
-          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please investigate and provide an RCA?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+          message = `Please review the attached sheet for price discrepancies for ${billingEntityName} during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please investigate and provide an RCA?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
         }
         
         // DRI header row
