@@ -449,6 +449,46 @@ function assignReason(
 }
 
 /**
+ * Get DRI team based on reason, fulfillment method, and price sync
+ */
+function getDriTeam(
+  reason: string,
+  fulfillmentMethod: string | undefined,
+  priceSync: string | undefined
+): string {
+  const fm = (fulfillmentMethod || "").toLowerCase().trim();
+  const ps = (priceSync || "").toLowerCase().trim();
+  
+  // MTB (Multiple Tickets Booked) - based on fulfillment method only
+  if (reason === "Multiple Tickets Booked") {
+    if (fm === "freesale") return "Tech";
+    if (fm === "manual") return "Reservation Ops";
+    if (fm === "selenium") return "Selenium";
+    if (fm === "pre purchase" || fm === "prepurchase" || fm === "pre-purchase") return "Inventory Ops";
+    if (fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api") return "Tech";
+    if (fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request") return "Tech";
+    return "Unknown";
+  }
+  
+  // NPD (Net Price Discrepancy) - based on fulfillment method and price sync
+  if (reason === "Net Price Discrepancy") {
+    if (fm === "freesale") return "Biz Ops";
+    if (fm === "manual") return "Biz Ops";
+    if (fm === "selenium") return "Selenium";
+    if (fm === "pre purchase" || fm === "prepurchase" || fm === "pre-purchase") return "Inventory Ops";
+    if (fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api") {
+      if (ps === "yes") return "Inventory Ops";
+      return "Biz Ops"; // No or blank
+    }
+    if (fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request") return "Tech";
+    return "Unknown";
+  }
+  
+  // For other reasons, default to Unknown
+  return "Unknown";
+}
+
+/**
  * STEP E-F: Compute reconciliation fields on Primary HO rows only
  * Secondary rows are completely excluded from analysis
  */
@@ -503,6 +543,9 @@ function computeReconciliationRows(
       spNetInHo
     );
     
+    // Compute DRI team based on reason and fulfillment method
+    const driTeam = getDriTeam(reason, ho.fulfillmentMethod, ho.priceSync);
+    
     primaryRows.push({
       bookingId,
       fulfillmentIdentifier: "Primary",
@@ -525,7 +568,7 @@ function computeReconciliationRows(
       supplierName: ho.supplierName,
       tid: ho.tid,
       fulfillmentMethod: ho.fulfillmentMethod,
-      driTeam: ho.driTeam,
+      driTeam,
       headoutSellingPrice: ho.headoutSellingPrice,
     });
   });
