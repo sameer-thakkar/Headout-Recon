@@ -1197,47 +1197,77 @@ export async function registerRoutes(
       }
       
       // Build the sheet as array of arrays for custom layout
-      const draftRows: (string | number | null)[][] = [];
+      const draftRows: (string | number | Date | null)[][] = [];
+      
+      // Track table regions for styling: { startRow, endRow, numCols }
+      const tableRegions: { startRow: number; endRow: number; numCols: number; type: 'header' | 'tid' | 'dri' }[] = [];
+      
+      // Helper to convert date string to Excel serial number
+      const dateToExcelSerial = (dateStr: string): number | string => {
+        if (!dateStr) return "";
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        // Excel epoch is Dec 30, 1899; add 1 for Excel's leap year bug
+        const excelEpoch = new Date(1899, 11, 30);
+        const days = Math.floor((date.getTime() - excelEpoch.getTime()) / (24 * 60 * 60 * 1000));
+        return days;
+      };
+      
+      // Helper to format date for display in message text
+      const formatDateForMessage = (dateStr: string): string => {
+        if (!dateStr) return "";
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      };
       
       // Helper to add a DRI message block with optional TID table
       const addNpdBlock = (driTeam: string, tids: TidSummary[]) => {
         if (tids.length === 0) return;
         
+        // Sort by discrepancy USD lowest to highest
+        const sortedTids = [...tids].sort((a, b) => a.discrepancyUsd - b.discrepancyUsd);
+        
         // Calculate aggregates
-        const allDates = tids.flatMap(t => [t.startDate, t.endDate]).filter(d => d).sort();
+        const allDates = sortedTids.flatMap(t => [t.startDate, t.endDate]).filter(d => d).sort();
         const overallStart = allDates.length > 0 ? allDates[0] : "";
         const overallEnd = allDates.length > 0 ? allDates[allDates.length - 1] : "";
-        const totalDiscrepancyUsd = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
-        const totalBidCount = tids.reduce((sum, t) => sum + t.countBidWithDiscrepancy, 0);
-        const totalBidsInDuration = tids.reduce((sum, t) => sum + t.countBidsInDuration, 0);
+        const totalDiscrepancyUsd = sortedTids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
+        const totalBidCount = sortedTids.reduce((sum, t) => sum + t.countBidWithDiscrepancy, 0);
+        const totalBidsInDuration = sortedTids.reduce((sum, t) => sum + t.countBidsInDuration, 0);
         const discCoverage = totalBidsInDuration > 0 
           ? ((totalBidCount / totalBidsInDuration) * 100).toFixed(2) + "%"
           : "N/A";
         
         let message = "";
         if (driTeam === "BizOps" || driTeam === "Biz Ops") {
-          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${overallStart} to ${overallEnd}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please share with RCA what went wrong here?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please share with RCA what went wrong here?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
         } else if (driTeam === "Inventory Ops") {
-          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${overallStart} to ${overallEnd}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Since these are API products, can you confirm the price-sync status for the TIDs listed?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Since these are API products, can you confirm the price-sync status for the TIDs listed?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
         } else {
-          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${overallStart} to ${overallEnd}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please investigate and provide an RCA?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
+          message = `Please review the attached sheet for price discrepancies for [Billing Entity] during ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Total discrepancy: ${totalDiscrepancyUsd.toFixed(2)} USD. Can you please investigate and provide an RCA?\n\nSummary screenshot is attached; booking-level details are in the Google Sheet.`;
         }
         
-        // Header row
+        // DRI header row
+        const driHeaderRow = draftRows.length;
         draftRows.push(["DRI team", "Slack draft"]);
+        tableRegions.push({ startRow: driHeaderRow, endRow: driHeaderRow, numCols: 2, type: 'dri' });
+        
+        // DRI data row
         draftRows.push([driTeam, message]);
-        draftRows.push([]);
+        tableRegions.push({ startRow: driHeaderRow + 1, endRow: driHeaderRow + 1, numCols: 2, type: 'dri' });
         
         // TID table header
+        const tidHeaderRow = draftRows.length;
         draftRows.push(["TID", "Discrepancy USD", "Start Date", "End date", "Count of BID with discrepancy", "Count BIDs in duration", "Discrepancy %", "Pattern", "Frequency", "Fulfillment method"]);
         
         // TID table rows
-        for (const t of tids) {
+        for (const t of sortedTids) {
           draftRows.push([
             t.tid,
             t.discrepancyUsd,
-            t.startDate,
-            t.endDate,
+            dateToExcelSerial(t.startDate),
+            dateToExcelSerial(t.endDate),
             t.countBidWithDiscrepancy,
             t.countBidsInDuration,
             t.discrepancyPercent,
@@ -1246,43 +1276,53 @@ export async function registerRoutes(
             t.fulfillmentMethod
           ]);
         }
+        tableRegions.push({ startRow: tidHeaderRow, endRow: draftRows.length - 1, numCols: 10, type: 'tid' });
         
-        draftRows.push([]);
+        // Single empty row between blocks
         draftRows.push([]);
       };
       
       const addMtbBlock = (driTeam: string, tids: TidSummary[]) => {
         if (tids.length === 0) return;
         
+        // Sort by discrepancy USD lowest to highest
+        const sortedTids = [...tids].sort((a, b) => a.discrepancyUsd - b.discrepancyUsd);
+        
         // Calculate aggregates
-        const allDates = tids.flatMap(t => [t.startDate, t.endDate]).filter(d => d).sort();
+        const allDates = sortedTids.flatMap(t => [t.startDate, t.endDate]).filter(d => d).sort();
         const overallStart = allDates.length > 0 ? allDates[0] : "";
         const overallEnd = allDates.length > 0 ? allDates[allDates.length - 1] : "";
-        const totalDiscrepancyUsd = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
-        const tidList = tids.map(t => t.tid).join(", ");
-        const totalBidCount = tids.reduce((sum, t) => sum + t.countBidWithDiscrepancy, 0);
-        const totalBidsInDuration = tids.reduce((sum, t) => sum + t.countBidsInDuration, 0);
+        const totalDiscrepancyUsd = sortedTids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
+        const tidList = sortedTids.map(t => t.tid).join(", ");
+        const totalBidCount = sortedTids.reduce((sum, t) => sum + t.countBidWithDiscrepancy, 0);
+        const totalBidsInDuration = sortedTids.reduce((sum, t) => sum + t.countBidsInDuration, 0);
         const discCoverage = totalBidsInDuration > 0 
           ? ((totalBidCount / totalBidsInDuration) * 100).toFixed(2) + "%"
           : "N/A";
         
         let message = "";
         if (driTeam === "Tech" || driTeam === "Tech (BAR)") {
-          message = `Hey @bar, we have observed multiple uncancelled tickets for products on API. The TIDs involved here are ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). The booking level data has been attached below. Can you check the issue and share RCA and fix for this?`;
+          message = `Hey @bar, we have observed multiple uncancelled tickets for products on API. The TIDs involved here are ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). The booking level data has been attached below. Can you check the issue and share RCA and fix for this?`;
         } else if (driTeam === "Reservation Ops") {
-          message = `Hey Reservation Ops - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please confirm what went wrong here?`;
+          message = `Hey Reservation Ops - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please confirm what went wrong here?`;
         } else if (driTeam === "Selenium") {
-          message = `Hey Selenium Team - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please investigate?`;
+          message = `Hey Selenium Team - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please investigate?`;
         } else if (driTeam === "Inventory Ops") {
-          message = `Hey Inventory Ops - We have observed multiple tickets booked for TIDs ${tidList} (Pre Purchase). The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please check the inventory allocation?`;
+          message = `Hey Inventory Ops - We have observed multiple tickets booked for TIDs ${tidList} (Pre Purchase). The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please check the inventory allocation?`;
         } else {
-          message = `Hey ${driTeam} - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please investigate?`;
+          message = `Hey ${driTeam} - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please investigate?`;
         }
         
-        // Header row
+        // DRI header row
+        const driHeaderRow = draftRows.length;
         draftRows.push(["DRI team", "Slack draft"]);
+        tableRegions.push({ startRow: driHeaderRow, endRow: driHeaderRow, numCols: 2, type: 'dri' });
+        
+        // DRI data row
         draftRows.push([driTeam, message]);
-        draftRows.push([]);
+        tableRegions.push({ startRow: driHeaderRow + 1, endRow: driHeaderRow + 1, numCols: 2, type: 'dri' });
+        
+        // Single empty row between blocks
         draftRows.push([]);
       };
       
@@ -1291,15 +1331,16 @@ export async function registerRoutes(
       const hasMtb = mtbDriTeams.some(dri => (driReasonGroups.get(`${dri}:Multiple Tickets Booked`) || []).length > 0);
       
       if (hasMtb) {
+        const sectionHeaderRow = draftRows.length;
         draftRows.push(["Draft messages - Multiple Tickets Booked"]);
-        draftRows.push(["DRI team", "Slack draft"]);
-        draftRows.push([]);
-        draftRows.push([]);
+        tableRegions.push({ startRow: sectionHeaderRow, endRow: sectionHeaderRow, numCols: 1, type: 'header' });
         
         // Tech MTB (Check for Charge Loss section)
         const techMtbTids = driReasonGroups.get("Tech:Multiple Tickets Booked") || [];
         if (techMtbTids.length > 0) {
+          const subHeaderRow = draftRows.length;
           draftRows.push(["Draft messages - Check for Charge Loss"]);
+          tableRegions.push({ startRow: subHeaderRow, endRow: subHeaderRow, numCols: 1, type: 'header' });
           addMtbBlock("Tech (BAR)", techMtbTids);
         }
         
@@ -1315,7 +1356,9 @@ export async function registerRoutes(
       const hasNpd = npdDriTeams.some(dri => (driReasonGroups.get(`${dri}:Net Price Discrepancy`) || []).length > 0);
       
       if (hasNpd) {
+        const sectionHeaderRow = draftRows.length;
         draftRows.push(["Draft messages - Net Price Discrepancy"]);
+        tableRegions.push({ startRow: sectionHeaderRow, endRow: sectionHeaderRow, numCols: 1, type: 'header' });
         
         // BizOps NPD
         const bizOpsNpdTids = driReasonGroups.get("Biz Ops:Net Price Discrepancy") || [];
@@ -1335,6 +1378,47 @@ export async function registerRoutes(
       }
       
       const draftMessagesSheet = XLSX.utils.aoa_to_sheet(draftRows);
+      
+      // Apply styling: borders, number/date formats
+      const borderStyle = { style: "thin", color: { rgb: "000000" } };
+      const border = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
+      
+      for (const region of tableRegions) {
+        for (let r = region.startRow; r <= region.endRow; r++) {
+          for (let c = 0; c < region.numCols; c++) {
+            const cellRef = XLSX.utils.encode_cell({ r, c });
+            if (!draftMessagesSheet[cellRef]) draftMessagesSheet[cellRef] = { v: "", t: "s" };
+            
+            // Apply border
+            draftMessagesSheet[cellRef].s = draftMessagesSheet[cellRef].s || {};
+            draftMessagesSheet[cellRef].s.border = border;
+            
+            // Bold for headers
+            if (region.type === 'header' || (region.type === 'tid' && r === region.startRow) || (region.type === 'dri' && r === region.startRow)) {
+              draftMessagesSheet[cellRef].s.font = { bold: true };
+            }
+            
+            // Number format for Discrepancy USD (column 1 in TID table, index 1)
+            if (region.type === 'tid' && c === 1 && r > region.startRow) {
+              if (typeof draftMessagesSheet[cellRef].v === "number") {
+                draftMessagesSheet[cellRef].z = "#,##0.00";
+              }
+            }
+            
+            // Date format for Start Date (col 2) and End Date (col 3) in TID table
+            if (region.type === 'tid' && (c === 2 || c === 3) && r > region.startRow) {
+              if (typeof draftMessagesSheet[cellRef].v === "number") {
+                draftMessagesSheet[cellRef].t = "n";
+                draftMessagesSheet[cellRef].z = "DD-MMM-YYYY";
+              }
+            }
+          }
+        }
+      }
+      
+      // Remove gridlines
+      draftMessagesSheet["!sheetViews"] = [{ showGridLines: false }];
+      
       draftMessagesSheet["!cols"] = [
         { wch: 15 }, { wch: 150 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, 
         { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 18 }
