@@ -66,6 +66,7 @@ interface HORow {
   fulfillmentMethod?: string;
   driTeam?: string;
   headoutSellingPrice?: number;
+  priceSync?: string;
 }
 
 // SP Row from parsed sheet
@@ -133,6 +134,7 @@ function parseHOData(sheet: SheetData): HORow[] {
       fulfillmentMethod: getRowValue(row, "fulfillmentMethod", "Fulfillment Method", "fulfilmentMethod", "Fulfilment Method") ? String(getRowValue(row, "fulfillmentMethod", "Fulfillment Method", "fulfilmentMethod", "Fulfilment Method")) : undefined,
       driTeam: getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI") ? String(getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI")) : undefined,
       headoutSellingPrice: Number(getRowValue(row, "headoutSellingPrice", "Headout Selling Price", "headout_selling_price", "sellingPrice", "Selling Price")) || undefined,
+      priceSync: getRowValue(row, "priceSync", "Price Sync", "price_sync", "PriceSync") ? String(getRowValue(row, "priceSync", "Price Sync", "price_sync", "PriceSync")) : undefined,
     };
   });
 }
