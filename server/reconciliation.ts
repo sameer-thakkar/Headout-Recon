@@ -459,28 +459,36 @@ function getDriTeam(
   const fm = (fulfillmentMethod || "").toLowerCase().trim();
   const ps = (priceSync || "").toLowerCase().trim();
   
+  // Helper to check fulfillment method variants
+  const isFreesale = fm === "freesale";
+  const isManual = fm === "manual";
+  const isSelenium = fm === "selenium";
+  const isPrePurchase = fm === "pre purchase" || fm === "prepurchase" || fm === "pre-purchase" || fm === "pre_purchase";
+  const isVendorApi = fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api" || fm === "vendor_api";
+  const isVendorRequest = fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request" || fm === "vendor_request";
+  
   // MTB (Multiple Tickets Booked) - based on fulfillment method only
   if (reason === "Multiple Tickets Booked") {
-    if (fm === "freesale") return "Tech";
-    if (fm === "manual") return "Reservation Ops";
-    if (fm === "selenium") return "Selenium";
-    if (fm === "pre purchase" || fm === "prepurchase" || fm === "pre-purchase") return "Inventory Ops";
-    if (fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api") return "Tech";
-    if (fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request") return "Tech";
+    if (isFreesale) return "Tech";
+    if (isManual) return "Reservation Ops";
+    if (isSelenium) return "Selenium";
+    if (isPrePurchase) return "Inventory Ops";
+    if (isVendorApi) return "Tech";
+    if (isVendorRequest) return "Tech";
     return "Unknown";
   }
   
   // NPD (Net Price Discrepancy) - based on fulfillment method and price sync
   if (reason === "Net Price Discrepancy") {
-    if (fm === "freesale") return "Biz Ops";
-    if (fm === "manual") return "Biz Ops";
-    if (fm === "selenium") return "Selenium";
-    if (fm === "pre purchase" || fm === "prepurchase" || fm === "pre-purchase") return "Inventory Ops";
-    if (fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api") {
+    if (isFreesale) return "Biz Ops";
+    if (isManual) return "Biz Ops";
+    if (isSelenium) return "Selenium";
+    if (isPrePurchase) return "Inventory Ops";
+    if (isVendorApi) {
       if (ps === "yes") return "Inventory Ops";
       return "Biz Ops"; // No or blank
     }
-    if (fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request") return "Tech";
+    if (isVendorRequest) return "Tech";
     return "Unknown";
   }
   
