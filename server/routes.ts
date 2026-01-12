@@ -1207,9 +1207,9 @@ export async function registerRoutes(
         if (!dateStr) return "";
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return dateStr;
-        // Excel epoch is Dec 30, 1899; add 1 for Excel's leap year bug
-        const excelEpoch = new Date(1899, 11, 30);
-        const days = Math.floor((date.getTime() - excelEpoch.getTime()) / (24 * 60 * 60 * 1000));
+        // Excel serial: days since Jan 1, 1900, plus 2 for Excel's 1900 leap year bug
+        const epoch = new Date(1900, 0, 1);
+        const days = Math.floor((date.getTime() - epoch.getTime()) / (24 * 60 * 60 * 1000)) + 2;
         return days;
       };
       
@@ -1409,7 +1409,7 @@ export async function registerRoutes(
             if (region.type === 'tid' && (c === 2 || c === 3) && r > region.startRow) {
               if (typeof draftMessagesSheet[cellRef].v === "number") {
                 draftMessagesSheet[cellRef].t = "n";
-                draftMessagesSheet[cellRef].z = "DD-MMM-YYYY";
+                draftMessagesSheet[cellRef].z = "dd-mmm-yyyy";
               }
             }
           }
