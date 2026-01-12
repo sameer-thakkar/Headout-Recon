@@ -1443,9 +1443,19 @@ export async function registerRoutes(
       draftMessagesSheet["!sheetViews"] = [{ showGridLines: false }];
       
       draftMessagesSheet["!cols"] = [
-        { wch: 15 }, { wch: 150 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, 
+        { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, 
         { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 18 }
       ];
+      
+      // Apply wrapText to column B (Slack draft column, index 1)
+      const range = XLSX.utils.decode_range(draftMessagesSheet["!ref"] || "A1");
+      for (let r = 0; r <= range.e.r; r++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c: 1 });
+        if (draftMessagesSheet[cellRef]) {
+          draftMessagesSheet[cellRef].s = draftMessagesSheet[cellRef].s || {};
+          draftMessagesSheet[cellRef].s.alignment = { wrapText: true, vertical: "top" };
+        }
+      }
       XLSX.utils.book_append_sheet(workbook, draftMessagesSheet, "Draft Messages");
 
       // Generate buffer
