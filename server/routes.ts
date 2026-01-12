@@ -1202,15 +1202,13 @@ export async function registerRoutes(
       // Track table regions for styling: { startRow, endRow, numCols }
       const tableRegions: { startRow: number; endRow: number; numCols: number; type: 'header' | 'tid' | 'dri' }[] = [];
       
-      // Helper to convert date string to Excel serial number
+      // Helper to convert date string to Excel serial number (same formula as Discrepancy Analysis)
       const dateToExcelSerial = (dateStr: string): number | string => {
         if (!dateStr) return "";
         const date = new Date(dateStr);
         if (isNaN(date.getTime())) return dateStr;
-        // Excel serial: days since Jan 1, 1900, plus 2 for Excel's 1900 leap year bug
-        const epoch = new Date(1900, 0, 1);
-        const days = Math.floor((date.getTime() - epoch.getTime()) / (24 * 60 * 60 * 1000)) + 2;
-        return days;
+        // Convert JS Date to Excel serial (days since Jan 1, 1900) - same formula as toExcelDate
+        return Math.floor((date.getTime() / 86400000) + 25569);
       };
       
       // Helper to format date for display in message text
@@ -1407,9 +1405,13 @@ export async function registerRoutes(
             
             // Date format for Start Date (col 2) and End Date (col 3) in TID table
             if (region.type === 'tid' && (c === 2 || c === 3) && r > region.startRow) {
-              if (typeof draftMessagesSheet[cellRef].v === "number") {
+              const val = draftMessagesSheet[cellRef].v;
+              const numVal = typeof val === "number" ? val : parseFloat(String(val));
+              if (!isNaN(numVal) && numVal > 25000) {
+                // Truncate to date only and set as number with date format
+                draftMessagesSheet[cellRef].v = Math.floor(numVal);
                 draftMessagesSheet[cellRef].t = "n";
-                draftMessagesSheet[cellRef].z = "dd-mmm-yyyy";
+                draftMessagesSheet[cellRef].z = "dd/mm/yyyy";
               }
             }
           }
