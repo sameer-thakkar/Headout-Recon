@@ -1346,8 +1346,9 @@ export async function registerRoutes(
       };
       
       // Section: Multiple Tickets Booked
-      const mtbDriTeams = ["Tech", "Reservation Ops", "Selenium", "Inventory Ops"];
-      const hasMtb = mtbDriTeams.some(dri => (driReasonGroups.get(`${dri}:Multiple Tickets Booked`) || []).length > 0);
+      // Find ALL DRI teams that have MTB entries (dynamic discovery)
+      const mtbKeys = Array.from(driReasonGroups.keys()).filter(k => k.endsWith(":Multiple Tickets Booked"));
+      const hasMtb = mtbKeys.length > 0;
       
       if (hasMtb) {
         const sectionHeaderRow = draftRows.length;
@@ -1363,16 +1364,27 @@ export async function registerRoutes(
           addMtbBlock("Tech (BAR)", techMtbTids);
         }
         
-        // Other MTB teams
+        // Other specific MTB teams
         for (const dri of ["Reservation Ops", "Selenium", "Inventory Ops"]) {
           const tids = driReasonGroups.get(`${dri}:Multiple Tickets Booked`) || [];
           addMtbBlock(dri, tids);
         }
+        
+        // Catch any other/unknown DRI teams (not already handled above)
+        const handledMtbTeams = new Set(["Tech", "Reservation Ops", "Selenium", "Inventory Ops"]);
+        for (const key of mtbKeys) {
+          const dri = key.replace(":Multiple Tickets Booked", "");
+          if (!handledMtbTeams.has(dri)) {
+            const tids = driReasonGroups.get(key) || [];
+            addMtbBlock(dri, tids);
+          }
+        }
       }
       
       // Section: Net Price Discrepancy
-      const npdDriTeams = ["Biz Ops", "Inventory Ops", "Selenium", "Tech"];
-      const hasNpd = npdDriTeams.some(dri => (driReasonGroups.get(`${dri}:Net Price Discrepancy`) || []).length > 0);
+      // Find ALL DRI teams that have NPD entries (dynamic discovery)
+      const npdKeys = Array.from(driReasonGroups.keys()).filter(k => k.endsWith(":Net Price Discrepancy"));
+      const hasNpd = npdKeys.length > 0;
       
       if (hasNpd) {
         const sectionHeaderRow = draftRows.length;
@@ -1394,6 +1406,16 @@ export async function registerRoutes(
         // Tech NPD
         const techNpdTids = driReasonGroups.get("Tech:Net Price Discrepancy") || [];
         addNpdBlock("Tech", techNpdTids);
+        
+        // Catch any other/unknown DRI teams (not already handled above)
+        const handledNpdTeams = new Set(["Biz Ops", "Inventory Ops", "Selenium", "Tech"]);
+        for (const key of npdKeys) {
+          const dri = key.replace(":Net Price Discrepancy", "");
+          if (!handledNpdTeams.has(dri)) {
+            const tids = driReasonGroups.get(key) || [];
+            addNpdBlock(dri, tids);
+          }
+        }
       }
       
       const draftMessagesSheet = XLSX.utils.aoa_to_sheet(draftRows);
@@ -1457,6 +1479,155 @@ export async function registerRoutes(
         }
       }
       XLSX.utils.book_append_sheet(workbook, draftMessagesSheet, "Draft Messages");
+
+      // =====================================================
+      // DRI TEAM TABS - One sheet per DRI + Reason combination
+      // =====================================================
+      // Group discrepancy rows by DRI team + reason
+      const driReasonRowGroups = new Map<string, typeof discrepancyRows>();
+      for (const row of discrepancyRows) {
+        const key = `${row.driTeam || "Unknown"}_${row.reason}`;
+        if (!driReasonRowGroups.has(key)) {
+          driReasonRowGroups.set(key, []);
+        }
+        driReasonRowGroups.get(key)!.push(row);
+      }
+      
+      // Create a lookup map from bookingId to original HO data for additional fields
+      const hoDataLookup = new Map<string, Record<string, unknown>>();
+      for (const hoRow of originalHoData as Record<string, unknown>[]) {
+        const bookingId = String(hoRow["bookingId"] || hoRow["Booking ID"] || hoRow["booking_id"] || "");
+        if (bookingId) {
+          hoDataLookup.set(bookingId, hoRow);
+        }
+      }
+      
+      // Helper to get value from original HO row with multiple aliases
+      const getHoValue = (hoRow: Record<string, unknown> | undefined, ...aliases: string[]): unknown => {
+        if (!hoRow) return "";
+        for (const alias of aliases) {
+          if (hoRow[alias] !== undefined && hoRow[alias] !== null) {
+            return hoRow[alias];
+          }
+        }
+        return "";
+      };
+      
+      // Create a sheet for each DRI + reason group
+      for (const [key, rows] of Array.from(driReasonRowGroups.entries())) {
+        const [driTeam, reason] = key.split("_");
+        
+        // Build sheet data with required columns
+        const sheetData = rows.map((row: typeof discrepancyRows[0]) => {
+          const hoRow = hoDataLookup.get(row.bookingId);
+          
+          // Calculate take rates
+          const hoSp = row.headoutSellingPrice || 0;
+          const hoTakeRate = hoSp > 0 ? ((hoSp - row.hoNet) / hoSp * 100).toFixed(2) + "%" : "";
+          const actualTakeRate = hoSp > 0 ? ((hoSp - row.spNetInHo) / hoSp * 100).toFixed(2) + "%" : "";
+          
+          // Determine comments based on reason
+          let comments = "";
+          if (row.reason === "Multiple Tickets Booked") {
+            comments = "MTB";
+          } else if (row.reason === "Net Price Discrepancy") {
+            comments = "NPD";
+          }
+          
+          return {
+            "Booking ID": row.bookingId,
+            "Creation Date": row.bookingCreationDate || "",
+            "Experience Date": getHoValue(hoRow, "experienceDate", "Experience Date", "experience_date", "tourDate", "Tour Date"),
+            "TGID": getHoValue(hoRow, "tgid", "TGID", "tourGroupId", "Tour Group ID"),
+            "Experience Name": row.experienceName || "",
+            "TID": row.tid || "",
+            "VID": getHoValue(hoRow, "vid", "VID", "variantId", "Variant ID", "variant_id"),
+            "Currency": row.hoCurrency,
+            "Vendor Name": row.supplierName || "",
+            "Billing Entity Name": getHoValue(hoRow, "billingEntityName", "beId", "be_id", "billing_entity_id", "Billing Entity"),
+            "Booking Status": row.bookingStatus || "",
+            "FF Method": row.fulfillmentMethod || "",
+            "Payment Method": getHoValue(hoRow, "paymentMethod", "Payment Method", "payment_method"),
+            "HO SP": hoSp || "",
+            "HO Net": row.hoNet,
+            "HO Take Rate": hoTakeRate,
+            "SP Net": row.spNetInHo,
+            "Actual Take Rate": actualTakeRate,
+            "Difference LC": row.differenceLc,
+            "Difference %": ((row.differencePct || 0) * 100).toFixed(2) + "%",
+            "Difference USD": row.differenceUsd,
+            "Comments": comments,
+          };
+        });
+        
+        if (sheetData.length === 0) continue;
+        
+        const driSheet = XLSX.utils.json_to_sheet(sheetData);
+        
+        // Apply formatting
+        const driRange = XLSX.utils.decode_range(driSheet["!ref"] || "A1");
+        for (let r = 1; r <= driRange.e.r; r++) {
+          // Date format for Creation Date (col 1) and Experience Date (col 2)
+          for (const col of [1, 2]) {
+            const cellRef = XLSX.utils.encode_cell({ r, c: col });
+            if (driSheet[cellRef] && driSheet[cellRef].v) {
+              const val = driSheet[cellRef].v;
+              if (typeof val === "string" && val) {
+                const date = new Date(val);
+                if (!isNaN(date.getTime())) {
+                  driSheet[cellRef].v = Math.floor((date.getTime() / 86400000) + 25569);
+                  driSheet[cellRef].t = "n";
+                  driSheet[cellRef].z = "dd/mm/yyyy";
+                }
+              }
+            }
+          }
+          
+          // Number format for numeric columns
+          const numericCols = [13, 14, 16, 18, 20]; // HO SP, HO Net, SP Net, Difference LC, Difference USD
+          for (const col of numericCols) {
+            const cellRef = XLSX.utils.encode_cell({ r, c: col });
+            if (driSheet[cellRef] && typeof driSheet[cellRef].v === "number") {
+              driSheet[cellRef].z = "#,##0.00";
+            }
+          }
+        }
+        
+        // Set column widths
+        driSheet["!cols"] = [
+          { wch: 15 }, // Booking ID
+          { wch: 12 }, // Creation Date
+          { wch: 12 }, // Experience Date
+          { wch: 10 }, // TGID
+          { wch: 30 }, // Experience Name
+          { wch: 10 }, // TID
+          { wch: 10 }, // VID
+          { wch: 10 }, // Currency
+          { wch: 20 }, // Vendor Name
+          { wch: 20 }, // Billing Entity Name
+          { wch: 15 }, // Booking Status
+          { wch: 12 }, // FF Method
+          { wch: 15 }, // Payment Method
+          { wch: 12 }, // HO SP
+          { wch: 12 }, // HO Net
+          { wch: 12 }, // HO Take Rate
+          { wch: 12 }, // SP Net
+          { wch: 12 }, // Actual Take Rate
+          { wch: 12 }, // Difference LC
+          { wch: 12 }, // Difference %
+          { wch: 12 }, // Difference USD
+          { wch: 15 }, // Comments
+        ];
+        
+        // Remove gridlines
+        driSheet["!sheetViews"] = [{ showGridLines: false }];
+        
+        // Create sheet name (Excel limits to 31 chars)
+        const shortReason = reason === "Multiple Tickets Booked" ? "MTB" : reason === "Net Price Discrepancy" ? "NPD" : reason.substring(0, 10);
+        const sheetName = `${driTeam.substring(0, 20)}_${shortReason}`.substring(0, 31);
+        
+        XLSX.utils.book_append_sheet(workbook, driSheet, sheetName);
+      }
 
       // Generate buffer
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
