@@ -1321,7 +1321,7 @@ export async function registerRoutes(
         
         let message = "";
         if (driTeam === "Tech" || driTeam === "Tech (BAR)") {
-          message = `Hey @bar, we have observed multiple uncancelled tickets for products on API. The TIDs involved here are ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). The booking level data has been attached below. Can you check the issue and share RCA and fix for this?`;
+          message = `Hey @bar, we have observed multiple tickets booked for products on API. The TIDs involved here are ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). The booking level data has been attached below. Can you check the issue and share RCA and fix for this?`;
         } else if (driTeam === "Reservation Ops") {
           message = `Hey Reservation Ops - We have observed multiple tickets booked for TIDs ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancyUsd.toFixed(2)}. Period - ${formatDateForMessage(overallStart)} to ${formatDateForMessage(overallEnd)}. Bookings impacted- ${totalBidCount}/${totalBidsInDuration} (${discCoverage}). Can you please confirm what went wrong here?`;
         } else if (driTeam === "Selenium") {
@@ -1355,11 +1355,11 @@ export async function registerRoutes(
         draftRows.push(["Draft messages - Multiple Tickets Booked"]);
         tableRegions.push({ startRow: sectionHeaderRow, endRow: sectionHeaderRow, numCols: 1, type: 'header' });
         
-        // Tech MTB (Check for Charge Loss section)
+        // Tech MTB section
         const techMtbTids = driReasonGroups.get("Tech:Multiple Tickets Booked") || [];
         if (techMtbTids.length > 0) {
           const subHeaderRow = draftRows.length;
-          draftRows.push(["Draft messages - Check for Charge Loss"]);
+          draftRows.push(["Draft messages - Tech (MTB)"]);
           tableRegions.push({ startRow: subHeaderRow, endRow: subHeaderRow, numCols: 1, type: 'header' });
           addMtbBlock("Tech (BAR)", techMtbTids);
         }
