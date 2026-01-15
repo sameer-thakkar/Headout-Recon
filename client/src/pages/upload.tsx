@@ -120,6 +120,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         hoNet: row.hoNet,
         spNet: row.spNetInHo,
         currency: row.hoCurrency,
+        beId: row.beId,
+        billingEntityName: row.billingEntityName,
       }));
   }, [primaryRows, selectedPayableCurrency]);
 

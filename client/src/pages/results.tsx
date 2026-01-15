@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, Column } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
-import { AmountPayableModal, Adjustment } from "@/components/amount-payable-modal";
+import { AmountPayableModal, Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
 import type { RunResult, OverallSummaryRow, PrimaryRow } from "@shared/schema";
 
 interface ResultsPageProps {
@@ -147,6 +147,7 @@ function LoadingSkeleton() {
 
 export function ResultsPage({ runId }: ResultsPageProps) {
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [finalNetSelections, setFinalNetSelections] = useState<FinalNetSelection>({});
   const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
 
   const { data, isLoading, isError, error } = useQuery<RunResult>({
@@ -197,22 +198,49 @@ export function ResultsPage({ runId }: ResultsPageProps) {
   const totalDiscrepancyUsd = data.overallSummary.reduce((sum, row) => sum + row.discrepancyUsd, 0);
   const totalBookings = data.overallSummary.reduce((sum, row) => sum + row.countBid, 0);
 
+  const bookingsForPayable = useMemo((): BookingForPayable[] => {
+    if (!data) return [];
+    return data.primaryRows.map(row => ({
+      bookingId: row.bookingId,
+      tid: row.tid || row.bookingId,
+      reason: row.reason,
+      hoNet: row.hoNet,
+      spNet: row.spNetInHo,
+      currency: row.hoCurrency,
+      beId: row.beId,
+      billingEntityName: row.billingEntityName,
+    }));
+  }, [data]);
+
   const finalAmountPayable = useMemo(() => {
+    const baseAmount = bookingsForPayable.reduce((sum, b) => {
+      if (b.reason === "Reconciled") {
+        return sum + b.spNet;
+      }
+      const selection = finalNetSelections[b.bookingId] || "sp";
+      return sum + (selection === "ho" ? b.hoNet : b.spNet);
+    }, 0);
+    
     return adjustments.reduce((total, adj) => {
       if (adj.type === "add") {
         return total + adj.amount;
       } else {
         return total - adj.amount;
       }
-    }, totalDiscrepancyUsd);
-  }, [totalDiscrepancyUsd, adjustments]);
+    }, baseAmount);
+  }, [bookingsForPayable, finalNetSelections, adjustments]);
 
   const handleExport = () => {
     window.open(`/api/runs/${runId}/export`, "_blank");
   };
 
-  const handleAdjustmentsChange = useCallback((newAdjustments: Adjustment[]) => {
+  const handlePayableModalApply = useCallback((
+    newAdjustments: Adjustment[], 
+    newSelections: FinalNetSelection, 
+    _finalAmount: number
+  ) => {
     setAdjustments(newAdjustments);
+    setFinalNetSelections(newSelections);
   }, []);
 
   return (
@@ -309,9 +337,11 @@ export function ResultsPage({ runId }: ResultsPageProps) {
       <AmountPayableModal
         open={isPayableModalOpen}
         onOpenChange={setIsPayableModalOpen}
-        baseAmount={totalDiscrepancyUsd}
+        bookings={bookingsForPayable}
+        currency="USD"
         adjustments={adjustments}
-        onAdjustmentsChange={handleAdjustmentsChange}
+        finalNetSelections={finalNetSelections}
+        onApply={handlePayableModalApply}
       />
     </div>
   );
