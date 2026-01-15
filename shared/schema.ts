@@ -59,6 +59,10 @@ export const primaryRowSchema = z.object({
   fulfillmentMethod: z.string().optional(),
   driTeam: z.string().optional(),
   headoutSellingPrice: z.number().optional(),
+  
+  // Billing entity fields
+  beId: z.string().optional(),
+  billingEntityName: z.string().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 

@@ -67,6 +67,8 @@ interface HORow {
   driTeam?: string;
   headoutSellingPrice?: number;
   priceSync?: string;
+  beId?: string;
+  billingEntityName?: string;
 }
 
 // SP Row from parsed sheet
@@ -75,6 +77,7 @@ interface SPRow {
   netPrice: number;
   billingCurrency: string;
   fulfilmentDate?: string | null;
+  beId?: string;
 }
 
 /**
@@ -135,6 +138,8 @@ function parseHOData(sheet: SheetData): HORow[] {
       driTeam: getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI") ? String(getRowValue(row, "driTeam", "DRI Team", "dri_team", "DRI")) : undefined,
       headoutSellingPrice: Number(getRowValue(row, "headoutSellingPrice", "Headout Selling Price", "headout_selling_price", "sellingPrice", "Selling Price")) || undefined,
       priceSync: getRowValue(row, "priceSync", "Price Sync", "price_sync", "PriceSync") ? String(getRowValue(row, "priceSync", "Price Sync", "price_sync", "PriceSync")) : undefined,
+      beId: getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id") ? String(getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id")) : undefined,
+      billingEntityName: getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName") ? String(getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName")) : undefined,
     };
   });
 }
@@ -156,12 +161,14 @@ function parseSPData(sheet: SheetData): SPRow[] {
     const netPrice = getRowValue(row, "netPrice", "Net Price", "net_price");
     const billingCurrency = getRowValue(row, "Billing Currency", "billingCurrency", "currency", "Currency");
     const fulfilmentDate = getRowValue(row, "fulfilmentDate", "Fulfilment Date", "fulfilment_date");
+    const beId = getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id");
     
     return {
       bookingId: String(bookingId || ""),
       netPrice: Number(netPrice) || 0,
       billingCurrency: String(billingCurrency || "USD"),
       fulfilmentDate: fulfilmentDate ? String(fulfilmentDate) : null,
+      beId: beId ? String(beId) : undefined,
     };
   });
 }
@@ -341,6 +348,7 @@ interface SPBundle {
   spCurrency: string;
   hoCurrencyUsed: string;
   fxRateUsed: number;
+  beId?: string;
 }
 
 function buildSPLookup(
@@ -382,6 +390,7 @@ function buildSPLookup(
       spCurrency: best.aug.spCurrency,
       hoCurrencyUsed: best.aug.hoCurrencyUsed!,
       fxRateUsed: best.aug.fxRateUsed!,
+      beId: best.sp.beId,
     });
   });
   
@@ -578,6 +587,8 @@ function computeReconciliationRows(
       fulfillmentMethod: ho.fulfillmentMethod,
       driTeam,
       headoutSellingPrice: ho.headoutSellingPrice,
+      beId: spBundle?.beId || ho.beId,
+      billingEntityName: ho.billingEntityName,
     });
   });
   
