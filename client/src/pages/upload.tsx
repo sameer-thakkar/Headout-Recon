@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
+import { AmountPayableModal, Adjustment } from "@/components/amount-payable-modal";
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 
 interface UploadPageProps {
@@ -56,6 +57,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [amountPayable, setAmountPayable] = useState<Record<string, number>>({});
+  const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
+  const [selectedPayableCurrency, setSelectedPayableCurrency] = useState<string | null>(null);
+  const [adjustmentsPerCurrency, setAdjustmentsPerCurrency] = useState<Record<string, Adjustment[]>>({});
   const { toast } = useToast();
 
   const { data: runResult } = useQuery<{
@@ -183,6 +187,31 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     const numValue = parseFloat(value) || 0;
     setAmountPayable(prev => ({ ...prev, [currency]: numValue }));
   };
+
+  const openPayableCalculator = (currency: string) => {
+    setSelectedPayableCurrency(currency);
+    setIsPayableModalOpen(true);
+  };
+
+  const handlePayableAdjustmentsChange = useCallback((newAdjustments: Adjustment[]) => {
+    if (!selectedPayableCurrency) return;
+    
+    setAdjustmentsPerCurrency(prev => ({
+      ...prev,
+      [selectedPayableCurrency]: newAdjustments,
+    }));
+    
+    const baseAmount = amountPayableData.find(r => r.currency === selectedPayableCurrency)?.asPerSP || 0;
+    const finalAmount = newAdjustments.reduce((total, adj) => {
+      if (adj.type === "add") {
+        return total + adj.amount;
+      } else {
+        return total - adj.amount;
+      }
+    }, baseAmount);
+    
+    setAmountPayable(prev => ({ ...prev, [selectedPayableCurrency]: finalAmount }));
+  }, [selectedPayableCurrency, amountPayableData]);
 
   const handleExportExcel = useCallback(async () => {
     if (!currentRunId || primaryRows.length === 0) {
@@ -430,6 +459,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       <TableHead className="text-right">As per SP</TableHead>
                       <TableHead className="text-right">As per HO</TableHead>
                       <TableHead className="text-right">Final Payable</TableHead>
+                      <TableHead className="text-center">Calculate</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -450,6 +480,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                             className="w-32 h-8 text-right font-mono ml-auto"
                             data-testid={`input-payable-${row.currency}`}
                           />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openPayableCalculator(row.currency)}
+                            data-testid={`button-calculate-${row.currency}`}
+                          >
+                            <Calculator className="h-4 w-4 mr-1" />
+                            Calculate
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -582,6 +623,16 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
           </div>
         </DialogContent>
       </Dialog>
+
+      {selectedPayableCurrency && (
+        <AmountPayableModal
+          open={isPayableModalOpen}
+          onOpenChange={setIsPayableModalOpen}
+          baseAmount={amountPayableData.find(r => r.currency === selectedPayableCurrency)?.asPerSP || 0}
+          adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
+          onAdjustmentsChange={handlePayableAdjustmentsChange}
+        />
+      )}
     </div>
   );
 }
