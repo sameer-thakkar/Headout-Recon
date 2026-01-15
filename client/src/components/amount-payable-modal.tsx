@@ -76,12 +76,12 @@ export function AmountPayableModal({
   }, [open, adjustments, finalNetSelections]);
 
   const reconciledBookings = useMemo(() => 
-    bookings.filter(b => b.reason === "Reconciled"), 
+    (bookings || []).filter(b => b.reason === "Reconciled"), 
     [bookings]
   );
 
   const discrepancyBookings = useMemo(() => 
-    bookings.filter(b => b.reason !== "Reconciled"), 
+    (bookings || []).filter(b => b.reason !== "Reconciled"), 
     [bookings]
   );
 
