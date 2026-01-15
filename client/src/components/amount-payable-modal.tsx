@@ -66,12 +66,15 @@ export function AmountPayableModal({
 }: AmountPayableModalProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
+  const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open) {
       setLocalAdjustments(adjustments);
       setLocalSelections(finalNetSelections);
+      setExpandedReasons(new Set());
+      setExpandedTids(new Set());
     }
   }, [open, adjustments, finalNetSelections]);
 
@@ -85,14 +88,26 @@ export function AmountPayableModal({
     [bookings]
   );
 
-  const bookingsByTid = useMemo(() => {
+  const bookingsByReason = useMemo(() => {
     const grouped: Record<string, BookingForPayable[]> = {};
     for (const b of discrepancyBookings) {
-      if (!grouped[b.tid]) grouped[b.tid] = [];
-      grouped[b.tid].push(b);
+      if (!grouped[b.reason]) grouped[b.reason] = [];
+      grouped[b.reason].push(b);
     }
     return grouped;
   }, [discrepancyBookings]);
+
+  const bookingsByReasonAndTid = useMemo(() => {
+    const result: Record<string, Record<string, BookingForPayable[]>> = {};
+    for (const [reason, reasonBookings] of Object.entries(bookingsByReason)) {
+      result[reason] = {};
+      for (const b of reasonBookings) {
+        if (!result[reason][b.tid]) result[reason][b.tid] = [];
+        result[reason][b.tid].push(b);
+      }
+    }
+    return result;
+  }, [bookingsByReason]);
 
   const getSelection = useCallback((bookingId: string, reason: string): "ho" | "sp" => {
     if (reason === "Reconciled") return "sp";
@@ -130,8 +145,19 @@ export function AmountPayableModal({
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
   }, []);
 
-  const updateTidSelection = useCallback((tid: string, value: "ho" | "sp") => {
-    const tidBookings = bookingsByTid[tid] || [];
+  const updateReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
+    const reasonBookings = bookingsByReason[reason] || [];
+    setLocalSelections(prev => {
+      const updated = { ...prev };
+      for (const b of reasonBookings) {
+        updated[b.bookingId] = value;
+      }
+      return updated;
+    });
+  }, [bookingsByReason]);
+
+  const updateTidSelection = useCallback((reason: string, tid: string, value: "ho" | "sp") => {
+    const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
     setLocalSelections(prev => {
       const updated = { ...prev };
       for (const b of tidBookings) {
@@ -139,19 +165,36 @@ export function AmountPayableModal({
       }
       return updated;
     });
-  }, [bookingsByTid]);
+  }, [bookingsByReasonAndTid]);
 
-  const toggleTid = useCallback((tid: string) => {
-    setExpandedTids(prev => {
+  const toggleReason = useCallback((reason: string) => {
+    setExpandedReasons(prev => {
       const next = new Set(prev);
-      if (next.has(tid)) {
-        next.delete(tid);
+      if (next.has(reason)) {
+        next.delete(reason);
       } else {
-        next.add(tid);
+        next.add(reason);
       }
       return next;
     });
   }, []);
+
+  const toggleTid = useCallback((key: string) => {
+    setExpandedTids(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const getReasonTotal = useCallback((reason: string): number => {
+    const reasonBookings = bookingsByReason[reason] || [];
+    return reasonBookings.reduce((sum, b) => sum + getFinalNetPrice(b), 0);
+  }, [bookingsByReason, getFinalNetPrice]);
 
   const addAdjustment = useCallback(() => {
     const newAdj: Adjustment = {
@@ -213,62 +256,50 @@ export function AmountPayableModal({
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p className="text-sm font-medium">Discrepancy Bookings</p>
+                    <p className="text-sm font-medium">Discrepancy Bookings by Reason</p>
                     <p className="text-xs text-muted-foreground">
-                      Select HO Net or SP Net as Final Net for each booking
+                      Select HO Net or SP Net as Final Net for each discrepancy type
                     </p>
                   </div>
                   <Badge variant="outline">{discrepancyBookings.length} bookings</Badge>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
-                    <div className="col-span-3">TID / Booking ID</div>
-                    <div className="col-span-2 text-right">HO Net</div>
-                    <div className="col-span-2 text-right">SP Net</div>
-                    <div className="col-span-3 text-center">Final Net</div>
-                    <div className="col-span-2 text-right">Final Price</div>
-                  </div>
+                <div className="space-y-3">
+                  {Object.entries(bookingsByReasonAndTid).map(([reason, tidGroups]) => {
+                    const reasonBookings = bookingsByReason[reason] || [];
+                    const reasonTotal = getReasonTotal(reason);
+                    const tidKey = (tid: string) => `${reason}:${tid}`;
 
-                  <div className="max-h-64 overflow-y-auto">
-                    {Object.entries(bookingsByTid).map(([tid, tidBookings]) => (
+                    return (
                       <Collapsible
-                        key={tid}
-                        open={expandedTids.has(tid)}
-                        onOpenChange={() => toggleTid(tid)}
+                        key={reason}
+                        open={expandedReasons.has(reason)}
+                        onOpenChange={() => toggleReason(reason)}
                       >
-                        <div className="border-t">
-                          <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center">
-                            <div className="col-span-3 flex items-center gap-2">
+                        <div className="border rounded-lg overflow-hidden">
+                          <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 items-center">
+                            <div className="col-span-4 flex items-center gap-2">
                               <CollapsibleTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-6 w-6">
-                                  {expandedTids.has(tid) ? (
+                                  {expandedReasons.has(reason) ? (
                                     <ChevronDown className="h-4 w-4" />
                                   ) : (
                                     <ChevronRight className="h-4 w-4" />
                                   )}
                                 </Button>
                               </CollapsibleTrigger>
-                              <span className="font-medium text-sm truncate" title={tid}>
-                                {tid}
-                              </span>
+                              <span className="font-semibold text-sm">{reason}</span>
                               <Badge variant="secondary" className="text-xs">
-                                {tidBookings.length}
+                                {reasonBookings.length} bookings
                               </Badge>
-                            </div>
-                            <div className="col-span-2 text-right font-mono text-sm">
-                              {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
-                            </div>
-                            <div className="col-span-2 text-right font-mono text-sm">
-                              {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
                             </div>
                             <div className="col-span-3 flex justify-center">
                               <Select
                                 value=""
-                                onValueChange={(v) => updateTidSelection(tid, v as "ho" | "sp")}
+                                onValueChange={(v) => updateReasonSelection(reason, v as "ho" | "sp")}
                               >
-                                <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-tid-${tid}`}>
-                                  <SelectValue placeholder="Bulk set" />
+                                <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-reason-${reason}`}>
+                                  <SelectValue placeholder="Bulk set all" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="ho">All HO Net</SelectItem>
@@ -276,57 +307,124 @@ export function AmountPayableModal({
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="col-span-2 text-right font-mono text-sm font-medium">
-                              {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
+                            <div className="col-span-5 text-right font-mono text-sm font-semibold">
+                              {formatCurrency(reasonTotal)} {currency}
                             </div>
                           </div>
 
                           <CollapsibleContent>
-                            {tidBookings.map((booking) => (
-                              <div
-                                key={booking.bookingId}
-                                className="grid grid-cols-12 gap-2 px-3 py-1.5 border-t border-dashed items-center text-sm"
-                                data-testid={`row-booking-${booking.bookingId}`}
-                              >
-                                <div className="col-span-3 pl-8 truncate text-muted-foreground" title={booking.bookingId}>
-                                  {booking.bookingId}
-                                </div>
-                                <div className="col-span-2 text-right font-mono">
-                                  {formatCurrency(booking.hoNet)}
-                                </div>
-                                <div className="col-span-2 text-right font-mono">
-                                  {formatCurrency(booking.spNet)}
-                                </div>
-                                <div className="col-span-3 flex justify-center">
-                                  <Select
-                                    value={getSelection(booking.bookingId, booking.reason)}
-                                    onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
-                                  >
-                                    <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="ho">HO Net</SelectItem>
-                                      <SelectItem value="sp">SP Net</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="col-span-2 text-right font-mono font-medium">
-                                  {formatCurrency(getFinalNetPrice(booking))}
-                                </div>
-                              </div>
-                            ))}
+                            <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                              <div className="col-span-3">TID / Booking ID</div>
+                              <div className="col-span-2 text-right">HO Net</div>
+                              <div className="col-span-2 text-right">SP Net</div>
+                              <div className="col-span-3 text-center">Final Net</div>
+                              <div className="col-span-2 text-right">Final Price</div>
+                            </div>
+
+                            <div className="max-h-48 overflow-y-auto">
+                              {Object.entries(tidGroups).map(([tid, tidBookings]) => (
+                                <Collapsible
+                                  key={tid}
+                                  open={expandedTids.has(tidKey(tid))}
+                                  onOpenChange={() => toggleTid(tidKey(tid))}
+                                >
+                                  <div className="border-t">
+                                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-background items-center">
+                                      <div className="col-span-3 flex items-center gap-2">
+                                        <CollapsibleTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-5 w-5">
+                                            {expandedTids.has(tidKey(tid)) ? (
+                                              <ChevronDown className="h-3 w-3" />
+                                            ) : (
+                                              <ChevronRight className="h-3 w-3" />
+                                            )}
+                                          </Button>
+                                        </CollapsibleTrigger>
+                                        <span className="font-medium text-xs truncate" title={tid}>
+                                          {tid}
+                                        </span>
+                                        <Badge variant="outline" className="text-xs h-5">
+                                          {tidBookings.length}
+                                        </Badge>
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
+                                      </div>
+                                      <div className="col-span-3 flex justify-center">
+                                        <Select
+                                          value=""
+                                          onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
+                                        >
+                                          <SelectTrigger className="w-24 h-6 text-xs" data-testid={`select-tid-${reason}-${tid}`}>
+                                            <SelectValue placeholder="Bulk set" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="ho">All HO Net</SelectItem>
+                                            <SelectItem value="sp">All SP Net</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs font-medium">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
+                                      </div>
+                                    </div>
+
+                                    <CollapsibleContent>
+                                      {tidBookings.map((booking) => (
+                                        <div
+                                          key={booking.bookingId}
+                                          className="grid grid-cols-12 gap-2 px-3 py-1 border-t border-dashed items-center text-xs"
+                                          data-testid={`row-booking-${booking.bookingId}`}
+                                        >
+                                          <div className="col-span-3 pl-6 truncate text-muted-foreground" title={booking.bookingId}>
+                                            {booking.bookingId}
+                                          </div>
+                                          <div className="col-span-2 text-right font-mono">
+                                            {formatCurrency(booking.hoNet)}
+                                          </div>
+                                          <div className="col-span-2 text-right font-mono">
+                                            {formatCurrency(booking.spNet)}
+                                          </div>
+                                          <div className="col-span-3 flex justify-center">
+                                            <Select
+                                              value={getSelection(booking.bookingId, booking.reason)}
+                                              onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
+                                            >
+                                              <SelectTrigger className="w-20 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="ho">HO Net</SelectItem>
+                                                <SelectItem value="sp">SP Net</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+                                          <div className="col-span-2 text-right font-mono font-medium">
+                                            {formatCurrency(getFinalNetPrice(booking))}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </CollapsibleContent>
+                                  </div>
+                                </Collapsible>
+                              ))}
+                            </div>
                           </CollapsibleContent>
                         </div>
                       </Collapsible>
-                    ))}
-                  </div>
+                    );
+                  })}
+                </div>
 
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 border-t font-medium text-sm">
-                    <div className="col-span-7">Discrepancy Subtotal</div>
-                    <div className="col-span-5 text-right font-mono">
+                <div className="mt-3 bg-muted/50 rounded-lg p-3">
+                  <div className="flex items-center justify-between font-medium text-sm">
+                    <span>Total Discrepancy Amount</span>
+                    <span className="font-mono">
                       {formatCurrency(discrepancyTotal)} {currency}
-                    </div>
+                    </span>
                   </div>
                 </div>
               </div>
