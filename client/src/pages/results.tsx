@@ -1,3 +1,4 @@
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutDashboard, RefreshCw, Calendar, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, Column } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
+import { AmountPayableModal, Adjustment } from "@/components/amount-payable-modal";
 import type { RunResult, OverallSummaryRow, PrimaryRow } from "@shared/schema";
 
 interface ResultsPageProps {
@@ -144,6 +146,9 @@ function LoadingSkeleton() {
 }
 
 export function ResultsPage({ runId }: ResultsPageProps) {
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
+
   const { data, isLoading, isError, error } = useQuery<RunResult>({
     queryKey: [`/api/runs/${runId}/results`],
     enabled: !!runId,
@@ -192,9 +197,23 @@ export function ResultsPage({ runId }: ResultsPageProps) {
   const totalDiscrepancyUsd = data.overallSummary.reduce((sum, row) => sum + row.discrepancyUsd, 0);
   const totalBookings = data.overallSummary.reduce((sum, row) => sum + row.countBid, 0);
 
+  const finalAmountPayable = useMemo(() => {
+    return adjustments.reduce((total, adj) => {
+      if (adj.type === "add") {
+        return total + adj.amount;
+      } else {
+        return total - adj.amount;
+      }
+    }, totalDiscrepancyUsd);
+  }, [totalDiscrepancyUsd, adjustments]);
+
   const handleExport = () => {
     window.open(`/api/runs/${runId}/export`, "_blank");
   };
+
+  const handleAdjustmentsChange = useCallback((newAdjustments: Adjustment[]) => {
+    setAdjustments(newAdjustments);
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto px-8 py-8 space-y-8">
@@ -232,12 +251,25 @@ export function ResultsPage({ runId }: ResultsPageProps) {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer hover-elevate transition-all"
+          onClick={() => setIsPayableModalOpen(true)}
+          data-testid="card-amount-payable"
+        >
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground mb-1">Total Discrepancy (USD)</p>
-            <p className="text-3xl font-bold font-mono" data-testid="text-total-discrepancy">
-              ${totalDiscrepancyUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <p className="text-sm text-muted-foreground mb-1">
+              Amount Payable (USD)
+              <span className="ml-2 text-xs text-primary">(Click to adjust)</span>
             </p>
+            <p className="text-3xl font-bold font-mono" data-testid="text-amount-payable">
+              ${finalAmountPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+            {adjustments.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Base: ${totalDiscrepancyUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                + {adjustments.length} adjustment{adjustments.length > 1 ? "s" : ""}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -273,6 +305,14 @@ export function ResultsPage({ runId }: ResultsPageProps) {
           />
         </CardContent>
       </Card>
+
+      <AmountPayableModal
+        open={isPayableModalOpen}
+        onOpenChange={setIsPayableModalOpen}
+        baseAmount={totalDiscrepancyUsd}
+        adjustments={adjustments}
+        onAdjustmentsChange={handleAdjustmentsChange}
+      />
     </div>
   );
 }
