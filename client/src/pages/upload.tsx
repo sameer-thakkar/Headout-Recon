@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
-import { AmountPayableModal, Adjustment } from "@/components/amount-payable-modal";
+import { AmountPayableModal, Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 
 interface UploadPageProps {
@@ -60,6 +60,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
   const [selectedPayableCurrency, setSelectedPayableCurrency] = useState<string | null>(null);
   const [adjustmentsPerCurrency, setAdjustmentsPerCurrency] = useState<Record<string, Adjustment[]>>({});
+  const [finalNetSelectionsPerCurrency, setFinalNetSelectionsPerCurrency] = useState<Record<string, FinalNetSelection>>({});
   const { toast } = useToast();
 
   const { data: runResult } = useQuery<{
@@ -107,6 +108,20 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
     return filtered;
   }, [discrepancyData?.analysisRows, selectedReason]);
+
+  const bookingsForPayableModal = useMemo((): BookingForPayable[] => {
+    if (!selectedPayableCurrency) return [];
+    return primaryRows
+      .filter(row => row.hoCurrency === selectedPayableCurrency)
+      .map(row => ({
+        bookingId: row.bookingId,
+        tid: row.tid || row.bookingId,
+        reason: row.reason,
+        hoNet: row.hoNet,
+        spNet: row.spNetInHo,
+        currency: row.hoCurrency,
+      }));
+  }, [primaryRows, selectedPayableCurrency]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -193,7 +208,11 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     setIsPayableModalOpen(true);
   };
 
-  const handlePayableAdjustmentsChange = useCallback((newAdjustments: Adjustment[]) => {
+  const handlePayableModalApply = useCallback((
+    newAdjustments: Adjustment[],
+    selections: FinalNetSelection,
+    finalAmount: number
+  ) => {
     if (!selectedPayableCurrency) return;
     
     setAdjustmentsPerCurrency(prev => ({
@@ -201,17 +220,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       [selectedPayableCurrency]: newAdjustments,
     }));
     
-    const baseAmount = amountPayableData.find(r => r.currency === selectedPayableCurrency)?.asPerSP || 0;
-    const finalAmount = newAdjustments.reduce((total, adj) => {
-      if (adj.type === "add") {
-        return total + adj.amount;
-      } else {
-        return total - adj.amount;
-      }
-    }, baseAmount);
+    setFinalNetSelectionsPerCurrency(prev => ({
+      ...prev,
+      [selectedPayableCurrency]: selections,
+    }));
     
     setAmountPayable(prev => ({ ...prev, [selectedPayableCurrency]: finalAmount }));
-  }, [selectedPayableCurrency, amountPayableData]);
+  }, [selectedPayableCurrency]);
 
   const handleExportExcel = useCallback(async () => {
     if (!currentRunId || primaryRows.length === 0) {
@@ -628,9 +643,11 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         <AmountPayableModal
           open={isPayableModalOpen}
           onOpenChange={setIsPayableModalOpen}
-          baseAmount={amountPayableData.find(r => r.currency === selectedPayableCurrency)?.asPerSP || 0}
+          bookings={bookingsForPayableModal}
+          currency={selectedPayableCurrency}
           adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
-          onAdjustmentsChange={handlePayableAdjustmentsChange}
+          finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency] || {}}
+          onApply={handlePayableModalApply}
         />
       )}
     </div>
