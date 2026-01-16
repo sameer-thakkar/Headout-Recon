@@ -119,6 +119,7 @@ export function AmountPayableModal({
 
   const getSelection = useCallback((bookingId: string, reason: string): "ho" | "sp" => {
     if (reason === "Reconciled") return "sp";
+    if (reason === "Unmapped") return "sp"; // Unmapped bookings only have SP Net
     return localSelections[bookingId] || "sp";
   }, [localSelections]);
 
@@ -321,18 +322,22 @@ export function AmountPayableModal({
                               </Badge>
                             </div>
                             <div className="col-span-3 flex justify-center">
-                              <Select
-                                value=""
-                                onValueChange={(v) => updateReasonSelection(reason, v as "ho" | "sp")}
-                              >
-                                <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-reason-${reason}`}>
-                                  <SelectValue placeholder="Bulk set all" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="ho">All HO Net</SelectItem>
-                                  <SelectItem value="sp">All SP Net</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              {reason === "Unmapped" ? (
+                                <span className="text-xs text-muted-foreground">SP Net only</span>
+                              ) : (
+                                <Select
+                                  value=""
+                                  onValueChange={(v) => updateReasonSelection(reason, v as "ho" | "sp")}
+                                >
+                                  <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-reason-${reason}`}>
+                                    <SelectValue placeholder="Bulk set all" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="ho">All HO Net</SelectItem>
+                                    <SelectItem value="sp">All SP Net</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              )}
                             </div>
                             <div className="col-span-5 text-right font-mono text-sm font-semibold">
                               {formatCurrency(reasonTotal)} {currency}
@@ -381,18 +386,22 @@ export function AmountPayableModal({
                                         {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
                                       </div>
                                       <div className="col-span-3 flex justify-center">
-                                        <Select
-                                          value=""
-                                          onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
-                                        >
-                                          <SelectTrigger className="w-24 h-6 text-xs" data-testid={`select-tid-${reason}-${tid}`}>
-                                            <SelectValue placeholder="Bulk set" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="ho">All HO Net</SelectItem>
-                                            <SelectItem value="sp">All SP Net</SelectItem>
-                                          </SelectContent>
-                                        </Select>
+                                        {reason === "Unmapped" ? (
+                                          <span className="text-xs text-muted-foreground">SP Net only</span>
+                                        ) : (
+                                          <Select
+                                            value=""
+                                            onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
+                                          >
+                                            <SelectTrigger className="w-24 h-6 text-xs" data-testid={`select-tid-${reason}-${tid}`}>
+                                              <SelectValue placeholder="Bulk set" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="ho">All HO Net</SelectItem>
+                                              <SelectItem value="sp">All SP Net</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        )}
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs font-medium">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
@@ -410,24 +419,32 @@ export function AmountPayableModal({
                                             {booking.bookingId}
                                           </div>
                                           <div className="col-span-2 text-right font-mono">
-                                            {formatCurrency(booking.hoNet)}
+                                            {booking.reason === "Unmapped" ? (
+                                              <span className="text-muted-foreground">N/A</span>
+                                            ) : (
+                                              formatCurrency(booking.hoNet)
+                                            )}
                                           </div>
                                           <div className="col-span-2 text-right font-mono">
                                             {formatCurrency(booking.spNet)}
                                           </div>
                                           <div className="col-span-3 flex justify-center">
-                                            <Select
-                                              value={getSelection(booking.bookingId, booking.reason)}
-                                              onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
-                                            >
-                                              <SelectTrigger className="w-20 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="ho">HO Net</SelectItem>
-                                                <SelectItem value="sp">SP Net</SelectItem>
-                                              </SelectContent>
-                                            </Select>
+                                            {booking.reason === "Unmapped" ? (
+                                              <span className="text-muted-foreground text-xs">SP Net only</span>
+                                            ) : (
+                                              <Select
+                                                value={getSelection(booking.bookingId, booking.reason)}
+                                                onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
+                                              >
+                                                <SelectTrigger className="w-20 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  <SelectItem value="ho">HO Net</SelectItem>
+                                                  <SelectItem value="sp">SP Net</SelectItem>
+                                                </SelectContent>
+                                              </Select>
+                                            )}
                                           </div>
                                           <div className="col-span-2 text-right font-mono font-medium">
                                             {formatCurrency(getFinalNetPrice(booking))}

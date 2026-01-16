@@ -66,6 +66,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const { data: runResult } = useQuery<{
     overallSummary: OverallSummaryRow[];
     primaryRows: PrimaryRow[];
+    unmappedRows: PrimaryRow[];
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
     enabled: !!currentRunId,
@@ -78,6 +79,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const overallSummary = runResult?.overallSummary || [];
   const primaryRows = runResult?.primaryRows || [];
+  const unmappedRows = runResult?.unmappedRows || [];
 
   const amountPayableData = useMemo(() => {
     const currencyTotals: Record<string, { spTotal: number; hoTotal: number }> = {};
@@ -111,7 +113,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const bookingsForPayableModal = useMemo((): BookingForPayable[] => {
     if (!selectedPayableCurrency) return [];
-    return primaryRows
+    // Combine primary and unmapped rows
+    const allRows = [...primaryRows, ...unmappedRows];
+    return allRows
       .filter(row => row.hoCurrency === selectedPayableCurrency)
       .map(row => ({
         bookingId: row.bookingId,
@@ -123,7 +127,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         beId: row.beId,
         billingEntityName: row.billingEntityName,
       }));
-  }, [primaryRows, selectedPayableCurrency]);
+  }, [primaryRows, unmappedRows, selectedPayableCurrency]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();

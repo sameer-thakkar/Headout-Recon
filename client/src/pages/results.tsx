@@ -200,7 +200,9 @@ export function ResultsPage({ runId }: ResultsPageProps) {
 
   const bookingsForPayable = useMemo((): BookingForPayable[] => {
     if (!data) return [];
-    return data.primaryRows.map(row => ({
+    // Combine primary and unmapped rows
+    const allRows = [...data.primaryRows, ...(data.unmappedRows || [])];
+    return allRows.map(row => ({
       bookingId: row.bookingId,
       tid: row.tid || row.bookingId,
       reason: row.reason,

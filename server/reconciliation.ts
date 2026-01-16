@@ -723,6 +723,36 @@ export async function runReconciliation(
   // Sort by differenceUsd ascending
   primaryRows.sort((a, b) => a.differenceUsd - b.differenceUsd);
   
+  // Convert unmapped SP rows to PrimaryRow format for Amount Payable Calculator
+  const unmappedRows: PrimaryRow[] = unmappedSP.map(sp => {
+    const spCurrency = sp.billingCurrency;
+    const spNetOriginal = sp.netPrice;
+    // For unmapped, use SP currency as HO currency equivalent (no conversion)
+    const usdRate = usdToCcy[spCurrency] || 1;
+    const differenceUsd = spNetOriginal / usdRate; // SP Net in USD (since HO Net is 0)
+    
+    return {
+      bookingId: sp.bookingId,
+      fulfillmentIdentifier: "Primary" as const,
+      hoNet: 0, // No HO match
+      hoCurrency: spCurrency, // Use SP currency as placeholder
+      bookingCreationDate: null,
+      bookingStatus: "Unknown",
+      cancellable: null,
+      cancellationInsurance: null,
+      spNetOriginal,
+      spCurrency,
+      spNetInHo: spNetOriginal, // Same as original since no conversion
+      fxRateUsed: 1,
+      sameCurrency: true,
+      differenceLc: spNetOriginal, // Full SP Net is discrepancy
+      differencePct: null,
+      differenceUsd,
+      reason: "Unmapped",
+      beId: sp.beId,
+    };
+  });
+  
   // Build overall summary (Primary only + Unmapped)
   const overallSummary = buildOverallSummary(primaryRows, unmappedSP, usdToCcy);
   
@@ -730,6 +760,7 @@ export async function runReconciliation(
     fx,
     overallSummary,
     primaryRows,
+    unmappedRows, // New: unmapped bookings for Amount Payable Calculator
     allRows: primaryRows, // allRows now same as primaryRows (no Secondary)
     spFxDebugRows: augmentedSP,
   };

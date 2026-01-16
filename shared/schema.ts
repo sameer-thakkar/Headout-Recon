@@ -109,6 +109,7 @@ export const runResultSchema = z.object({
   fx: fxDataSchema,
   overallSummary: z.array(overallSummaryRowSchema),
   primaryRows: z.array(primaryRowSchema),       // Primary only for main tables
+  unmappedRows: z.array(primaryRowSchema),      // Unmapped bookings (in SP but not in HO)
   allRows: z.array(primaryRowSchema),           // All rows including Secondary (for DRI/drafts)
   spFxDebugRows: z.array(spFxDebugRowSchema),
 });
