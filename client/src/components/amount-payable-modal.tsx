@@ -74,6 +74,7 @@ export function AmountPayableModal({
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
+  const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (open) {
@@ -98,15 +99,19 @@ export function AmountPayableModal({
             
             setDisputeAmounts(newDisputeAmounts);
             setActiveDisputes(newActiveDisputes);
+            // Store original state for comparison on Apply
+            setOriginalDisputes(new Map(newDisputeAmounts));
           })
           .catch(err => {
             console.error("Failed to load existing disputes:", err);
             setDisputeAmounts(new Map());
             setActiveDisputes(new Set());
+            setOriginalDisputes(new Map());
           });
       } else {
         setDisputeAmounts(new Map());
         setActiveDisputes(new Set());
+        setOriginalDisputes(new Map());
       }
     }
   }, [open, adjustments, finalNetSelections, runId]);
@@ -264,20 +269,8 @@ export function AmountPayableModal({
       next.set(bookingId, maxDispute);
       return next;
     });
-    
-    // Persist dispute to backend
-    if (runId) {
-      apiRequest("POST", "/api/disputes", {
-        runId,
-        bookingId,
-        billingEntityId: booking.beId || "",
-        billingEntityName: booking.billingEntityName || "",
-        currency: currency,
-        disputeAmount: maxDispute,
-        maxDisputeAmount: maxDispute,
-      }).catch(err => console.error("Failed to create dispute:", err));
-    }
-  }, [runId, currency]);
+    // Note: Disputes are saved to backend only when Apply is clicked
+  }, []);
 
   const toggleReason = useCallback((reason: string) => {
     setExpandedReasons(prev => {
@@ -311,7 +304,7 @@ export function AmountPayableModal({
     return disputeAmounts.get(bookingId) || 0;
   }, [disputeAmounts]);
 
-  const setBookingDisputeAmount = useCallback((bookingId: string, amount: number, booking?: BookingForPayable) => {
+  const setBookingDisputeAmount = useCallback((bookingId: string, amount: number, _booking?: BookingForPayable) => {
     setDisputeAmounts(prev => {
       const next = new Map(prev);
       if (amount <= 0) {
@@ -327,24 +320,9 @@ export function AmountPayableModal({
         next.delete(bookingId);
         return next;
       });
-      // Delete dispute from backend when cleared
-      if (runId) {
-        fetch(`/api/disputes/${runId}/${bookingId}`, { method: "DELETE" })
-          .catch(err => console.error("Failed to delete dispute:", err));
-      }
-    } else if (runId && booking) {
-      // Persist dispute update to backend
-      apiRequest("POST", "/api/disputes", {
-        runId,
-        bookingId,
-        billingEntityId: booking.beId || "",
-        billingEntityName: booking.billingEntityName || "",
-        currency: currency,
-        disputeAmount: amount,
-        maxDisputeAmount: booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet),
-      }).catch(err => console.error("Failed to update dispute:", err));
     }
-  }, [runId, currency]);
+    // Note: Disputes are saved to backend only when Apply is clicked
+  }, []);
 
   const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
     const reasonBookings = bookingsByReason[reason] || [];
@@ -373,28 +351,8 @@ export function AmountPayableModal({
       }
       return next;
     });
-    
-    // Persist to backend
-    if (runId) {
-      for (const b of disputableBookings) {
-        if (action === "all") {
-          const maxDispute = getMaxDisputeAmount(b);
-          apiRequest("POST", "/api/disputes", {
-            runId,
-            bookingId: b.bookingId,
-            billingEntityId: b.beId || "",
-            billingEntityName: b.billingEntityName || "",
-            currency: currency,
-            disputeAmount: maxDispute,
-            maxDisputeAmount: maxDispute,
-          }).catch(err => console.error("Failed to create dispute:", err));
-        } else {
-          fetch(`/api/disputes/${runId}/${b.bookingId}`, { method: "DELETE" })
-            .catch(err => console.error("Failed to delete dispute:", err));
-        }
-      }
-    }
-  }, [bookingsByReason, getSelection, getMaxDisputeAmount, runId, currency]);
+    // Note: Disputes are saved to backend only when Apply is clicked
+  }, [bookingsByReason, getSelection, getMaxDisputeAmount]);
 
   const updateTidDispute = useCallback((reason: string, tid: string, action: "all" | "clear") => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
@@ -423,28 +381,8 @@ export function AmountPayableModal({
       }
       return next;
     });
-    
-    // Persist to backend
-    if (runId) {
-      for (const b of disputableBookings) {
-        if (action === "all") {
-          const maxDispute = getMaxDisputeAmount(b);
-          apiRequest("POST", "/api/disputes", {
-            runId,
-            bookingId: b.bookingId,
-            billingEntityId: b.beId || "",
-            billingEntityName: b.billingEntityName || "",
-            currency: currency,
-            disputeAmount: maxDispute,
-            maxDisputeAmount: maxDispute,
-          }).catch(err => console.error("Failed to create dispute:", err));
-        } else {
-          fetch(`/api/disputes/${runId}/${b.bookingId}`, { method: "DELETE" })
-            .catch(err => console.error("Failed to delete dispute:", err));
-        }
-      }
-    }
-  }, [bookingsByReasonAndTid, getSelection, getMaxDisputeAmount, runId, currency]);
+    // Note: Disputes are saved to backend only when Apply is clicked
+  }, [bookingsByReasonAndTid, getSelection, getMaxDisputeAmount]);
 
   const getTidDisputeCount = useCallback((reason: string, tid: string): { disputed: number; disputable: number; total: number; totalDisputeAmt: number } => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
@@ -492,10 +430,62 @@ export function AmountPayableModal({
     );
   }, []);
 
-  const handleApply = useCallback(() => {
+  const handleApply = useCallback(async () => {
+    // Sync disputes to backend: compare current state with original
+    if (runId) {
+      const currentBookingIds = new Set(disputeAmounts.keys());
+      const originalBookingIds = new Set(originalDisputes.keys());
+      
+      // Find disputes to create (in current but not in original, or amount changed)
+      const disputesToCreate: string[] = [];
+      Array.from(currentBookingIds).forEach(bookingId => {
+        const currentAmount = disputeAmounts.get(bookingId) || 0;
+        const originalAmount = originalDisputes.get(bookingId) || 0;
+        if (!originalBookingIds.has(bookingId) || currentAmount !== originalAmount) {
+          disputesToCreate.push(bookingId);
+        }
+      });
+      
+      // Find disputes to delete (in original but not in current)
+      const disputesToDelete: string[] = [];
+      Array.from(originalBookingIds).forEach(bookingId => {
+        if (!currentBookingIds.has(bookingId)) {
+          disputesToDelete.push(bookingId);
+        }
+      });
+      
+      // Get booking info for creating disputes
+      const allBookings = [...(bookings || [])];
+      const bookingMap = new Map(allBookings.map(b => [b.bookingId, b]));
+      
+      // Create/update disputes
+      for (const bookingId of disputesToCreate) {
+        const booking = bookingMap.get(bookingId);
+        const disputeAmount = disputeAmounts.get(bookingId) || 0;
+        if (booking && disputeAmount > 0) {
+          const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+          await apiRequest("POST", "/api/disputes", {
+            runId,
+            bookingId,
+            billingEntityId: booking.beId || "",
+            billingEntityName: booking.billingEntityName || "",
+            currency: currency,
+            disputeAmount,
+            maxDisputeAmount: maxDispute,
+          }).catch(err => console.error("Failed to create dispute:", err));
+        }
+      }
+      
+      // Delete removed disputes
+      for (const bookingId of disputesToDelete) {
+        await fetch(`/api/disputes/${runId}/${bookingId}`, { method: "DELETE" })
+          .catch(err => console.error("Failed to delete dispute:", err));
+      }
+    }
+    
     onApply(localAdjustments, localSelections, finalAmount);
     onOpenChange(false);
-  }, [localAdjustments, localSelections, finalAmount, onApply, onOpenChange]);
+  }, [localAdjustments, localSelections, finalAmount, onApply, onOpenChange, runId, disputeAmounts, originalDisputes, bookings, currency]);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
