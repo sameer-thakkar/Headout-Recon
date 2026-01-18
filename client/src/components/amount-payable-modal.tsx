@@ -246,10 +246,36 @@ export function AmountPayableModal({
     });
   }, [bookingsByReason]);
 
+  const updateTidDispute = useCallback((reason: string, tid: string, action: "all" | "clear") => {
+    const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
+    setDisputedBookings(prev => {
+      const next = new Set(prev);
+      for (const b of tidBookings) {
+        if (action === "all") {
+          next.add(b.bookingId);
+        } else {
+          next.delete(b.bookingId);
+        }
+      }
+      return next;
+    });
+  }, [bookingsByReasonAndTid]);
+
+  const getTidDisputeCount = useCallback((reason: string, tid: string): { disputed: number; total: number } => {
+    const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
+    const disputed = tidBookings.filter(b => disputedBookings.has(b.bookingId)).length;
+    return { disputed, total: tidBookings.length };
+  }, [bookingsByReasonAndTid, disputedBookings]);
+
   const isTidDisputed = useCallback((reason: string, tid: string) => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
     return tidBookings.length > 0 && tidBookings.every(b => disputedBookings.has(b.bookingId));
   }, [bookingsByReasonAndTid, disputedBookings]);
+
+  const isTidPartiallyDisputed = useCallback((reason: string, tid: string) => {
+    const { disputed, total } = getTidDisputeCount(reason, tid);
+    return disputed > 0 && disputed < total;
+  }, [getTidDisputeCount]);
 
   const isBookingDisputed = useCallback((bookingId: string) => {
     return disputedBookings.has(bookingId);
@@ -475,16 +501,29 @@ export function AmountPayableModal({
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-1 flex justify-center">
-                                        <Button
-                                          variant={isTidDisputed(reason, tid) ? "destructive" : "outline"}
-                                          size="sm"
-                                          className="h-6 px-2 text-xs"
-                                          onClick={() => toggleTidDispute(reason, tid)}
-                                          data-testid={`button-dispute-tid-${reason}-${tid}`}
-                                        >
-                                          <AlertTriangle className="h-3 w-3" />
-                                        </Button>
+                                      <div className="col-span-1 flex justify-center items-center gap-1">
+                                        {(() => {
+                                          const { disputed, total } = getTidDisputeCount(reason, tid);
+                                          const allDisputed = disputed === total;
+                                          const partialDisputed = disputed > 0 && disputed < total;
+                                          return (
+                                            <Select
+                                              value=""
+                                              onValueChange={(v) => updateTidDispute(reason, tid, v as "all" | "clear")}
+                                            >
+                                              <SelectTrigger 
+                                                className={`w-16 h-6 text-xs ${allDisputed ? 'border-destructive text-destructive' : partialDisputed ? 'border-orange-500 text-orange-600' : ''}`}
+                                                data-testid={`select-dispute-tid-${reason}-${tid}`}
+                                              >
+                                                <SelectValue placeholder={disputed > 0 ? `${disputed}/${total}` : "0"} />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="all">Dispute All</SelectItem>
+                                                <SelectItem value="clear">Clear All</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          );
+                                        })()}
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs font-medium">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
