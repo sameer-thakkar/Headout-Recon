@@ -81,10 +81,35 @@ export function AmountPayableModal({
       setLocalSelections(finalNetSelections);
       setExpandedReasons(new Set());
       setExpandedTids(new Set());
-      setDisputeAmounts(new Map());
-      setActiveDisputes(new Set());
+      
+      // Load existing disputes from backend
+      if (runId) {
+        fetch(`/api/disputes/${runId}`)
+          .then(res => res.json())
+          .then(data => {
+            const disputes = data.disputes || [];
+            const newDisputeAmounts = new Map<string, number>();
+            const newActiveDisputes = new Set<string>();
+            
+            for (const dispute of disputes) {
+              newDisputeAmounts.set(dispute.bookingId, dispute.disputeAmount);
+              newActiveDisputes.add(dispute.bookingId);
+            }
+            
+            setDisputeAmounts(newDisputeAmounts);
+            setActiveDisputes(newActiveDisputes);
+          })
+          .catch(err => {
+            console.error("Failed to load existing disputes:", err);
+            setDisputeAmounts(new Map());
+            setActiveDisputes(new Set());
+          });
+      } else {
+        setDisputeAmounts(new Map());
+        setActiveDisputes(new Set());
+      }
     }
-  }, [open, adjustments, finalNetSelections]);
+  }, [open, adjustments, finalNetSelections, runId]);
 
   const reconciledBookings = useMemo(() => 
     (bookings || []).filter(b => b.reason === "Reconciled"), 
