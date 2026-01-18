@@ -178,11 +178,13 @@ export function AmountPayableModal({
               if (group.length === 0) continue;
               const first = group[0];
               const totalAmount = group.reduce((sum, d) => sum + d.disputeAmount, 0);
+              // Round to exactly 2 decimal places
+              const roundedTotal = Math.round(totalAmount * 100) / 100;
               aggregatedDisputes.push({
                 displayId: `DID-#${counter}`,
                 billingEntityId: first.billingEntityId,
                 billingEntityName: first.billingEntityName,
-                totalDisputeAmount: totalAmount,
+                totalDisputeAmount: roundedTotal,
                 bookingCount: group.length,
               });
               counter++;
@@ -273,13 +275,15 @@ export function AmountPayableModal({
   const baseAmount = reconciledTotal + discrepancyTotal;
 
   const finalAmount = useMemo(() => {
-    return localAdjustments.reduce((total, adj) => {
+    const result = localAdjustments.reduce((total, adj) => {
       if (adj.type === "add") {
         return total + adj.amount;
       } else {
         return total - adj.amount;
       }
     }, baseAmount);
+    // Round to exactly 2 decimal places
+    return Math.round(result * 100) / 100;
   }, [baseAmount, localAdjustments]);
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
@@ -542,11 +546,14 @@ export function AmountPayableModal({
           .filter(d => selectedIds.includes(d.displayId))
           .reduce((sum, d) => sum + d.totalDisputeAmount, 0);
         
+        // Round to exactly 2 decimal places
+        const roundedAmount = Math.round(totalAmount * 100) / 100;
+        
         return {
           ...a,
           selectedDisputeIds: selectedIds,
           reference: selectedIds.join(", "),
-          amount: totalAmount,
+          amount: roundedAmount,
         };
       })
     );
