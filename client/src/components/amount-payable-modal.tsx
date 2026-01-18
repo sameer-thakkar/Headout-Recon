@@ -536,9 +536,10 @@ export function AmountPayableModal({
                               <div className="col-span-2 text-right">HO Net</div>
                               <div className="col-span-2 text-right">SP Net</div>
                               <div className="col-span-2 text-center">Final Net</div>
-                              <div className="col-span-2 text-right">Dispute Amt</div>
+                              <div className="col-span-1 text-center">Dispute</div>
                               <div className="col-span-2 text-right">Price Payable</div>
-                              <div className="col-span-3 text-right">Reconciled Net</div>
+                              <div className="col-span-2 text-right">Dispute Amt</div>
+                              <div className="col-span-2 text-right">Reconciled Net</div>
                             </div>
 
                             <div>
@@ -591,9 +592,9 @@ export function AmountPayableModal({
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-2 flex justify-end items-center">
+                                      <div className="col-span-1 flex justify-center items-center">
                                         {(() => {
-                                          const { disputed, disputable, totalDisputeAmt } = getTidDisputeCount(reason, tid);
+                                          const { disputed, disputable } = getTidDisputeCount(reason, tid);
                                           const noDisputable = disputable === 0;
                                           
                                           if (noDisputable) {
@@ -602,20 +603,15 @@ export function AmountPayableModal({
                                           
                                           if (disputed > 0) {
                                             return (
-                                              <div className="flex items-center gap-1">
-                                                <span className="font-mono text-xs text-orange-600 dark:text-orange-400">
-                                                  {formatCurrency(totalDisputeAmt)}
-                                                </span>
-                                                <Button
-                                                  size="sm"
-                                                  variant="ghost"
-                                                  className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground"
-                                                  onClick={() => updateTidDispute(reason, tid, "clear")}
-                                                  data-testid={`button-clear-dispute-tid-${reason}-${tid}`}
-                                                >
-                                                  Clear
-                                                </Button>
-                                              </div>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground"
+                                                onClick={() => updateTidDispute(reason, tid, "clear")}
+                                                data-testid={`button-clear-dispute-tid-${reason}-${tid}`}
+                                              >
+                                                Clear
+                                              </Button>
                                             );
                                           }
                                           
@@ -623,11 +619,11 @@ export function AmountPayableModal({
                                             <Button
                                               size="sm"
                                               variant="outline"
-                                              className="h-5 px-2 text-[10px]"
+                                              className="h-5 px-1 text-[9px]"
                                               onClick={() => updateTidDispute(reason, tid, "all")}
                                               data-testid={`button-dispute-all-tid-${reason}-${tid}`}
                                             >
-                                              Dispute All
+                                              All
                                             </Button>
                                           );
                                         })()}
@@ -635,7 +631,15 @@ export function AmountPayableModal({
                                       <div className="col-span-2 text-right font-mono text-xs font-medium">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </div>
-                                      <div className="col-span-3 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
+                                      <div className="col-span-2 text-right font-mono text-xs">
+                                        {(() => {
+                                          const { totalDisputeAmt } = getTidDisputeCount(reason, tid);
+                                          return totalDisputeAmt > 0 ? (
+                                            <span className="text-orange-600 dark:text-orange-400">{formatCurrency(totalDisputeAmt)}</span>
+                                          ) : null;
+                                        })()}
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
                                           const canDispute = b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp";
                                           const pricePayable = getFinalNetPrice(b);
@@ -691,33 +695,23 @@ export function AmountPayableModal({
                                                 </Select>
                                               )}
                                             </div>
-                                            <div className="col-span-2 flex justify-end">
+                                            <div className="col-span-1 flex justify-center">
                                               {canDispute ? (
                                                 activeDisputes.has(booking.bookingId) ? (
-                                                  <div className="relative group">
-                                                    <Input
-                                                      type="number"
-                                                      min="0"
-                                                      step="0.01"
-                                                      value={currentDispute || ""}
-                                                      onChange={(e) => setBookingDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0)}
-                                                      className={`w-20 h-5 text-xs text-right font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
-                                                      placeholder="0"
-                                                      data-testid={`input-dispute-booking-${booking.bookingId}`}
-                                                    />
-                                                    {exceedsMax && (
-                                                      <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
-                                                        <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
-                                                          Max: {formatCurrency(maxDispute)}
-                                                        </div>
-                                                      </div>
-                                                    )}
-                                                  </div>
+                                                  <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground"
+                                                    onClick={() => setBookingDisputeAmount(booking.bookingId, 0)}
+                                                    data-testid={`button-clear-dispute-${booking.bookingId}`}
+                                                  >
+                                                    Clear
+                                                  </Button>
                                                 ) : (
                                                   <Button
                                                     size="sm"
                                                     variant="outline"
-                                                    className="h-5 px-2 text-[10px]"
+                                                    className="h-5 px-1 text-[9px]"
                                                     onClick={() => activateDispute(booking.bookingId, booking)}
                                                     data-testid={`button-dispute-${booking.bookingId}`}
                                                   >
@@ -729,7 +723,30 @@ export function AmountPayableModal({
                                             <div className="col-span-2 text-right font-mono font-medium">
                                               {formatCurrency(pricePayable)}
                                             </div>
-                                            <div className="col-span-3 text-right font-mono font-medium text-green-600 dark:text-green-400">
+                                            <div className="col-span-2 flex justify-end">
+                                              {activeDisputes.has(booking.bookingId) ? (
+                                                <div className="relative group">
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={currentDispute || ""}
+                                                    onChange={(e) => setBookingDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0)}
+                                                    className={`w-20 h-5 text-xs text-right font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
+                                                    placeholder="0"
+                                                    data-testid={`input-dispute-booking-${booking.bookingId}`}
+                                                  />
+                                                  {exceedsMax && (
+                                                    <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
+                                                      <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
+                                                        Max: {formatCurrency(maxDispute)}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ) : null}
+                                            </div>
+                                            <div className="col-span-2 text-right font-mono font-medium text-green-600 dark:text-green-400">
                                               {formatCurrency(reconciledNet)}
                                             </div>
                                           </div>
