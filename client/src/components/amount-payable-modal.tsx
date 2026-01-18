@@ -233,9 +233,12 @@ export function AmountPayableModal({
 
   const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
     const reasonBookings = bookingsByReason[reason] || [];
+    const disputableBookings = reasonBookings.filter(b => 
+      b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp"
+    );
     setDisputedBookings(prev => {
       const next = new Set(prev);
-      for (const b of reasonBookings) {
+      for (const b of disputableBookings) {
         if (action === "all") {
           next.add(b.bookingId);
         } else {
@@ -244,13 +247,16 @@ export function AmountPayableModal({
       }
       return next;
     });
-  }, [bookingsByReason]);
+  }, [bookingsByReason, getSelection]);
 
   const updateTidDispute = useCallback((reason: string, tid: string, action: "all" | "clear") => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
+    const disputableBookings = tidBookings.filter(b => 
+      b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp"
+    );
     setDisputedBookings(prev => {
       const next = new Set(prev);
-      for (const b of tidBookings) {
+      for (const b of disputableBookings) {
         if (action === "all") {
           next.add(b.bookingId);
         } else {
@@ -259,13 +265,16 @@ export function AmountPayableModal({
       }
       return next;
     });
-  }, [bookingsByReasonAndTid]);
+  }, [bookingsByReasonAndTid, getSelection]);
 
-  const getTidDisputeCount = useCallback((reason: string, tid: string): { disputed: number; total: number } => {
+  const getTidDisputeCount = useCallback((reason: string, tid: string): { disputed: number; disputable: number; total: number } => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
-    const disputed = tidBookings.filter(b => disputedBookings.has(b.bookingId)).length;
-    return { disputed, total: tidBookings.length };
-  }, [bookingsByReasonAndTid, disputedBookings]);
+    const disputableBookings = tidBookings.filter(b => 
+      b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp"
+    );
+    const disputed = disputableBookings.filter(b => disputedBookings.has(b.bookingId)).length;
+    return { disputed, disputable: disputableBookings.length, total: tidBookings.length };
+  }, [bookingsByReasonAndTid, disputedBookings, getSelection]);
 
   const isTidDisputed = useCallback((reason: string, tid: string) => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
@@ -273,8 +282,8 @@ export function AmountPayableModal({
   }, [bookingsByReasonAndTid, disputedBookings]);
 
   const isTidPartiallyDisputed = useCallback((reason: string, tid: string) => {
-    const { disputed, total } = getTidDisputeCount(reason, tid);
-    return disputed > 0 && disputed < total;
+    const { disputed, disputable } = getTidDisputeCount(reason, tid);
+    return disputed > 0 && disputed < disputable;
   }, [getTidDisputeCount]);
 
   const isBookingDisputed = useCallback((bookingId: string) => {
@@ -503,9 +512,15 @@ export function AmountPayableModal({
                                       </div>
                                       <div className="col-span-1 flex justify-center items-center gap-1">
                                         {(() => {
-                                          const { disputed, total } = getTidDisputeCount(reason, tid);
-                                          const allDisputed = disputed === total;
-                                          const partialDisputed = disputed > 0 && disputed < total;
+                                          const { disputed, disputable } = getTidDisputeCount(reason, tid);
+                                          const allDisputed = disputable > 0 && disputed === disputable;
+                                          const partialDisputed = disputed > 0 && disputed < disputable;
+                                          const noDisputable = disputable === 0;
+                                          
+                                          if (noDisputable) {
+                                            return <span className="text-muted-foreground text-xs">-</span>;
+                                          }
+                                          
                                           return (
                                             <Select
                                               value=""
@@ -515,7 +530,7 @@ export function AmountPayableModal({
                                                 className={`w-16 h-6 text-xs ${allDisputed ? 'border-destructive text-destructive' : partialDisputed ? 'border-orange-500 text-orange-600' : ''}`}
                                                 data-testid={`select-dispute-tid-${reason}-${tid}`}
                                               >
-                                                <SelectValue placeholder={disputed > 0 ? `${disputed}/${total}` : "0"} />
+                                                <SelectValue placeholder={disputed > 0 ? `${disputed}/${disputable}` : "0"} />
                                               </SelectTrigger>
                                               <SelectContent>
                                                 <SelectItem value="all">Dispute All</SelectItem>
@@ -530,16 +545,18 @@ export function AmountPayableModal({
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs text-destructive">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
-                                          if (!isBookingDisputed(b.bookingId)) return s;
+                                          const canDispute = b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp";
+                                          if (!isBookingDisputed(b.bookingId) || !canDispute) return s;
                                           const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
                                           return s + maxDispute;
                                         }, 0))}
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
+                                          const canDispute = b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp";
                                           const pricePayable = getFinalNetPrice(b);
                                           const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
-                                          const disputeAmt = isBookingDisputed(b.bookingId) ? maxDispute : 0;
+                                          const disputeAmt = (isBookingDisputed(b.bookingId) && canDispute) ? maxDispute : 0;
                                           return s + (pricePayable - disputeAmt);
                                         }, 0))}
                                       </div>
@@ -547,9 +564,11 @@ export function AmountPayableModal({
 
                                     <CollapsibleContent>
                                       {tidBookings.map((booking) => {
+                                        const selection = getSelection(booking.bookingId, booking.reason);
+                                        const canDispute = booking.reason === "Unmapped" || selection === "sp";
                                         const pricePayable = getFinalNetPrice(booking);
                                         const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
-                                        const disputeAmt = isBookingDisputed(booking.bookingId) ? maxDispute : 0;
+                                        const disputeAmt = (isBookingDisputed(booking.bookingId) && canDispute) ? maxDispute : 0;
                                         const reconciledNet = pricePayable - disputeAmt;
                                         return (
                                           <div
@@ -575,7 +594,7 @@ export function AmountPayableModal({
                                                 <span className="text-muted-foreground text-xs">SP only</span>
                                               ) : (
                                                 <Select
-                                                  value={getSelection(booking.bookingId, booking.reason)}
+                                                  value={selection}
                                                   onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
                                                 >
                                                   <SelectTrigger className="w-16 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
@@ -589,15 +608,19 @@ export function AmountPayableModal({
                                               )}
                                             </div>
                                             <div className="col-span-1 flex justify-center">
-                                              <Button
-                                                variant={isBookingDisputed(booking.bookingId) ? "destructive" : "ghost"}
-                                                size="sm"
-                                                className="h-5 w-5 p-0"
-                                                onClick={() => toggleBookingDispute(booking.bookingId)}
-                                                data-testid={`button-dispute-booking-${booking.bookingId}`}
-                                              >
-                                                <AlertTriangle className="h-3 w-3" />
-                                              </Button>
+                                              {canDispute ? (
+                                                <Button
+                                                  variant={isBookingDisputed(booking.bookingId) ? "destructive" : "ghost"}
+                                                  size="sm"
+                                                  className="h-5 w-5 p-0"
+                                                  onClick={() => toggleBookingDispute(booking.bookingId)}
+                                                  data-testid={`button-dispute-booking-${booking.bookingId}`}
+                                                >
+                                                  <AlertTriangle className="h-3 w-3" />
+                                                </Button>
+                                              ) : (
+                                                <span className="text-muted-foreground text-xs">-</span>
+                                              )}
                                             </div>
                                             <div className="col-span-2 text-right font-mono font-medium">
                                               {formatCurrency(pricePayable)}
