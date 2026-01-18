@@ -280,6 +280,13 @@ export function AmountPayableModal({
       }
       return next;
     });
+    if (amount <= 0) {
+      setActiveDisputes(prev => {
+        const next = new Set(prev);
+        next.delete(bookingId);
+        return next;
+      });
+    }
   }, []);
 
   const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
