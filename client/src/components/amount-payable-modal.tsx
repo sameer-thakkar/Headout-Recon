@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +69,8 @@ export function AmountPayableModal({
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
+  const [disputedTids, setDisputedTids] = useState<Set<string>>(new Set());
+  const [disputedBookings, setDisputedBookings] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open) {
@@ -76,6 +78,8 @@ export function AmountPayableModal({
       setLocalSelections(finalNetSelections);
       setExpandedReasons(new Set());
       setExpandedTids(new Set());
+      setDisputedTids(new Set());
+      setDisputedBookings(new Set());
     }
   }, [open, adjustments, finalNetSelections]);
 
@@ -199,6 +203,39 @@ export function AmountPayableModal({
       return next;
     });
   }, []);
+
+  const toggleTidDispute = useCallback((reason: string, tid: string) => {
+    const key = `${reason}:${tid}`;
+    setDisputedTids(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleBookingDispute = useCallback((bookingId: string) => {
+    setDisputedBookings(prev => {
+      const next = new Set(prev);
+      if (next.has(bookingId)) {
+        next.delete(bookingId);
+      } else {
+        next.add(bookingId);
+      }
+      return next;
+    });
+  }, []);
+
+  const isTidDisputed = useCallback((reason: string, tid: string) => {
+    return disputedTids.has(`${reason}:${tid}`);
+  }, [disputedTids]);
+
+  const isBookingDisputed = useCallback((bookingId: string) => {
+    return disputedBookings.has(bookingId);
+  }, [disputedBookings]);
 
   const getReasonTotal = useCallback((reason: string): number => {
     const reasonBookings = bookingsByReason[reason] || [];
@@ -349,8 +386,9 @@ export function AmountPayableModal({
                               <div className="col-span-3">TID / Booking ID</div>
                               <div className="col-span-2 text-right">HO Net</div>
                               <div className="col-span-2 text-right">SP Net</div>
-                              <div className="col-span-3 text-center">Final Net</div>
+                              <div className="col-span-2 text-center">Final Net</div>
                               <div className="col-span-2 text-right">Final Price</div>
+                              <div className="col-span-1 text-center">Dispute</div>
                             </div>
 
                             <div>
@@ -385,7 +423,7 @@ export function AmountPayableModal({
                                       <div className="col-span-2 text-right font-mono text-xs">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
                                       </div>
-                                      <div className="col-span-3 flex justify-center">
+                                      <div className="col-span-2 flex justify-center">
                                         {reason === "Unmapped" ? (
                                           <span className="text-xs text-muted-foreground">SP Net only</span>
                                         ) : (
@@ -393,8 +431,8 @@ export function AmountPayableModal({
                                             value=""
                                             onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
                                           >
-                                            <SelectTrigger className="w-24 h-6 text-xs" data-testid={`select-tid-${reason}-${tid}`}>
-                                              <SelectValue placeholder="Bulk set" />
+                                            <SelectTrigger className="w-20 h-6 text-xs" data-testid={`select-tid-${reason}-${tid}`}>
+                                              <SelectValue placeholder="Bulk" />
                                             </SelectTrigger>
                                             <SelectContent>
                                               <SelectItem value="ho">All HO Net</SelectItem>
@@ -405,6 +443,17 @@ export function AmountPayableModal({
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs font-medium">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
+                                      </div>
+                                      <div className="col-span-1 flex justify-center">
+                                        <Button
+                                          variant={isTidDisputed(reason, tid) ? "destructive" : "outline"}
+                                          size="sm"
+                                          className="h-6 px-2 text-xs"
+                                          onClick={() => toggleTidDispute(reason, tid)}
+                                          data-testid={`button-dispute-tid-${reason}-${tid}`}
+                                        >
+                                          <AlertTriangle className="h-3 w-3" />
+                                        </Button>
                                       </div>
                                     </div>
 
@@ -428,26 +477,37 @@ export function AmountPayableModal({
                                           <div className="col-span-2 text-right font-mono">
                                             {formatCurrency(booking.spNet)}
                                           </div>
-                                          <div className="col-span-3 flex justify-center">
+                                          <div className="col-span-2 flex justify-center">
                                             {booking.reason === "Unmapped" ? (
-                                              <span className="text-muted-foreground text-xs">SP Net only</span>
+                                              <span className="text-muted-foreground text-xs">SP only</span>
                                             ) : (
                                               <Select
                                                 value={getSelection(booking.bookingId, booking.reason)}
                                                 onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
                                               >
-                                                <SelectTrigger className="w-20 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
+                                                <SelectTrigger className="w-16 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
                                                   <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                  <SelectItem value="ho">HO Net</SelectItem>
-                                                  <SelectItem value="sp">SP Net</SelectItem>
+                                                  <SelectItem value="ho">HO</SelectItem>
+                                                  <SelectItem value="sp">SP</SelectItem>
                                                 </SelectContent>
                                               </Select>
                                             )}
                                           </div>
                                           <div className="col-span-2 text-right font-mono font-medium">
                                             {formatCurrency(getFinalNetPrice(booking))}
+                                          </div>
+                                          <div className="col-span-1 flex justify-center">
+                                            <Button
+                                              variant={isBookingDisputed(booking.bookingId) ? "destructive" : "ghost"}
+                                              size="sm"
+                                              className="h-5 w-5 p-0"
+                                              onClick={() => toggleBookingDispute(booking.bookingId)}
+                                              data-testid={`button-dispute-booking-${booking.bookingId}`}
+                                            >
+                                              <AlertTriangle className="h-3 w-3" />
+                                            </Button>
                                           </div>
                                         </div>
                                       ))}
