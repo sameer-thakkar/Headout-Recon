@@ -70,6 +70,7 @@ export function AmountPayableModal({
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
+  const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open) {
@@ -78,6 +79,7 @@ export function AmountPayableModal({
       setExpandedReasons(new Set());
       setExpandedTids(new Set());
       setDisputeAmounts(new Map());
+      setActiveDisputes(new Set());
     }
   }, [open, adjustments, finalNetSelections]);
 
@@ -154,16 +156,14 @@ export function AmountPayableModal({
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
-    if (value === "sp" && booking) {
-      const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+    if (value === "ho") {
       setDisputeAmounts(prev => {
         const next = new Map(prev);
-        next.set(bookingId, maxDispute);
+        next.delete(bookingId);
         return next;
       });
-    } else if (value === "ho") {
-      setDisputeAmounts(prev => {
-        const next = new Map(prev);
+      setActiveDisputes(prev => {
+        const next = new Set(prev);
         next.delete(bookingId);
         return next;
       });
@@ -179,18 +179,22 @@ export function AmountPayableModal({
       }
       return updated;
     });
-    setDisputeAmounts(prev => {
-      const next = new Map(prev);
-      for (const b of reasonBookings) {
-        if (value === "sp") {
-          const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
-          next.set(b.bookingId, maxDispute);
-        } else {
+    if (value === "ho") {
+      setDisputeAmounts(prev => {
+        const next = new Map(prev);
+        for (const b of reasonBookings) {
           next.delete(b.bookingId);
         }
-      }
-      return next;
-    });
+        return next;
+      });
+      setActiveDisputes(prev => {
+        const next = new Set(prev);
+        for (const b of reasonBookings) {
+          next.delete(b.bookingId);
+        }
+        return next;
+      });
+    }
   }, [bookingsByReason]);
 
   const updateTidSelection = useCallback((reason: string, tid: string, value: "ho" | "sp") => {
@@ -202,19 +206,37 @@ export function AmountPayableModal({
       }
       return updated;
     });
-    setDisputeAmounts(prev => {
-      const next = new Map(prev);
-      for (const b of tidBookings) {
-        if (value === "sp") {
-          const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
-          next.set(b.bookingId, maxDispute);
-        } else {
+    if (value === "ho") {
+      setDisputeAmounts(prev => {
+        const next = new Map(prev);
+        for (const b of tidBookings) {
           next.delete(b.bookingId);
         }
-      }
+        return next;
+      });
+      setActiveDisputes(prev => {
+        const next = new Set(prev);
+        for (const b of tidBookings) {
+          next.delete(b.bookingId);
+        }
+        return next;
+      });
+    }
+  }, [bookingsByReasonAndTid]);
+
+  const activateDispute = useCallback((bookingId: string, booking: BookingForPayable) => {
+    const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+    setActiveDisputes(prev => {
+      const next = new Set(prev);
+      next.add(bookingId);
       return next;
     });
-  }, [bookingsByReasonAndTid]);
+    setDisputeAmounts(prev => {
+      const next = new Map(prev);
+      next.set(bookingId, maxDispute);
+      return next;
+    });
+  }, []);
 
   const toggleReason = useCallback((reason: string) => {
     setExpandedReasons(prev => {
@@ -276,6 +298,17 @@ export function AmountPayableModal({
       }
       return next;
     });
+    setActiveDisputes(prev => {
+      const next = new Set(prev);
+      for (const b of disputableBookings) {
+        if (action === "all") {
+          next.add(b.bookingId);
+        } else {
+          next.delete(b.bookingId);
+        }
+      }
+      return next;
+    });
   }, [bookingsByReason, getSelection, getMaxDisputeAmount]);
 
   const updateTidDispute = useCallback((reason: string, tid: string, action: "all" | "clear") => {
@@ -288,6 +321,17 @@ export function AmountPayableModal({
       for (const b of disputableBookings) {
         if (action === "all") {
           next.set(b.bookingId, getMaxDisputeAmount(b));
+        } else {
+          next.delete(b.bookingId);
+        }
+      }
+      return next;
+    });
+    setActiveDisputes(prev => {
+      const next = new Set(prev);
+      for (const b of disputableBookings) {
+        if (action === "all") {
+          next.add(b.bookingId);
         } else {
           next.delete(b.bookingId);
         }
@@ -454,19 +498,25 @@ export function AmountPayableModal({
                                 </Select>
                               )}
                             </div>
-                            <div className="col-span-2 flex justify-center">
-                              <Select
-                                value=""
-                                onValueChange={(v) => updateReasonDispute(reason, v as "all" | "clear")}
+                            <div className="col-span-2 flex justify-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => updateReasonDispute(reason, "all")}
+                                data-testid={`button-dispute-all-reason-${reason}`}
                               >
-                                <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-dispute-reason-${reason}`}>
-                                  <SelectValue placeholder="Bulk Dispute" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="all">Dispute All</SelectItem>
-                                  <SelectItem value="clear">Clear All</SelectItem>
-                                </SelectContent>
-                              </Select>
+                                Dispute All
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs text-muted-foreground"
+                                onClick={() => updateReasonDispute(reason, "clear")}
+                                data-testid={`button-clear-reason-${reason}`}
+                              >
+                                Clear
+                              </Button>
                             </div>
                             <div className="col-span-4 text-right font-mono text-sm font-semibold">
                               {formatCurrency(reasonTotal)} {currency}
@@ -534,38 +584,44 @@ export function AmountPayableModal({
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-2 flex justify-end items-center gap-1">
+                                      <div className="col-span-2 flex justify-end items-center">
                                         {(() => {
                                           const { disputed, disputable, totalDisputeAmt } = getTidDisputeCount(reason, tid);
-                                          const allDisputed = disputable > 0 && disputed === disputable;
-                                          const partialDisputed = disputed > 0 && disputed < disputable;
                                           const noDisputable = disputable === 0;
                                           
                                           if (noDisputable) {
-                                            return <span className="text-muted-foreground text-xs">-</span>;
+                                            return null;
+                                          }
+                                          
+                                          if (disputed > 0) {
+                                            return (
+                                              <div className="flex items-center gap-1">
+                                                <span className="font-mono text-xs text-orange-600 dark:text-orange-400">
+                                                  {formatCurrency(totalDisputeAmt)}
+                                                </span>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground"
+                                                  onClick={() => updateTidDispute(reason, tid, "clear")}
+                                                  data-testid={`button-clear-dispute-tid-${reason}-${tid}`}
+                                                >
+                                                  Clear
+                                                </Button>
+                                              </div>
+                                            );
                                           }
                                           
                                           return (
-                                            <div className="flex items-center gap-1">
-                                              <span className="font-mono text-xs text-destructive">
-                                                {totalDisputeAmt > 0 ? formatCurrency(totalDisputeAmt) : "-"}
-                                              </span>
-                                              <Select
-                                                value=""
-                                                onValueChange={(v) => updateTidDispute(reason, tid, v as "all" | "clear")}
-                                              >
-                                                <SelectTrigger 
-                                                  className={`w-12 h-5 text-xs ${allDisputed ? 'border-destructive text-destructive' : partialDisputed ? 'border-orange-500 text-orange-600' : ''}`}
-                                                  data-testid={`select-dispute-tid-${reason}-${tid}`}
-                                                >
-                                                  <SelectValue placeholder={disputed > 0 ? `${disputed}` : "0"} />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  <SelectItem value="all">Dispute All</SelectItem>
-                                                  <SelectItem value="clear">Clear All</SelectItem>
-                                                </SelectContent>
-                                              </Select>
-                                            </div>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-5 px-2 text-[10px]"
+                                              onClick={() => updateTidDispute(reason, tid, "all")}
+                                              data-testid={`button-dispute-all-tid-${reason}-${tid}`}
+                                            >
+                                              Dispute All
+                                            </Button>
                                           );
                                         })()}
                                       </div>
@@ -630,28 +686,38 @@ export function AmountPayableModal({
                                             </div>
                                             <div className="col-span-2 flex justify-end">
                                               {canDispute ? (
-                                                <div className="relative group">
-                                                  <Input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
-                                                    value={currentDispute || ""}
-                                                    onChange={(e) => setBookingDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0)}
-                                                    className={`w-20 h-5 text-xs text-right font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
-                                                    placeholder="0"
-                                                    data-testid={`input-dispute-booking-${booking.bookingId}`}
-                                                  />
-                                                  {exceedsMax && (
-                                                    <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
-                                                      <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
-                                                        Max: {formatCurrency(maxDispute)}
+                                                activeDisputes.has(booking.bookingId) ? (
+                                                  <div className="relative group">
+                                                    <Input
+                                                      type="number"
+                                                      min="0"
+                                                      step="0.01"
+                                                      value={currentDispute || ""}
+                                                      onChange={(e) => setBookingDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0)}
+                                                      className={`w-20 h-5 text-xs text-right font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
+                                                      placeholder="0"
+                                                      data-testid={`input-dispute-booking-${booking.bookingId}`}
+                                                    />
+                                                    {exceedsMax && (
+                                                      <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
+                                                        <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
+                                                          Max: {formatCurrency(maxDispute)}
+                                                        </div>
                                                       </div>
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              ) : (
-                                                <span className="text-muted-foreground text-xs">-</span>
-                                              )}
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-5 px-2 text-[10px]"
+                                                    onClick={() => activateDispute(booking.bookingId, booking)}
+                                                    data-testid={`button-dispute-${booking.bookingId}`}
+                                                  >
+                                                    Dispute
+                                                  </Button>
+                                                )
+                                              ) : null}
                                             </div>
                                             <div className="col-span-2 text-right font-mono font-medium">
                                               {formatCurrency(pricePayable)}
