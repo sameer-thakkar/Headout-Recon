@@ -69,7 +69,6 @@ export function AmountPayableModal({
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
-  const [disputedTids, setDisputedTids] = useState<Set<string>>(new Set());
   const [disputedBookings, setDisputedBookings] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -78,7 +77,6 @@ export function AmountPayableModal({
       setLocalSelections(finalNetSelections);
       setExpandedReasons(new Set());
       setExpandedTids(new Set());
-      setDisputedTids(new Set());
       setDisputedBookings(new Set());
     }
   }, [open, adjustments, finalNetSelections]);
@@ -205,17 +203,21 @@ export function AmountPayableModal({
   }, []);
 
   const toggleTidDispute = useCallback((reason: string, tid: string) => {
-    const key = `${reason}:${tid}`;
-    setDisputedTids(prev => {
+    const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
+    const allDisputed = tidBookings.every(b => disputedBookings.has(b.bookingId));
+    
+    setDisputedBookings(prev => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
+      for (const b of tidBookings) {
+        if (allDisputed) {
+          next.delete(b.bookingId);
+        } else {
+          next.add(b.bookingId);
+        }
       }
       return next;
     });
-  }, []);
+  }, [bookingsByReasonAndTid, disputedBookings]);
 
   const toggleBookingDispute = useCallback((bookingId: string) => {
     setDisputedBookings(prev => {
@@ -229,9 +231,25 @@ export function AmountPayableModal({
     });
   }, []);
 
+  const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
+    const reasonBookings = bookingsByReason[reason] || [];
+    setDisputedBookings(prev => {
+      const next = new Set(prev);
+      for (const b of reasonBookings) {
+        if (action === "all") {
+          next.add(b.bookingId);
+        } else {
+          next.delete(b.bookingId);
+        }
+      }
+      return next;
+    });
+  }, [bookingsByReason]);
+
   const isTidDisputed = useCallback((reason: string, tid: string) => {
-    return disputedTids.has(`${reason}:${tid}`);
-  }, [disputedTids]);
+    const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
+    return tidBookings.length > 0 && tidBookings.every(b => disputedBookings.has(b.bookingId));
+  }, [bookingsByReasonAndTid, disputedBookings]);
 
   const isBookingDisputed = useCallback((bookingId: string) => {
     return disputedBookings.has(bookingId);
@@ -358,7 +376,7 @@ export function AmountPayableModal({
                                 {reasonBookings.length} bookings
                               </Badge>
                             </div>
-                            <div className="col-span-3 flex justify-center">
+                            <div className="col-span-2 flex justify-center">
                               {reason === "Unmapped" ? (
                                 <span className="text-xs text-muted-foreground">SP Net only</span>
                               ) : (
@@ -366,8 +384,8 @@ export function AmountPayableModal({
                                   value=""
                                   onValueChange={(v) => updateReasonSelection(reason, v as "ho" | "sp")}
                                 >
-                                  <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-reason-${reason}`}>
-                                    <SelectValue placeholder="Bulk set all" />
+                                  <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-reason-${reason}`}>
+                                    <SelectValue placeholder="Bulk Net" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="ho">All HO Net</SelectItem>
@@ -376,7 +394,21 @@ export function AmountPayableModal({
                                 </Select>
                               )}
                             </div>
-                            <div className="col-span-5 text-right font-mono text-sm font-semibold">
+                            <div className="col-span-2 flex justify-center">
+                              <Select
+                                value=""
+                                onValueChange={(v) => updateReasonDispute(reason, v as "all" | "clear")}
+                              >
+                                <SelectTrigger className="w-28 h-7 text-xs" data-testid={`select-dispute-reason-${reason}`}>
+                                  <SelectValue placeholder="Bulk Dispute" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="all">Dispute All</SelectItem>
+                                  <SelectItem value="clear">Clear All</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-4 text-right font-mono text-sm font-semibold">
                               {formatCurrency(reasonTotal)} {currency}
                             </div>
                           </div>
