@@ -458,12 +458,17 @@ export function AmountPayableModal({
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs text-destructive">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + (isBookingDisputed(b.bookingId) ? getFinalNetPrice(b) : 0), 0))}
+                                        {formatCurrency(tidBookings.reduce((s, b) => {
+                                          if (!isBookingDisputed(b.bookingId)) return s;
+                                          const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
+                                          return s + maxDispute;
+                                        }, 0))}
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
                                           const pricePayable = getFinalNetPrice(b);
-                                          const disputeAmt = isBookingDisputed(b.bookingId) ? pricePayable : 0;
+                                          const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
+                                          const disputeAmt = isBookingDisputed(b.bookingId) ? maxDispute : 0;
                                           return s + (pricePayable - disputeAmt);
                                         }, 0))}
                                       </div>
@@ -472,7 +477,8 @@ export function AmountPayableModal({
                                     <CollapsibleContent>
                                       {tidBookings.map((booking) => {
                                         const pricePayable = getFinalNetPrice(booking);
-                                        const disputeAmt = isBookingDisputed(booking.bookingId) ? pricePayable : 0;
+                                        const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+                                        const disputeAmt = isBookingDisputed(booking.bookingId) ? maxDispute : 0;
                                         const reconciledNet = pricePayable - disputeAmt;
                                         return (
                                           <div
