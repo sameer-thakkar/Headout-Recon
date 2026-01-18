@@ -152,8 +152,22 @@ export function AmountPayableModal({
     }, baseAmount);
   }, [baseAmount, localAdjustments]);
 
-  const updateSelection = useCallback((bookingId: string, value: "ho" | "sp") => {
+  const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
+    if (value === "sp" && booking) {
+      const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+      setDisputeAmounts(prev => {
+        const next = new Map(prev);
+        next.set(bookingId, maxDispute);
+        return next;
+      });
+    } else if (value === "ho") {
+      setDisputeAmounts(prev => {
+        const next = new Map(prev);
+        next.delete(bookingId);
+        return next;
+      });
+    }
   }, []);
 
   const updateReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
@@ -165,6 +179,18 @@ export function AmountPayableModal({
       }
       return updated;
     });
+    setDisputeAmounts(prev => {
+      const next = new Map(prev);
+      for (const b of reasonBookings) {
+        if (value === "sp") {
+          const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
+          next.set(b.bookingId, maxDispute);
+        } else {
+          next.delete(b.bookingId);
+        }
+      }
+      return next;
+    });
   }, [bookingsByReason]);
 
   const updateTidSelection = useCallback((reason: string, tid: string, value: "ho" | "sp") => {
@@ -175,6 +201,18 @@ export function AmountPayableModal({
         updated[b.bookingId] = value;
       }
       return updated;
+    });
+    setDisputeAmounts(prev => {
+      const next = new Map(prev);
+      for (const b of tidBookings) {
+        if (value === "sp") {
+          const maxDispute = b.reason === "Unmapped" ? b.spNet : Math.abs(b.hoNet - b.spNet);
+          next.set(b.bookingId, maxDispute);
+        } else {
+          next.delete(b.bookingId);
+        }
+      }
+      return next;
     });
   }, [bookingsByReasonAndTid]);
 
@@ -578,7 +616,7 @@ export function AmountPayableModal({
                                               ) : (
                                                 <Select
                                                   value={selection}
-                                                  onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
+                                                  onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                 >
                                                   <SelectTrigger className="w-16 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
                                                     <SelectValue />
