@@ -120,6 +120,22 @@ export class MemStorage implements IStorage {
   }
 
   async createDispute(dispute: Omit<DisputeRecord, "disputeId" | "createdAt">): Promise<DisputeRecord> {
+    // Ensure counter is higher than any existing DID to prevent duplicates
+    const existingIds = Array.from(this.disputes.keys());
+    const maxExisting = existingIds.reduce((max, id) => {
+      const match = id.match(/DID-#(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        return num > max ? num : max;
+      }
+      return max;
+    }, 0);
+    
+    // Use the higher of current counter or max existing
+    if (maxExisting >= this.disputeCounter) {
+      this.disputeCounter = maxExisting;
+    }
+    
     this.disputeCounter++;
     const disputeId = `DID-#${this.disputeCounter}`;
     const newDispute: DisputeRecord = {

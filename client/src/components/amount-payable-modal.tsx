@@ -598,8 +598,9 @@ export function AmountPayableModal({
     onOpenChange(false);
   }, [localAdjustments, localSelections, finalAmount, onApply, onOpenChange, runId, disputeAmounts, originalDisputes, bookings, currency]);
 
+  // Indian numbering format: 1,00,000.00
   const formatCurrency = (value: number) => {
-    return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   return (
@@ -1101,13 +1102,15 @@ export function AmountPayableModal({
                             </PopoverContent>
                           </Popover>
                         ) : (
-                          <Input
-                            placeholder="Reference..."
-                            value={adj.reference || ""}
-                            onChange={(e) => updateAdjustment(adj.id, "reference", e.target.value)}
-                            className="h-8"
-                            data-testid={`input-reference-${index}`}
-                          />
+                          <div className="overflow-x-auto">
+                            <Input
+                              placeholder="Reference..."
+                              value={adj.reference || ""}
+                              onChange={(e) => updateAdjustment(adj.id, "reference", e.target.value)}
+                              className="h-8 min-w-full"
+                              data-testid={`input-reference-${index}`}
+                            />
+                          </div>
                         )}
                       </div>
 

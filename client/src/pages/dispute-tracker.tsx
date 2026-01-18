@@ -102,13 +102,21 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
     return aggregated;
   }, [disputes]);
 
+  // Indian numbering format: 1,00,000.00 with currency symbol
   const formatCurrency = (amount: number, currency: string = "USD") => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency,
+    // Use Indian locale for grouping (lakhs/crores)
+    const formatted = amount.toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(amount);
+    });
+    // Add currency symbol
+    const symbols: Record<string, string> = {
+      USD: "$",
+      EUR: "€",
+      GBP: "£",
+      INR: "₹",
+    };
+    return `${symbols[currency] || currency} ${formatted}`;
   };
 
   const getStatusBadge = (status: DisputeRecord["status"]) => {

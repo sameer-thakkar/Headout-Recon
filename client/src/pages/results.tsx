@@ -24,7 +24,7 @@ const summaryColumns: Column<OverallSummaryRow>[] = [
     className: "font-mono",
     render: (value) => {
       const num = value as number;
-      return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     },
   },
   {
@@ -35,7 +35,7 @@ const summaryColumns: Column<OverallSummaryRow>[] = [
     className: "font-mono",
     render: (value) => {
       const num = value as number;
-      return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `$${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     },
   },
   {
@@ -68,7 +68,7 @@ const bookingColumns: Column<PrimaryRow>[] = [
     className: "font-mono",
     render: (value) => {
       const num = value as number;
-      return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     },
   },
   {
@@ -79,7 +79,7 @@ const bookingColumns: Column<PrimaryRow>[] = [
     className: "font-mono",
     render: (value) => {
       const num = value as number;
-      return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     },
   },
   {
@@ -90,7 +90,7 @@ const bookingColumns: Column<PrimaryRow>[] = [
     className: "font-mono",
     render: (value) => {
       const num = value as number;
-      return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     },
   },
   {
@@ -101,7 +101,7 @@ const bookingColumns: Column<PrimaryRow>[] = [
     className: "font-mono",
     render: (value) => {
       const num = value as number;
-      const formatted = num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const formatted = num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const color = num > 0 ? "text-red-600 dark:text-red-400" : num < 0 ? "text-green-600 dark:text-green-400" : "";
       return <span className={color}>{formatted}</span>;
     },
@@ -114,7 +114,7 @@ const bookingColumns: Column<PrimaryRow>[] = [
     className: "font-mono",
     render: (value) => {
       const num = value as number;
-      const formatted = `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const formatted = `$${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const color = num > 0 ? "text-red-600 dark:text-red-400" : num < 0 ? "text-green-600 dark:text-green-400" : "";
       return <span className={color}>{formatted}</span>;
     },
@@ -294,11 +294,11 @@ export function ResultsPage({ runId }: ResultsPageProps) {
               <span className="ml-2 text-xs text-primary">(Click to adjust)</span>
             </p>
             <p className="text-3xl font-bold font-mono" data-testid="text-amount-payable">
-              ${finalAmountPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${finalAmountPayable.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             {adjustments.length > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                Base: ${totalDiscrepancyUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+                Base: ${totalDiscrepancyUsd.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
                 + {adjustments.length} adjustment{adjustments.length > 1 ? "s" : ""}
               </p>
             )}
