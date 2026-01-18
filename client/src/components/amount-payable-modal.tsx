@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Dialog,
@@ -24,13 +24,32 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export interface Adjustment {
   id: string;
   nature: string;
+  reference: string;
   type: "add" | "less";
   amount: number;
+  selectedDisputeIds?: string[]; // For "Open Dispute Adjustments" nature
 }
+
+// Predefined adjustment nature options
+export const ADJUSTMENT_NATURES = [
+  "Open Dispute Adjustments",
+  "Credit Note",
+  "Debit Note",
+  "Commission Adjustment",
+  "Penalty",
+  "Refund",
+  "Other",
+] as const;
 
 export interface BookingForPayable {
   bookingId: string;
@@ -76,6 +95,8 @@ export function AmountPayableModal({
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
   const [disputesLoaded, setDisputesLoaded] = useState(false);
+  // Store all open disputes from backend for adjustment reference dropdown
+  const [openDisputes, setOpenDisputes] = useState<Array<{ disputeId: string; disputeAmount: number; bookingId: string }>>([]);
 
   // Reset adjustments and selections when props change (but not disputes)
   useEffect(() => {
@@ -109,6 +130,12 @@ export function AmountPayableModal({
             setActiveDisputes(newActiveDisputes);
             // Store original state for comparison on Apply
             setOriginalDisputes(new Map(newDisputeAmounts));
+            // Store full dispute records for adjustment reference dropdown
+            setOpenDisputes(disputes.map((d: { disputeId: string; disputeAmount: number; bookingId: string }) => ({
+              disputeId: d.disputeId,
+              disputeAmount: d.disputeAmount,
+              bookingId: d.bookingId,
+            })));
             setDisputesLoaded(true);
           })
           .catch(err => {
@@ -428,8 +455,10 @@ export function AmountPayableModal({
     const newAdj: Adjustment = {
       id: crypto.randomUUID(),
       nature: "",
+      reference: "",
       type: "add",
       amount: 0,
+      selectedDisputeIds: [],
     };
     setLocalAdjustments((prev) => [...prev, newAdj]);
   }, []);
@@ -438,13 +467,50 @@ export function AmountPayableModal({
     setLocalAdjustments((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  const updateAdjustment = useCallback((id: string, field: keyof Adjustment, value: string | number) => {
+  const updateAdjustment = useCallback((id: string, field: keyof Adjustment, value: string | number | string[]) => {
     setLocalAdjustments((prev) =>
-      prev.map((a) =>
-        a.id === id ? { ...a, [field]: value } : a
-      )
+      prev.map((a) => {
+        if (a.id !== id) return a;
+        
+        const updated = { ...a, [field]: value };
+        
+        // Special handling for "Open Dispute Adjustments" nature
+        if (field === "nature" && value === "Open Dispute Adjustments") {
+          updated.type = "less"; // Always "Less" for dispute adjustments
+          updated.selectedDisputeIds = [];
+          updated.reference = "";
+          updated.amount = 0;
+        } else if (field === "nature" && value !== "Open Dispute Adjustments") {
+          // Clear dispute-specific fields when switching away
+          updated.selectedDisputeIds = [];
+          updated.reference = "";
+        }
+        
+        return updated;
+      })
     );
   }, []);
+
+  // Update selected dispute IDs for an adjustment and recalculate amount
+  const updateAdjustmentDisputes = useCallback((adjustmentId: string, selectedIds: string[]) => {
+    setLocalAdjustments((prev) =>
+      prev.map((a) => {
+        if (a.id !== adjustmentId) return a;
+        
+        // Calculate total amount from selected disputes
+        const totalAmount = openDisputes
+          .filter(d => selectedIds.includes(d.disputeId))
+          .reduce((sum, d) => sum + d.disputeAmount, 0);
+        
+        return {
+          ...a,
+          selectedDisputeIds: selectedIds,
+          reference: selectedIds.join(", "),
+          amount: totalAmount,
+        };
+      })
+    );
+  }, [openDisputes]);
 
   const handleApply = useCallback(async () => {
     // Sync disputes to backend: compare current state with original
@@ -918,64 +984,153 @@ export function AmountPayableModal({
               ) : (
                 <div className="space-y-2">
                   <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground px-1">
-                    <div className="col-span-5">Nature</div>
+                    <div className="col-span-3">Nature</div>
+                    <div className="col-span-3">Reference No</div>
                     <div className="col-span-2">Add/Less</div>
-                    <div className="col-span-4">Amount</div>
+                    <div className="col-span-3">Amount ({currency})</div>
                     <div className="col-span-1"></div>
                   </div>
 
-                  {localAdjustments.map((adj, index) => (
-                    <div
-                      key={adj.id}
-                      className="grid grid-cols-12 gap-2 items-center"
-                      data-testid={`row-adjustment-${index}`}
-                    >
-                      <div className="col-span-5">
-                        <Input
-                          placeholder="e.g., Credit Note"
-                          value={adj.nature}
-                          onChange={(e) => updateAdjustment(adj.id, "nature", e.target.value)}
-                          className="h-8"
-                          data-testid={`input-nature-${index}`}
-                        />
+                  {localAdjustments.map((adj, index) => {
+                    const isDisputeAdjustment = adj.nature === "Open Dispute Adjustments";
+                    
+                    return (
+                      <div
+                        key={adj.id}
+                        className="grid grid-cols-12 gap-2 items-center"
+                        data-testid={`row-adjustment-${index}`}
+                      >
+                        {/* Nature Dropdown */}
+                        <div className="col-span-3">
+                          <Select
+                            value={adj.nature}
+                            onValueChange={(v) => updateAdjustment(adj.id, "nature", v)}
+                          >
+                            <SelectTrigger className="h-8" data-testid={`select-nature-${index}`}>
+                              <SelectValue placeholder="Select type..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ADJUSTMENT_NATURES.map((nature) => (
+                                <SelectItem key={nature} value={nature}>
+                                  {nature}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Reference Number - Multi-select for disputes, text input for others */}
+                        <div className="col-span-3">
+                          {isDisputeAdjustment ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className="h-8 w-full justify-start text-left font-normal"
+                                  data-testid={`select-disputes-${index}`}
+                                >
+                                  {adj.selectedDisputeIds && adj.selectedDisputeIds.length > 0 ? (
+                                    <span className="truncate">
+                                      {adj.selectedDisputeIds.length} selected
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">Select disputes...</span>
+                                  )}
+                                  <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-64 p-2" align="start">
+                                {openDisputes.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground p-2">No open disputes</p>
+                                ) : (
+                                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                                    {openDisputes.map((dispute) => {
+                                      const isSelected = adj.selectedDisputeIds?.includes(dispute.disputeId) || false;
+                                      return (
+                                        <div
+                                          key={dispute.disputeId}
+                                          className="flex items-center gap-2 p-2 rounded hover-elevate cursor-pointer"
+                                          onClick={() => {
+                                            const currentIds = adj.selectedDisputeIds || [];
+                                            const newIds = isSelected
+                                              ? currentIds.filter(id => id !== dispute.disputeId)
+                                              : [...currentIds, dispute.disputeId];
+                                            updateAdjustmentDisputes(adj.id, newIds);
+                                          }}
+                                        >
+                                          <Checkbox checked={isSelected} />
+                                          <div className="flex-1">
+                                            <span className="text-sm font-medium">{dispute.disputeId}</span>
+                                            <span className="text-xs text-muted-foreground ml-2">
+                                              ({formatCurrency(dispute.disputeAmount)} {currency})
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            <Input
+                              placeholder="Reference..."
+                              value={adj.reference || ""}
+                              onChange={(e) => updateAdjustment(adj.id, "reference", e.target.value)}
+                              className="h-8"
+                              data-testid={`input-reference-${index}`}
+                            />
+                          )}
+                        </div>
+
+                        {/* Add/Less - Locked to "Less" for dispute adjustments */}
+                        <div className="col-span-2">
+                          <Select
+                            value={adj.type}
+                            onValueChange={(v) => updateAdjustment(adj.id, "type", v as "add" | "less")}
+                            disabled={isDisputeAdjustment}
+                          >
+                            <SelectTrigger 
+                              className={`h-8 ${isDisputeAdjustment ? "opacity-70" : ""}`} 
+                              data-testid={`select-type-${index}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="add">Add</SelectItem>
+                              <SelectItem value="less">Less</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Amount - Read-only for dispute adjustments (auto-calculated) */}
+                        <div className="col-span-3">
+                          <Input
+                            type="number"
+                            placeholder="0.00"
+                            value={adj.amount || ""}
+                            onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}
+                            className={`font-mono h-8 ${isDisputeAdjustment ? "bg-muted" : ""}`}
+                            readOnly={isDisputeAdjustment}
+                            data-testid={`input-amount-${index}`}
+                          />
+                        </div>
+
+                        {/* Remove Button */}
+                        <div className="col-span-1 flex justify-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeAdjustment(adj.id)}
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            data-testid={`button-remove-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="col-span-2">
-                        <Select
-                          value={adj.type}
-                          onValueChange={(v) => updateAdjustment(adj.id, "type", v as "add" | "less")}
-                        >
-                          <SelectTrigger className="h-8" data-testid={`select-type-${index}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="add">Add</SelectItem>
-                            <SelectItem value="less">Less</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-4">
-                        <Input
-                          type="number"
-                          placeholder="0.00"
-                          value={adj.amount || ""}
-                          onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}
-                          className="font-mono h-8"
-                          data-testid={`input-amount-${index}`}
-                        />
-                      </div>
-                      <div className="col-span-1 flex justify-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeAdjustment(adj.id)}
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          data-testid={`button-remove-${index}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
