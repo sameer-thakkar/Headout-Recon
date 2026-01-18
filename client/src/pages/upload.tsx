@@ -10,7 +10,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
-import { AmountPayableModal, Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
+import { Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
+import { AmountPayablePanel } from "@/components/amount-payable-panel";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 
 interface UploadPageProps {
@@ -57,7 +59,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [amountPayable, setAmountPayable] = useState<Record<string, number>>({});
-  const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
   const [selectedPayableCurrency, setSelectedPayableCurrency] = useState<string | null>(null);
   const [adjustmentsPerCurrency, setAdjustmentsPerCurrency] = useState<Record<string, Adjustment[]>>({});
   const [finalNetSelectionsPerCurrency, setFinalNetSelectionsPerCurrency] = useState<Record<string, FinalNetSelection>>({});
@@ -211,7 +213,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const openPayableCalculator = (currency: string) => {
     setSelectedPayableCurrency(currency);
-    setIsPayableModalOpen(true);
+    setShowCalculator(true);
   };
 
   const handlePayableModalApply = useCallback((
@@ -293,8 +295,11 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         </p>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
+      <PanelGroup direction="horizontal" className="flex-1">
+        {/* Left Panel - Main Content */}
+        <Panel defaultSize={showCalculator ? 50 : 100} minSize={40}>
+          <ScrollArea className="h-full">
+            <div className="p-4 space-y-4">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Upload Files</CardTitle>
@@ -524,8 +529,30 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               )}
             </CardContent>
           </Card>
-        </div>
-      </ScrollArea>
+            </div>
+          </ScrollArea>
+        </Panel>
+
+        {/* Resize Handle */}
+        {showCalculator && selectedPayableCurrency && (
+          <>
+            <PanelResizeHandle className="w-1.5 bg-border hover:bg-primary/50 transition-colors" />
+            
+            {/* Right Panel - Amount Payable Calculator */}
+            <Panel defaultSize={50} minSize={30}>
+              <AmountPayablePanel
+                bookings={bookingsForPayableModal}
+                currency={selectedPayableCurrency}
+                adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
+                finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency] || {}}
+                onApply={handlePayableModalApply}
+                onClose={() => setShowCalculator(false)}
+                runId={currentRunId}
+              />
+            </Panel>
+          </>
+        )}
+      </PanelGroup>
 
       <Dialog open={isModalOpen} onOpenChange={handleModalClose}>
         <DialogContent className="max-w-[95vw] max-h-[85vh] flex flex-col">
@@ -645,18 +672,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         </DialogContent>
       </Dialog>
 
-      {selectedPayableCurrency && (
-        <AmountPayableModal
-          open={isPayableModalOpen}
-          onOpenChange={setIsPayableModalOpen}
-          bookings={bookingsForPayableModal}
-          currency={selectedPayableCurrency}
-          adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
-          finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency] || {}}
-          onApply={handlePayableModalApply}
-          runId={currentRunId}
-        />
-      )}
     </div>
   );
 }
