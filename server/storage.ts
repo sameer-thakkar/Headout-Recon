@@ -10,6 +10,7 @@ import type {
   ReconResult,
   SummaryRow,
   DraftMessage,
+  DisputeRecord,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -34,6 +35,13 @@ export interface IStorage {
   // Legacy: Temp file data (for upload processing)
   setTempFileData(id: string, headers: string[], rawData: Record<string, unknown>[]): Promise<void>;
   getTempFileData(id: string): Promise<{ headers: string[]; rawData: Record<string, unknown>[] } | undefined>;
+
+  // Disputes
+  createDispute(dispute: Omit<DisputeRecord, "disputeId" | "createdAt">): Promise<DisputeRecord>;
+  getDisputes(runId: string): Promise<DisputeRecord[]>;
+  updateDispute(disputeId: string, updates: Partial<DisputeRecord>): Promise<DisputeRecord | undefined>;
+  deleteDispute(disputeId: string): Promise<boolean>;
+  getDisputeByBooking(runId: string, bookingId: string): Promise<DisputeRecord | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -42,6 +50,7 @@ export class MemStorage implements IStorage {
   private runResults: Map<string, RunResult> = new Map();
   private fxRates: FxRate[] = [];
   private tempFileData: Map<string, { headers: string[]; rawData: Record<string, unknown>[] }> = new Map();
+  private disputes: Map<string, DisputeRecord> = new Map();
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -107,6 +116,39 @@ export class MemStorage implements IStorage {
 
   async getTempFileData(id: string): Promise<{ headers: string[]; rawData: Record<string, unknown>[] } | undefined> {
     return this.tempFileData.get(id);
+  }
+
+  async createDispute(dispute: Omit<DisputeRecord, "disputeId" | "createdAt">): Promise<DisputeRecord> {
+    const disputeId = `DSP-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    const newDispute: DisputeRecord = {
+      ...dispute,
+      disputeId,
+      createdAt: new Date().toISOString(),
+    };
+    this.disputes.set(disputeId, newDispute);
+    return newDispute;
+  }
+
+  async getDisputes(runId: string): Promise<DisputeRecord[]> {
+    return Array.from(this.disputes.values())
+      .filter(d => d.runId === runId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async updateDispute(disputeId: string, updates: Partial<DisputeRecord>): Promise<DisputeRecord | undefined> {
+    const dispute = this.disputes.get(disputeId);
+    if (!dispute) return undefined;
+    const updated = { ...dispute, ...updates, updatedAt: new Date().toISOString() };
+    this.disputes.set(disputeId, updated);
+    return updated;
+  }
+
+  async deleteDispute(disputeId: string): Promise<boolean> {
+    return this.disputes.delete(disputeId);
+  }
+
+  async getDisputeByBooking(runId: string, bookingId: string): Promise<DisputeRecord | undefined> {
+    return Array.from(this.disputes.values()).find(d => d.runId === runId && d.bookingId === bookingId);
   }
 }
 

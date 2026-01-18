@@ -1869,5 +1869,79 @@ export async function registerRoutes(
     }
   });
 
+  // Dispute Tracker endpoints
+  app.get("/api/disputes/:runId", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const disputes = await storage.getDisputes(runId);
+      res.json({ disputes });
+    } catch (error) {
+      console.error("Get disputes error:", error);
+      res.status(500).json({ error: "Failed to fetch disputes" });
+    }
+  });
+
+  app.post("/api/disputes", async (req, res) => {
+    try {
+      const { runId, bookingId, billingEntityId, billingEntityName, currency, disputeAmount, maxDisputeAmount } = req.body;
+      
+      // Check if dispute already exists for this booking
+      const existing = await storage.getDisputeByBooking(runId, bookingId);
+      if (existing) {
+        // Update existing dispute
+        const updated = await storage.updateDispute(existing.disputeId, {
+          disputeAmount,
+          billingEntityId,
+          billingEntityName,
+        });
+        return res.json({ dispute: updated });
+      }
+      
+      const dispute = await storage.createDispute({
+        runId,
+        bookingId,
+        billingEntityId: billingEntityId || "",
+        billingEntityName: billingEntityName || "",
+        currency: currency || "USD",
+        disputeAmount: disputeAmount || 0,
+        maxDisputeAmount: maxDisputeAmount || 0,
+        status: "pending",
+      });
+      res.json({ dispute });
+    } catch (error) {
+      console.error("Create dispute error:", error);
+      res.status(500).json({ error: "Failed to create dispute" });
+    }
+  });
+
+  app.patch("/api/disputes/:disputeId", async (req, res) => {
+    try {
+      const { disputeId } = req.params;
+      const updates = req.body;
+      const dispute = await storage.updateDispute(disputeId, updates);
+      if (!dispute) {
+        return res.status(404).json({ error: "Dispute not found" });
+      }
+      res.json({ dispute });
+    } catch (error) {
+      console.error("Update dispute error:", error);
+      res.status(500).json({ error: "Failed to update dispute" });
+    }
+  });
+
+  app.delete("/api/disputes/:disputeId", async (req, res) => {
+    try {
+      const { disputeId } = req.params;
+      const deleted = await storage.deleteDispute(disputeId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Dispute not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete dispute error:", error);
+      res.status(500).json({ error: "Failed to delete dispute" });
+    }
+  });
+
   return httpServer;
 }

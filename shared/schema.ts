@@ -233,6 +233,25 @@ export const summaryRowSchema = z.object({
 });
 export type SummaryRow = z.infer<typeof summaryRowSchema>;
 
+// Dispute record for tracking disputes from Amount Payable Calculator
+export const disputeStatusSchema = z.enum(["pending", "submitted", "resolved", "rejected"]);
+export type DisputeStatus = z.infer<typeof disputeStatusSchema>;
+
+export const disputeRecordSchema = z.object({
+  disputeId: z.string(),
+  runId: z.string(),
+  bookingId: z.string(),
+  billingEntityId: z.string(),
+  billingEntityName: z.string(),
+  currency: z.string(),
+  disputeAmount: z.number(),
+  maxDisputeAmount: z.number(),
+  status: disputeStatusSchema,
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+});
+export type DisputeRecord = z.infer<typeof disputeRecordSchema>;
+
 // Required field names for column mapping (not used with new pipeline)
 export const requiredFields = [
   "bid",

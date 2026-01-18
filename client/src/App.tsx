@@ -18,6 +18,7 @@ import { DiscrepancyAnalysisPage } from "@/pages/discrepancy-analysis";
 import { DraftsPage } from "@/pages/drafts";
 import { DriPage } from "@/pages/dri";
 import { ExportPage } from "@/pages/export";
+import { DisputeTrackerPage } from "@/pages/dispute-tracker";
 import NotFound from "@/pages/not-found";
 
 import type {
@@ -345,6 +346,9 @@ function AppContent() {
                   onExportXlsx={handleExportXlsx}
                   lastExportTimestamp={lastExportTimestamp}
                 />
+              </Route>
+              <Route path="/dispute-tracker">
+                <DisputeTrackerPage runId={currentRunId} />
               </Route>
               <Route component={NotFound} />
             </Switch>

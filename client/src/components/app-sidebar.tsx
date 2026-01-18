@@ -3,6 +3,7 @@ import {
   Home,
   Upload,
   LayoutDashboard,
+  FileWarning,
 } from "lucide-react";
 import {
   Sidebar,
@@ -20,6 +21,7 @@ import {
 const navItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Reconciliation", url: "/upload", icon: Upload },
+  { title: "Dispute Tracker", url: "/dispute-tracker", icon: FileWarning },
 ];
 
 export function AppSidebar() {
