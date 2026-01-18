@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
@@ -1102,15 +1103,15 @@ export function AmountPayableModal({
                             </PopoverContent>
                           </Popover>
                         ) : (
-                          <div className="overflow-x-auto">
+                          <ScrollArea className="w-full">
                             <Input
                               placeholder="Reference..."
                               value={adj.reference || ""}
                               onChange={(e) => updateAdjustment(adj.id, "reference", e.target.value)}
-                              className="h-8 min-w-full"
+                              className="h-8"
                               data-testid={`input-reference-${index}`}
                             />
-                          </div>
+                          </ScrollArea>
                         )}
                       </div>
 
