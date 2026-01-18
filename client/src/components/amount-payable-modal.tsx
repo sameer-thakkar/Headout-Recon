@@ -110,7 +110,6 @@ export function AmountPayableModal({
             // Store original state for comparison on Apply
             setOriginalDisputes(new Map(newDisputeAmounts));
             setDisputesLoaded(true);
-            console.log("[Modal] Loaded", disputes.length, "disputes from backend");
           })
           .catch(err => {
             console.error("Failed to load existing disputes:", err);
@@ -453,10 +452,6 @@ export function AmountPayableModal({
       const currentBookingIds = new Set(disputeAmounts.keys());
       const originalBookingIds = new Set(originalDisputes.keys());
       
-      console.log("[handleApply] Current disputes:", Array.from(disputeAmounts.entries()));
-      console.log("[handleApply] Original disputes:", Array.from(originalDisputes.entries()));
-      console.log("[handleApply] Active disputes:", Array.from(activeDisputes));
-      
       // Find disputes to create (in current but not in original, or amount changed)
       const disputesToCreate: string[] = [];
       Array.from(currentBookingIds).forEach(bookingId => {
@@ -475,13 +470,9 @@ export function AmountPayableModal({
         }
       });
       
-      console.log("[handleApply] To create:", disputesToCreate.length, disputesToCreate.slice(0, 5));
-      console.log("[handleApply] To delete:", disputesToDelete.length, disputesToDelete.slice(0, 5));
-      
       // Get booking info for creating disputes
       const allBookings = [...(bookings || [])];
       const bookingMap = new Map(allBookings.map(b => [b.bookingId, b]));
-      console.log("[handleApply] Total bookings available:", allBookings.length);
       
       // Create/update disputes
       let createdCount = 0;
@@ -502,11 +493,9 @@ export function AmountPayableModal({
           }).catch(err => console.error("Failed to create dispute:", err));
           createdCount++;
         } else {
-          console.log("[handleApply] Skipped bookingId:", bookingId, "booking found:", !!booking, "disputeAmount:", disputeAmount);
           skippedCount++;
         }
       }
-      console.log("[handleApply] Created:", createdCount, "Skipped:", skippedCount);
       
       // Delete removed disputes
       for (const bookingId of disputesToDelete) {
@@ -516,7 +505,6 @@ export function AmountPayableModal({
       
       // Invalidate the disputes query cache so Dispute Tracker gets fresh data
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
-      console.log("[handleApply] Invalidated cache for /api/disputes/" + runId);
     }
     
     onApply(localAdjustments, localSelections, finalAmount);
