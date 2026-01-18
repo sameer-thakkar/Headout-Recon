@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Dialog,
   DialogContent,
@@ -75,11 +75,19 @@ export function AmountPayableModal({
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
+  const [disputesLoaded, setDisputesLoaded] = useState(false);
 
+  // Reset adjustments and selections when props change (but not disputes)
   useEffect(() => {
     if (open) {
       setLocalAdjustments(adjustments);
       setLocalSelections(finalNetSelections);
+    }
+  }, [open, adjustments, finalNetSelections]);
+
+  // Load disputes only once when modal opens (not when other props change)
+  useEffect(() => {
+    if (open && !disputesLoaded) {
       setExpandedReasons(new Set());
       setExpandedTids(new Set());
       
@@ -101,20 +109,29 @@ export function AmountPayableModal({
             setActiveDisputes(newActiveDisputes);
             // Store original state for comparison on Apply
             setOriginalDisputes(new Map(newDisputeAmounts));
+            setDisputesLoaded(true);
+            console.log("[Modal] Loaded", disputes.length, "disputes from backend");
           })
           .catch(err => {
             console.error("Failed to load existing disputes:", err);
             setDisputeAmounts(new Map());
             setActiveDisputes(new Set());
             setOriginalDisputes(new Map());
+            setDisputesLoaded(true);
           });
       } else {
         setDisputeAmounts(new Map());
         setActiveDisputes(new Set());
         setOriginalDisputes(new Map());
+        setDisputesLoaded(true);
       }
     }
-  }, [open, adjustments, finalNetSelections, runId]);
+    
+    // Reset disputesLoaded when modal closes so next open loads fresh data
+    if (!open) {
+      setDisputesLoaded(false);
+    }
+  }, [open, runId, disputesLoaded]);
 
   const reconciledBookings = useMemo(() => 
     (bookings || []).filter(b => b.reason === "Reconciled"), 
@@ -436,6 +453,10 @@ export function AmountPayableModal({
       const currentBookingIds = new Set(disputeAmounts.keys());
       const originalBookingIds = new Set(originalDisputes.keys());
       
+      console.log("[handleApply] Current disputes:", Array.from(disputeAmounts.entries()));
+      console.log("[handleApply] Original disputes:", Array.from(originalDisputes.entries()));
+      console.log("[handleApply] Active disputes:", Array.from(activeDisputes));
+      
       // Find disputes to create (in current but not in original, or amount changed)
       const disputesToCreate: string[] = [];
       Array.from(currentBookingIds).forEach(bookingId => {
@@ -454,11 +475,17 @@ export function AmountPayableModal({
         }
       });
       
+      console.log("[handleApply] To create:", disputesToCreate.length, disputesToCreate.slice(0, 5));
+      console.log("[handleApply] To delete:", disputesToDelete.length, disputesToDelete.slice(0, 5));
+      
       // Get booking info for creating disputes
       const allBookings = [...(bookings || [])];
       const bookingMap = new Map(allBookings.map(b => [b.bookingId, b]));
+      console.log("[handleApply] Total bookings available:", allBookings.length);
       
       // Create/update disputes
+      let createdCount = 0;
+      let skippedCount = 0;
       for (const bookingId of disputesToCreate) {
         const booking = bookingMap.get(bookingId);
         const disputeAmount = disputeAmounts.get(bookingId) || 0;
@@ -473,14 +500,23 @@ export function AmountPayableModal({
             disputeAmount,
             maxDisputeAmount: maxDispute,
           }).catch(err => console.error("Failed to create dispute:", err));
+          createdCount++;
+        } else {
+          console.log("[handleApply] Skipped bookingId:", bookingId, "booking found:", !!booking, "disputeAmount:", disputeAmount);
+          skippedCount++;
         }
       }
+      console.log("[handleApply] Created:", createdCount, "Skipped:", skippedCount);
       
       // Delete removed disputes
       for (const bookingId of disputesToDelete) {
         await fetch(`/api/disputes/${runId}/${bookingId}`, { method: "DELETE" })
           .catch(err => console.error("Failed to delete dispute:", err));
       }
+      
+      // Invalidate the disputes query cache so Dispute Tracker gets fresh data
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      console.log("[handleApply] Invalidated cache for /api/disputes/" + runId);
     }
     
     onApply(localAdjustments, localSelections, finalAmount);
