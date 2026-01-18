@@ -387,8 +387,8 @@ export function AmountPayableModal({
                               <div className="col-span-2 text-right">HO Net</div>
                               <div className="col-span-2 text-right">SP Net</div>
                               <div className="col-span-2 text-center">Final Net</div>
-                              <div className="col-span-2 text-right">Final Price</div>
                               <div className="col-span-1 text-center">Dispute</div>
+                              <div className="col-span-2 text-right">Final Price</div>
                             </div>
 
                             <div>
@@ -441,9 +441,6 @@ export function AmountPayableModal({
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-2 text-right font-mono text-xs font-medium">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
-                                      </div>
                                       <div className="col-span-1 flex justify-center">
                                         <Button
                                           variant={isTidDisputed(reason, tid) ? "destructive" : "outline"}
@@ -454,6 +451,9 @@ export function AmountPayableModal({
                                         >
                                           <AlertTriangle className="h-3 w-3" />
                                         </Button>
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs font-medium">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </div>
                                     </div>
 
@@ -495,9 +495,6 @@ export function AmountPayableModal({
                                               </Select>
                                             )}
                                           </div>
-                                          <div className="col-span-2 text-right font-mono font-medium">
-                                            {formatCurrency(getFinalNetPrice(booking))}
-                                          </div>
                                           <div className="col-span-1 flex justify-center">
                                             <Button
                                               variant={isBookingDisputed(booking.bookingId) ? "destructive" : "ghost"}
@@ -508,6 +505,9 @@ export function AmountPayableModal({
                                             >
                                               <AlertTriangle className="h-3 w-3" />
                                             </Button>
+                                          </div>
+                                          <div className="col-span-2 text-right font-mono font-medium">
+                                            {formatCurrency(getFinalNetPrice(booking))}
                                           </div>
                                         </div>
                                       ))}
