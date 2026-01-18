@@ -44,7 +44,7 @@ export interface Adjustment {
 // The 7 fixed preset adjustment natures (in order)
 export const PRESET_ADJUSTMENT_NATURES = [
   "Open Dispute Adjustments",
-  "Cancellations- Post Recon",
+  "Cancellations-Post Recon",
   "Credit Note",
   "Debit Note",
   "Rebate",
@@ -520,14 +520,17 @@ export function AmountPayableModal({
   }, [openDisputes]);
 
   const handleApply = useCallback(async () => {
+    // Clear any previous validation error
+    setValidationError("");
+    
     // Validate manually added rows - all fields must be filled
     const manualAdjustments = localAdjustments.filter(a => !a.isPreset);
     const incompleteRows = manualAdjustments.filter(a => 
-      !a.nature.trim() || !a.reference.trim() || a.amount === 0
+      !a.nature.trim() || !a.reference.trim() || !a.type || a.amount === 0
     );
     
     if (incompleteRows.length > 0) {
-      setValidationError(`Please fill all fields for manually added adjustment rows. ${incompleteRows.length} row(s) incomplete.`);
+      setValidationError(`Manually added rows require: Nature, Reference No, Add/Less selection, and Amount (non-zero). ${incompleteRows.length} row(s) incomplete.`);
       return;
     }
     
