@@ -324,7 +324,12 @@ function AppContent() {
                 />
               </Route>
               <Route path="/results">
-                <ResultsPage runId={currentRunId} />
+                <ResultsPage 
+                  runId={currentRunId} 
+                  uploadedFiles={uploadedFiles}
+                  onFilesUploaded={handleFilesUploaded}
+                  onLoadDemo={handleLoadDemo}
+                />
               </Route>
               <Route path="/discrepancy-analysis">
                 <DiscrepancyAnalysisPage runId={currentRunId} />
