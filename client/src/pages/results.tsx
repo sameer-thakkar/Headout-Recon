@@ -344,6 +344,7 @@ export function ResultsPage({ runId }: ResultsPageProps) {
         adjustments={adjustments}
         finalNetSelections={finalNetSelections}
         onApply={handlePayableModalApply}
+        runId={runId}
       />
     </div>
   );

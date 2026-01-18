@@ -654,6 +654,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
           adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
           finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency] || {}}
           onApply={handlePayableModalApply}
+          runId={currentRunId}
         />
       )}
     </div>

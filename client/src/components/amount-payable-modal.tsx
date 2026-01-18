@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,7 @@ interface AmountPayableModalProps {
   adjustments: Adjustment[];
   finalNetSelections: FinalNetSelection;
   onApply: (adjustments: Adjustment[], selections: FinalNetSelection, finalAmount: number) => void;
+  runId?: string | null;
 }
 
 export function AmountPayableModal({
@@ -64,6 +66,7 @@ export function AmountPayableModal({
   adjustments,
   finalNetSelections,
   onApply,
+  runId,
 }: AmountPayableModalProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
@@ -236,7 +239,20 @@ export function AmountPayableModal({
       next.set(bookingId, maxDispute);
       return next;
     });
-  }, []);
+    
+    // Persist dispute to backend
+    if (runId) {
+      apiRequest("POST", "/api/disputes", {
+        runId,
+        bookingId,
+        billingEntityId: booking.beId || "",
+        billingEntityName: booking.billingEntityName || "",
+        currency: currency,
+        disputeAmount: maxDispute,
+        maxDisputeAmount: maxDispute,
+      }).catch(err => console.error("Failed to create dispute:", err));
+    }
+  }, [runId, currency]);
 
   const toggleReason = useCallback((reason: string) => {
     setExpandedReasons(prev => {
@@ -270,7 +286,7 @@ export function AmountPayableModal({
     return disputeAmounts.get(bookingId) || 0;
   }, [disputeAmounts]);
 
-  const setBookingDisputeAmount = useCallback((bookingId: string, amount: number) => {
+  const setBookingDisputeAmount = useCallback((bookingId: string, amount: number, booking?: BookingForPayable) => {
     setDisputeAmounts(prev => {
       const next = new Map(prev);
       if (amount <= 0) {
@@ -287,7 +303,20 @@ export function AmountPayableModal({
         return next;
       });
     }
-  }, []);
+    
+    // Persist dispute update to backend
+    if (runId && amount > 0 && booking) {
+      apiRequest("POST", "/api/disputes", {
+        runId,
+        bookingId,
+        billingEntityId: booking.beId || "",
+        billingEntityName: booking.billingEntityName || "",
+        currency: currency,
+        disputeAmount: amount,
+        maxDisputeAmount: booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet),
+      }).catch(err => console.error("Failed to update dispute:", err));
+    }
+  }, [runId, currency]);
 
   const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
     const reasonBookings = bookingsByReason[reason] || [];
@@ -731,7 +760,7 @@ export function AmountPayableModal({
                                                     min="0"
                                                     step="0.01"
                                                     value={currentDispute || ""}
-                                                    onChange={(e) => setBookingDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0)}
+                                                    onChange={(e) => setBookingDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
                                                     className={`w-20 h-5 text-xs text-right font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
                                                     placeholder="0"
                                                     data-testid={`input-dispute-booking-${booking.bookingId}`}
