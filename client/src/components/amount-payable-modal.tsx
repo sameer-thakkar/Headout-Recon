@@ -302,10 +302,13 @@ export function AmountPayableModal({
         next.delete(bookingId);
         return next;
       });
-    }
-    
-    // Persist dispute update to backend
-    if (runId && amount > 0 && booking) {
+      // Delete dispute from backend when cleared
+      if (runId) {
+        fetch(`/api/disputes/${runId}/${bookingId}`, { method: "DELETE" })
+          .catch(err => console.error("Failed to delete dispute:", err));
+      }
+    } else if (runId && booking) {
+      // Persist dispute update to backend
       apiRequest("POST", "/api/disputes", {
         runId,
         bookingId,
@@ -345,7 +348,28 @@ export function AmountPayableModal({
       }
       return next;
     });
-  }, [bookingsByReason, getSelection, getMaxDisputeAmount]);
+    
+    // Persist to backend
+    if (runId) {
+      for (const b of disputableBookings) {
+        if (action === "all") {
+          const maxDispute = getMaxDisputeAmount(b);
+          apiRequest("POST", "/api/disputes", {
+            runId,
+            bookingId: b.bookingId,
+            billingEntityId: b.beId || "",
+            billingEntityName: b.billingEntityName || "",
+            currency: currency,
+            disputeAmount: maxDispute,
+            maxDisputeAmount: maxDispute,
+          }).catch(err => console.error("Failed to create dispute:", err));
+        } else {
+          fetch(`/api/disputes/${runId}/${b.bookingId}`, { method: "DELETE" })
+            .catch(err => console.error("Failed to delete dispute:", err));
+        }
+      }
+    }
+  }, [bookingsByReason, getSelection, getMaxDisputeAmount, runId, currency]);
 
   const updateTidDispute = useCallback((reason: string, tid: string, action: "all" | "clear") => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
@@ -374,7 +398,28 @@ export function AmountPayableModal({
       }
       return next;
     });
-  }, [bookingsByReasonAndTid, getSelection, getMaxDisputeAmount]);
+    
+    // Persist to backend
+    if (runId) {
+      for (const b of disputableBookings) {
+        if (action === "all") {
+          const maxDispute = getMaxDisputeAmount(b);
+          apiRequest("POST", "/api/disputes", {
+            runId,
+            bookingId: b.bookingId,
+            billingEntityId: b.beId || "",
+            billingEntityName: b.billingEntityName || "",
+            currency: currency,
+            disputeAmount: maxDispute,
+            maxDisputeAmount: maxDispute,
+          }).catch(err => console.error("Failed to create dispute:", err));
+        } else {
+          fetch(`/api/disputes/${runId}/${b.bookingId}`, { method: "DELETE" })
+            .catch(err => console.error("Failed to delete dispute:", err));
+        }
+      }
+    }
+  }, [bookingsByReasonAndTid, getSelection, getMaxDisputeAmount, runId, currency]);
 
   const getTidDisputeCount = useCallback((reason: string, tid: string): { disputed: number; disputable: number; total: number; totalDisputeAmt: number } => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];

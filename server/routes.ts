@@ -1943,5 +1943,21 @@ export async function registerRoutes(
     }
   });
 
+  // Delete dispute by runId and bookingId
+  app.delete("/api/disputes/:runId/:bookingId", async (req, res) => {
+    try {
+      const { runId, bookingId } = req.params;
+      const existing = await storage.getDisputeByBooking(runId, bookingId);
+      if (!existing) {
+        return res.json({ success: true }); // Already deleted or never existed
+      }
+      await storage.deleteDispute(existing.disputeId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete dispute by booking error:", error);
+      res.status(500).json({ error: "Failed to delete dispute" });
+    }
+  });
+
   return httpServer;
 }
