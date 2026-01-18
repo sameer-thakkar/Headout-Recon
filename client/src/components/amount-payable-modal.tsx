@@ -382,13 +382,15 @@ export function AmountPayableModal({
                           </div>
 
                           <CollapsibleContent>
-                            <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                            <div className="grid grid-cols-16 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
                               <div className="col-span-3">TID / Booking ID</div>
                               <div className="col-span-2 text-right">HO Net</div>
                               <div className="col-span-2 text-right">SP Net</div>
                               <div className="col-span-2 text-center">Final Net</div>
                               <div className="col-span-1 text-center">Dispute</div>
-                              <div className="col-span-2 text-right">Final Price</div>
+                              <div className="col-span-2 text-right">Price Payable</div>
+                              <div className="col-span-2 text-right">Dispute Amt</div>
+                              <div className="col-span-2 text-right">Reconciled Net</div>
                             </div>
 
                             <div>
@@ -399,7 +401,7 @@ export function AmountPayableModal({
                                   onOpenChange={() => toggleTid(tidKey(tid))}
                                 >
                                   <div className="border-t">
-                                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-background items-center">
+                                    <div className="grid grid-cols-16 gap-2 px-3 py-2 bg-background items-center">
                                       <div className="col-span-3 flex items-center gap-2">
                                         <CollapsibleTrigger asChild>
                                           <Button variant="ghost" size="icon" className="h-5 w-5">
@@ -455,62 +457,83 @@ export function AmountPayableModal({
                                       <div className="col-span-2 text-right font-mono text-xs font-medium">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </div>
+                                      <div className="col-span-2 text-right font-mono text-xs text-destructive">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + (isBookingDisputed(b.bookingId) ? getFinalNetPrice(b) : 0), 0))}
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
+                                        {formatCurrency(tidBookings.reduce((s, b) => {
+                                          const pricePayable = getFinalNetPrice(b);
+                                          const disputeAmt = isBookingDisputed(b.bookingId) ? pricePayable : 0;
+                                          return s + (pricePayable - disputeAmt);
+                                        }, 0))}
+                                      </div>
                                     </div>
 
                                     <CollapsibleContent>
-                                      {tidBookings.map((booking) => (
-                                        <div
-                                          key={booking.bookingId}
-                                          className="grid grid-cols-12 gap-2 px-3 py-1 border-t border-dashed items-center text-xs"
-                                          data-testid={`row-booking-${booking.bookingId}`}
-                                        >
-                                          <div className="col-span-3 pl-6 truncate text-muted-foreground" title={booking.bookingId}>
-                                            {booking.bookingId}
-                                          </div>
-                                          <div className="col-span-2 text-right font-mono">
-                                            {booking.reason === "Unmapped" ? (
-                                              <span className="text-muted-foreground">N/A</span>
-                                            ) : (
-                                              formatCurrency(booking.hoNet)
-                                            )}
-                                          </div>
-                                          <div className="col-span-2 text-right font-mono">
-                                            {formatCurrency(booking.spNet)}
-                                          </div>
-                                          <div className="col-span-2 flex justify-center">
-                                            {booking.reason === "Unmapped" ? (
-                                              <span className="text-muted-foreground text-xs">SP only</span>
-                                            ) : (
-                                              <Select
-                                                value={getSelection(booking.bookingId, booking.reason)}
-                                                onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
+                                      {tidBookings.map((booking) => {
+                                        const pricePayable = getFinalNetPrice(booking);
+                                        const disputeAmt = isBookingDisputed(booking.bookingId) ? pricePayable : 0;
+                                        const reconciledNet = pricePayable - disputeAmt;
+                                        return (
+                                          <div
+                                            key={booking.bookingId}
+                                            className="grid grid-cols-16 gap-2 px-3 py-1 border-t border-dashed items-center text-xs"
+                                            data-testid={`row-booking-${booking.bookingId}`}
+                                          >
+                                            <div className="col-span-3 pl-6 truncate text-muted-foreground" title={booking.bookingId}>
+                                              {booking.bookingId}
+                                            </div>
+                                            <div className="col-span-2 text-right font-mono">
+                                              {booking.reason === "Unmapped" ? (
+                                                <span className="text-muted-foreground">N/A</span>
+                                              ) : (
+                                                formatCurrency(booking.hoNet)
+                                              )}
+                                            </div>
+                                            <div className="col-span-2 text-right font-mono">
+                                              {formatCurrency(booking.spNet)}
+                                            </div>
+                                            <div className="col-span-2 flex justify-center">
+                                              {booking.reason === "Unmapped" ? (
+                                                <span className="text-muted-foreground text-xs">SP only</span>
+                                              ) : (
+                                                <Select
+                                                  value={getSelection(booking.bookingId, booking.reason)}
+                                                  onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp")}
+                                                >
+                                                  <SelectTrigger className="w-16 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    <SelectItem value="ho">HO</SelectItem>
+                                                    <SelectItem value="sp">SP</SelectItem>
+                                                  </SelectContent>
+                                                </Select>
+                                              )}
+                                            </div>
+                                            <div className="col-span-1 flex justify-center">
+                                              <Button
+                                                variant={isBookingDisputed(booking.bookingId) ? "destructive" : "ghost"}
+                                                size="sm"
+                                                className="h-5 w-5 p-0"
+                                                onClick={() => toggleBookingDispute(booking.bookingId)}
+                                                data-testid={`button-dispute-booking-${booking.bookingId}`}
                                               >
-                                                <SelectTrigger className="w-16 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
-                                                  <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  <SelectItem value="ho">HO</SelectItem>
-                                                  <SelectItem value="sp">SP</SelectItem>
-                                                </SelectContent>
-                                              </Select>
-                                            )}
+                                                <AlertTriangle className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                            <div className="col-span-2 text-right font-mono font-medium">
+                                              {formatCurrency(pricePayable)}
+                                            </div>
+                                            <div className="col-span-2 text-right font-mono text-destructive">
+                                              {disputeAmt > 0 ? formatCurrency(disputeAmt) : "-"}
+                                            </div>
+                                            <div className="col-span-2 text-right font-mono font-medium text-green-600 dark:text-green-400">
+                                              {formatCurrency(reconciledNet)}
+                                            </div>
                                           </div>
-                                          <div className="col-span-1 flex justify-center">
-                                            <Button
-                                              variant={isBookingDisputed(booking.bookingId) ? "destructive" : "ghost"}
-                                              size="sm"
-                                              className="h-5 w-5 p-0"
-                                              onClick={() => toggleBookingDispute(booking.bookingId)}
-                                              data-testid={`button-dispute-booking-${booking.bookingId}`}
-                                            >
-                                              <AlertTriangle className="h-3 w-3" />
-                                            </Button>
-                                          </div>
-                                          <div className="col-span-2 text-right font-mono font-medium">
-                                            {formatCurrency(getFinalNetPrice(booking))}
-                                          </div>
-                                        </div>
-                                      ))}
+                                        );
+                                      })}
                                     </CollapsibleContent>
                                   </div>
                                 </Collapsible>
