@@ -155,6 +155,51 @@ export function ResultsPage({ runId }: ResultsPageProps) {
     enabled: !!runId,
   });
 
+  // All hooks must be called before any early returns to maintain consistent hook order
+  const bookingsForPayable = useMemo((): BookingForPayable[] => {
+    if (!data) return [];
+    // Combine primary and unmapped rows
+    const allRows = [...data.primaryRows, ...(data.unmappedRows || [])];
+    return allRows.map(row => ({
+      bookingId: row.bookingId,
+      tid: row.tid || row.bookingId,
+      reason: row.reason,
+      hoNet: row.hoNet,
+      spNet: row.spNetInHo,
+      currency: row.hoCurrency,
+      beId: row.beId,
+      billingEntityName: row.billingEntityName,
+    }));
+  }, [data]);
+
+  const finalAmountPayable = useMemo(() => {
+    const baseAmount = bookingsForPayable.reduce((sum, b) => {
+      if (b.reason === "Reconciled") {
+        return sum + b.spNet;
+      }
+      const selection = finalNetSelections[b.bookingId] || "sp";
+      return sum + (selection === "ho" ? b.hoNet : b.spNet);
+    }, 0);
+    
+    return adjustments.reduce((total, adj) => {
+      if (adj.type === "add") {
+        return total + adj.amount;
+      } else {
+        return total - adj.amount;
+      }
+    }, baseAmount);
+  }, [bookingsForPayable, finalNetSelections, adjustments]);
+
+  const handlePayableModalApply = useCallback((
+    newAdjustments: Adjustment[], 
+    newSelections: FinalNetSelection, 
+    _finalAmount: number
+  ) => {
+    setAdjustments(newAdjustments);
+    setFinalNetSelections(newSelections);
+  }, []);
+
+  // Early returns after all hooks
   if (!runId) {
     return (
       <div className="max-w-6xl mx-auto px-8 py-8">
@@ -198,52 +243,9 @@ export function ResultsPage({ runId }: ResultsPageProps) {
   const totalDiscrepancyUsd = data.overallSummary.reduce((sum, row) => sum + row.discrepancyUsd, 0);
   const totalBookings = data.overallSummary.reduce((sum, row) => sum + row.countBid, 0);
 
-  const bookingsForPayable = useMemo((): BookingForPayable[] => {
-    if (!data) return [];
-    // Combine primary and unmapped rows
-    const allRows = [...data.primaryRows, ...(data.unmappedRows || [])];
-    return allRows.map(row => ({
-      bookingId: row.bookingId,
-      tid: row.tid || row.bookingId,
-      reason: row.reason,
-      hoNet: row.hoNet,
-      spNet: row.spNetInHo,
-      currency: row.hoCurrency,
-      beId: row.beId,
-      billingEntityName: row.billingEntityName,
-    }));
-  }, [data]);
-
-  const finalAmountPayable = useMemo(() => {
-    const baseAmount = bookingsForPayable.reduce((sum, b) => {
-      if (b.reason === "Reconciled") {
-        return sum + b.spNet;
-      }
-      const selection = finalNetSelections[b.bookingId] || "sp";
-      return sum + (selection === "ho" ? b.hoNet : b.spNet);
-    }, 0);
-    
-    return adjustments.reduce((total, adj) => {
-      if (adj.type === "add") {
-        return total + adj.amount;
-      } else {
-        return total - adj.amount;
-      }
-    }, baseAmount);
-  }, [bookingsForPayable, finalNetSelections, adjustments]);
-
   const handleExport = () => {
     window.open(`/api/runs/${runId}/export`, "_blank");
   };
-
-  const handlePayableModalApply = useCallback((
-    newAdjustments: Adjustment[], 
-    newSelections: FinalNetSelection, 
-    _finalAmount: number
-  ) => {
-    setAdjustments(newAdjustments);
-    setFinalNetSelections(newSelections);
-  }, []);
 
   return (
     <div className="max-w-6xl mx-auto px-8 py-8 space-y-8">
