@@ -110,8 +110,14 @@ export function AmountPayableModal({
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
   const [disputesLoaded, setDisputesLoaded] = useState(false);
-  // Store all open disputes from backend for adjustment reference dropdown
-  const [openDisputes, setOpenDisputes] = useState<Array<{ disputeId: string; disputeAmount: number; bookingId: string }>>([]);
+  // Store aggregated disputes by billing entity for adjustment reference dropdown (matches Dispute Tracker view)
+  const [openDisputes, setOpenDisputes] = useState<Array<{ 
+    displayId: string; 
+    billingEntityId: string;
+    billingEntityName: string;
+    totalDisputeAmount: number; 
+    bookingCount: number;
+  }>>([]);
   // Validation error for manually added adjustment rows
   const [validationError, setValidationError] = useState<string>("");
 
@@ -150,12 +156,38 @@ export function AmountPayableModal({
             setActiveDisputes(newActiveDisputes);
             // Store original state for comparison on Apply
             setOriginalDisputes(new Map(newDisputeAmounts));
-            // Store full dispute records for adjustment reference dropdown
-            setOpenDisputes(disputes.map((d: { disputeId: string; disputeAmount: number; bookingId: string }) => ({
-              disputeId: d.disputeId,
-              disputeAmount: d.disputeAmount,
-              bookingId: d.bookingId,
-            })));
+            
+            // Aggregate disputes by billing entity (same logic as Dispute Tracker)
+            const groupedByBillingEntity = new Map<string, Array<{ billingEntityId: string; billingEntityName: string; disputeAmount: number }>>();
+            for (const dispute of disputes) {
+              const key = `${dispute.billingEntityId}-${dispute.currency}`;
+              if (!groupedByBillingEntity.has(key)) {
+                groupedByBillingEntity.set(key, []);
+              }
+              groupedByBillingEntity.get(key)!.push({
+                billingEntityId: dispute.billingEntityId,
+                billingEntityName: dispute.billingEntityName,
+                disputeAmount: dispute.disputeAmount,
+              });
+            }
+            
+            // Create aggregated display (matching Dispute Tracker numbering)
+            const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number }> = [];
+            let counter = 1;
+            for (const group of Array.from(groupedByBillingEntity.values())) {
+              if (group.length === 0) continue;
+              const first = group[0];
+              const totalAmount = group.reduce((sum, d) => sum + d.disputeAmount, 0);
+              aggregatedDisputes.push({
+                displayId: `DID-#${counter}`,
+                billingEntityId: first.billingEntityId,
+                billingEntityName: first.billingEntityName,
+                totalDisputeAmount: totalAmount,
+                bookingCount: group.length,
+              });
+              counter++;
+            }
+            setOpenDisputes(aggregatedDisputes);
             setDisputesLoaded(true);
           })
           .catch(err => {
@@ -505,10 +537,10 @@ export function AmountPayableModal({
       prev.map((a) => {
         if (a.id !== adjustmentId) return a;
         
-        // Calculate total amount from selected disputes
+        // Calculate total amount from selected aggregated disputes
         const totalAmount = openDisputes
-          .filter(d => selectedIds.includes(d.disputeId))
-          .reduce((sum, d) => sum + d.disputeAmount, 0);
+          .filter(d => selectedIds.includes(d.displayId))
+          .reduce((sum, d) => sum + d.totalDisputeAmount, 0);
         
         return {
           ...a,
@@ -1075,25 +1107,30 @@ export function AmountPayableModal({
                               ) : (
                                 <div className="space-y-1 max-h-48 overflow-y-auto">
                                   {openDisputes.map((dispute) => {
-                                    const isSelected = adj.selectedDisputeIds?.includes(dispute.disputeId) || false;
+                                    const isSelected = adj.selectedDisputeIds?.includes(dispute.displayId) || false;
                                     return (
                                       <div
-                                        key={dispute.disputeId}
+                                        key={dispute.displayId}
                                         className="flex items-center gap-2 p-2 rounded hover-elevate cursor-pointer"
                                         onClick={() => {
                                           const currentIds = adj.selectedDisputeIds || [];
                                           const newIds = isSelected
-                                            ? currentIds.filter(id => id !== dispute.disputeId)
-                                            : [...currentIds, dispute.disputeId];
+                                            ? currentIds.filter(id => id !== dispute.displayId)
+                                            : [...currentIds, dispute.displayId];
                                           updateAdjustmentDisputes(adj.id, newIds);
                                         }}
                                       >
                                         <Checkbox checked={isSelected} />
                                         <div className="flex-1">
-                                          <span className="text-sm font-medium">{dispute.disputeId}</span>
+                                          <span className="text-sm font-medium">{dispute.displayId}</span>
                                           <span className="text-xs text-muted-foreground ml-2">
-                                            ({formatCurrency(dispute.disputeAmount)} {currency})
+                                            ({formatCurrency(dispute.totalDisputeAmount)} {currency})
                                           </span>
+                                          {dispute.bookingCount > 1 && (
+                                            <span className="text-xs text-muted-foreground ml-1">
+                                              ({dispute.bookingCount} bookings)
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     );
