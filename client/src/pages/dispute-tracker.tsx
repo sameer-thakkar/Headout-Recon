@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Table,
@@ -10,14 +10,35 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileWarning, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FileWarning, AlertCircle, ChevronRight } from "lucide-react";
 
 interface DisputeRecord {
   disputeId: string;
+  bookingId: string;
   billingEntityId: string;
   billingEntityName: string;
   currency: string;
   disputeAmount: number;
+  maxDisputeAmount: number;
+  status: "pending" | "submitted" | "resolved" | "rejected";
+  createdAt: string;
+}
+
+interface AggregatedDispute {
+  displayId: string;
+  billingEntityId: string;
+  billingEntityName: string;
+  currency: string;
+  totalDisputeAmount: number;
+  bookingCount: number;
+  disputes: DisputeRecord[];
   status: "pending" | "submitted" | "resolved" | "rejected";
 }
 
@@ -26,12 +47,60 @@ interface DisputeTrackerPageProps {
 }
 
 export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
-  const { data, isLoading, error } = useQuery<{ disputes: DisputeRecord[] }>({
+  const [selectedDispute, setSelectedDispute] = useState<AggregatedDispute | null>(null);
+
+  const { data, isLoading } = useQuery<{ disputes: DisputeRecord[] }>({
     queryKey: [`/api/disputes/${runId}`],
     enabled: !!runId,
   });
 
   const disputes = data?.disputes || [];
+
+  const aggregatedDisputes = useMemo(() => {
+    const groupedByBillingEntity = new Map<string, DisputeRecord[]>();
+    
+    for (const dispute of disputes) {
+      const key = `${dispute.billingEntityId}-${dispute.currency}`;
+      if (!groupedByBillingEntity.has(key)) {
+        groupedByBillingEntity.set(key, []);
+      }
+      groupedByBillingEntity.get(key)!.push(dispute);
+    }
+
+    const aggregated: AggregatedDispute[] = [];
+    let counter = 1;
+
+    for (const group of Array.from(groupedByBillingEntity.values())) {
+      if (group.length === 0) continue;
+      
+      const first = group[0];
+      const totalAmount = group.reduce((sum: number, d: DisputeRecord) => sum + d.disputeAmount, 0);
+      
+      const statuses = group.map((d: DisputeRecord) => d.status);
+      let aggregatedStatus: AggregatedDispute["status"] = "pending";
+      if (statuses.every((s: DisputeRecord["status"]) => s === "resolved")) {
+        aggregatedStatus = "resolved";
+      } else if (statuses.every((s: DisputeRecord["status"]) => s === "rejected")) {
+        aggregatedStatus = "rejected";
+      } else if (statuses.some((s: DisputeRecord["status"]) => s === "submitted")) {
+        aggregatedStatus = "submitted";
+      }
+
+      aggregated.push({
+        displayId: `DID-#${counter}`,
+        billingEntityId: first.billingEntityId,
+        billingEntityName: first.billingEntityName,
+        currency: first.currency,
+        totalDisputeAmount: totalAmount,
+        bookingCount: group.length,
+        disputes: group,
+        status: aggregatedStatus,
+      });
+      counter++;
+    }
+
+    return aggregated;
+  }, [disputes]);
 
   const formatCurrency = (amount: number, currency: string = "USD") => {
     return new Intl.NumberFormat("en-US", {
@@ -98,12 +167,12 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
           <CardTitle className="text-base font-medium flex items-center gap-2">
             Active Disputes
             <Badge variant="secondary" className="ml-2" data-testid="badge-dispute-count">
-              {disputes.length} disputes
+              {aggregatedDisputes.length} {aggregatedDisputes.length === 1 ? 'dispute' : 'disputes'}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {disputes.length === 0 ? (
+          {aggregatedDisputes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileWarning className="h-10 w-10 mx-auto mb-3 opacity-50" />
               <p>No disputes recorded yet.</p>
@@ -119,28 +188,48 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                     <TableHead className="font-semibold" data-testid="header-billing-entity-name">Billing Entity Name</TableHead>
                     <TableHead className="font-semibold" data-testid="header-currency">Currency</TableHead>
                     <TableHead className="font-semibold text-right" data-testid="header-dispute-amount">Dispute Amount</TableHead>
+                    <TableHead className="font-semibold text-center" data-testid="header-bookings">Bookings</TableHead>
                     <TableHead className="font-semibold text-center" data-testid="header-status">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {disputes.map((dispute) => (
-                    <TableRow key={dispute.disputeId} data-testid={`row-dispute-${dispute.disputeId}`}>
-                      <TableCell className="font-mono text-sm" data-testid={`cell-dispute-id-${dispute.disputeId}`}>
-                        {dispute.disputeId}
+                  {aggregatedDisputes.map((dispute) => (
+                    <TableRow 
+                      key={dispute.displayId} 
+                      data-testid={`row-dispute-${dispute.displayId}`}
+                      className="hover-elevate cursor-pointer"
+                      onClick={() => setSelectedDispute(dispute)}
+                    >
+                      <TableCell data-testid={`cell-dispute-id-${dispute.displayId}`}>
+                        <Button 
+                          variant="ghost" 
+                          className="p-0 h-auto font-mono text-sm text-primary hover:underline hover:bg-transparent"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDispute(dispute);
+                          }}
+                          data-testid={`button-dispute-id-${dispute.displayId}`}
+                        >
+                          {dispute.displayId}
+                          <ChevronRight className="h-3 w-3 ml-1" />
+                        </Button>
                       </TableCell>
-                      <TableCell className="font-mono text-sm" data-testid={`cell-billing-entity-id-${dispute.disputeId}`}>
+                      <TableCell className="font-mono text-sm" data-testid={`cell-billing-entity-id-${dispute.displayId}`}>
                         {dispute.billingEntityId || "-"}
                       </TableCell>
-                      <TableCell data-testid={`cell-billing-entity-name-${dispute.disputeId}`}>
+                      <TableCell data-testid={`cell-billing-entity-name-${dispute.displayId}`}>
                         {dispute.billingEntityName || "-"}
                       </TableCell>
-                      <TableCell className="font-mono" data-testid={`cell-currency-${dispute.disputeId}`}>
+                      <TableCell className="font-mono" data-testid={`cell-currency-${dispute.displayId}`}>
                         {dispute.currency}
                       </TableCell>
-                      <TableCell className="text-right font-mono font-medium text-orange-600 dark:text-orange-400" data-testid={`cell-dispute-amount-${dispute.disputeId}`}>
-                        {formatCurrency(dispute.disputeAmount, dispute.currency)}
+                      <TableCell className="text-right font-mono font-medium text-orange-600 dark:text-orange-400" data-testid={`cell-dispute-amount-${dispute.displayId}`}>
+                        {formatCurrency(dispute.totalDisputeAmount, dispute.currency)}
                       </TableCell>
-                      <TableCell className="text-center" data-testid={`cell-status-${dispute.disputeId}`}>
+                      <TableCell className="text-center" data-testid={`cell-bookings-${dispute.displayId}`}>
+                        <Badge variant="outline">{dispute.bookingCount}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center" data-testid={`cell-status-${dispute.displayId}`}>
                         {getStatusBadge(dispute.status)}
                       </TableCell>
                     </TableRow>
@@ -151,6 +240,81 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedDispute} onOpenChange={(open) => !open && setSelectedDispute(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileWarning className="h-5 w-5" />
+              Dispute Details - {selectedDispute?.displayId}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedDispute && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
+                <div>
+                  <p className="text-sm text-muted-foreground">Billing Entity ID</p>
+                  <p className="font-mono font-medium">{selectedDispute.billingEntityId || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Billing Entity Name</p>
+                  <p className="font-medium">{selectedDispute.billingEntityName || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Currency</p>
+                  <p className="font-mono font-medium">{selectedDispute.currency}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Dispute Amount</p>
+                  <p className="font-mono font-medium text-orange-600 dark:text-orange-400">
+                    {formatCurrency(selectedDispute.totalDisputeAmount, selectedDispute.currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Bookings</p>
+                  <p className="font-medium">{selectedDispute.bookingCount}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <div>{getStatusBadge(selectedDispute.status)}</div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-medium mb-2">Booking Details</h4>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Individual booking disputes under this billing entity
+                </p>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="font-semibold">Booking ID</TableHead>
+                        <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
+                        <TableHead className="font-semibold text-center">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedDispute.disputes.map((d) => (
+                        <TableRow key={d.bookingId}>
+                          <TableCell className="font-mono text-sm">{d.bookingId}</TableCell>
+                          <TableCell className="text-right font-mono text-orange-600 dark:text-orange-400">
+                            {formatCurrency(d.disputeAmount, d.currency)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {getStatusBadge(d.status)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

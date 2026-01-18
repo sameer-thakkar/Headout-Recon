@@ -51,6 +51,7 @@ export class MemStorage implements IStorage {
   private fxRates: FxRate[] = [];
   private tempFileData: Map<string, { headers: string[]; rawData: Record<string, unknown>[] }> = new Map();
   private disputes: Map<string, DisputeRecord> = new Map();
+  private disputeCounter: number = 0;
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -119,7 +120,8 @@ export class MemStorage implements IStorage {
   }
 
   async createDispute(dispute: Omit<DisputeRecord, "disputeId" | "createdAt">): Promise<DisputeRecord> {
-    const disputeId = `DSP-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    this.disputeCounter++;
+    const disputeId = `DID-#${this.disputeCounter}`;
     const newDispute: DisputeRecord = {
       ...dispute,
       disputeId,
