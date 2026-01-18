@@ -38,18 +38,32 @@ export interface Adjustment {
   type: "add" | "less";
   amount: number;
   selectedDisputeIds?: string[]; // For "Open Dispute Adjustments" nature
+  isPreset?: boolean; // True for the 7 fixed adjustment rows
 }
 
-// Predefined adjustment nature options
-export const ADJUSTMENT_NATURES = [
+// The 7 fixed preset adjustment natures (in order)
+export const PRESET_ADJUSTMENT_NATURES = [
   "Open Dispute Adjustments",
+  "Cancellations- Post Recon",
   "Credit Note",
   "Debit Note",
-  "Commission Adjustment",
-  "Penalty",
-  "Refund",
-  "Other",
+  "Rebate",
+  "Co-Marketing Income",
+  "Deposit adjustment",
 ] as const;
+
+// Helper to create the 7 preset adjustment rows
+export const createPresetAdjustments = (): Adjustment[] => {
+  return PRESET_ADJUSTMENT_NATURES.map((nature, index) => ({
+    id: `preset-${index}`,
+    nature,
+    reference: "",
+    type: "less" as const,
+    amount: 0,
+    selectedDisputeIds: nature === "Open Dispute Adjustments" ? [] : undefined,
+    isPreset: true,
+  }));
+};
 
 export interface BookingForPayable {
   bookingId: string;
@@ -97,11 +111,16 @@ export function AmountPayableModal({
   const [disputesLoaded, setDisputesLoaded] = useState(false);
   // Store all open disputes from backend for adjustment reference dropdown
   const [openDisputes, setOpenDisputes] = useState<Array<{ disputeId: string; disputeAmount: number; bookingId: string }>>([]);
+  // Validation error for manually added adjustment rows
+  const [validationError, setValidationError] = useState<string>("");
 
   // Reset adjustments and selections when props change (but not disputes)
   useEffect(() => {
     if (open) {
-      setLocalAdjustments(adjustments);
+      // Merge preset adjustments with any passed-in adjustments
+      const presets = createPresetAdjustments();
+      const customAdjustments = adjustments.filter(a => !a.isPreset);
+      setLocalAdjustments([...presets, ...customAdjustments]);
       setLocalSelections(finalNetSelections);
     }
   }, [open, adjustments, finalNetSelections]);
@@ -458,37 +477,25 @@ export function AmountPayableModal({
       reference: "",
       type: "add",
       amount: 0,
-      selectedDisputeIds: [],
+      isPreset: false, // Manually added row
     };
     setLocalAdjustments((prev) => [...prev, newAdj]);
   }, []);
 
   const removeAdjustment = useCallback((id: string) => {
-    setLocalAdjustments((prev) => prev.filter((a) => a.id !== id));
+    // Only allow deletion of non-preset rows
+    setLocalAdjustments((prev) => prev.filter((a) => a.id !== id || a.isPreset));
   }, []);
 
   const updateAdjustment = useCallback((id: string, field: keyof Adjustment, value: string | number | string[]) => {
     setLocalAdjustments((prev) =>
       prev.map((a) => {
         if (a.id !== id) return a;
-        
-        const updated = { ...a, [field]: value };
-        
-        // Special handling for "Open Dispute Adjustments" nature
-        if (field === "nature" && value === "Open Dispute Adjustments") {
-          updated.type = "less"; // Always "Less" for dispute adjustments
-          updated.selectedDisputeIds = [];
-          updated.reference = "";
-          updated.amount = 0;
-        } else if (field === "nature" && value !== "Open Dispute Adjustments") {
-          // Clear dispute-specific fields when switching away
-          updated.selectedDisputeIds = [];
-          updated.reference = "";
-        }
-        
-        return updated;
+        return { ...a, [field]: value };
       })
     );
+    // Clear validation error when user starts filling in fields
+    setValidationError("");
   }, []);
 
   // Update selected dispute IDs for an adjustment and recalculate amount
@@ -513,6 +520,17 @@ export function AmountPayableModal({
   }, [openDisputes]);
 
   const handleApply = useCallback(async () => {
+    // Validate manually added rows - all fields must be filled
+    const manualAdjustments = localAdjustments.filter(a => !a.isPreset);
+    const incompleteRows = manualAdjustments.filter(a => 
+      !a.nature.trim() || !a.reference.trim() || a.amount === 0
+    );
+    
+    if (incompleteRows.length > 0) {
+      setValidationError(`Please fill all fields for manually added adjustment rows. ${incompleteRows.length} row(s) incomplete.`);
+      return;
+    }
+    
     // Sync disputes to backend: compare current state with original
     if (runId) {
       const currentBookingIds = new Set(disputeAmounts.keys());
@@ -977,128 +995,135 @@ export function AmountPayableModal({
                 </Button>
               </div>
 
-              {localAdjustments.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground border rounded-lg border-dashed">
-                  <p className="text-sm">No adjustments added</p>
+              {/* Validation Error */}
+              {validationError && (
+                <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 mb-2">
+                  <p className="text-sm text-destructive flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    {validationError}
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground px-1">
-                    <div className="col-span-3">Nature</div>
-                    <div className="col-span-3">Reference No</div>
-                    <div className="col-span-2">Add/Less</div>
-                    <div className="col-span-3">Amount ({currency})</div>
-                    <div className="col-span-1"></div>
-                  </div>
+              )}
 
-                  {localAdjustments.map((adj, index) => {
-                    const isDisputeAdjustment = adj.nature === "Open Dispute Adjustments";
-                    
-                    return (
-                      <div
-                        key={adj.id}
-                        className="grid grid-cols-12 gap-2 items-center"
-                        data-testid={`row-adjustment-${index}`}
-                      >
-                        {/* Nature Dropdown */}
-                        <div className="col-span-3">
-                          <Select
+              <div className="space-y-2">
+                <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground px-1">
+                  <div className="col-span-3">Nature</div>
+                  <div className="col-span-3">Reference No</div>
+                  <div className="col-span-2">Add/Less</div>
+                  <div className="col-span-3">Amount ({currency})</div>
+                  <div className="col-span-1"></div>
+                </div>
+
+                {localAdjustments.map((adj, index) => {
+                  const isDisputeAdjustment = adj.nature === "Open Dispute Adjustments";
+                  const isPreset = adj.isPreset === true;
+                  
+                  return (
+                    <div
+                      key={adj.id}
+                      className="grid grid-cols-12 gap-2 items-center"
+                      data-testid={`row-adjustment-${index}`}
+                    >
+                      {/* Nature - Read-only text for preset rows, editable input for manual rows */}
+                      <div className="col-span-3">
+                        {isPreset ? (
+                          <div 
+                            className="h-8 px-3 flex items-center text-sm bg-muted/50 rounded-md border"
+                            data-testid={`text-nature-${index}`}
+                          >
+                            {adj.nature}
+                          </div>
+                        ) : (
+                          <Input
+                            placeholder="Enter nature..."
                             value={adj.nature}
-                            onValueChange={(v) => updateAdjustment(adj.id, "nature", v)}
-                          >
-                            <SelectTrigger className="h-8" data-testid={`select-nature-${index}`}>
-                              <SelectValue placeholder="Select type..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ADJUSTMENT_NATURES.map((nature) => (
-                                <SelectItem key={nature} value={nature}>
-                                  {nature}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                            onChange={(e) => updateAdjustment(adj.id, "nature", e.target.value)}
+                            className="h-8"
+                            data-testid={`input-nature-${index}`}
+                          />
+                        )}
+                      </div>
 
-                        {/* Reference Number - Multi-select for disputes, text input for others */}
-                        <div className="col-span-3">
-                          {isDisputeAdjustment ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  className="h-8 w-full justify-start text-left font-normal"
-                                  data-testid={`select-disputes-${index}`}
-                                >
-                                  {adj.selectedDisputeIds && adj.selectedDisputeIds.length > 0 ? (
-                                    <span className="truncate">
-                                      {adj.selectedDisputeIds.length} selected
-                                    </span>
-                                  ) : (
-                                    <span className="text-muted-foreground">Select disputes...</span>
-                                  )}
-                                  <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-64 p-2" align="start">
-                                {openDisputes.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground p-2">No open disputes</p>
+                      {/* Reference Number - Multi-select for disputes, text input for others */}
+                      <div className="col-span-3">
+                        {isDisputeAdjustment ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="h-8 w-full justify-start text-left font-normal"
+                                data-testid={`select-disputes-${index}`}
+                              >
+                                {adj.selectedDisputeIds && adj.selectedDisputeIds.length > 0 ? (
+                                  <span className="truncate">
+                                    {adj.selectedDisputeIds.length} selected
+                                  </span>
                                 ) : (
-                                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                                    {openDisputes.map((dispute) => {
-                                      const isSelected = adj.selectedDisputeIds?.includes(dispute.disputeId) || false;
-                                      return (
-                                        <div
-                                          key={dispute.disputeId}
-                                          className="flex items-center gap-2 p-2 rounded hover-elevate cursor-pointer"
-                                          onClick={() => {
-                                            const currentIds = adj.selectedDisputeIds || [];
-                                            const newIds = isSelected
-                                              ? currentIds.filter(id => id !== dispute.disputeId)
-                                              : [...currentIds, dispute.disputeId];
-                                            updateAdjustmentDisputes(adj.id, newIds);
-                                          }}
-                                        >
-                                          <Checkbox checked={isSelected} />
-                                          <div className="flex-1">
-                                            <span className="text-sm font-medium">{dispute.disputeId}</span>
-                                            <span className="text-xs text-muted-foreground ml-2">
-                                              ({formatCurrency(dispute.disputeAmount)} {currency})
-                                            </span>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
+                                  <span className="text-muted-foreground">Select disputes...</span>
                                 )}
-                              </PopoverContent>
-                            </Popover>
-                          ) : (
-                            <Input
-                              placeholder="Reference..."
-                              value={adj.reference || ""}
-                              onChange={(e) => updateAdjustment(adj.id, "reference", e.target.value)}
-                              className="h-8"
-                              data-testid={`input-reference-${index}`}
-                            />
-                          )}
-                        </div>
+                                <ChevronDown className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-2" align="start">
+                              {openDisputes.length === 0 ? (
+                                <p className="text-sm text-muted-foreground p-2">No open disputes</p>
+                              ) : (
+                                <div className="space-y-1 max-h-48 overflow-y-auto">
+                                  {openDisputes.map((dispute) => {
+                                    const isSelected = adj.selectedDisputeIds?.includes(dispute.disputeId) || false;
+                                    return (
+                                      <div
+                                        key={dispute.disputeId}
+                                        className="flex items-center gap-2 p-2 rounded hover-elevate cursor-pointer"
+                                        onClick={() => {
+                                          const currentIds = adj.selectedDisputeIds || [];
+                                          const newIds = isSelected
+                                            ? currentIds.filter(id => id !== dispute.disputeId)
+                                            : [...currentIds, dispute.disputeId];
+                                          updateAdjustmentDisputes(adj.id, newIds);
+                                        }}
+                                      >
+                                        <Checkbox checked={isSelected} />
+                                        <div className="flex-1">
+                                          <span className="text-sm font-medium">{dispute.disputeId}</span>
+                                          <span className="text-xs text-muted-foreground ml-2">
+                                            ({formatCurrency(dispute.disputeAmount)} {currency})
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <Input
+                            placeholder="Reference..."
+                            value={adj.reference || ""}
+                            onChange={(e) => updateAdjustment(adj.id, "reference", e.target.value)}
+                            className="h-8"
+                            data-testid={`input-reference-${index}`}
+                          />
+                        )}
+                      </div>
 
-                        {/* Add/Less - Locked to "Less" for dispute adjustments */}
-                        <div className="col-span-2">
-                          <Select
-                            value={adj.type}
-                            onValueChange={(v) => updateAdjustment(adj.id, "type", v as "add" | "less")}
-                            disabled={isDisputeAdjustment}
+                      {/* Add/Less - Locked to "Less" for dispute adjustments */}
+                      <div className="col-span-2">
+                        <Select
+                          value={adj.type}
+                          onValueChange={(v) => updateAdjustment(adj.id, "type", v as "add" | "less")}
+                          disabled={isDisputeAdjustment}
+                        >
+                          <SelectTrigger 
+                            className={`h-8 ${isDisputeAdjustment ? "opacity-70" : ""}`} 
+                            data-testid={`select-type-${index}`}
                           >
-                            <SelectTrigger 
-                              className={`h-8 ${isDisputeAdjustment ? "opacity-70" : ""}`} 
-                              data-testid={`select-type-${index}`}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="add">Add</SelectItem>
-                              <SelectItem value="less">Less</SelectItem>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="add">Add</SelectItem>
+                            <SelectItem value="less">Less</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1116,23 +1141,24 @@ export function AmountPayableModal({
                           />
                         </div>
 
-                        {/* Remove Button */}
+                        {/* Remove Button - Only show for manually added rows */}
                         <div className="col-span-1 flex justify-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeAdjustment(adj.id)}
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            data-testid={`button-remove-${index}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {!isPreset && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeAdjustment(adj.id)}
+                              className="h-8 w-8 text-destructive hover:text-destructive"
+                              data-testid={`button-remove-${index}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
             </div>
 
             <Separator />
