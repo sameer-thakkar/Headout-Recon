@@ -39,6 +39,7 @@ export interface Adjustment {
   type: "add" | "less";
   amount: number;
   selectedDisputeIds?: string[]; // For "Open Dispute Adjustments" nature
+  maxDisputeAmount?: number; // Max allowed amount based on selected DIDs (for "Open Dispute Adjustments")
   isPreset?: boolean; // True for the 7 fixed adjustment rows
 }
 
@@ -553,10 +554,26 @@ export function AmountPayableModal({
           selectedDisputeIds: selectedIds,
           reference: selectedIds.join(", "),
           amount: roundedAmount,
+          maxDisputeAmount: roundedAmount, // Set max as the total from selected DIDs
         };
       })
     );
   }, [openDisputes]);
+
+  // Update dispute adjustment amount with max validation
+  const updateDisputeAdjustmentAmount = useCallback((adjustmentId: string, value: number) => {
+    setLocalAdjustments((prev) =>
+      prev.map((a) => {
+        if (a.id !== adjustmentId) return a;
+        // Clamp the value to max if it exceeds
+        const maxAmount = a.maxDisputeAmount || 0;
+        const clampedValue = Math.min(value, maxAmount);
+        // Round to exactly 2 decimal places
+        const roundedAmount = Math.round(clampedValue * 100) / 100;
+        return { ...a, amount: roundedAmount };
+      })
+    );
+  }, []);
 
   const handleApply = useCallback(async () => {
     // Clear any previous validation error
@@ -1162,17 +1179,41 @@ export function AmountPayableModal({
                           </Select>
                         </div>
 
-                        {/* Amount - Read-only for dispute adjustments (auto-calculated) */}
+                        {/* Amount - Editable for dispute adjustments with max validation */}
                         <div className="col-span-3">
-                          <Input
-                            type="number"
-                            placeholder="0.00"
-                            value={adj.amount || ""}
-                            onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}
-                            className={`font-mono h-8 ${isDisputeAdjustment ? "bg-muted" : ""}`}
-                            readOnly={isDisputeAdjustment}
-                            data-testid={`input-amount-${index}`}
-                          />
+                          {isDisputeAdjustment ? (
+                            <div className="space-y-1">
+                              <Input
+                                type="number"
+                                placeholder={adj.selectedDisputeIds && adj.selectedDisputeIds.length > 0 ? "0.00" : "Select DID first"}
+                                min="0"
+                                max={adj.maxDisputeAmount || 0}
+                                step="0.01"
+                                value={adj.amount || ""}
+                                onChange={(e) => {
+                                  const value = parseFloat(e.target.value) || 0;
+                                  updateDisputeAdjustmentAmount(adj.id, value);
+                                }}
+                                className="font-mono h-8"
+                                disabled={!adj.selectedDisputeIds || adj.selectedDisputeIds.length === 0}
+                                data-testid={`input-amount-${index}`}
+                              />
+                              {adj.maxDisputeAmount && adj.maxDisputeAmount > 0 && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Max: {formatCurrency(adj.maxDisputeAmount)} {currency}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <Input
+                              type="number"
+                              placeholder="0.00"
+                              value={adj.amount || ""}
+                              onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}
+                              className="font-mono h-8"
+                              data-testid={`input-amount-${index}`}
+                            />
+                          )}
                         </div>
 
                         {/* Remove Button - Only show for manually added rows */}
