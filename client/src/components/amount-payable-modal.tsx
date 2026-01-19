@@ -76,6 +76,7 @@ export interface BookingForPayable {
   currency: string;
   beId?: string;
   billingEntityName?: string;
+  ticketId?: string;
 }
 
 export interface FinalNetSelection {
@@ -838,15 +839,16 @@ export function AmountPayableModal({
                           </div>
 
                           <CollapsibleContent>
-                            <div className="grid grid-cols-16 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
-                              <div className="col-span-3">TID / Booking ID</div>
+                            <div className="grid grid-cols-18 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                              <div className="col-span-2">TID / Booking ID</div>
+                              <div className="col-span-2">Ticket ID</div>
                               <div className="col-span-2 text-right">HO Net</div>
                               <div className="col-span-2 text-right">SP Net</div>
                               <div className="col-span-2 text-center">Final Net</div>
                               <div className="col-span-1 text-center">Dispute</div>
                               <div className="col-span-2 text-right">Price Payable</div>
                               <div className="col-span-2 text-right">Dispute Amt</div>
-                              <div className="col-span-2 text-right">Reconciled Net</div>
+                              <div className="col-span-3 text-right">Reconciled Net</div>
                             </div>
 
                             <div>
@@ -857,8 +859,8 @@ export function AmountPayableModal({
                                   onOpenChange={() => toggleTid(tidKey(tid))}
                                 >
                                   <div className="border-t">
-                                    <div className="grid grid-cols-16 gap-2 px-3 py-2 bg-background items-center">
-                                      <div className="col-span-3 flex items-center gap-2">
+                                    <div className="grid grid-cols-18 gap-2 px-3 py-2 bg-background items-center">
+                                      <div className="col-span-2 flex items-center gap-1">
                                         <CollapsibleTrigger asChild>
                                           <Button variant="ghost" size="icon" className="h-5 w-5">
                                             {expandedTids.has(tidKey(tid)) ? (
@@ -875,6 +877,7 @@ export function AmountPayableModal({
                                           {tidBookings.length}
                                         </Badge>
                                       </div>
+                                      <div className="col-span-2 text-xs text-muted-foreground">—</div>
                                       <div className="col-span-2 text-right font-mono text-xs">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
                                       </div>
@@ -942,7 +945,7 @@ export function AmountPayableModal({
                                           ) : null;
                                         })()}
                                       </div>
-                                      <div className="col-span-2 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
+                                      <div className="col-span-3 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
                                           const canDispute = getSelection(b.bookingId, b.reason) === "sp";
                                           const pricePayable = getFinalNetPrice(b);
@@ -964,11 +967,14 @@ export function AmountPayableModal({
                                         return (
                                           <div
                                             key={booking.bookingId}
-                                            className="grid grid-cols-16 gap-2 px-3 py-1 border-t border-dashed items-center text-xs"
+                                            className="grid grid-cols-18 gap-2 px-3 py-1 border-t border-dashed items-center text-xs"
                                             data-testid={`row-booking-${booking.bookingId}`}
                                           >
-                                            <div className="col-span-3 pl-6 truncate text-muted-foreground" title={booking.bookingId}>
+                                            <div className="col-span-2 pl-6 truncate text-muted-foreground" title={booking.bookingId}>
                                               {booking.bookingId}
+                                            </div>
+                                            <div className="col-span-2 truncate text-muted-foreground" title={booking.ticketId || ""} data-testid={`cell-ticketid-${booking.bookingId}`}>
+                                              {booking.ticketId || "—"}
                                             </div>
                                             <div className="col-span-2 text-right font-mono">
                                               {formatCurrency(booking.hoNet)}
@@ -1041,7 +1047,7 @@ export function AmountPayableModal({
                                                 </div>
                                               ) : null}
                                             </div>
-                                            <div className="col-span-2 text-right font-mono font-medium text-green-600 dark:text-green-400">
+                                            <div className="col-span-3 text-right font-mono font-medium text-green-600 dark:text-green-400">
                                               {formatCurrency(reconciledNet)}
                                             </div>
                                           </div>

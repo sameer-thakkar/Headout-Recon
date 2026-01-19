@@ -273,6 +273,7 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo 
       currency: row.hoCurrency,
       beId: row.beId,
       billingEntityName: row.billingEntityName,
+      ticketId: row.ticketId,
     }));
   }, [data]);
 

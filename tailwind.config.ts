@@ -7,6 +7,7 @@ export default {
     extend: {
       gridTemplateColumns: {
         '16': 'repeat(16, minmax(0, 1fr))',
+        '18': 'repeat(18, minmax(0, 1fr))',
       },
       borderRadius: {
         lg: ".5625rem", /* 9px */
