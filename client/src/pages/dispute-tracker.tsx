@@ -16,8 +16,25 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { FileWarning, AlertCircle, ChevronRight } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { FileWarning, AlertCircle, ChevronRight, XCircle } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface DisputeRecord {
   disputeId: string;
@@ -30,6 +47,8 @@ interface DisputeRecord {
   status: "pending" | "submitted" | "resolved" | "rejected";
   createdAt: string;
   closureStatus: "open" | "closed";
+  closureType?: "adjustment" | "manual_writeoff";
+  closureNote?: string;
   closedAt?: string;
   closedByAdjustmentAmount?: number;
 }
@@ -42,8 +61,11 @@ interface AggregatedDispute {
   totalDisputeAmount: number;
   bookingCount: number;
   disputes: DisputeRecord[];
+  actualDisputeIds: string[];
   status: "pending" | "submitted" | "resolved" | "rejected";
   closureStatus: "open" | "closed";
+  closureType?: "adjustment" | "manual_writeoff";
+  closureNote?: string;
   closedAt?: string;
   closedByAdjustmentAmount?: number;
 }
@@ -54,6 +76,10 @@ interface DisputeTrackerPageProps {
 
 export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const [selectedDispute, setSelectedDispute] = useState<AggregatedDispute | null>(null);
+  const [writeOffDispute, setWriteOffDispute] = useState<AggregatedDispute | null>(null);
+  const [writeOffNote, setWriteOffNote] = useState("");
+  const [isWritingOff, setIsWritingOff] = useState(false);
+  const { toast } = useToast();
 
   const { data, isLoading } = useQuery<{ disputes: DisputeRecord[] }>({
     queryKey: [`/api/disputes/${runId}`],
@@ -61,6 +87,36 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   });
 
   const disputes = data?.disputes || [];
+
+  const handleWriteOff = async () => {
+    if (!writeOffDispute) return;
+    
+    setIsWritingOff(true);
+    try {
+      await apiRequest("POST", "/api/disputes/manual-close", {
+        disputeIds: writeOffDispute.actualDisputeIds,
+        note: writeOffNote || undefined,
+      });
+      
+      toast({
+        title: "Dispute Written Off",
+        description: `${writeOffDispute.displayId} has been closed as a write-off.`,
+      });
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      setWriteOffDispute(null);
+      setWriteOffNote("");
+    } catch (error) {
+      console.error("Write off error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to write off dispute. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsWritingOff(false);
+    }
+  };
 
   const aggregatedDisputes = useMemo(() => {
     const groupedByBillingEntity = new Map<string, DisputeRecord[]>();
@@ -97,6 +153,9 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       const isAllClosed = closureStatuses.every((s) => s === "closed");
       const closedDispute = isAllClosed ? group.find(d => d.closedAt) : undefined;
 
+      // Collect actual dispute IDs for API calls
+      const actualIds = group.map((d: DisputeRecord) => d.disputeId);
+
       aggregated.push({
         displayId: `DID-#${counter}`,
         billingEntityId: first.billingEntityId,
@@ -105,8 +164,11 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         totalDisputeAmount: totalAmount,
         bookingCount: group.length,
         disputes: group,
+        actualDisputeIds: actualIds,
         status: aggregatedStatus,
         closureStatus: isAllClosed ? "closed" : "open",
+        closureType: closedDispute?.closureType,
+        closureNote: closedDispute?.closureNote,
         closedAt: closedDispute?.closedAt,
         closedByAdjustmentAmount: closedDispute?.closedByAdjustmentAmount,
       });
@@ -224,6 +286,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                     <TableHead className="font-semibold text-right" data-testid="header-dispute-amount">Dispute Amount</TableHead>
                     <TableHead className="font-semibold text-center" data-testid="header-bookings">Bookings</TableHead>
                     <TableHead className="font-semibold text-center" data-testid="header-status">Status</TableHead>
+                    <TableHead className="font-semibold text-center" data-testid="header-actions">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -266,6 +329,21 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                       <TableCell className="text-center" data-testid={`cell-status-${dispute.displayId}`}>
                         {getStatusBadge(dispute.status)}
                       </TableCell>
+                      <TableCell className="text-center" data-testid={`cell-actions-${dispute.displayId}`}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-orange-600 hover:text-orange-700 border-orange-200 hover:border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-950"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setWriteOffDispute(dispute);
+                          }}
+                          data-testid={`button-writeoff-${dispute.displayId}`}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Write Off
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -295,6 +373,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                     <TableHead className="font-semibold">Billing Entity Name</TableHead>
                     <TableHead className="font-semibold">Currency</TableHead>
                     <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
+                    <TableHead className="font-semibold text-center">Closure Type</TableHead>
                     <TableHead className="font-semibold text-right">Adjustment Used</TableHead>
                     <TableHead className="font-semibold text-center">Closed Date</TableHead>
                   </TableRow>
@@ -318,8 +397,21 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                       <TableCell className="text-right font-mono">
                         {formatCurrency(dispute.totalDisputeAmount, dispute.currency)}
                       </TableCell>
+                      <TableCell className="text-center">
+                        {dispute.closureType === "adjustment" ? (
+                          <Badge className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
+                            Adjusted
+                          </Badge>
+                        ) : dispute.closureType === "manual_writeoff" ? (
+                          <Badge className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
+                            Written Off
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Unknown</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right font-mono text-green-600 dark:text-green-400">
-                        {dispute.closedByAdjustmentAmount !== undefined 
+                        {dispute.closureType === "adjustment" && dispute.closedByAdjustmentAmount !== undefined 
                           ? formatCurrency(dispute.closedByAdjustmentAmount, dispute.currency)
                           : "-"
                         }
@@ -383,6 +475,22 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                 {selectedDispute.closureStatus === "closed" && (
                   <>
                     <div>
+                      <p className="text-sm text-muted-foreground">Closure Type</p>
+                      <div className="mt-1">
+                        {selectedDispute.closureType === "adjustment" ? (
+                          <Badge className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
+                            Adjusted
+                          </Badge>
+                        ) : selectedDispute.closureType === "manual_writeoff" ? (
+                          <Badge className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
+                            Written Off
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">Unknown</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div>
                       <p className="text-sm text-muted-foreground">Closed Date</p>
                       <p className="font-medium">
                         {selectedDispute.closedAt 
@@ -391,15 +499,23 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                         }
                       </p>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Adjustment Amount Used</p>
-                      <p className="font-mono font-medium text-green-600 dark:text-green-400">
-                        {selectedDispute.closedByAdjustmentAmount !== undefined
-                          ? formatCurrency(selectedDispute.closedByAdjustmentAmount, selectedDispute.currency)
-                          : "-"
-                        }
-                      </p>
-                    </div>
+                    {selectedDispute.closureType === "adjustment" && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Adjustment Amount Used</p>
+                        <p className="font-mono font-medium text-green-600 dark:text-green-400">
+                          {selectedDispute.closedByAdjustmentAmount !== undefined
+                            ? formatCurrency(selectedDispute.closedByAdjustmentAmount, selectedDispute.currency)
+                            : "-"
+                          }
+                        </p>
+                      </div>
+                    )}
+                    {selectedDispute.closureType === "manual_writeoff" && selectedDispute.closureNote && (
+                      <div className="col-span-2">
+                        <p className="text-sm text-muted-foreground">Write-Off Note</p>
+                        <p className="text-sm mt-1">{selectedDispute.closureNote}</p>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -436,6 +552,86 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Write Off Confirmation Dialog */}
+      <Dialog open={!!writeOffDispute} onOpenChange={(open) => {
+        if (!open) {
+          setWriteOffDispute(null);
+          setWriteOffNote("");
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <XCircle className="h-5 w-5" />
+              Write Off Dispute
+            </DialogTitle>
+            <DialogDescription>
+              This will close the dispute as a write-off (Headout loss). This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {writeOffDispute && (
+            <div className="space-y-4">
+              <div className="p-4 bg-muted/30 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Dispute ID</span>
+                  <span className="font-mono font-medium">{writeOffDispute.displayId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Billing Entity</span>
+                  <span className="font-medium">{writeOffDispute.billingEntityName || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Amount</span>
+                  <span className="font-mono font-medium text-orange-600 dark:text-orange-400">
+                    {formatCurrency(writeOffDispute.totalDisputeAmount, writeOffDispute.currency)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Bookings</span>
+                  <span className="font-medium">{writeOffDispute.bookingCount}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="writeoff-note">Note (optional)</Label>
+                <Textarea
+                  id="writeoff-note"
+                  placeholder="e.g., SP rejected claim - Headout to absorb loss"
+                  value={writeOffNote}
+                  onChange={(e) => setWriteOffNote(e.target.value)}
+                  className="min-h-[80px]"
+                  data-testid="input-writeoff-note"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setWriteOffDispute(null);
+                setWriteOffNote("");
+              }}
+              disabled={isWritingOff}
+              data-testid="button-cancel-writeoff"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleWriteOff}
+              disabled={isWritingOff}
+              data-testid="button-confirm-writeoff"
+            >
+              {isWritingOff ? "Writing Off..." : "Confirm Write Off"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

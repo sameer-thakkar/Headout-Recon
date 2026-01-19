@@ -2026,5 +2026,41 @@ export async function registerRoutes(
     }
   });
 
+  // Manual close (write off) disputes
+  app.post("/api/disputes/manual-close", async (req, res) => {
+    try {
+      const { disputeIds, note } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      // Validate all disputes exist and are open
+      const existingDisputes = await Promise.all(
+        disputeIds.map(async (id: string) => {
+          const dispute = await storage.getDisputeById(id);
+          return dispute;
+        })
+      );
+      
+      const validDisputes = existingDisputes.filter(d => d !== undefined && d.closureStatus === "open");
+      
+      if (validDisputes.length === 0) {
+        return res.status(400).json({ error: "No valid open disputes found" });
+      }
+      
+      // Close the disputes with manual write-off type
+      const closedDisputes = await storage.manualCloseDisputes(disputeIds, note);
+      res.json({ 
+        success: true, 
+        closedDisputes,
+        message: `${closedDisputes.length} dispute(s) written off successfully`
+      });
+    } catch (error) {
+      console.error("Manual close disputes error:", error);
+      res.status(500).json({ error: "Failed to write off disputes" });
+    }
+  });
+
   return httpServer;
 }

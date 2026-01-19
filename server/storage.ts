@@ -45,6 +45,7 @@ export interface IStorage {
   deleteDispute(disputeId: string): Promise<boolean>;
   getDisputeByBooking(runId: string, bookingId: string): Promise<DisputeRecord | undefined>;
   closeDisputes(disputeIds: string[], adjustmentAmount: number): Promise<DisputeRecord[]>;
+  manualCloseDisputes(disputeIds: string[], note?: string): Promise<DisputeRecord[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -161,8 +162,32 @@ export class MemStorage implements IStorage {
         const updated: DisputeRecord = {
           ...dispute,
           closureStatus: "closed",
+          closureType: "adjustment",
           closedAt: now,
           closedByAdjustmentAmount: adjustmentAmount,
+          updatedAt: now,
+        };
+        this.disputes.set(disputeId, updated);
+        closedDisputes.push(updated);
+      }
+    }
+    
+    return closedDisputes;
+  }
+
+  async manualCloseDisputes(disputeIds: string[], note?: string): Promise<DisputeRecord[]> {
+    const closedDisputes: DisputeRecord[] = [];
+    const now = new Date().toISOString();
+    
+    for (const disputeId of disputeIds) {
+      const dispute = this.disputes.get(disputeId);
+      if (dispute && dispute.closureStatus === "open") {
+        const updated: DisputeRecord = {
+          ...dispute,
+          closureStatus: "closed",
+          closureType: "manual_writeoff",
+          closureNote: note,
+          closedAt: now,
           updatedAt: now,
         };
         this.disputes.set(disputeId, updated);
