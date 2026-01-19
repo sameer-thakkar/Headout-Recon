@@ -78,6 +78,7 @@ interface SPRow {
   billingCurrency: string;
   fulfilmentDate?: string | null;
   beId?: string;
+  ticketId?: string;
 }
 
 /**
@@ -162,6 +163,7 @@ function parseSPData(sheet: SheetData): SPRow[] {
     const billingCurrency = getRowValue(row, "Billing Currency", "billingCurrency", "currency", "Currency");
     const fulfilmentDate = getRowValue(row, "fulfilmentDate", "Fulfilment Date", "fulfilment_date");
     const beId = getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id");
+    const ticketId = getRowValue(row, "ticketId", "Ticket ID", "ticket_id", "Ticket Id", "ticketid");
     
     return {
       bookingId: String(bookingId || ""),
@@ -169,6 +171,7 @@ function parseSPData(sheet: SheetData): SPRow[] {
       billingCurrency: String(billingCurrency || "USD"),
       fulfilmentDate: fulfilmentDate ? String(fulfilmentDate) : null,
       beId: beId ? String(beId) : undefined,
+      ticketId: ticketId ? String(ticketId) : undefined,
     };
   });
 }
@@ -349,6 +352,7 @@ interface SPBundle {
   hoCurrencyUsed: string;
   fxRateUsed: number;
   beId?: string;
+  ticketId?: string;
 }
 
 function buildSPLookup(
@@ -391,6 +395,7 @@ function buildSPLookup(
       hoCurrencyUsed: best.aug.hoCurrencyUsed!,
       fxRateUsed: best.aug.fxRateUsed!,
       beId: best.sp.beId,
+      ticketId: best.sp.ticketId,
     });
   });
   
@@ -589,6 +594,7 @@ function computeReconciliationRows(
       headoutSellingPrice: ho.headoutSellingPrice,
       beId: spBundle?.beId || ho.beId,
       billingEntityName: ho.billingEntityName,
+      ticketId: spBundle?.ticketId,
     });
   });
   
@@ -750,6 +756,7 @@ export async function runReconciliation(
       differenceUsd,
       reason: "Unmapped",
       beId: sp.beId,
+      ticketId: sp.ticketId,
     };
   });
   
