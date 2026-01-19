@@ -253,7 +253,6 @@ export function AmountPayableModal({
 
   const getSelection = useCallback((bookingId: string, reason: string): "ho" | "sp" => {
     if (reason === "Reconciled") return "sp";
-    if (reason === "Unmapped") return "sp"; // Unmapped bookings only have SP Net
     return localSelections[bookingId] || "sp";
   }, [localSelections]);
 
@@ -357,7 +356,7 @@ export function AmountPayableModal({
   }, [bookingsByReasonAndTid]);
 
   const activateDispute = useCallback((bookingId: string, booking: BookingForPayable) => {
-    const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+    const maxDispute = Math.abs(booking.hoNet - booking.spNet);
     setActiveDisputes(prev => {
       const next = new Set(prev);
       next.add(bookingId);
@@ -396,7 +395,7 @@ export function AmountPayableModal({
   }, []);
 
   const getMaxDisputeAmount = useCallback((booking: BookingForPayable): number => {
-    return booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+    return Math.abs(booking.hoNet - booking.spNet);
   }, []);
 
   const getDisputeAmount = useCallback((bookingId: string): number => {
@@ -426,7 +425,7 @@ export function AmountPayableModal({
   const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
     const reasonBookings = bookingsByReason[reason] || [];
     const disputableBookings = reasonBookings.filter(b => 
-      b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp"
+      getSelection(b.bookingId, b.reason) === "sp"
     );
     setDisputeAmounts(prev => {
       const next = new Map(prev);
@@ -456,7 +455,7 @@ export function AmountPayableModal({
   const updateTidDispute = useCallback((reason: string, tid: string, action: "all" | "clear") => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
     const disputableBookings = tidBookings.filter(b => 
-      b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp"
+      getSelection(b.bookingId, b.reason) === "sp"
     );
     setDisputeAmounts(prev => {
       const next = new Map(prev);
@@ -486,7 +485,7 @@ export function AmountPayableModal({
   const getTidDisputeCount = useCallback((reason: string, tid: string): { disputed: number; disputable: number; total: number; totalDisputeAmt: number } => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
     const disputableBookings = tidBookings.filter(b => 
-      b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp"
+      getSelection(b.bookingId, b.reason) === "sp"
     );
     const disputed = disputableBookings.filter(b => getDisputeAmount(b.bookingId) > 0).length;
     const totalDisputeAmt = disputableBookings.reduce((s, b) => s + getDisputeAmount(b.bookingId), 0);
@@ -608,7 +607,7 @@ export function AmountPayableModal({
         const booking = bookingMap.get(bookingId);
         const disputeAmount = disputeAmounts.get(bookingId) || 0;
         if (booking && disputeAmount > 0) {
-          const maxDispute = booking.reason === "Unmapped" ? booking.spNet : Math.abs(booking.hoNet - booking.spNet);
+          const maxDispute = Math.abs(booking.hoNet - booking.spNet);
           await apiRequest("POST", "/api/disputes", {
             runId,
             bookingId,
@@ -729,22 +728,18 @@ export function AmountPayableModal({
                               </Badge>
                             </div>
                             <div className="col-span-2 flex justify-center">
-                              {reason === "Unmapped" ? (
-                                <span className="text-xs text-muted-foreground">SP Net only</span>
-                              ) : (
-                                <Select
-                                  value=""
-                                  onValueChange={(v) => updateReasonSelection(reason, v as "ho" | "sp")}
-                                >
-                                  <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-reason-${reason}`}>
-                                    <SelectValue placeholder="Bulk Net" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="ho">All HO Net</SelectItem>
-                                    <SelectItem value="sp">All SP Net</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              )}
+                              <Select
+                                value=""
+                                onValueChange={(v) => updateReasonSelection(reason, v as "ho" | "sp")}
+                              >
+                                <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-reason-${reason}`}>
+                                  <SelectValue placeholder="Bulk Net" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="ho">All HO Net</SelectItem>
+                                  <SelectItem value="sp">All SP Net</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
                             <div className="col-span-2 flex justify-center gap-1">
                               <Button
@@ -816,22 +811,18 @@ export function AmountPayableModal({
                                         {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
                                       </div>
                                       <div className="col-span-2 flex justify-center">
-                                        {reason === "Unmapped" ? (
-                                          <span className="text-xs text-muted-foreground">SP Net only</span>
-                                        ) : (
-                                          <Select
-                                            value=""
-                                            onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
-                                          >
-                                            <SelectTrigger className="w-20 h-6 text-xs" data-testid={`select-tid-${reason}-${tid}`}>
-                                              <SelectValue placeholder="Bulk" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="ho">All HO Net</SelectItem>
-                                              <SelectItem value="sp">All SP Net</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                        )}
+                                        <Select
+                                          value=""
+                                          onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
+                                        >
+                                          <SelectTrigger className="w-20 h-6 text-xs" data-testid={`select-tid-${reason}-${tid}`}>
+                                            <SelectValue placeholder="Bulk" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="ho">All HO Net</SelectItem>
+                                            <SelectItem value="sp">All SP Net</SelectItem>
+                                          </SelectContent>
+                                        </Select>
                                       </div>
                                       <div className="col-span-1 flex justify-center items-center">
                                         {(() => {
@@ -882,7 +873,7 @@ export function AmountPayableModal({
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
-                                          const canDispute = b.reason === "Unmapped" || getSelection(b.bookingId, b.reason) === "sp";
+                                          const canDispute = getSelection(b.bookingId, b.reason) === "sp";
                                           const pricePayable = getFinalNetPrice(b);
                                           const disputeAmt = canDispute ? getDisputeAmount(b.bookingId) : 0;
                                           return s + (pricePayable - disputeAmt);
@@ -893,7 +884,7 @@ export function AmountPayableModal({
                                     <CollapsibleContent>
                                       {tidBookings.map((booking) => {
                                         const selection = getSelection(booking.bookingId, booking.reason);
-                                        const canDispute = booking.reason === "Unmapped" || selection === "sp";
+                                        const canDispute = selection === "sp";
                                         const pricePayable = getFinalNetPrice(booking);
                                         const maxDispute = getMaxDisputeAmount(booking);
                                         const currentDispute = canDispute ? getDisputeAmount(booking.bookingId) : 0;
@@ -909,32 +900,24 @@ export function AmountPayableModal({
                                               {booking.bookingId}
                                             </div>
                                             <div className="col-span-2 text-right font-mono">
-                                              {booking.reason === "Unmapped" ? (
-                                                <span className="text-muted-foreground">N/A</span>
-                                              ) : (
-                                                formatCurrency(booking.hoNet)
-                                              )}
+                                              {formatCurrency(booking.hoNet)}
                                             </div>
                                             <div className="col-span-2 text-right font-mono">
                                               {formatCurrency(booking.spNet)}
                                             </div>
                                             <div className="col-span-2 flex justify-center">
-                                              {booking.reason === "Unmapped" ? (
-                                                <span className="text-muted-foreground text-xs">SP only</span>
-                                              ) : (
-                                                <Select
-                                                  value={selection}
-                                                  onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
-                                                >
-                                                  <SelectTrigger className="w-16 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
-                                                    <SelectValue />
-                                                  </SelectTrigger>
-                                                  <SelectContent>
-                                                    <SelectItem value="ho">HO</SelectItem>
-                                                    <SelectItem value="sp">SP</SelectItem>
-                                                  </SelectContent>
-                                                </Select>
-                                              )}
+                                              <Select
+                                                value={selection}
+                                                onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
+                                              >
+                                                <SelectTrigger className="w-16 h-5 text-xs" data-testid={`select-booking-${booking.bookingId}`}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  <SelectItem value="ho">HO</SelectItem>
+                                                  <SelectItem value="sp">SP</SelectItem>
+                                                </SelectContent>
+                                              </Select>
                                             </div>
                                             <div className="col-span-1 flex justify-center">
                                               {canDispute ? (
