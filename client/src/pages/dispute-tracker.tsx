@@ -29,6 +29,9 @@ interface DisputeRecord {
   maxDisputeAmount: number;
   status: "pending" | "submitted" | "resolved" | "rejected";
   createdAt: string;
+  closureStatus: "open" | "closed";
+  closedAt?: string;
+  closedByAdjustmentAmount?: number;
 }
 
 interface AggregatedDispute {
@@ -40,6 +43,9 @@ interface AggregatedDispute {
   bookingCount: number;
   disputes: DisputeRecord[];
   status: "pending" | "submitted" | "resolved" | "rejected";
+  closureStatus: "open" | "closed";
+  closedAt?: string;
+  closedByAdjustmentAmount?: number;
 }
 
 interface DisputeTrackerPageProps {
@@ -86,6 +92,11 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         aggregatedStatus = "submitted";
       }
 
+      // Determine closure status - closed if ALL disputes in group are closed
+      const closureStatuses = group.map((d: DisputeRecord) => d.closureStatus || "open");
+      const isAllClosed = closureStatuses.every((s) => s === "closed");
+      const closedDispute = isAllClosed ? group.find(d => d.closedAt) : undefined;
+
       aggregated.push({
         displayId: `DID-#${counter}`,
         billingEntityId: first.billingEntityId,
@@ -95,6 +106,9 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         bookingCount: group.length,
         disputes: group,
         status: aggregatedStatus,
+        closureStatus: isAllClosed ? "closed" : "open",
+        closedAt: closedDispute?.closedAt,
+        closedByAdjustmentAmount: closedDispute?.closedByAdjustmentAmount,
       });
       counter++;
     }
@@ -134,6 +148,17 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
     }
   };
 
+  const getClosureBadge = (closureStatus: "open" | "closed") => {
+    if (closureStatus === "closed") {
+      return <Badge className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" data-testid="badge-closure-closed">Closed</Badge>;
+    }
+    return <Badge variant="outline" data-testid="badge-closure-open">Open</Badge>;
+  };
+
+  // Separate open and closed disputes for display
+  const openDisputes = aggregatedDisputes.filter(d => d.closureStatus === "open");
+  const closedDisputes = aggregatedDisputes.filter(d => d.closureStatus === "closed");
+
   if (!runId) {
     return (
       <div className="p-6">
@@ -170,20 +195,21 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         <h1 className="text-2xl font-semibold" data-testid="text-dispute-tracker-title">Dispute Tracker</h1>
       </div>
 
+      {/* Open Disputes */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-medium flex items-center gap-2">
-            Active Disputes
-            <Badge variant="secondary" className="ml-2" data-testid="badge-dispute-count">
-              {aggregatedDisputes.length} {aggregatedDisputes.length === 1 ? 'dispute' : 'disputes'}
+            Open Disputes
+            <Badge variant="secondary" className="ml-2" data-testid="badge-open-dispute-count">
+              {openDisputes.length} {openDisputes.length === 1 ? 'dispute' : 'disputes'}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {aggregatedDisputes.length === 0 ? (
+          {openDisputes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileWarning className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p>No disputes recorded yet.</p>
+              <p>No open disputes.</p>
               <p className="text-sm mt-1">Disputes created in the Amount Payable Calculator will appear here.</p>
             </div>
           ) : (
@@ -201,7 +227,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {aggregatedDisputes.map((dispute) => (
+                  {openDisputes.map((dispute) => (
                     <TableRow 
                       key={dispute.displayId} 
                       data-testid={`row-dispute-${dispute.displayId}`}
@@ -249,6 +275,70 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         </CardContent>
       </Card>
 
+      {/* Closed Disputes */}
+      {closedDisputes.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-medium flex items-center gap-2">
+              Closed Disputes
+              <Badge className="ml-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20" data-testid="badge-closed-dispute-count">
+                {closedDisputes.length} {closedDisputes.length === 1 ? 'dispute' : 'disputes'}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">Dispute ID</TableHead>
+                    <TableHead className="font-semibold">Billing Entity Name</TableHead>
+                    <TableHead className="font-semibold">Currency</TableHead>
+                    <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
+                    <TableHead className="font-semibold text-right">Adjustment Used</TableHead>
+                    <TableHead className="font-semibold text-center">Closed Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {closedDisputes.map((dispute) => (
+                    <TableRow 
+                      key={dispute.displayId} 
+                      data-testid={`row-closed-dispute-${dispute.displayId}`}
+                      className="opacity-70 hover-elevate cursor-pointer"
+                      onClick={() => setSelectedDispute(dispute)}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">{dispute.displayId}</span>
+                          {getClosureBadge(dispute.closureStatus)}
+                        </div>
+                      </TableCell>
+                      <TableCell>{dispute.billingEntityName || "-"}</TableCell>
+                      <TableCell className="font-mono">{dispute.currency}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatCurrency(dispute.totalDisputeAmount, dispute.currency)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-green-600 dark:text-green-400">
+                        {dispute.closedByAdjustmentAmount !== undefined 
+                          ? formatCurrency(dispute.closedByAdjustmentAmount, dispute.currency)
+                          : "-"
+                        }
+                      </TableCell>
+                      <TableCell className="text-center text-sm text-muted-foreground">
+                        {dispute.closedAt 
+                          ? new Date(dispute.closedAt).toLocaleDateString()
+                          : "-"
+                        }
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Dialog open={!!selectedDispute} onOpenChange={(open) => !open && setSelectedDispute(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -285,8 +375,33 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
-                  <div>{getStatusBadge(selectedDispute.status)}</div>
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(selectedDispute.status)}
+                    {getClosureBadge(selectedDispute.closureStatus)}
+                  </div>
                 </div>
+                {selectedDispute.closureStatus === "closed" && (
+                  <>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Closed Date</p>
+                      <p className="font-medium">
+                        {selectedDispute.closedAt 
+                          ? new Date(selectedDispute.closedAt).toLocaleDateString()
+                          : "-"
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Adjustment Amount Used</p>
+                      <p className="font-mono font-medium text-green-600 dark:text-green-400">
+                        {selectedDispute.closedByAdjustmentAmount !== undefined
+                          ? formatCurrency(selectedDispute.closedByAdjustmentAmount, selectedDispute.currency)
+                          : "-"
+                        }
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div>

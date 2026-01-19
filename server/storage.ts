@@ -39,9 +39,12 @@ export interface IStorage {
   // Disputes
   createDispute(dispute: Omit<DisputeRecord, "disputeId" | "createdAt">): Promise<DisputeRecord>;
   getDisputes(runId: string): Promise<DisputeRecord[]>;
+  getOpenDisputes(runId: string): Promise<DisputeRecord[]>;
+  getDisputeById(disputeId: string): Promise<DisputeRecord | undefined>;
   updateDispute(disputeId: string, updates: Partial<DisputeRecord>): Promise<DisputeRecord | undefined>;
   deleteDispute(disputeId: string): Promise<boolean>;
   getDisputeByBooking(runId: string, bookingId: string): Promise<DisputeRecord | undefined>;
+  closeDisputes(disputeIds: string[], adjustmentAmount: number): Promise<DisputeRecord[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -142,9 +145,42 @@ export class MemStorage implements IStorage {
       ...dispute,
       disputeId,
       createdAt: new Date().toISOString(),
+      closureStatus: dispute.closureStatus || "open", // Default to open
     };
     this.disputes.set(disputeId, newDispute);
     return newDispute;
+  }
+
+  async closeDisputes(disputeIds: string[], adjustmentAmount: number): Promise<DisputeRecord[]> {
+    const closedDisputes: DisputeRecord[] = [];
+    const now = new Date().toISOString();
+    
+    for (const disputeId of disputeIds) {
+      const dispute = this.disputes.get(disputeId);
+      if (dispute && dispute.closureStatus === "open") {
+        const updated: DisputeRecord = {
+          ...dispute,
+          closureStatus: "closed",
+          closedAt: now,
+          closedByAdjustmentAmount: adjustmentAmount,
+          updatedAt: now,
+        };
+        this.disputes.set(disputeId, updated);
+        closedDisputes.push(updated);
+      }
+    }
+    
+    return closedDisputes;
+  }
+
+  async getOpenDisputes(runId: string): Promise<DisputeRecord[]> {
+    return Array.from(this.disputes.values())
+      .filter(d => d.runId === runId && d.closureStatus === "open")
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async getDisputeById(disputeId: string): Promise<DisputeRecord | undefined> {
+    return this.disputes.get(disputeId);
   }
 
   async getDisputes(runId: string): Promise<DisputeRecord[]> {

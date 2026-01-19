@@ -118,6 +118,7 @@ export function AmountPayableModal({
     billingEntityName: string;
     totalDisputeAmount: number; 
     bookingCount: number;
+    actualDisputeIds: string[]; // Actual backend disputeId values for closure
   }>>([]);
   // Validation error for manually added adjustment rows
   const [validationError, setValidationError] = useState<string>("");
@@ -159,13 +160,18 @@ export function AmountPayableModal({
             setOriginalDisputes(new Map(newDisputeAmounts));
             
             // Aggregate disputes by billing entity (same logic as Dispute Tracker)
-            const groupedByBillingEntity = new Map<string, Array<{ billingEntityId: string; billingEntityName: string; disputeAmount: number }>>();
-            for (const dispute of disputes) {
+            // Filter to only include open disputes for the adjustment dropdown
+            const openDisputesList = disputes.filter((d: { closureStatus?: string }) => 
+              !d.closureStatus || d.closureStatus === "open"
+            );
+            const groupedByBillingEntity = new Map<string, Array<{ disputeId: string; billingEntityId: string; billingEntityName: string; disputeAmount: number }>>();
+            for (const dispute of openDisputesList) {
               const key = `${dispute.billingEntityId}-${dispute.currency}`;
               if (!groupedByBillingEntity.has(key)) {
                 groupedByBillingEntity.set(key, []);
               }
               groupedByBillingEntity.get(key)!.push({
+                disputeId: dispute.disputeId, // Store actual backend ID
                 billingEntityId: dispute.billingEntityId,
                 billingEntityName: dispute.billingEntityName,
                 disputeAmount: dispute.disputeAmount,
@@ -173,7 +179,7 @@ export function AmountPayableModal({
             }
             
             // Create aggregated display (matching Dispute Tracker numbering)
-            const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number }> = [];
+            const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number; actualDisputeIds: string[] }> = [];
             let counter = 1;
             for (const group of Array.from(groupedByBillingEntity.values())) {
               if (group.length === 0) continue;
@@ -181,12 +187,15 @@ export function AmountPayableModal({
               const totalAmount = group.reduce((sum, d) => sum + d.disputeAmount, 0);
               // Round to exactly 2 decimal places
               const roundedTotal = Math.round(totalAmount * 100) / 100;
+              // Collect all actual disputeIds in this group
+              const actualIds = group.map(d => d.disputeId);
               aggregatedDisputes.push({
                 displayId: `DID-#${counter}`,
                 billingEntityId: first.billingEntityId,
                 billingEntityName: first.billingEntityName,
                 totalDisputeAmount: roundedTotal,
                 bookingCount: group.length,
+                actualDisputeIds: actualIds,
               });
               counter++;
             }
@@ -648,11 +657,56 @@ export function AmountPayableModal({
       
       // Invalidate the disputes query cache so Dispute Tracker gets fresh data
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      
+      // Close disputes that were used in post-recon adjustments
+      // A dispute can be closed if:
+      // 1. The DID# was used in an "Open Dispute Adjustments" row
+      // 2. The adjustment amount matches the total dispute amount for those DIDs
+      const disputeAdjustments = localAdjustments.filter(
+        a => a.nature === "Open Dispute Adjustments" && 
+             a.selectedDisputeIds && 
+             a.selectedDisputeIds.length > 0
+      );
+      
+      for (const adj of disputeAdjustments) {
+        if (adj.selectedDisputeIds && adj.amount > 0) {
+          // Get selected aggregated disputes
+          const selectedAggregated = openDisputes.filter(
+            d => adj.selectedDisputeIds!.includes(d.displayId)
+          );
+          
+          // Calculate total dispute amount from selected DIDs
+          const selectedTotal = selectedAggregated.reduce((sum, d) => sum + d.totalDisputeAmount, 0);
+          
+          // Collect all actual dispute IDs from selected aggregated groups
+          const actualDisputeIds = selectedAggregated.flatMap(d => d.actualDisputeIds);
+          
+          // Round for comparison
+          const roundedAdjAmount = Math.round(adj.amount * 100) / 100;
+          const roundedSelectedTotal = Math.round(selectedTotal * 100) / 100;
+          
+          // Only close if amounts match exactly
+          if (roundedAdjAmount === roundedSelectedTotal && actualDisputeIds.length > 0) {
+            try {
+              await apiRequest("POST", "/api/disputes/close", {
+                disputeIds: actualDisputeIds, // Send actual backend IDs
+                adjustmentAmount: adj.amount,
+              });
+              console.log(`Closed disputes: ${actualDisputeIds.join(", ")}`);
+            } catch (err) {
+              console.error("Failed to close disputes:", err);
+            }
+          }
+        }
+      }
+      
+      // Re-invalidate to pick up closed disputes
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
     }
     
     onApply(localAdjustments, localSelections, finalAmount);
     onOpenChange(false);
-  }, [localAdjustments, localSelections, finalAmount, onApply, onOpenChange, runId, disputeAmounts, originalDisputes, bookings, currency]);
+  }, [localAdjustments, localSelections, finalAmount, onApply, onOpenChange, runId, disputeAmounts, originalDisputes, bookings, currency, openDisputes]);
 
   // Indian numbering format: 1,00,000.00
   const formatCurrency = (value: number) => {

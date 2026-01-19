@@ -237,6 +237,10 @@ export type SummaryRow = z.infer<typeof summaryRowSchema>;
 export const disputeStatusSchema = z.enum(["pending", "submitted", "resolved", "rejected"]);
 export type DisputeStatus = z.infer<typeof disputeStatusSchema>;
 
+// Dispute closure status - separate from dispute status
+export const disputeClosureStatusSchema = z.enum(["open", "closed"]);
+export type DisputeClosureStatus = z.infer<typeof disputeClosureStatusSchema>;
+
 export const disputeRecordSchema = z.object({
   disputeId: z.string(),
   runId: z.string(),
@@ -249,6 +253,10 @@ export const disputeRecordSchema = z.object({
   status: disputeStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string().optional(),
+  // Closure fields
+  closureStatus: disputeClosureStatusSchema.default("open"),
+  closedAt: z.string().optional(),
+  closedByAdjustmentAmount: z.number().optional(),
 });
 export type DisputeRecord = z.infer<typeof disputeRecordSchema>;
 

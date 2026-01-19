@@ -1906,6 +1906,7 @@ export async function registerRoutes(
         disputeAmount: disputeAmount || 0,
         maxDisputeAmount: maxDisputeAmount || 0,
         status: "pending",
+        closureStatus: "open",
       });
       res.json({ dispute });
     } catch (error) {
@@ -1956,6 +1957,72 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Delete dispute by booking error:", error);
       res.status(500).json({ error: "Failed to delete dispute" });
+    }
+  });
+
+  // Get only open disputes for a run (for Amount Payable Calculator dropdown)
+  app.get("/api/disputes/:runId/open", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const disputes = await storage.getOpenDisputes(runId);
+      res.json({ disputes });
+    } catch (error) {
+      console.error("Get open disputes error:", error);
+      res.status(500).json({ error: "Failed to fetch open disputes" });
+    }
+  });
+
+  // Close disputes when used in post-recon adjustments
+  app.post("/api/disputes/close", async (req, res) => {
+    try {
+      const { disputeIds, adjustmentAmount } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      if (typeof adjustmentAmount !== "number" || adjustmentAmount <= 0) {
+        return res.status(400).json({ error: "Valid adjustmentAmount is required" });
+      }
+      
+      // Get all disputes to validate amounts match
+      // Fetch from all runs to find the disputes by their IDs
+      const allDisputes = await Promise.all(
+        disputeIds.map(async (id: string) => {
+          // Disputes are stored with their disputeId as key, search across all runs
+          // Get dispute directly by looking through storage
+          const dispute = await storage.getDisputeById(id);
+          return dispute;
+        })
+      );
+      
+      // Calculate total dispute amount from selected DIDs
+      const validDisputes = allDisputes.filter(d => d !== undefined);
+      const totalDisputeAmount = validDisputes.reduce((sum, d) => sum + (d?.disputeAmount || 0), 0);
+      
+      // Round for comparison (avoid floating point issues)
+      const roundedAdjustment = Math.round(adjustmentAmount * 100) / 100;
+      const roundedTotal = Math.round(totalDisputeAmount * 100) / 100;
+      
+      // Check if amounts match (required for closure)
+      if (roundedAdjustment !== roundedTotal) {
+        return res.status(400).json({ 
+          error: "Adjustment amount must match total dispute amount for closure",
+          adjustmentAmount: roundedAdjustment,
+          totalDisputeAmount: roundedTotal
+        });
+      }
+      
+      // Close the disputes
+      const closedDisputes = await storage.closeDisputes(disputeIds, adjustmentAmount);
+      res.json({ 
+        success: true, 
+        closedDisputes,
+        message: `${closedDisputes.length} dispute(s) closed successfully`
+      });
+    } catch (error) {
+      console.error("Close disputes error:", error);
+      res.status(500).json({ error: "Failed to close disputes" });
     }
   });
 
