@@ -735,7 +735,9 @@ export async function runReconciliation(
     const spNetOriginal = sp.netPrice;
     // For unmapped, use SP currency as HO currency equivalent (no conversion)
     const usdRate = usdToCcy[spCurrency] || 1;
-    const differenceUsd = spNetOriginal / usdRate; // SP Net in USD (since HO Net is 0)
+    // Difference = HO Net - SP Net = 0 - spNetOriginal (negative when SP claims more)
+    const differenceLc = -spNetOriginal;
+    const differenceUsd = differenceLc / usdRate;
     
     return {
       bookingId: sp.bookingId,
@@ -751,7 +753,7 @@ export async function runReconciliation(
       spNetInHo: spNetOriginal, // Same as original since no conversion
       fxRateUsed: 1,
       sameCurrency: true,
-      differenceLc: spNetOriginal, // Full SP Net is discrepancy
+      differenceLc, // 0 - SP Net (negative = HO owes SP)
       differencePct: null,
       differenceUsd,
       reason: "Unmapped",
