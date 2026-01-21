@@ -1,12 +1,11 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, RefreshCw, Calendar, Download, Upload, FileSpreadsheet, X, Calculator, ChevronDown, ExternalLink } from "lucide-react";
+import { LayoutDashboard, RefreshCw, Calendar, Download, FileSpreadsheet, Calculator, ChevronDown, ExternalLink, File } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { DataTable, Column } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { AmountPayablePanel } from "@/components/amount-payable-panel";
 import { Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
@@ -19,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import type { RunResult, OverallSummaryRow, PrimaryRow, UploadedFile } from "@shared/schema";
+import type { RunResult, UploadedFile } from "@shared/schema";
 
 interface ResultsPageProps {
   runId: string | null;
@@ -28,115 +27,6 @@ interface ResultsPageProps {
   onLoadDemo: () => void;
   onExportGSheet: () => Promise<{ spreadsheetUrl?: string }>;
 }
-
-const summaryColumns: Column<OverallSummaryRow>[] = [
-  { key: "reason", header: "Reason", sortable: true },
-  { key: "currency", header: "Currency", sortable: true },
-  {
-    key: "discrepancyLc",
-    header: "Discrepancy LC",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-    render: (value) => {
-      const num = value as number;
-      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    },
-  },
-  {
-    key: "discrepancyUsd",
-    header: "Discrepancy USD",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-    render: (value) => {
-      const num = value as number;
-      return `$${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    },
-  },
-  {
-    key: "countBid",
-    header: "Count of BID",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-  },
-];
-
-const bookingColumns: Column<PrimaryRow>[] = [
-  { key: "bookingId", header: "Booking ID", sortable: true },
-  { key: "fulfillmentIdentifier", header: "Type", sortable: true },
-  { 
-    key: "bookingCreationDate", 
-    header: "Creation Date", 
-    sortable: true,
-    render: (value) => {
-      if (!value) return <span className="text-muted-foreground">N/A</span>;
-      return String(value);
-    },
-  },
-  { key: "hoCurrency", header: "Currency", sortable: true },
-  {
-    key: "hoNet",
-    header: "HO Net",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-    render: (value) => {
-      const num = value as number;
-      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    },
-  },
-  {
-    key: "spNetOriginal",
-    header: "SP Net Original",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-    render: (value) => {
-      const num = value as number;
-      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    },
-  },
-  {
-    key: "spNetInHo",
-    header: "SP Net (HO Ccy)",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-    render: (value) => {
-      const num = value as number;
-      return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    },
-  },
-  {
-    key: "differenceLc",
-    header: "Difference LC",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-    render: (value) => {
-      const num = value as number;
-      const formatted = num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const color = num > 0 ? "text-red-600 dark:text-red-400" : num < 0 ? "text-green-600 dark:text-green-400" : "";
-      return <span className={color}>{formatted}</span>;
-    },
-  },
-  {
-    key: "differenceUsd",
-    header: "Difference USD",
-    sortable: true,
-    align: "right",
-    className: "font-mono",
-    render: (value) => {
-      const num = value as number;
-      const formatted = `$${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      const color = num > 0 ? "text-red-600 dark:text-red-400" : num < 0 ? "text-green-600 dark:text-green-400" : "";
-      return <span className={color}>{formatted}</span>;
-    },
-  },
-  { key: "reason", header: "Reason", sortable: true },
-];
 
 function LoadingSkeleton() {
   return (
@@ -161,88 +51,86 @@ function LoadingSkeleton() {
   );
 }
 
-function FileUploadSection({ 
-  uploadedFiles, 
-  onFilesUploaded, 
-  onLoadDemo,
-  isUploading,
-  setIsUploading 
-}: { 
-  uploadedFiles: UploadedFile[];
-  onFilesUploaded: (files: File[]) => Promise<UploadedFile[]>;
-  onLoadDemo: () => void;
-  isUploading: boolean;
-  setIsUploading: (v: boolean) => void;
-}) {
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const droppedFiles = Array.from(e.dataTransfer.files).filter(
-      f => f.name.endsWith('.xlsx') || f.name.endsWith('.csv')
-    );
-    
-    if (droppedFiles.length > 0) {
-      setIsUploading(true);
-      try {
-        await onFilesUploaded(droppedFiles);
-      } finally {
-        setIsUploading(false);
-      }
-    }
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    if (selectedFiles.length > 0) {
-      setIsUploading(true);
-      try {
-        await onFilesUploaded(selectedFiles);
-      } finally {
-        setIsUploading(false);
-      }
-    }
-  };
+function UploadedFilesSection({ uploadedFiles }: { uploadedFiles: UploadedFile[] }) {
+  if (uploadedFiles.length === 0) {
+    return null;
+  }
 
   return (
-    <Card className="mb-4">
-      <CardContent className="p-4">
-        <div className="flex items-center gap-4">
-          <div 
-            className={`flex-1 border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-              isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
-            }`}
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            data-testid="dropzone-upload"
-          >
-            <div className="flex items-center justify-center gap-3">
-              <Upload className="h-5 w-5 text-muted-foreground" />
-              <div className="text-sm">
-                <label className="text-primary cursor-pointer hover:underline" data-testid="label-browse-files">
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept=".xlsx,.csv"
-                    multiple
-                    onChange={handleFileSelect}
-                    disabled={isUploading}
-                    data-testid="input-file-upload"
-                  />
-                  Browse files
-                </label>
-                <span className="text-muted-foreground"> or drag & drop</span>
-              </div>
-              {uploadedFiles.length > 0 && (
-                <Badge variant="secondary" className="ml-2" data-testid="badge-files-uploaded">
-                  <FileSpreadsheet className="h-3 w-3 mr-1" />
-                  {uploadedFiles.length} file{uploadedFiles.length > 1 ? 's' : ''} uploaded
-                </Badge>
-              )}
-            </div>
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileSpreadsheet className="h-4 w-4" />
+          Uploaded Files
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          {uploadedFiles.map((file, index) => (
+            <Badge 
+              key={index} 
+              variant="secondary" 
+              className="flex items-center gap-1.5 py-1.5 px-3"
+              data-testid={`badge-uploaded-file-${index}`}
+            >
+              <File className="h-3 w-3" />
+              <span className="font-medium">{file.name}</span>
+              <span className="text-muted-foreground text-xs">
+                ({(file.size / 1024).toFixed(1)} KB)
+              </span>
+            </Badge>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SPDetailsSection({ 
+  beId, 
+  billingEntityName, 
+  ticketId, 
+  paymentBasis 
+}: { 
+  beId: string; 
+  billingEntityName: string; 
+  ticketId: string; 
+  paymentBasis: string;
+}) {
+  if (!beId && !billingEntityName && !ticketId && !paymentBasis) {
+    return null;
+  }
+
+  return (
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">SP Details</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Billing Entity ID</p>
+            <p className="font-mono font-semibold" data-testid="text-sp-be-id">
+              {beId || "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Billing Entity Name</p>
+            <p className="font-semibold" data-testid="text-sp-be-name">
+              {billingEntityName || "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Ticket ID</p>
+            <p className="font-mono font-semibold" data-testid="text-sp-ticket-id">
+              {ticketId || "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Payment Basis</p>
+            <p className="font-semibold" data-testid="text-sp-payment-basis">
+              {paymentBasis || "—"}
+            </p>
           </div>
         </div>
       </CardContent>
@@ -254,7 +142,6 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [finalNetSelections, setFinalNetSelections] = useState<FinalNetSelection>({});
   const [showCalculator, setShowCalculator] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
   const { toast } = useToast();
@@ -279,6 +166,19 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
       ticketId: row.ticketId,
       paymentBasis: row.paymentBasis,
     }));
+  }, [data]);
+
+  const spDetails = useMemo(() => {
+    if (!data || data.primaryRows.length === 0) {
+      return { beId: "", billingEntityName: "", ticketId: "", paymentBasis: "" };
+    }
+    const firstRow = data.primaryRows[0];
+    return {
+      beId: firstRow.beId || "",
+      billingEntityName: firstRow.billingEntityName || "",
+      ticketId: firstRow.ticketId || "",
+      paymentBasis: firstRow.paymentBasis || "",
+    };
   }, [data]);
 
   const finalAmountPayable = useMemo(() => {
@@ -337,18 +237,11 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
     }
   };
 
-  // Empty state - no run yet
   if (!runId) {
     return (
       <div className="h-full flex flex-col">
         <div className="p-6">
-          <FileUploadSection 
-            uploadedFiles={uploadedFiles}
-            onFilesUploaded={onFilesUploaded}
-            onLoadDemo={onLoadDemo}
-            isUploading={isUploading}
-            setIsUploading={setIsUploading}
-          />
+          <UploadedFilesSection uploadedFiles={uploadedFiles} />
         </div>
         <div className="flex-1 flex items-center justify-center">
           <EmptyState
@@ -381,13 +274,7 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
     return (
       <div className="h-full flex flex-col">
         <div className="p-6">
-          <FileUploadSection 
-            uploadedFiles={uploadedFiles}
-            onFilesUploaded={onFilesUploaded}
-            onLoadDemo={onLoadDemo}
-            isUploading={isUploading}
-            setIsUploading={setIsUploading}
-          />
+          <UploadedFilesSection uploadedFiles={uploadedFiles} />
         </div>
         <div className="flex-1 flex items-center justify-center">
           <EmptyState
@@ -400,7 +287,6 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
     );
   }
 
-  const totalDiscrepancyUsd = data.overallSummary.reduce((sum, row) => sum + row.discrepancyUsd, 0);
   const totalBookings = data.overallSummary.reduce((sum, row) => sum + row.countBid, 0);
   const reconciledCount = data.overallSummary.find(r => r.reason === "Reconciled")?.countBid || 0;
   const discrepancyCount = totalBookings - reconciledCount;
@@ -408,20 +294,18 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
   return (
     <div className="h-full">
       <PanelGroup direction="horizontal" className="h-full">
-        {/* Left Panel - Summary & Data */}
         <Panel defaultSize={showCalculator ? 50 : 100} minSize={35}>
           <ScrollArea className="h-full">
             <div className="p-6 space-y-6">
-              {/* File Upload Section */}
-              <FileUploadSection 
-                uploadedFiles={uploadedFiles}
-                onFilesUploaded={onFilesUploaded}
-                onLoadDemo={onLoadDemo}
-                isUploading={isUploading}
-                setIsUploading={setIsUploading}
+              <UploadedFilesSection uploadedFiles={uploadedFiles} />
+              
+              <SPDetailsSection 
+                beId={spDetails.beId}
+                billingEntityName={spDetails.billingEntityName}
+                ticketId={spDetails.ticketId}
+                paymentBasis={spDetails.paymentBasis}
               />
 
-              {/* Header with actions */}
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h1 className="text-2xl font-bold mb-1">Reconciliation Results</h1>
@@ -475,7 +359,6 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
                 </div>
               </div>
 
-              {/* Stats Cards */}
               <div className="grid grid-cols-4 gap-4">
                 <Card>
                   <CardContent className="p-4">
@@ -517,50 +400,14 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
                   </CardContent>
                 </Card>
               </div>
-
-              {/* Summary Table */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Overall Reconciliation Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    columns={summaryColumns}
-                    data={data.overallSummary}
-                    defaultSortKey="discrepancyUsd"
-                    defaultSortDir="asc"
-                    testIdPrefix="table-summary"
-                    emptyMessage="No summary data available"
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Booking Details Table */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Booking-Level Details</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <DataTable
-                    columns={bookingColumns}
-                    data={data.allRows}
-                    defaultSortKey="bookingId"
-                    defaultSortDir="asc"
-                    testIdPrefix="table-bookings"
-                    emptyMessage="No booking data available"
-                  />
-                </CardContent>
-              </Card>
             </div>
           </ScrollArea>
         </Panel>
 
-        {/* Resize Handle */}
         {showCalculator && (
           <>
             <PanelResizeHandle className="w-1.5 bg-border hover:bg-primary/50 transition-colors" />
             
-            {/* Right Panel - Amount Payable Calculator */}
             <Panel defaultSize={50} minSize={30}>
               <AmountPayablePanel
                 bookings={bookingsForPayable}
@@ -570,6 +417,7 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
                 onApply={handlePayableModalApply}
                 onClose={() => setShowCalculator(false)}
                 runId={runId}
+                allRows={data.allRows}
               />
             </Panel>
           </>

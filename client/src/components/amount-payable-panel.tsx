@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { 
   Adjustment, 
   BookingForPayable, 
@@ -31,6 +45,7 @@ import {
   PRESET_ADJUSTMENT_NATURES,
   createPresetAdjustments 
 } from "./amount-payable-modal";
+import type { PrimaryRow } from "@shared/schema";
 
 interface AmountPayablePanelProps {
   bookings: BookingForPayable[];
@@ -40,6 +55,7 @@ interface AmountPayablePanelProps {
   onApply: (adjustments: Adjustment[], selections: FinalNetSelection, finalAmount: number) => void;
   onClose: () => void;
   runId?: string | null;
+  allRows?: PrimaryRow[];
 }
 
 export function AmountPayablePanel({
@@ -50,6 +66,7 @@ export function AmountPayablePanel({
   onApply,
   onClose,
   runId,
+  allRows = [],
 }: AmountPayablePanelProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
@@ -67,6 +84,7 @@ export function AmountPayablePanel({
     bookingCount: number;
   }>>([]);
   const [validationError, setValidationError] = useState<string>("");
+  const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
 
   useEffect(() => {
     const presets = createPresetAdjustments();
@@ -622,7 +640,18 @@ export function AmountPayablePanel({
                                 )}
                               </Button>
                             </CollapsibleTrigger>
-                            <span className="font-semibold text-sm">{reason}</span>
+                            <Button
+                              variant="ghost"
+                              className="p-0 h-auto font-semibold text-sm hover:text-primary hover:bg-transparent"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedReasonModal(reason);
+                              }}
+                              data-testid={`button-view-reason-${reason}`}
+                            >
+                              {reason}
+                              <Eye className="h-3 w-3 ml-1 opacity-50" />
+                            </Button>
                             <Badge variant="secondary" className="text-xs">
                               {reasonBookings.length}
                             </Badge>
@@ -959,6 +988,65 @@ export function AmountPayablePanel({
           Apply
         </Button>
       </div>
+
+      <Dialog open={!!selectedReasonModal} onOpenChange={(open) => !open && setSelectedReasonModal(null)}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>
+              Discrepancy Analysis: {selectedReasonModal === "MTB" ? "Multiple Tickets Booked" : 
+                selectedReasonModal === "NPD" ? "Net Price Discrepancy" :
+                selectedReasonModal === "Unmapped" ? "Unmapped Bookings" :
+                selectedReasonModal}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {selectedReasonModal && (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="font-semibold">TID</TableHead>
+                    <TableHead className="font-semibold text-right">Discrepancy USD</TableHead>
+                    <TableHead className="font-semibold">Fulfilment Method</TableHead>
+                    <TableHead className="font-semibold text-center">Times Charged</TableHead>
+                    <TableHead className="font-semibold">Booking Date</TableHead>
+                    <TableHead className="font-semibold text-center">BID Count</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(() => {
+                    const filteredRows = allRows.filter(r => r.reason === selectedReasonModal);
+                    const groupedByTid = new Map<string, typeof filteredRows>();
+                    for (const row of filteredRows) {
+                      const tid = row.tid || row.bookingId;
+                      if (!groupedByTid.has(tid)) {
+                        groupedByTid.set(tid, []);
+                      }
+                      groupedByTid.get(tid)!.push(row);
+                    }
+                    
+                    return Array.from(groupedByTid.entries()).map(([tid, rows]) => {
+                      const totalDiscrepancy = rows.reduce((sum, r) => sum + (r.differenceUsd || 0), 0);
+                      const firstRow = rows[0];
+                      return (
+                        <TableRow key={tid}>
+                          <TableCell className="font-mono">{tid}</TableCell>
+                          <TableCell className={`text-right font-mono ${totalDiscrepancy < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                            {totalDiscrepancy.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell>{firstRow.fulfillmentIdentifier || "-"}</TableCell>
+                          <TableCell className="text-center">{rows.length > 1 ? `${rows.length}x` : "1x"}</TableCell>
+                          <TableCell>{firstRow.bookingCreationDate || "-"}</TableCell>
+                          <TableCell className="text-center">{rows.length}</TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })()}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
