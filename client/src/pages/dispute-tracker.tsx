@@ -535,8 +535,10 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
                   <div className="flex items-center gap-2">
-                    {getStatusBadge(selectedDispute.status)}
-                    {getClosureBadge(selectedDispute.closureStatus)}
+                    {selectedDispute.closureStatus === "closed" 
+                      ? getClosureBadge("closed")
+                      : getStatusBadge(selectedDispute.status)
+                    }
                   </div>
                 </div>
                 {selectedDispute.closureStatus === "closed" && (
