@@ -418,7 +418,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       ) : (
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       )}
-                      <CardTitle className="text-base">Overall Reconciliation Summary</CardTitle>
+                      <span className="text-sm font-medium">Overall Reconciliation Summary</span>
                     </div>
                     {hasResults && (
                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -524,10 +524,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-4">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
+                <span className="text-sm font-medium">
                   Amount Payable to {spDetails?.billingEntityName || "Supplier"}
-                </CardTitle>
+                </span>
                 {hasResults && (
                   <Button
                     variant="outline"
