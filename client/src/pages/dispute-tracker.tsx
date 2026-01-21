@@ -594,9 +594,9 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
               </div>
 
               <div>
-                <h4 className="font-medium mb-2">Booking Details</h4>
+                <h4 className="font-medium mb-2">TID Details</h4>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Individual booking disputes under this billing entity (click Ticket ID to view Booking IDs)
+                  Disputes grouped by TID (click to view Booking IDs)
                 </p>
                 <div className="rounded-md border">
                   <ScrollArea className="max-h-[400px]">
@@ -604,58 +604,93 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                       <TableHeader>
                         <TableRow className="bg-muted/50">
                           <TableHead className="w-[40px]"></TableHead>
-                          <TableHead className="font-semibold">Ticket ID</TableHead>
+                          <TableHead className="font-semibold">TID</TableHead>
                           <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
                           <TableHead className="font-semibold text-center">Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedDispute.disputes.map((d) => {
-                          const isExpanded = expandedTids.has(d.disputeId);
-                          return (
-                            <Collapsible
-                              key={d.disputeId}
-                              open={isExpanded}
-                              onOpenChange={() => toggleTid(d.disputeId)}
-                              asChild
-                            >
-                              <>
-                                <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => toggleTid(d.disputeId)}>
-                                  <TableCell className="p-2">
-                                    <CollapsibleTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-6 w-6">
-                                        {isExpanded ? (
-                                          <ChevronDown className="h-4 w-4" />
-                                        ) : (
-                                          <ChevronRight className="h-4 w-4" />
-                                        )}
-                                      </Button>
-                                    </CollapsibleTrigger>
-                                  </TableCell>
-                                  <TableCell className="font-mono text-sm" data-testid={`text-ticket-id-${d.bookingId}`}>
-                                    {d.ticketId || "—"}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono text-orange-600 dark:text-orange-400">
-                                    {formatCurrency(d.disputeAmount, d.currency)}
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    {getStatusBadge(d.status)}
-                                  </TableCell>
-                                </TableRow>
-                                <CollapsibleContent asChild>
-                                  <TableRow className="bg-muted/30">
-                                    <TableCell colSpan={4} className="py-2 pl-12 pr-4">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Booking ID:</span>
-                                        <span className="font-mono text-sm">{d.bookingId}</span>
-                                      </div>
+                        {(() => {
+                          // Group disputes by TID
+                          const tidGroups = new Map<string, DisputeRecord[]>();
+                          for (const d of selectedDispute.disputes) {
+                            const tid = d.ticketId || "Unknown";
+                            if (!tidGroups.has(tid)) {
+                              tidGroups.set(tid, []);
+                            }
+                            tidGroups.get(tid)!.push(d);
+                          }
+                          
+                          return Array.from(tidGroups.entries()).map(([tid, disputes]) => {
+                            const isExpanded = expandedTids.has(tid);
+                            const totalAmount = disputes.reduce((sum, d) => sum + d.disputeAmount, 0);
+                            const currency = disputes[0]?.currency || "USD";
+                            // TID is closed if ALL disputes under it are closed
+                            const isTidClosed = disputes.every(d => d.closureStatus === "closed");
+                            
+                            return (
+                              <Collapsible
+                                key={tid}
+                                open={isExpanded}
+                                onOpenChange={() => toggleTid(tid)}
+                                asChild
+                              >
+                                <>
+                                  <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => toggleTid(tid)}>
+                                    <TableCell className="p-2">
+                                      <CollapsibleTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6">
+                                          {isExpanded ? (
+                                            <ChevronDown className="h-4 w-4" />
+                                          ) : (
+                                            <ChevronRight className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                      </CollapsibleTrigger>
+                                    </TableCell>
+                                    <TableCell className="font-mono text-sm" data-testid={`text-tid-${tid}`}>
+                                      {tid}
+                                      {disputes.length > 1 && (
+                                        <Badge variant="outline" className="ml-2 text-xs">
+                                          {disputes.length} bookings
+                                        </Badge>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-orange-600 dark:text-orange-400">
+                                      {formatCurrency(totalAmount, currency)}
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                      {isTidClosed 
+                                        ? getClosureBadge("closed")
+                                        : <Badge variant="outline" data-testid="badge-tid-open">Open</Badge>
+                                      }
                                     </TableCell>
                                   </TableRow>
-                                </CollapsibleContent>
-                              </>
-                            </Collapsible>
-                          );
-                        })}
+                                  <CollapsibleContent asChild>
+                                    <>
+                                      {disputes.map((d) => (
+                                        <TableRow key={d.bookingId} className="bg-muted/30">
+                                          <TableCell></TableCell>
+                                          <TableCell colSpan={3} className="py-2 pl-4">
+                                            <div className="flex items-center justify-between">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Booking ID:</span>
+                                                <span className="font-mono text-sm">{d.bookingId}</span>
+                                              </div>
+                                              <span className="font-mono text-sm text-muted-foreground">
+                                                {formatCurrency(d.disputeAmount, d.currency)}
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </>
+                                  </CollapsibleContent>
+                                </>
+                              </Collapsible>
+                            );
+                          });
+                        })()}
                       </TableBody>
                     </Table>
                   </ScrollArea>
