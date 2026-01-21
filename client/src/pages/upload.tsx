@@ -376,15 +376,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     <Download className="h-3 w-3" />
                     Download template
                   </a>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onLoadDemo}
-                    data-testid="button-load-demo"
-                  >
-                    <Play className="h-3 w-3 mr-1" />
-                    Load Demo
-                  </Button>
                 </div>
 
                 {files.length > 0 && (

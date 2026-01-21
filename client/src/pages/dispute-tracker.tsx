@@ -349,7 +349,6 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                     <TableHead className="font-semibold text-right" data-testid="header-dispute-amount">Dispute Amount</TableHead>
                     <TableHead className="font-semibold text-center" data-testid="header-bookings">Bookings</TableHead>
                     <TableHead className="font-semibold text-center" data-testid="header-status">Status</TableHead>
-                    <TableHead className="font-semibold text-center" data-testid="header-actions">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -391,21 +390,6 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                       </TableCell>
                       <TableCell className="text-center" data-testid={`cell-status-${dispute.displayId}`}>
                         {getStatusBadge(dispute.status)}
-                      </TableCell>
-                      <TableCell className="text-center" data-testid={`cell-actions-${dispute.displayId}`}>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-orange-600 hover:text-orange-700 border-orange-200 hover:border-orange-300 hover:bg-orange-50 dark:text-orange-400 dark:border-orange-800 dark:hover:bg-orange-950"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setWriteOffDispute(dispute);
-                          }}
-                          data-testid={`button-writeoff-${dispute.displayId}`}
-                        >
-                          <XCircle className="h-3 w-3 mr-1" />
-                          Write Off
-                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -244,15 +244,6 @@ function FileUploadSection({
               )}
             </div>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={onLoadDemo}
-            disabled={isUploading}
-            data-testid="button-load-demo"
-          >
-            Load Demo
-          </Button>
         </div>
       </CardContent>
     </Card>
