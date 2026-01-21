@@ -709,10 +709,21 @@ export function AmountPayablePanel({
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-2 text-center text-xs text-muted-foreground">
+                                      <div className="col-span-2 flex justify-center items-center gap-1">
                                         {(() => {
                                           const { disputed, disputable } = getTidDisputeCount(reason, tid);
-                                          return disputable > 0 ? `${disputed}/${disputable}` : "-";
+                                          if (disputable === 0) return <span className="text-xs text-muted-foreground">-</span>;
+                                          return (
+                                            <>
+                                              <Checkbox
+                                                checked={disputed === disputable}
+                                                onCheckedChange={() => toggleTidDispute(reason, tid)}
+                                                className="h-4 w-4"
+                                                data-testid={`checkbox-dispute-tid-${tid}`}
+                                              />
+                                              <span className="text-xs text-muted-foreground">{disputed}/{disputable}</span>
+                                            </>
+                                          );
                                         })()}
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs font-semibold">
