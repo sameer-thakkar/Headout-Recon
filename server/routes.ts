@@ -8,6 +8,7 @@ import path from "path";
 import fs from "fs";
 import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
 import { runReconciliation } from "./reconciliation";
+import { getUncachableGoogleSheetClient } from "./google-sheets";
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "server", "uploads");
@@ -1640,6 +1641,155 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Export error:", error);
       res.status(500).json({ error: "Failed to export results" });
+    }
+  });
+
+  /**
+   * POST /api/runs/:runId/export-gsheet
+   * Export reconciliation results to Google Sheets
+   */
+  app.post("/api/runs/:runId/export-gsheet", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const run = await storage.getRun(runId);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+
+      if (run.status !== "done") {
+        return res.status(400).json({ error: "Run not complete" });
+      }
+
+      const result = await storage.getRunResult(runId);
+      if (!result) {
+        return res.status(404).json({ error: "Results not found" });
+      }
+
+      // Get Google Sheets client
+      const sheets = await getUncachableGoogleSheetClient();
+
+      // Create a new spreadsheet
+      const spreadsheetTitle = `Reconciliation Export - ${new Date().toISOString().split("T")[0]}`;
+      const createResponse = await sheets.spreadsheets.create({
+        requestBody: {
+          properties: {
+            title: spreadsheetTitle,
+          },
+          sheets: [
+            { properties: { title: "Payable Summary" } },
+            { properties: { title: "Discrepancy Analysis" } },
+            { properties: { title: "SP Invoice Report" } },
+            { properties: { title: "HO Report Updated" } },
+          ],
+        },
+      });
+
+      const spreadsheetId = createResponse.data.spreadsheetId;
+      const spreadsheetUrl = createResponse.data.spreadsheetUrl;
+
+      if (!spreadsheetId) {
+        throw new Error("Failed to create spreadsheet");
+      }
+
+      // Prepare sheet data
+
+      // Sheet 1: Payable Summary
+      const spTotalByCurrency = new Map<string, number>();
+      for (const r of result.spFxDebugRows) {
+        const ccy = r.spCurrency;
+        spTotalByCurrency.set(ccy, (spTotalByCurrency.get(ccy) || 0) + r.spNetOriginal);
+      }
+
+      const hoTotalByCurrency = new Map<string, number>();
+      for (const r of result.primaryRows) {
+        const ccy = r.hoCurrency;
+        hoTotalByCurrency.set(ccy, (hoTotalByCurrency.get(ccy) || 0) + r.hoNet);
+      }
+
+      const payableSummaryData: (string | number)[][] = [
+        ["Description", "Currency", "Amount", "Note"],
+      ];
+
+      Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+        payableSummaryData.push(["Payable as per SP", ccy, amount, "Sum of SP Invoice"]);
+      });
+
+      Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+        payableSummaryData.push(["Payable as per HO", ccy, amount, "Sum of HO Net (Primary only)"]);
+      });
+
+      // Sheet 2: Discrepancy Analysis
+      const discrepancyData: (string | number)[][] = [
+        ["Reason", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Count BID"],
+      ];
+
+      result.overallSummary
+        .filter(r => r.reason !== "Reconciled")
+        .forEach(row => {
+          discrepancyData.push([
+            row.reason,
+            row.currency,
+            row.discrepancyLc,
+            row.discrepancyUsd,
+            row.countBid,
+          ]);
+        });
+
+      // Sheet 3: SP Invoice Report
+      const spReportData: (string | number | null)[][] = [
+        ["Booking ID", "SP Net (Original)", "SP Currency"],
+      ];
+
+      result.spFxDebugRows.forEach(row => {
+        spReportData.push([
+          row.bookingId,
+          row.spNetOriginal,
+          row.spCurrency,
+        ]);
+      });
+
+      // Sheet 4: HO Report Updated
+      const hoReportData: (string | number | null)[][] = [
+        ["Booking ID", "HO Net", "Currency", "SP Net (in HO)", "Difference", "Difference %", "Reason", "DRI Team"],
+      ];
+
+      result.primaryRows.forEach(row => {
+        hoReportData.push([
+          row.bookingId,
+          row.hoNet,
+          row.hoCurrency,
+          row.spNetInHo,
+          row.differenceLc,
+          row.differencePct !== null ? `${(row.differencePct * 100).toFixed(2)}%` : "",
+          row.reason,
+          row.driTeam || "",
+        ]);
+      });
+
+      // Write data to sheets
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          valueInputOption: "USER_ENTERED",
+          data: [
+            { range: "Payable Summary!A1", values: payableSummaryData },
+            { range: "Discrepancy Analysis!A1", values: discrepancyData },
+            { range: "SP Invoice Report!A1", values: spReportData },
+            { range: "HO Report Updated!A1", values: hoReportData },
+          ],
+        },
+      });
+
+      res.json({
+        success: true,
+        spreadsheetId,
+        spreadsheetUrl,
+        message: `Exported to Google Sheets: ${spreadsheetTitle}`,
+      });
+    } catch (error) {
+      console.error("Google Sheets export error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to export to Google Sheets";
+      res.status(500).json({ error: errorMessage });
     }
   });
 

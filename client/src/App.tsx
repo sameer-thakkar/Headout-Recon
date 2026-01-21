@@ -266,6 +266,20 @@ function AppContent() {
     setLastExportTimestamp(new Date().toISOString());
   }, []);
 
+  const handleExportGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
+    if (!currentRunId) {
+      return {};
+    }
+    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet`, {
+      method: "POST",
+    });
+    const data = await response.json();
+    if (data.spreadsheetUrl) {
+      setLastExportTimestamp(new Date().toISOString());
+    }
+    return data;
+  }, [currentRunId]);
+
   // Run change handler
   const handleRunChange = useCallback((runId: string) => {
     setCurrentRunId(runId);
@@ -349,6 +363,7 @@ function AppContent() {
                   hasResults={hasResults}
                   onExportZip={handleExportZip}
                   onExportXlsx={handleExportXlsx}
+                  onExportGSheet={handleExportGSheet}
                   lastExportTimestamp={lastExportTimestamp}
                 />
               </Route>

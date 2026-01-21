@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Download, FileArchive, FileSpreadsheet, Clock, Check } from "lucide-react";
+import { Download, FileArchive, FileSpreadsheet, Clock, Check, ExternalLink } from "lucide-react";
+import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
@@ -9,6 +10,7 @@ interface ExportPageProps {
   hasResults: boolean;
   onExportZip: () => Promise<void>;
   onExportXlsx: () => Promise<void>;
+  onExportGSheet: () => Promise<{ spreadsheetUrl?: string }>;
   lastExportTimestamp: string | null;
 }
 
@@ -16,10 +18,13 @@ export function ExportPage({
   hasResults,
   onExportZip,
   onExportXlsx,
+  onExportGSheet,
   lastExportTimestamp,
 }: ExportPageProps) {
   const [isExportingZip, setIsExportingZip] = useState(false);
   const [isExportingXlsx, setIsExportingXlsx] = useState(false);
+  const [isExportingGSheet, setIsExportingGSheet] = useState(false);
+  const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleExportZip = async () => {
@@ -43,6 +48,22 @@ export function ExportPage({
       toast({ title: "Export failed", variant: "destructive" });
     } finally {
       setIsExportingXlsx(false);
+    }
+  };
+
+  const handleExportGSheet = async () => {
+    setIsExportingGSheet(true);
+    setGSheetUrl(null);
+    try {
+      const result = await onExportGSheet();
+      if (result.spreadsheetUrl) {
+        setGSheetUrl(result.spreadsheetUrl);
+        toast({ title: "Export complete", description: "Google Sheet created successfully" });
+      }
+    } catch (error) {
+      toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
+    } finally {
+      setIsExportingGSheet(false);
     }
   };
 
@@ -149,6 +170,61 @@ export function ExportPage({
                   </>
                 )}
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <SiGooglesheets className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Export to Google Sheets</CardTitle>
+                <CardDescription>Create a new Google Sheet with your data</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                <p>Creates a new spreadsheet with tabs:</p>
+                <ul className="list-disc list-inside mt-1">
+                  <li>Payable Summary - Currency totals</li>
+                  <li>Discrepancy Analysis - By reason</li>
+                  <li>SP Invoice Report - Supplier data</li>
+                  <li>HO Report Updated - Full details</li>
+                </ul>
+              </div>
+              <div className="flex flex-col items-end gap-2 ml-4">
+                <Button
+                  onClick={handleExportGSheet}
+                  disabled={isExportingGSheet}
+                  data-testid="button-export-gsheet"
+                >
+                  {isExportingGSheet ? (
+                    "Creating..."
+                  ) : (
+                    <>
+                      <SiGooglesheets className="h-4 w-4 mr-2" />
+                      Export to Sheets
+                    </>
+                  )}
+                </Button>
+                {gSheetUrl && (
+                  <a
+                    href={gSheetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-sm text-green-600 hover:underline"
+                    data-testid="link-gsheet"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open Sheet
+                  </a>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
