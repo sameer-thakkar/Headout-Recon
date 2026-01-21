@@ -434,14 +434,10 @@ function assignReason(
   
   // 2) Not Cancelled cases
   if (differencePct !== null) {
-    // a) MTB rule: abs(differencePct) >= 0.95 AND close to whole percentage
-    const absPct = Math.abs(differencePct);
-    if (absPct >= 0.95) {
-      const pctTimesHundred = absPct * 100;
-      const roundedToHundred = Math.round(pctTimesHundred / 100) * 100;
-      if (Math.abs(pctTimesHundred - roundedToHundred) <= 5) {
-        return "Multiple Tickets Booked";
-      }
+    // a) MTB rule: HO Net < SP Net (differencePct is negative) AND abs(differencePct) >= 95%
+    // differencePct = (hoNet - spNet) / hoNet, so negative means SP claims more than HO
+    if (differencePct <= -0.95) {
+      return "Multiple Tickets Booked";
     }
     
     // b) Reconciled rules
