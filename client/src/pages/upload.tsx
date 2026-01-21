@@ -470,14 +470,14 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               <CollapsibleContent>
                 <CardContent className="pt-0">
                   {hasResults ? (
-                    <Table>
+                    <Table className="text-sm">
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>Reason</TableHead>
-                          <TableHead>Currency</TableHead>
-                          <TableHead className="text-right">Disc. LC</TableHead>
-                          <TableHead className="text-right">Disc. USD</TableHead>
-                          <TableHead className="text-right">Count</TableHead>
+                        <TableRow className="h-8">
+                          <TableHead className="py-1.5 text-xs">Reason</TableHead>
+                          <TableHead className="py-1.5 text-xs">Currency</TableHead>
+                          <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
+                          <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
+                          <TableHead className="py-1.5 text-xs text-right">Count</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -486,26 +486,23 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                           return (
                             <TableRow
                               key={`${row.reason}-${row.currency}-${index}`}
-                              className={isClickable ? "cursor-pointer hover-elevate" : ""}
+                              className={`h-8 ${isClickable ? "cursor-pointer hover-elevate" : ""}`}
                               onClick={() => isClickable && handleReasonClick(row.reason)}
                               data-testid={`summary-row-${row.reason}-${row.currency}`}
                             >
-                              <TableCell>
-                                <Badge 
-                                  variant={row.reason === "Reconciled" ? "default" : "secondary"}
-                                  className="text-xs"
-                                >
+                              <TableCell className="py-1.5">
+                                <span className={`text-xs ${row.reason === "Reconciled" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
                                   {row.reason}
-                                </Badge>
+                                </span>
                               </TableCell>
-                              <TableCell>{row.currency}</TableCell>
-                              <TableCell className="text-right font-mono">
+                              <TableCell className="py-1.5">{row.currency}</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono">
                                 {formatNumber(row.discrepancyLc)}
                               </TableCell>
-                              <TableCell className="text-right font-mono">
+                              <TableCell className="py-1.5 text-right font-mono">
                                 {formatNumber(row.discrepancyUsd)}
                               </TableCell>
-                              <TableCell className="text-right">{row.countBid}</TableCell>
+                              <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
                             </TableRow>
                           );
                         })}
