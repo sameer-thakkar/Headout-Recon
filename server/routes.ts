@@ -10,6 +10,125 @@ import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
 import { runReconciliation } from "./reconciliation";
 import { getUncachableGoogleSheetClient } from "./google-sheets";
 
+/**
+ * Format a number in Indian notation (1,00,000.00)
+ * Uses lakhs/crores grouping: X,XX,XX,XXX.XX
+ */
+function formatIndianNumber(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "";
+  
+  // Handle already formatted strings (strip commas before parsing)
+  let num: number;
+  if (typeof value === "string") {
+    const cleaned = value.replace(/,/g, "");
+    num = parseFloat(cleaned);
+  } else {
+    num = value;
+  }
+  
+  if (isNaN(num)) return String(value);
+  
+  const isNegative = num < 0;
+  const absNum = Math.abs(num);
+  const [intPart, decPart] = absNum.toFixed(2).split(".");
+  
+  // Indian grouping: first 3 digits from right, then groups of 2
+  let result = "";
+  const len = intPart.length;
+  
+  if (len <= 3) {
+    result = intPart;
+  } else {
+    // Last 3 digits
+    result = intPart.slice(-3);
+    let remaining = intPart.slice(0, -3);
+    
+    // Groups of 2 from right
+    while (remaining.length > 0) {
+      const chunk = remaining.slice(-2);
+      result = chunk + "," + result;
+      remaining = remaining.slice(0, -2);
+    }
+  }
+  
+  return (isNegative ? "-" : "") + result + "." + decPart;
+}
+
+/**
+ * Format date value to DD/MM/YYYY format
+ * Handles Excel serial numbers, ISO dates, and DD/MM/YYYY strings
+ * Uses UTC to avoid timezone issues
+ */
+function formatDateValue(dateValue: string | number | null | undefined): string {
+  if (dateValue === null || dateValue === undefined || dateValue === "") return "";
+  
+  let day: number, month: number, year: number;
+  
+  // Handle Excel serial numbers (numeric)
+  if (typeof dateValue === "number" || (!isNaN(Number(dateValue)) && String(dateValue).match(/^[\d.]+$/))) {
+    const numValue = Number(dateValue);
+    if (numValue > 40000 && numValue < 60000) {
+      // Excel serial date: days since 1899-12-30
+      // Use UTC to avoid timezone shifts
+      const excelEpochMs = Date.UTC(1899, 11, 30);
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const date = new Date(excelEpochMs + numValue * msPerDay);
+      day = date.getUTCDate();
+      month = date.getUTCMonth() + 1;
+      year = date.getUTCFullYear();
+      return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+    } else if (numValue > 1000000000000) {
+      // Milliseconds timestamp
+      const date = new Date(numValue);
+      day = date.getUTCDate();
+      month = date.getUTCMonth() + 1;
+      year = date.getUTCFullYear();
+      return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+    } else if (numValue > 1000000000) {
+      // Seconds timestamp
+      const date = new Date(numValue * 1000);
+      day = date.getUTCDate();
+      month = date.getUTCMonth() + 1;
+      year = date.getUTCFullYear();
+      return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+    }
+  }
+  
+  // Handle string dates
+  const strValue = String(dateValue).trim();
+  
+  // Already in DD/MM/YYYY format - return as-is
+  const dmyMatch = strValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmyMatch) {
+    day = parseInt(dmyMatch[1], 10);
+    month = parseInt(dmyMatch[2], 10);
+    year = parseInt(dmyMatch[3], 10);
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+  }
+  
+  // ISO format YYYY-MM-DD (parse manually to avoid timezone issues)
+  const isoMatch = strValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    year = parseInt(isoMatch[1], 10);
+    month = parseInt(isoMatch[2], 10);
+    day = parseInt(isoMatch[3], 10);
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+  }
+  
+  // MM/DD/YYYY format (US format)
+  const mdyMatch = strValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdyMatch) {
+    // Assume DD/MM/YYYY since that's the target format
+    day = parseInt(mdyMatch[1], 10);
+    month = parseInt(mdyMatch[2], 10);
+    year = parseInt(mdyMatch[3], 10);
+    return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+  }
+  
+  // Fallback: return original value if can't parse
+  return strValue;
+}
+
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "server", "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -513,7 +632,36 @@ export async function registerRoutes(
       });
       
       const payableSheet = XLSX.utils.json_to_sheet(payableSummaryData);
-      payableSheet["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 15 }, { wch: 30 }];
+      payableSheet["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 30 }];
+      payableSheet["!sheetViews"] = [{ showGridLines: false }];
+      
+      // Apply formatting to Payable Summary (borders, bold header, Indian number format)
+      const payableHeaders = ["Description", "Currency", "Amount", "Note"];
+      const payableRowCount = payableSummaryData.length + 1; // +1 for header
+      const payBorderStyle = { style: "thin", color: { rgb: "000000" } };
+      const payBorder = { top: payBorderStyle, bottom: payBorderStyle, left: payBorderStyle, right: payBorderStyle };
+      
+      for (let r = 0; r < payableRowCount; r++) {
+        for (let c = 0; c < payableHeaders.length; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          if (!payableSheet[cellRef]) continue;
+          
+          payableSheet[cellRef].s = payableSheet[cellRef].s || {};
+          payableSheet[cellRef].s.border = payBorder;
+          
+          if (r === 0) {
+            payableSheet[cellRef].s.font = { bold: true };
+          }
+          
+          // Format Amount column with Indian notation
+          if (r > 0 && c === 2 && typeof payableSheet[cellRef].v === "number") {
+            payableSheet[cellRef].v = formatIndianNumber(payableSheet[cellRef].v);
+            payableSheet[cellRef].t = "s";
+            payableSheet[cellRef].s.alignment = { horizontal: "right" };
+          }
+        }
+      }
+      
       XLSX.utils.book_append_sheet(workbook, payableSheet, "Payable Summary");
 
       // =====================================================
@@ -682,10 +830,12 @@ export async function registerRoutes(
         };
       });
 
-      // Sort TID analysis by reason then TID
+      // Sort TID analysis by Discrepancy USD: negative highest to positive lowest
+      // (most negative first, then ascending through zero to most positive)
       tidAnalysisData.sort((a, b) => {
-        if (a["Reason"] !== b["Reason"]) return a["Reason"].localeCompare(b["Reason"]);
-        return a["TID"].localeCompare(b["TID"]);
+        const aUsd = typeof a["Discrepancy (USD)"] === "number" ? a["Discrepancy (USD)"] : 0;
+        const bUsd = typeof b["Discrepancy (USD)"] === "number" ? b["Discrepancy (USD)"] : 0;
+        return aUsd - bUsd; // ascending order puts most negative first
       });
 
       // Group TID data by reason for separate tables
@@ -773,30 +923,37 @@ export async function registerRoutes(
             // Apply number/date formats (skip header row)
             if (r > 0 && columns[c]) {
               const colName = columns[c].toLowerCase();
-              // Number format for discrepancy and loss columns - use cell.z for xlsx-js-style
+              
+              // Format currency columns with Indian notation (1,00,000.00)
+              // Convert to formatted text string since Excel doesn't support Indian format natively
               if (colName.includes("discrepancy") && !colName.includes("%") && !colName.includes("range")) {
                 if (typeof sheet[cellRef].v === "number") {
-                  sheet[cellRef].t = "n";
-                  sheet[cellRef].z = "#,##0.00";
+                  sheet[cellRef].v = formatIndianNumber(sheet[cellRef].v);
+                  sheet[cellRef].t = "s"; // Text type for formatted string
+                  sheet[cellRef].s.alignment = { horizontal: "right" };
                 }
               }
               if (colName.includes("loss") && !colName.includes("?")) {
                 if (typeof sheet[cellRef].v === "number") {
-                  sheet[cellRef].t = "n";
-                  sheet[cellRef].z = "#,##0.00";
+                  sheet[cellRef].v = formatIndianNumber(sheet[cellRef].v);
+                  sheet[cellRef].t = "s";
+                  sheet[cellRef].s.alignment = { horizontal: "right" };
                 }
               }
-              // Date format for start/end date columns - use cell.z for xlsx-js-style
+              if (colName === "amount" || colName.includes("net") || colName.includes("price")) {
+                if (typeof sheet[cellRef].v === "number") {
+                  sheet[cellRef].v = formatIndianNumber(sheet[cellRef].v);
+                  sheet[cellRef].t = "s";
+                  sheet[cellRef].s.alignment = { horizontal: "right" };
+                }
+              }
+              
+              // Date format for start/end date columns
               if (colName === "start date" || colName === "end date") {
                 const val = sheet[cellRef].v;
-                // Convert to number if it's a numeric string or already a number
-                const numVal = typeof val === "number" ? val : parseFloat(String(val));
-                if (!isNaN(numVal) && numVal > 25000) {
-                  // Truncate to date only (remove time portion) and set as number with date format
-                  sheet[cellRef].v = Math.floor(numVal);
-                  sheet[cellRef].t = "n";
-                  sheet[cellRef].z = "dd/mm/yyyy";
-                }
+                // Convert to formatted date string DD/MM/YYYY
+                sheet[cellRef].v = formatDateValue(val);
+                sheet[cellRef].t = "s";
               }
             }
           }
@@ -864,6 +1021,19 @@ export async function registerRoutes(
         currentRow += rows.length + 2;
       }
       
+      // Set auto column widths for Discrepancy Analysis
+      // Calculate max column count across all tables
+      const maxColCount = Math.max(
+        summaryHeaders.length,
+        ...Array.from(tidByReason.values()).map(rows => rows.length > 0 ? getColumnsForReason(rows[0]["Reason"] as string).length : 0)
+      );
+      discrepancySheet["!cols"] = Array(maxColCount).fill(null).map((_, i) => {
+        // Wider columns for TID, Reason, DRI Team, Fulfillment Method
+        if (i === 0) return { wch: 15 }; // TID/Reason
+        if (i <= 2) return { wch: 12 }; // Currency, numeric
+        return { wch: 18 }; // Other columns
+      });
+      
       XLSX.utils.book_append_sheet(workbook, discrepancySheet, "Discrepancy Analysis");
 
       // =====================================================
@@ -881,6 +1051,50 @@ export async function registerRoutes(
         };
       });
       const spReportSheet = XLSX.utils.json_to_sheet(spReportData);
+      spReportSheet["!sheetViews"] = [{ showGridLines: false }];
+      
+      // Apply formatting to SP Invoice Report
+      const spRange = XLSX.utils.decode_range(spReportSheet["!ref"] || "A1");
+      const spBorderStyle = { style: "thin", color: { rgb: "000000" } };
+      const spBorder = { top: spBorderStyle, bottom: spBorderStyle, left: spBorderStyle, right: spBorderStyle };
+      
+      // Get column headers for number/date formatting
+      const spHeaders: string[] = [];
+      for (let c = 0; c <= spRange.e.c; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+        spHeaders.push(spReportSheet[cellRef]?.v?.toString().toLowerCase() || "");
+      }
+      
+      for (let r = 0; r <= spRange.e.r; r++) {
+        for (let c = 0; c <= spRange.e.c; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          if (!spReportSheet[cellRef]) continue;
+          
+          spReportSheet[cellRef].s = spReportSheet[cellRef].s || {};
+          spReportSheet[cellRef].s.border = spBorder;
+          
+          if (r === 0) {
+            spReportSheet[cellRef].s.font = { bold: true };
+          }
+          
+          // Apply Indian number format and date format to data rows
+          if (r > 0 && spHeaders[c]) {
+            const col = spHeaders[c];
+            if (col.includes("net") || col.includes("amount") || col.includes("price") || col.includes("fx")) {
+              if (typeof spReportSheet[cellRef].v === "number") {
+                spReportSheet[cellRef].v = formatIndianNumber(spReportSheet[cellRef].v);
+                spReportSheet[cellRef].t = "s";
+                spReportSheet[cellRef].s.alignment = { horizontal: "right" };
+              }
+            }
+            if (col.includes("date")) {
+              spReportSheet[cellRef].v = formatDateValue(spReportSheet[cellRef].v);
+              spReportSheet[cellRef].t = "s";
+            }
+          }
+        }
+      }
+      
       XLSX.utils.book_append_sheet(workbook, spReportSheet, "SP Invoice Report");
 
       // =====================================================
@@ -1090,6 +1304,54 @@ export async function registerRoutes(
         return newRow;
       });
       const hoReportSheet = XLSX.utils.json_to_sheet(hoReportData);
+      hoReportSheet["!sheetViews"] = [{ showGridLines: false }];
+      
+      // Apply formatting to HO Report Updated
+      const hoRange = XLSX.utils.decode_range(hoReportSheet["!ref"] || "A1");
+      const hoBorderStyle = { style: "thin", color: { rgb: "000000" } };
+      const hoBorder = { top: hoBorderStyle, bottom: hoBorderStyle, left: hoBorderStyle, right: hoBorderStyle };
+      
+      // Get column headers for number/date formatting
+      const hoHeaders: string[] = [];
+      for (let c = 0; c <= hoRange.e.c; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+        hoHeaders.push(hoReportSheet[cellRef]?.v?.toString().toLowerCase() || "");
+      }
+      
+      for (let r = 0; r <= hoRange.e.r; r++) {
+        for (let c = 0; c <= hoRange.e.c; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          if (!hoReportSheet[cellRef]) continue;
+          
+          hoReportSheet[cellRef].s = hoReportSheet[cellRef].s || {};
+          hoReportSheet[cellRef].s.border = hoBorder;
+          
+          if (r === 0) {
+            hoReportSheet[cellRef].s.font = { bold: true };
+          }
+          
+          // Apply Indian number format and date format to data rows
+          if (r > 0 && hoHeaders[c]) {
+            const col = hoHeaders[c];
+            if (col.includes("net") || col.includes("amount") || col.includes("price") || 
+                col.includes("difference") || col.includes("sp net") || col.includes("ho net")) {
+              // Skip percentage columns
+              if (!col.includes("%")) {
+                if (typeof hoReportSheet[cellRef].v === "number") {
+                  hoReportSheet[cellRef].v = formatIndianNumber(hoReportSheet[cellRef].v);
+                  hoReportSheet[cellRef].t = "s";
+                  hoReportSheet[cellRef].s.alignment = { horizontal: "right" };
+                }
+              }
+            }
+            if (col.includes("date")) {
+              hoReportSheet[cellRef].v = formatDateValue(hoReportSheet[cellRef].v);
+              hoReportSheet[cellRef].t = "s";
+            }
+          }
+        }
+      }
+      
       XLSX.utils.book_append_sheet(workbook, hoReportSheet, "HO Report Updated");
 
       // =====================================================
@@ -1422,8 +1684,8 @@ export async function registerRoutes(
       const draftMessagesSheet = XLSX.utils.aoa_to_sheet(draftRows);
       
       // Apply styling: borders, number/date formats
-      const borderStyle = { style: "thin", color: { rgb: "000000" } };
-      const border = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
+      const draftBorderStyle = { style: "thin", color: { rgb: "000000" } };
+      const draftBorder = { top: draftBorderStyle, bottom: draftBorderStyle, left: draftBorderStyle, right: draftBorderStyle };
       
       for (const region of tableRegions) {
         for (let r = region.startRow; r <= region.endRow; r++) {
@@ -1433,30 +1695,28 @@ export async function registerRoutes(
             
             // Apply border
             draftMessagesSheet[cellRef].s = draftMessagesSheet[cellRef].s || {};
-            draftMessagesSheet[cellRef].s.border = border;
+            draftMessagesSheet[cellRef].s.border = draftBorder;
             
             // Bold for headers
             if (region.type === 'header' || (region.type === 'tid' && r === region.startRow) || (region.type === 'dri' && r === region.startRow)) {
               draftMessagesSheet[cellRef].s.font = { bold: true };
             }
             
-            // Number format for Discrepancy USD (column 1 in TID table, index 1)
+            // Indian number format for Discrepancy USD (column 1 in TID table, index 1)
             if (region.type === 'tid' && c === 1 && r > region.startRow) {
               if (typeof draftMessagesSheet[cellRef].v === "number") {
-                draftMessagesSheet[cellRef].z = "#,##0.00";
+                draftMessagesSheet[cellRef].v = formatIndianNumber(draftMessagesSheet[cellRef].v);
+                draftMessagesSheet[cellRef].t = "s";
+                draftMessagesSheet[cellRef].s.alignment = { horizontal: "right" };
               }
             }
             
             // Date format for Start Date (col 2) and End Date (col 3) in TID table
             if (region.type === 'tid' && (c === 2 || c === 3) && r > region.startRow) {
               const val = draftMessagesSheet[cellRef].v;
-              const numVal = typeof val === "number" ? val : parseFloat(String(val));
-              if (!isNaN(numVal) && numVal > 25000) {
-                // Truncate to date only and set as number with date format
-                draftMessagesSheet[cellRef].v = Math.floor(numVal);
-                draftMessagesSheet[cellRef].t = "n";
-                draftMessagesSheet[cellRef].z = "dd/mm/yyyy";
-              }
+              // Convert to formatted date string DD/MM/YYYY
+              draftMessagesSheet[cellRef].v = formatDateValue(val);
+              draftMessagesSheet[cellRef].t = "s";
             }
           }
         }
@@ -1740,10 +2000,10 @@ export async function registerRoutes(
 
       const payableSummaryData: (string | number)[][] = [["Description", "Currency", "Amount", "Note"]];
       Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-        payableSummaryData.push(["Payable as per SP", ccy, amount, "Sum of SP Invoice"]);
+        payableSummaryData.push(["Payable as per SP", ccy, formatIndianNumber(amount), "Sum of SP Invoice"]);
       });
       Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-        payableSummaryData.push(["Payable as per HO", ccy, amount, "Sum of HO Net (Primary only)"]);
+        payableSummaryData.push(["Payable as per HO", ccy, formatIndianNumber(amount), "Sum of HO Net (Primary only)"]);
       });
 
       // ===== Sheet 2: Discrepancy Analysis (with TID breakdown) =====
@@ -1796,13 +2056,19 @@ export async function registerRoutes(
       // Get total BIDs in report for coverage calculations
       const totalBidsInReport = allPrimaryRows.length;
 
-      // Build discrepancy analysis data
+      // Build discrepancy analysis data with Indian number format
       const discrepancyData: (string | number)[][] = [
         ["OVERALL DISCREPANCY SUMMARY"],
         ["Reason", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Count BID"],
       ];
       discrepancySummary.forEach(row => {
-        discrepancyData.push([row.reason, row.currency, row.discrepancyLc, row.discrepancyUsd, row.countBid]);
+        discrepancyData.push([
+          row.reason, 
+          row.currency, 
+          formatIndianNumber(row.discrepancyLc), 
+          formatIndianNumber(row.discrepancyUsd), 
+          row.countBid
+        ]);
       });
       discrepancyData.push([]);
 
@@ -1811,6 +2077,11 @@ export async function registerRoutes(
       for (const [, group] of Array.from(tidGroups.entries())) {
         if (!tidByReason.has(group.reason)) tidByReason.set(group.reason, []);
         tidByReason.get(group.reason)!.push(group);
+      }
+      
+      // Sort groups by Discrepancy USD (negative highest to positive lowest)
+      for (const [, groupList] of Array.from(tidByReason.entries())) {
+        groupList.sort((a, b) => a.discrepancyUsd - b.discrepancyUsd);
       }
 
       for (const [reason, groups] of Array.from(tidByReason.entries())) {
@@ -1874,21 +2145,29 @@ export async function registerRoutes(
             ? Math.abs(g.lossLcTotal * g.discrepancyUsd / g.discrepancyLc)
             : 0;
           
+          // Apply Indian number format and date format
+          const formattedDiscLc = formatIndianNumber(g.discrepancyLc);
+          const formattedDiscUsd = formatIndianNumber(g.discrepancyUsd);
+          const formattedStartDate = formatDateValue(startDate);
+          const formattedEndDate = formatDateValue(endDate);
+          const formattedLossLc = g.hasSoldAtLoss ? formatIndianNumber(g.lossLcTotal) : "";
+          const formattedLossUsd = g.hasSoldAtLoss ? formatIndianNumber(lossUsd) : "";
+          
           if (isMtb) {
             discrepancyData.push([
-              g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, g.fulfillmentMethod,
-              timesCharged, startDate, endDate, bidCount, bidsInDuration, totalBidsInReport, coveragePct, frequency, g.driTeam
+              g.tid, g.currency, formattedDiscLc, formattedDiscUsd, g.fulfillmentMethod,
+              timesCharged, formattedStartDate, formattedEndDate, bidCount, bidsInDuration, totalBidsInReport, coveragePct, frequency, g.driTeam
             ]);
           } else if (isNpd) {
             discrepancyData.push([
-              g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, avgHoTakeRate, avgActualTakeRate,
-              startDate, endDate, bidCount, bidsInDuration, coveragePct, discPctRange, pattern, frequency, g.fulfillmentMethod, g.driTeam,
-              g.hasSoldAtLoss ? "Yes" : "No", g.hasSoldAtLoss ? g.lossLcTotal : "", g.hasSoldAtLoss ? lossUsd : ""
+              g.tid, g.currency, formattedDiscLc, formattedDiscUsd, avgHoTakeRate, avgActualTakeRate,
+              formattedStartDate, formattedEndDate, bidCount, bidsInDuration, coveragePct, discPctRange, pattern, frequency, g.fulfillmentMethod, g.driTeam,
+              g.hasSoldAtLoss ? "Yes" : "No", formattedLossLc, formattedLossUsd
             ]);
           } else {
             discrepancyData.push([
-              g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, g.fulfillmentMethod,
-              startDate, endDate, bidCount, totalBidsInReport, coveragePct, frequency, g.driTeam
+              g.tid, g.currency, formattedDiscLc, formattedDiscUsd, g.fulfillmentMethod,
+              formattedStartDate, formattedEndDate, bidCount, totalBidsInReport, coveragePct, frequency, g.driTeam
             ]);
           }
         }
@@ -1896,19 +2175,41 @@ export async function registerRoutes(
       }
 
       // ===== Sheet 3: SP Invoice Report (enriched) =====
-      const spReportData: (string | number | null)[][] = [
-        ["Booking ID", "SP Net (Original)", "SP Currency", "SP Net (HO Currency)", "FX Rate Used"],
-      ];
+      // Match Excel: include ALL original columns + SP Net (HO Currency) + FX Rate Used
+      const spReportData: (string | number | null)[][] = [];
+      
+      // Get headers from first row of original data
+      const firstSpRow = originalSpData[0] as Record<string, unknown> | undefined;
+      const spOriginalHeaders = firstSpRow ? Object.keys(firstSpRow) : [];
+      const spAllHeaders = [...spOriginalHeaders, "SP Net (HO Currency)", "FX Rate Used"];
+      spReportData.push(spAllHeaders);
+      
       for (const row of originalSpData as Record<string, unknown>[]) {
         const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
         const spFxRow = spFxMap.get(bookingId);
-        spReportData.push([
-          bookingId,
-          spFxRow?.spNetOriginal ?? "",
-          spFxRow?.spCurrency ?? "",
-          spFxRow?.spNetInHo ?? "",
-          spFxRow?.fxRateUsed ?? "",
-        ]);
+        
+        // Build row with all original columns + enriched columns
+        const dataRow: (string | number | null)[] = spOriginalHeaders.map(header => {
+          const val = row[header];
+          const headerLower = header.toLowerCase();
+          
+          // Format numbers with Indian notation
+          if ((headerLower.includes("net") || headerLower.includes("amount") || headerLower.includes("price")) && typeof val === "number") {
+            return formatIndianNumber(val);
+          }
+          // Format dates
+          if (headerLower.includes("date")) {
+            return formatDateValue(val as string | number);
+          }
+          
+          return val as string | number | null ?? "";
+        });
+        
+        // Add enriched columns with Indian number format
+        dataRow.push(spFxRow?.spNetInHo !== undefined ? formatIndianNumber(spFxRow.spNetInHo) : "");
+        dataRow.push(spFxRow?.fxRateUsed ?? "");
+        
+        spReportData.push(dataRow);
       }
 
       // ===== Sheet 4: HO Report Updated (enriched) =====
@@ -1926,10 +2227,10 @@ export async function registerRoutes(
           row.bookingId,
           row.tid || "",
           row.experienceName || "",
-          row.hoNet,
+          formatIndianNumber(row.hoNet),
           row.hoCurrency,
-          row.spNetInHo,
-          row.differenceLc,
+          formatIndianNumber(row.spNetInHo),
+          formatIndianNumber(row.differenceLc),
           row.differencePct !== null ? `${(row.differencePct * 100).toFixed(2)}%` : "",
           row.reason,
           row.driTeam || "",
@@ -2039,12 +2340,12 @@ export async function registerRoutes(
           draftMessagesData.push(["DRI Team", "Slack Draft"]);
           draftMessagesData.push([driTeam, message]);
           
-          // Add TID table for MTB (matching Excel structure)
+          // Add TID table for MTB (matching Excel structure) with Indian number and date format
           draftMessagesData.push(["TID", "Discrepancy USD", "Start Date", "End Date", "BID Count", "BIDs in Duration", "Times Charged", "Fulfillment"]);
           for (const t of tids.sort((a, b) => a.discrepancyUsd - b.discrepancyUsd)) {
-            const startDate = t.dates[0] || "";
-            const endDate = t.dates[t.dates.length - 1] || "";
-            draftMessagesData.push([t.tid, t.discrepancyUsd, startDate, endDate, t.bidCount, t.bidsInDuration, t.timesCharged, t.fulfillmentMethod]);
+            const startDate = formatDateValue(t.dates[0] || "");
+            const endDate = formatDateValue(t.dates[t.dates.length - 1] || "");
+            draftMessagesData.push([t.tid, formatIndianNumber(t.discrepancyUsd), startDate, endDate, t.bidCount, t.bidsInDuration, t.timesCharged, t.fulfillmentMethod]);
           }
           draftMessagesData.push([]);
         }
@@ -2080,12 +2381,12 @@ export async function registerRoutes(
           draftMessagesData.push(["DRI Team", "Slack Draft"]);
           draftMessagesData.push([driTeam, message]);
           
-          // Add TID table for NPD
+          // Add TID table for NPD with Indian number and date format
           draftMessagesData.push(["TID", "Discrepancy USD", "Start Date", "End Date", "BID Count", "BIDs in Duration", "Discrepancy %", "Pattern", "Frequency", "Fulfillment"]);
           for (const t of tids.sort((a, b) => a.discrepancyUsd - b.discrepancyUsd)) {
-            const startDate = t.dates[0] || "";
-            const endDate = t.dates[t.dates.length - 1] || "";
-            draftMessagesData.push([t.tid, t.discrepancyUsd, startDate, endDate, t.bidCount, t.bidsInDuration, t.discPctRange, t.pattern, t.frequency, t.fulfillmentMethod]);
+            const startDate = formatDateValue(t.dates[0] || "");
+            const endDate = formatDateValue(t.dates[t.dates.length - 1] || "");
+            draftMessagesData.push([t.tid, formatIndianNumber(t.discrepancyUsd), startDate, endDate, t.bidCount, t.bidsInDuration, t.discPctRange, t.pattern, t.frequency, t.fulfillmentMethod]);
           }
           draftMessagesData.push([]);
         }
@@ -2124,16 +2425,23 @@ export async function registerRoutes(
            "Difference LC", "Difference %", "Difference USD", "Comments"],
         ];
         
-        for (const row of rows) {
+        // Sort by Discrepancy USD (negative highest to positive lowest)
+        const sortedRows = [...rows].sort((a, b) => a.differenceUsd - b.differenceUsd);
+        
+        for (const row of sortedRows) {
           const hoRow = hoDataLookup.get(row.bookingId);
           const hoSp = row.headoutSellingPrice || 0;
           const hoTakeRate = hoSp > 0 ? ((hoSp - row.hoNet) / hoSp * 100).toFixed(2) + "%" : "";
           const actualTakeRate = hoSp > 0 ? ((hoSp - row.spNetInHo) / hoSp * 100).toFixed(2) + "%" : "";
           
+          // Format dates
+          const creationDate = formatDateValue(row.bookingCreationDate || "");
+          const experienceDate = formatDateValue(getHoValue(hoRow, "experienceDate", "Experience Date", "experience_date", "tourDate") as string);
+          
           sheetData.push([
             row.bookingId,
-            row.bookingCreationDate || "",
-            getHoValue(hoRow, "experienceDate", "Experience Date", "experience_date", "tourDate") as string || "",
+            creationDate,
+            experienceDate,
             getHoValue(hoRow, "tgid", "TGID", "tourGroupId") as string || "",
             row.experienceName || "",
             row.tid || "",
@@ -2144,14 +2452,14 @@ export async function registerRoutes(
             row.bookingStatus || "",
             row.fulfillmentMethod || "",
             getHoValue(hoRow, "paymentMethod", "Payment Method") as string || "",
-            hoSp || "",
-            row.hoNet,
+            hoSp ? formatIndianNumber(hoSp) : "",
+            formatIndianNumber(row.hoNet),
             hoTakeRate,
-            row.spNetInHo,
+            formatIndianNumber(row.spNetInHo),
             actualTakeRate,
-            row.differenceLc,
+            formatIndianNumber(row.differenceLc),
             row.differencePct !== null ? `${(row.differencePct * 100).toFixed(2)}%` : "",
-            row.differenceUsd,
+            formatIndianNumber(row.differenceUsd),
             defaultComment,
           ]);
         }
