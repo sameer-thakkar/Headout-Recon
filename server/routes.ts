@@ -2538,24 +2538,23 @@ export async function registerRoutes(
       // Build formatting requests for consistent styling matching Excel
       const formatRequests: any[] = [];
       
-      // Header style: bold, light gray background (matches Excel applyTableStyles)
+      // Header style: bold text only (no background color - matching Excel)
       const headerStyle = {
-        backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
         textFormat: { bold: true },
         horizontalAlignment: "CENTER",
       };
-      const borderStyle = { style: "SOLID", color: { red: 0.7, green: 0.7, blue: 0.7 } };
-      const lightBorder = { style: "SOLID", color: { red: 0.85, green: 0.85, blue: 0.85 } };
+      // Black borders to match Excel
+      const borderStyle = { style: "SOLID", color: { red: 0, green: 0, blue: 0 } };
 
-      // Helper to add standard sheet formatting
+      // Helper to add standard sheet formatting (single table)
       const addSheetFormatting = (sheetId: number, rowCount: number, colCount: number, headerRowIndices: number[] = [0]) => {
-        // Format all identified header rows
+        // Format all identified header rows (bold only, no background)
         for (const rowIdx of headerRowIndices) {
           formatRequests.push({
             repeatCell: {
               range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
               cell: { userEnteredFormat: headerStyle },
-              fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
+              fields: "userEnteredFormat(textFormat,horizontalAlignment)",
             },
           });
         }
@@ -2577,12 +2576,34 @@ export async function registerRoutes(
           },
         });
         
-        // Borders around all data
+        // Borders around all data (black borders)
         formatRequests.push({
           updateBorders: {
             range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
             top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle,
-            innerHorizontal: lightBorder, innerVertical: lightBorder,
+            innerHorizontal: borderStyle, innerVertical: borderStyle,
+          },
+        });
+      };
+      
+      // Helper to add borders around a specific table range
+      const addTableBorders = (sheetId: number, startRow: number, endRow: number, startCol: number, endCol: number) => {
+        formatRequests.push({
+          updateBorders: {
+            range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: startCol, endColumnIndex: endCol },
+            top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle,
+            innerHorizontal: borderStyle, innerVertical: borderStyle,
+          },
+        });
+      };
+      
+      // Helper to bold a header row
+      const addHeaderFormatting = (sheetId: number, rowIdx: number, colCount: number) => {
+        formatRequests.push({
+          repeatCell: {
+            range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
+            cell: { userEnteredFormat: headerStyle },
+            fields: "userEnteredFormat(textFormat,horizontalAlignment)",
           },
         });
       };
@@ -2593,24 +2614,74 @@ export async function registerRoutes(
         addSheetFormatting(payableSheetId, payableSummaryData.length, 4, [0]);
       }
 
-      // Discrepancy Analysis - find all header rows (section titles and table headers)
+      // Discrepancy Analysis - identify each table separately and apply individual borders
       const discSheetId = sheetIdMap.get("Discrepancy Analysis");
       if (discSheetId !== undefined) {
-        const discHeaderRows: number[] = [];
-        let maxCols = 1;
+        // Find table boundaries by scanning for section headers and empty rows
+        type TableInfo = { startRow: number; endRow: number; headerRow: number; colCount: number; };
+        const tables: TableInfo[] = [];
+        let currentTableStart = -1;
+        let currentHeaderRow = -1;
+        let currentColCount = 0;
+        
         discrepancyData.forEach((row, idx) => {
-          maxCols = Math.max(maxCols, row.length);
           const firstCell = String(row[0] || "");
-          // Section headers (single-cell rows with SUMMARY/ANALYSIS)
-          if (row.length === 1 && (firstCell.includes("SUMMARY") || firstCell.includes("ANALYSIS"))) {
-            discHeaderRows.push(idx);
-          }
-          // Table headers (multi-cell rows starting with Reason/TID)
-          else if (row.length > 1 && (firstCell === "Reason" || firstCell === "TID")) {
-            discHeaderRows.push(idx);
+          const isEmptyRow = row.length === 0 || (row.length === 1 && !firstCell);
+          const isSectionHeader = row.length === 1 && (firstCell.includes("SUMMARY") || firstCell.includes("ANALYSIS"));
+          const isTableHeader = row.length > 1 && (firstCell === "Reason" || firstCell === "TID");
+          
+          if (isSectionHeader) {
+            // End previous table if exists
+            if (currentTableStart >= 0 && currentHeaderRow >= 0) {
+              tables.push({ startRow: currentTableStart, endRow: idx, headerRow: currentHeaderRow, colCount: currentColCount });
+            }
+            currentTableStart = idx;
+            currentHeaderRow = -1;
+            currentColCount = 1;
+          } else if (isTableHeader) {
+            currentHeaderRow = idx;
+            currentColCount = Math.max(currentColCount, row.length);
+          } else if (isEmptyRow) {
+            // End current table at empty row
+            if (currentTableStart >= 0 && currentHeaderRow >= 0) {
+              tables.push({ startRow: currentTableStart, endRow: idx, headerRow: currentHeaderRow, colCount: currentColCount });
+            }
+            currentTableStart = -1;
+            currentHeaderRow = -1;
+            currentColCount = 0;
+          } else {
+            // Data row - update column count
+            currentColCount = Math.max(currentColCount, row.length);
           }
         });
-        addSheetFormatting(discSheetId, discrepancyData.length, maxCols, discHeaderRows);
+        
+        // Close last table if not ended
+        if (currentTableStart >= 0 && currentHeaderRow >= 0) {
+          tables.push({ startRow: currentTableStart, endRow: discrepancyData.length, headerRow: currentHeaderRow, colCount: currentColCount });
+        }
+        
+        // Auto-resize all columns
+        let maxCols = 1;
+        discrepancyData.forEach(row => { maxCols = Math.max(maxCols, row.length); });
+        formatRequests.push({
+          autoResizeDimensions: {
+            dimensions: { sheetId: discSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: maxCols },
+          },
+        });
+        
+        // Apply formatting to each table separately
+        for (const table of tables) {
+          // Bold the section header row (single cell spanning)
+          addHeaderFormatting(discSheetId, table.startRow, table.colCount);
+          
+          // Bold the table header row (Reason/TID row)
+          if (table.headerRow !== table.startRow) {
+            addHeaderFormatting(discSheetId, table.headerRow, table.colCount);
+          }
+          
+          // Add borders around the entire table (from section header to end)
+          addTableBorders(discSheetId, table.startRow, table.endRow, 0, table.colCount);
+        }
       }
 
       // SP Invoice Report - use header row (first row) length
@@ -2629,20 +2700,71 @@ export async function registerRoutes(
         addSheetFormatting(hoSheetId, hoReportData.length, hoCols, [0]);
       }
 
-      // Draft Messages - find header rows (section headers and table headers)
+      // Draft Messages - identify each table separately and apply individual borders
       const draftSheetId = sheetIdMap.get("Draft Messages");
       if (draftSheetId !== undefined) {
-        const draftHeaderRows: number[] = [];
-        let maxCols = 1;
+        // Find table boundaries
+        type DraftTableInfo = { startRow: number; endRow: number; headerRows: number[]; colCount: number; };
+        const draftTables: DraftTableInfo[] = [];
+        let currentTableStart = -1;
+        let currentHeaderRows: number[] = [];
+        let currentColCount = 0;
+        
         draftMessagesData.forEach((row, idx) => {
-          maxCols = Math.max(maxCols, row.length);
           const firstCell = String(row[0] || "");
-          // Section headers: "Draft messages - X" or table headers: "DRI Team", "TID"
-          if (firstCell.startsWith("Draft messages") || firstCell === "DRI Team" || firstCell === "TID") {
-            draftHeaderRows.push(idx);
+          const isEmptyRow = row.length === 0 || (row.length === 1 && !firstCell);
+          const isSectionHeader = firstCell.startsWith("Draft messages");
+          const isTableHeader = firstCell === "DRI Team" || firstCell === "TID";
+          
+          if (isSectionHeader) {
+            // End previous table if exists
+            if (currentTableStart >= 0 && currentHeaderRows.length > 0) {
+              draftTables.push({ startRow: currentTableStart, endRow: idx, headerRows: [...currentHeaderRows], colCount: currentColCount });
+            }
+            currentTableStart = idx;
+            currentHeaderRows = [idx];
+            currentColCount = Math.max(1, row.length);
+          } else if (isTableHeader) {
+            currentHeaderRows.push(idx);
+            currentColCount = Math.max(currentColCount, row.length);
+          } else if (isEmptyRow) {
+            // End current table at empty row
+            if (currentTableStart >= 0 && currentHeaderRows.length > 0) {
+              draftTables.push({ startRow: currentTableStart, endRow: idx, headerRows: [...currentHeaderRows], colCount: currentColCount });
+            }
+            currentTableStart = -1;
+            currentHeaderRows = [];
+            currentColCount = 0;
+          } else {
+            // Data row - update column count
+            currentColCount = Math.max(currentColCount, row.length);
           }
         });
-        addSheetFormatting(draftSheetId, draftMessagesData.length, maxCols, draftHeaderRows);
+        
+        // Close last table if not ended
+        if (currentTableStart >= 0 && currentHeaderRows.length > 0) {
+          draftTables.push({ startRow: currentTableStart, endRow: draftMessagesData.length, headerRows: [...currentHeaderRows], colCount: currentColCount });
+        }
+        
+        // Auto-resize all columns
+        let maxCols = 1;
+        draftMessagesData.forEach(row => { maxCols = Math.max(maxCols, row.length); });
+        formatRequests.push({
+          autoResizeDimensions: {
+            dimensions: { sheetId: draftSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: maxCols },
+          },
+        });
+        
+        // Apply formatting to each table separately
+        for (const table of draftTables) {
+          // Bold all header rows
+          for (const headerRow of table.headerRows) {
+            addHeaderFormatting(draftSheetId, headerRow, table.colCount);
+          }
+          
+          // Add borders around the entire table
+          addTableBorders(draftSheetId, table.startRow, table.endRow, 0, table.colCount);
+        }
       }
 
       // DRI Views - simple tables with header at row 0
