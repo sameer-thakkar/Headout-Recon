@@ -248,7 +248,7 @@ export const disputeClosureStatusSchema = z.enum(["open", "closed"]);
 export type DisputeClosureStatus = z.infer<typeof disputeClosureStatusSchema>;
 
 // Dispute closure type (how the dispute was closed)
-export const disputeClosureTypeSchema = z.enum(["adjustment", "manual_writeoff", "accept_ho_error"]);
+export const disputeClosureTypeSchema = z.enum(["adjustment", "manual_writeoff", "accept_ho_error", "sp_error"]);
 export type DisputeClosureType = z.infer<typeof disputeClosureTypeSchema>;
 
 export const disputeRecordSchema = z.object({

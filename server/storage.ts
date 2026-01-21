@@ -162,7 +162,7 @@ export class MemStorage implements IStorage {
         const updated: DisputeRecord = {
           ...dispute,
           closureStatus: "closed",
-          closureType: "adjustment",
+          closureType: "sp_error", // SP Error - full amount adjusted, no HO net update needed
           closedAt: now,
           closedByAdjustmentAmount: adjustmentAmount,
           updatedAt: now,

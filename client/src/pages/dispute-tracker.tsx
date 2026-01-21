@@ -52,7 +52,7 @@ interface DisputeRecord {
   status: "pending" | "submitted" | "resolved" | "rejected";
   createdAt: string;
   closureStatus: "open" | "closed";
-  closureType?: "adjustment" | "manual_writeoff" | "accept_ho_error";
+  closureType?: "adjustment" | "manual_writeoff" | "accept_ho_error" | "sp_error";
   closureNote?: string;
   closedAt?: string;
   closedByAdjustmentAmount?: number;
@@ -69,7 +69,7 @@ interface AggregatedDispute {
   actualDisputeIds: string[];
   status: "pending" | "submitted" | "resolved" | "rejected";
   closureStatus: "open" | "closed";
-  closureType?: "adjustment" | "manual_writeoff" | "accept_ho_error";
+  closureType?: "adjustment" | "manual_writeoff" | "accept_ho_error" | "sp_error";
   closureNote?: string;
   closedAt?: string;
   closedByAdjustmentAmount?: number;
@@ -473,12 +473,16 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                           <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
                             HO Error Accepted
                           </Badge>
+                        ) : dispute.closureType === "sp_error" ? (
+                          <Badge className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20">
+                            SP Error
+                          </Badge>
                         ) : (
                           <Badge variant="secondary">Unknown</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-green-600 dark:text-green-400">
-                        {dispute.closureType === "adjustment" && dispute.closedByAdjustmentAmount !== undefined 
+                        {(dispute.closureType === "adjustment" || dispute.closureType === "sp_error") && dispute.closedByAdjustmentAmount !== undefined 
                           ? formatCurrency(dispute.closedByAdjustmentAmount, dispute.currency)
                           : "-"
                         }
@@ -558,6 +562,10 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                           <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
                             HO Error Accepted
                           </Badge>
+                        ) : selectedDispute.closureType === "sp_error" ? (
+                          <Badge className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20">
+                            SP Error
+                          </Badge>
                         ) : (
                           <Badge variant="secondary">Unknown</Badge>
                         )}
@@ -572,7 +580,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                         }
                       </p>
                     </div>
-                    {selectedDispute.closureType === "adjustment" && (
+                    {(selectedDispute.closureType === "adjustment" || selectedDispute.closureType === "sp_error") && (
                       <div>
                         <p className="text-sm text-muted-foreground">Adjustment Amount Used</p>
                         <p className="font-mono font-medium text-green-600 dark:text-green-400">
@@ -580,6 +588,13 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                             ? formatCurrency(selectedDispute.closedByAdjustmentAmount, selectedDispute.currency)
                             : "-"
                           }
+                        </p>
+                      </div>
+                    )}
+                    {selectedDispute.closureType === "sp_error" && (
+                      <div className="col-span-2 p-3 bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800 rounded-lg">
+                        <p className="text-sm text-cyan-700 dark:text-cyan-300 font-medium">
+                          No HO Net update needed - the previously reconciled net price was correct.
                         </p>
                       </div>
                     )}
