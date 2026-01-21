@@ -56,6 +56,8 @@ interface AmountPayablePanelProps {
   onClose: () => void;
   runId?: string | null;
   allRows?: PrimaryRow[];
+  onCurrencyChange?: (currency: string) => void;
+  availableCurrencies?: string[];
 }
 
 export function AmountPayablePanel({
@@ -67,6 +69,8 @@ export function AmountPayablePanel({
   onClose,
   runId,
   allRows = [],
+  onCurrencyChange,
+  availableCurrencies = [],
 }: AmountPayablePanelProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
@@ -542,7 +546,21 @@ export function AmountPayablePanel({
       <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
         <div className="flex items-center gap-2">
           <Calculator className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Amount Payable Calculator - {currency}</h2>
+          <h2 className="text-lg font-semibold">Amount Payable Calculator</h2>
+          {availableCurrencies.length > 1 && onCurrencyChange ? (
+            <Select value={currency} onValueChange={onCurrencyChange}>
+              <SelectTrigger className="w-24 h-8" data-testid="select-currency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableCurrencies.map((curr) => (
+                  <SelectItem key={curr} value={curr}>{curr}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Badge variant="outline">{currency}</Badge>
+          )}
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-panel">
           <X className="h-4 w-4" />

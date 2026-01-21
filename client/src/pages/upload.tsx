@@ -70,13 +70,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [files, setFiles] = useState<UploadedFile[]>(uploadedFiles);
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [amountPayable, setAmountPayable] = useState<Record<string, number>>({});
   const [selectedPayableCurrency, setSelectedPayableCurrency] = useState<string | null>(null);
   const [adjustmentsPerCurrency, setAdjustmentsPerCurrency] = useState<Record<string, Adjustment[]>>({});
   const [finalNetSelectionsPerCurrency, setFinalNetSelectionsPerCurrency] = useState<Record<string, FinalNetSelection>>({});
   const [isExportingGSheet, setIsExportingGSheet] = useState(false);
   const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(true);
+  const [isComputeOpen, setIsComputeOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: runResult } = useQuery<{
@@ -96,26 +96,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const overallSummary = runResult?.overallSummary || [];
   const primaryRows = runResult?.primaryRows || [];
   const unmappedRows = runResult?.unmappedRows || [];
-
-  const amountPayableData = useMemo(() => {
-    const currencyTotals: Record<string, { spTotal: number; hoTotal: number }> = {};
-    
-    for (const row of primaryRows) {
-      const currency = row.hoCurrency;
-      if (!currencyTotals[currency]) {
-        currencyTotals[currency] = { spTotal: 0, hoTotal: 0 };
-      }
-      currencyTotals[currency].spTotal += row.spNetOriginal;
-      currencyTotals[currency].hoTotal += row.hoNet;
-    }
-    
-    return Object.entries(currencyTotals).map(([currency, totals]) => ({
-      currency,
-      asPerSP: totals.spTotal,
-      asPerHO: totals.hoTotal,
-      finalPayable: amountPayable[currency] ?? totals.spTotal,
-    }));
-  }, [primaryRows, amountPayable]);
 
   const filteredDiscrepancyRows = useMemo(() => {
     if (!discrepancyData?.analysisRows || !selectedReason) return [];
@@ -236,23 +216,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
   };
 
-  const handleFinalPayableChange = (currency: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setAmountPayable(prev => ({ ...prev, [currency]: numValue }));
-  };
-
-  const openPayableCalculator = (currency: string) => {
-    if (selectedPayableCurrency === currency) {
-      setSelectedPayableCurrency(null);
-    } else {
-      setSelectedPayableCurrency(currency);
-    }
-  };
-
-  const closePayableCalculator = () => {
-    setSelectedPayableCurrency(null);
-  };
-
   const handlePayableModalApply = useCallback((
     newAdjustments: Adjustment[],
     selections: FinalNetSelection,
@@ -269,8 +232,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       ...prev,
       [selectedPayableCurrency]: selections,
     }));
-    
-    setAmountPayable(prev => ({ ...prev, [selectedPayableCurrency]: finalAmount }));
   }, [selectedPayableCurrency]);
 
   const handleExportExcel = useCallback(async () => {
@@ -571,86 +532,51 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Amount Payable
-              </CardTitle>
+              <div className="flex items-center justify-between gap-4">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  {spDetails?.billingEntityName || "Amount Payable"}
+                </CardTitle>
+                {hasResults && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (!isComputeOpen && !selectedPayableCurrency && spDetails?.currency) {
+                        setSelectedPayableCurrency(spDetails.currency.split(", ")[0]);
+                      }
+                      setIsComputeOpen(!isComputeOpen);
+                    }}
+                    data-testid="button-compute"
+                  >
+                    <Calculator className="h-4 w-4 mr-1" />
+                    {isComputeOpen ? "Close" : "Compute"}
+                  </Button>
+                )}
+              </div>
               {!hasResults && (
                 <CardDescription>
                   Summary will appear after processing
                 </CardDescription>
               )}
             </CardHeader>
-            <CardContent>
-              {hasResults ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Currency</TableHead>
-                      <TableHead className="text-right">As per SP</TableHead>
-                      <TableHead className="text-right">As per HO</TableHead>
-                      <TableHead className="text-right">Final Payable</TableHead>
-                      <TableHead className="text-center">Calculate</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {amountPayableData.map((row) => (
-                      <TableRow key={row.currency} data-testid={`payable-row-${row.currency}`}>
-                        <TableCell className="font-medium">{row.currency}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatNumber(row.asPerSP)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {formatNumber(row.asPerHO)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            value={amountPayable[row.currency] ?? row.asPerSP}
-                            onChange={(e) => handleFinalPayableChange(row.currency, e.target.value)}
-                            className="w-32 h-8 text-right font-mono ml-auto"
-                            data-testid={`input-payable-${row.currency}`}
-                          />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openPayableCalculator(row.currency)}
-                            data-testid={`button-calculate-${row.currency}`}
-                          >
-                            <Calculator className="h-4 w-4 mr-1" />
-                            Calculate
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="h-16 flex items-center justify-center text-muted-foreground">
-                  <p className="text-sm">No data yet</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {selectedPayableCurrency && (
-            <Card>
-              <CardContent className="p-0">
+            {isComputeOpen && hasResults && (
+              <CardContent className="pt-0">
                 <AmountPayablePanel
                   bookings={bookingsForPayableModal}
-                  currency={selectedPayableCurrency}
-                  adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
-                  finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency] || {}}
+                  currency={selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""}
+                  adjustments={adjustmentsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || []}
+                  finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || {}}
                   onApply={handlePayableModalApply}
-                  onClose={closePayableCalculator}
+                  onClose={() => setIsComputeOpen(false)}
                   runId={currentRunId}
                   allRows={primaryRows}
+                  onCurrencyChange={setSelectedPayableCurrency}
+                  availableCurrencies={spDetails?.currency.split(", ") || []}
                 />
               </CardContent>
-            </Card>
-          )}
+            )}
+          </Card>
         </div>
       </ScrollArea>
 
