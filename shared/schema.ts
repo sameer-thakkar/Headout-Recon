@@ -258,6 +258,7 @@ export const disputeRecordSchema = z.object({
   billingEntityId: z.string(),
   billingEntityName: z.string(),
   ticketId: z.string().optional(),
+  tid: z.string().optional(), // TID (Tour ID) - separate from ticketId
   currency: z.string(),
   disputeAmount: z.number(),
   maxDisputeAmount: z.number(),

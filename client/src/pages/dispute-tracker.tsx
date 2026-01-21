@@ -45,6 +45,7 @@ interface DisputeRecord {
   billingEntityId: string;
   billingEntityName: string;
   ticketId?: string;
+  tid?: string; // TID (Tour ID) - separate from ticketId
   currency: string;
   disputeAmount: number;
   maxDisputeAmount: number;
@@ -617,14 +618,14 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                       </TableHeader>
                       <TableBody>
                         {(() => {
-                          // Group disputes by TID
+                          // Group disputes by TID (Tour ID)
                           const tidGroups = new Map<string, DisputeRecord[]>();
                           for (const d of selectedDispute.disputes) {
-                            const tid = d.ticketId || "Unknown";
-                            if (!tidGroups.has(tid)) {
-                              tidGroups.set(tid, []);
+                            const tidValue = d.tid || "Unknown";
+                            if (!tidGroups.has(tidValue)) {
+                              tidGroups.set(tidValue, []);
                             }
-                            tidGroups.get(tid)!.push(d);
+                            tidGroups.get(tidValue)!.push(d);
                           }
                           
                           return Array.from(tidGroups.entries()).map(([tid, disputes]) => {

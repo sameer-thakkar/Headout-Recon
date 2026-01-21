@@ -3224,7 +3224,7 @@ export async function registerRoutes(
 
   app.post("/api/disputes", async (req, res) => {
     try {
-      const { runId, bookingId, billingEntityId, billingEntityName, ticketId, currency, disputeAmount, maxDisputeAmount, reconciledNet } = req.body;
+      const { runId, bookingId, billingEntityId, billingEntityName, ticketId, tid, currency, disputeAmount, maxDisputeAmount, reconciledNet } = req.body;
       
       // Check if dispute already exists for this booking
       const existing = await storage.getDisputeByBooking(runId, bookingId);
@@ -3235,6 +3235,7 @@ export async function registerRoutes(
           billingEntityId,
           billingEntityName,
           ticketId,
+          tid,
           reconciledNet,
         });
         return res.json({ dispute: updated });
@@ -3246,6 +3247,7 @@ export async function registerRoutes(
         billingEntityId: billingEntityId || "",
         billingEntityName: billingEntityName || "",
         ticketId: ticketId || "",
+        tid: tid || "",
         currency: currency || "USD",
         disputeAmount: disputeAmount || 0,
         maxDisputeAmount: maxDisputeAmount || 0,
@@ -3443,7 +3445,7 @@ export async function registerRoutes(
       
       const results = [];
       for (const d of disputes) {
-        const { bookingId, disputeAmount, currency, billingEntityId, billingEntityName, ticketId, reconciledNet } = d;
+        const { bookingId, disputeAmount, currency, billingEntityId, billingEntityName, ticketId, tid, reconciledNet } = d;
         
         // Check if dispute already exists for this booking
         const existing = await storage.getDisputeByBooking(runId, bookingId);
@@ -3454,6 +3456,7 @@ export async function registerRoutes(
             billingEntityId,
             billingEntityName,
             ticketId,
+            tid,
             reconciledNet,
           });
           if (updated) results.push(updated);
@@ -3465,6 +3468,7 @@ export async function registerRoutes(
             billingEntityId: billingEntityId || "",
             billingEntityName: billingEntityName || "",
             ticketId: ticketId || "",
+            tid: tid || "",
             currency: currency || "USD",
             disputeAmount: disputeAmount || 0,
             maxDisputeAmount: disputeAmount || 0,

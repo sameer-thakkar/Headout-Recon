@@ -481,6 +481,7 @@ export function AmountPayablePanel({
         billingEntityId: string;
         billingEntityName: string;
         ticketId: string;
+        tid: string;
         reconciledNet: number;
       }> = [];
       const removedDisputes: string[] = [];
@@ -501,6 +502,7 @@ export function AmountPayablePanel({
             billingEntityId: booking.beId || "",
             billingEntityName: booking.billingEntityName || "",
             ticketId: booking.ticketId || "",
+            tid: booking.tid || "",
             reconciledNet,
           });
         } else if (wasDisputed && !isNowDisputed) {
