@@ -409,26 +409,26 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         <div className="p-4 space-y-4">
 
           {spDetails && hasResults && (
-            <div className="flex items-center gap-x-6 gap-y-2 flex-wrap text-sm border-b pb-3" data-testid="sp-details-section">
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">BE ID:</span>
-                <span className="font-mono font-medium" data-testid="text-sp-be-id">{spDetails.beId || "—"}</span>
+            <div className="grid grid-cols-5 gap-4 text-sm border-b pb-4" data-testid="sp-details-section">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Billing Entity ID</p>
+                <p className="font-mono font-medium" data-testid="text-sp-be-id">{spDetails.beId || "—"}</p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">Entity:</span>
-                <span className="font-medium" data-testid="text-sp-entity-name">{spDetails.billingEntityName || "—"}</span>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Billing Entity Name</p>
+                <p className="font-medium" data-testid="text-sp-entity-name">{spDetails.billingEntityName || "—"}</p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">Ticket:</span>
-                <span className="font-mono font-medium" data-testid="text-sp-ticket-id">{spDetails.ticketId || "—"}</span>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Ticket ID</p>
+                <p className="font-mono font-medium" data-testid="text-sp-ticket-id">{spDetails.ticketId || "—"}</p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">Payment:</span>
-                <span className="font-medium" data-testid="text-sp-payment-basis">{spDetails.paymentBasis || "—"}</span>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Payment Basis</p>
+                <p className="font-medium" data-testid="text-sp-payment-basis">{spDetails.paymentBasis || "—"}</p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">Currency:</span>
-                <span className="font-mono font-medium" data-testid="text-sp-currency">{spDetails.currency || "—"}</span>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Currency</p>
+                <p className="font-mono font-medium" data-testid="text-sp-currency">{spDetails.currency || "—"}</p>
               </div>
             </div>
           )}
