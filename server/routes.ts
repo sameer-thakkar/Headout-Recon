@@ -2248,31 +2248,191 @@ export async function registerRoutes(
         spReportData.push(dataRow);
       }
 
-      // ===== Sheet 4: HO Report Updated (enriched) =====
-      const hoReportData: (string | number | null)[][] = [
-        ["Booking ID", "TID", "Experience Name", "HO Net", "Currency", "SP Net", "Difference", "Difference %", "Reason", "DRI Team", "Comments"],
-      ];
+      // ===== Sheet 4: HO Report Updated (enriched) - matching Excel format =====
+      // Uses original HO data with SP Net, Difference, Difference % inserted before finalNetPrice
+      // Updates finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
       
-      for (const row of result.primaryRows) {
-        let comments = "";
-        if (row.reason === "Multiple Tickets Booked") comments = "MTB";
-        else if (row.reason === "Net Price Discrepancy") comments = "NPD";
-        else if (row.reason === "Reconciled") comments = "Reconciled";
-        
-        hoReportData.push([
-          row.bookingId,
-          row.tid || "",
-          row.experienceName || "",
-          formatIndianNumber(row.hoNet),
-          row.hoCurrency,
-          formatIndianNumber(row.spNetInHo),
-          formatIndianNumber(row.differenceLc),
-          row.differencePct !== null ? `${(row.differencePct * 100).toFixed(2)}%` : "",
-          row.reason,
-          row.driTeam || "",
-          comments,
-        ]);
+      // Parse date value safely - same logic as Excel export
+      const gsParseDate = (dateValue: string | number | null | undefined): number => {
+        if (dateValue === null || dateValue === undefined || dateValue === "") return 0;
+        if (typeof dateValue === "number" || !isNaN(Number(dateValue))) {
+          const numValue = Number(dateValue);
+          if (numValue > 40000 && numValue < 60000) {
+            const excelEpoch = new Date(1899, 11, 30).getTime();
+            const msPerDay = 24 * 60 * 60 * 1000;
+            return excelEpoch + numValue * msPerDay;
+          }
+          if (numValue > 1000000000000) return numValue;
+          if (numValue > 1000000000) return numValue * 1000;
+        }
+        const strValue = String(dateValue);
+        const dmyMatch = strValue.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(.*)$/);
+        if (dmyMatch) {
+          const [, day, month, year, time] = dmyMatch;
+          const isoStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}${time ? 'T' + time : ''}`;
+          const parsed2 = new Date(isoStr);
+          if (!isNaN(parsed2.getTime())) return parsed2.getTime();
+        }
+        const parsed = new Date(strValue);
+        if (!isNaN(parsed.getTime())) return parsed.getTime();
+        return 0;
+      };
+      
+      // Build set of Secondary row indices by analyzing duplicate bookingIds
+      const gsSecondaryRowIndices = new Set<number>();
+      const gsHoRowsByBookingId = new Map<string, { index: number; row: Record<string, unknown>; date: number }[]>();
+      
+      originalHoData.forEach((row: Record<string, unknown>, index: number) => {
+        const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        if (!bookingId) return;
+        const dateValue = row["bookingCreationDate"] || row["Booking Creation Date"] || row["BookingCreationDate"] || "";
+        const dateNum = gsParseDate(dateValue as string | number);
+        if (!gsHoRowsByBookingId.has(bookingId)) gsHoRowsByBookingId.set(bookingId, []);
+        gsHoRowsByBookingId.get(bookingId)!.push({ index, row, date: dateNum });
+      });
+      
+      gsHoRowsByBookingId.forEach((rows) => {
+        if (rows.length <= 1) return;
+        rows.sort((a, b) => b.date - a.date);
+        for (let i = 1; i < rows.length; i++) {
+          gsSecondaryRowIndices.add(rows[i].index);
+        }
+      });
+      
+      // Helper to check if a key is the finalNetPrice column
+      const gsIsFinalNetCol = (k: string) => {
+        const kLower = k.toLowerCase();
+        return kLower === "finalnetprice" || kLower === "final net price" || 
+               kLower === "finalnet" || kLower === "final net" || kLower === "final payable";
+      };
+      
+      // Get headers from original data
+      const gsOriginalKeys = originalHoData.length > 0 ? Object.keys(originalHoData[0] as Record<string, unknown>) : [];
+      
+      // Build header row with SP Net, Difference, Difference % inserted before finalNetPrice
+      const gsHeaderRow: string[] = [];
+      let gsInsertedNewCols = false;
+      for (const key of gsOriginalKeys) {
+        if (gsIsFinalNetCol(key) && !gsInsertedNewCols) {
+          gsHeaderRow.push("SP Net", "Difference", "Difference %");
+          gsInsertedNewCols = true;
+        }
+        gsHeaderRow.push(key);
       }
+      if (!gsInsertedNewCols) {
+        gsHeaderRow.push("SP Net", "Difference", "Difference %", "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments");
+      }
+      
+      const hoReportData: (string | number | null)[][] = [gsHeaderRow];
+      
+      // Process each row from original HO data
+      originalHoData.forEach((row: Record<string, unknown>, rowIndex: number) => {
+        const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        const reconRows = allRowsMap.get(bookingId) || [];
+        const reconRow = reconRows[0];
+        const isSecondary = gsSecondaryRowIndices.has(rowIndex);
+        
+        // Calculate values
+        const spNet = reconRow?.spNetInHo ?? "";
+        const hoNet = reconRow?.hoNet ?? 0;
+        const difference = reconRow ? hoNet - reconRow.spNetInHo : "";
+        const differencePercent = reconRow && hoNet !== 0 
+          ? ((hoNet - reconRow.spNetInHo) / hoNet * 100).toFixed(2) + "%" 
+          : "";
+        
+        // Determine finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
+        let finalNetPrice: number | string = "";
+        let errorTeamAttribution = row["errorTeamAttribution"] || row["Error Team Attribution"] || "";
+        let errorBucket = row["errorBucket"] || row["Error Bucket"] || "";
+        let comments = row["comments"] || row["Comments"] || "";
+        
+        const reason = reconRow?.reason || "Reconciled";
+        const fulfillmentMethod = String(reconRow?.fulfillmentMethod || row["fulfillmentMethod"] || row["Fulfillment Method"] || "");
+        const priceSync = String(row["priceSync"] || row["Price Sync"] || row["PriceSync"] || "");
+        
+        if (isSecondary) {
+          finalNetPrice = 0;
+          comments = "Duplicate Fulfillment";
+        } else if (reason === "Reconciled") {
+          finalNetPrice = spNet;
+          comments = "Reconciled";
+        } else if (reason.toLowerCase().includes("multiple") || reason === "MTB") {
+          finalNetPrice = spNet;
+          errorBucket = "Multiple Tickets Booked";
+          comments = "Multiple Tickets Booked";
+          if (fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") {
+            errorTeamAttribution = "Tech";
+          } else if (fulfillmentMethod.toLowerCase() === "manual") {
+            errorTeamAttribution = "Reservation Ops";
+          } else if (fulfillmentMethod.toLowerCase() === "selenium") {
+            errorTeamAttribution = "Selenium";
+          }
+        } else if (reason.toLowerCase().includes("price") || reason === "NPD") {
+          finalNetPrice = spNet;
+          errorBucket = "Price Mismatch";
+          const varianceComment = hoNet < (reconRow?.spNetInHo || 0) ? "Negative Variance" : "Positive Variance";
+          comments = varianceComment;
+          if ((fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") && 
+              priceSync.toLowerCase() === "yes") {
+            errorTeamAttribution = "Inventory";
+          } else if (fulfillmentMethod.toLowerCase() === "manual" && 
+                     (priceSync.toLowerCase() === "no" || priceSync === "")) {
+            errorTeamAttribution = "BizOps";
+          } else if (fulfillmentMethod.toLowerCase() === "selenium") {
+            errorTeamAttribution = "Selenium";
+          }
+        } else {
+          finalNetPrice = spNet;
+        }
+        
+        // Build data row matching header order
+        const dataRow: (string | number | null)[] = [];
+        let insertedNewCols = false;
+        
+        for (const key of gsOriginalKeys) {
+          const keyLower = key.toLowerCase();
+          
+          // Insert SP Net, Difference, Difference % before finalNetPrice
+          if (gsIsFinalNetCol(key) && !insertedNewCols) {
+            dataRow.push(typeof spNet === "number" ? formatIndianNumber(spNet) : spNet);
+            dataRow.push(typeof difference === "number" ? formatIndianNumber(difference) : difference);
+            dataRow.push(differencePercent);
+            insertedNewCols = true;
+          }
+          
+          // Format value based on column type
+          let value: string | number | null = row[key] as string | number | null;
+          
+          if (gsIsFinalNetCol(key)) {
+            value = typeof finalNetPrice === "number" ? formatIndianNumber(finalNetPrice) : finalNetPrice;
+          } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
+            value = String(errorTeamAttribution);
+          } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
+            value = String(errorBucket);
+          } else if (keyLower === "comments") {
+            value = String(comments);
+          } else if (keyLower === "honet" || keyLower === "ho net" || keyLower === "ho_net") {
+            value = typeof value === "number" ? formatIndianNumber(value) : value;
+          } else if (keyLower.includes("date") && value) {
+            value = formatDateValue(value);
+          }
+          
+          dataRow.push(value);
+        }
+        
+        // If finalNetPrice column wasn't in original, append new columns at end
+        if (!insertedNewCols) {
+          dataRow.push(typeof spNet === "number" ? formatIndianNumber(spNet) : spNet);
+          dataRow.push(typeof difference === "number" ? formatIndianNumber(difference) : difference);
+          dataRow.push(differencePercent);
+          dataRow.push(typeof finalNetPrice === "number" ? formatIndianNumber(finalNetPrice) : finalNetPrice);
+          dataRow.push(String(errorTeamAttribution));
+          dataRow.push(String(errorBucket));
+          dataRow.push(String(comments));
+        }
+        
+        hoReportData.push(dataRow);
+      });
 
       // ===== Sheet 5: Draft Messages (with TID tables matching Excel) =====
       const firstHoRow = originalHoData[0] as Record<string, unknown> | undefined;
