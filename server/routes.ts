@@ -2191,63 +2191,126 @@ export async function registerRoutes(
         }
       }
 
-      // Build formatting requests for consistent styling
+      // Build formatting requests for consistent styling matching Excel
       const formatRequests: any[] = [];
       
-      // Header style: bold, light gray background
+      // Header style: bold, light gray background (matches Excel applyTableStyles)
       const headerStyle = {
         backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
         textFormat: { bold: true },
         horizontalAlignment: "CENTER",
       };
-      
-      // Number format for currency columns
-      const currencyFormat = { type: "NUMBER", pattern: "#,##0.00" };
-      const percentFormat = { type: "PERCENT", pattern: "0.00%" };
+      const borderStyle = { style: "SOLID", color: { red: 0.7, green: 0.7, blue: 0.7 } };
+      const lightBorder = { style: "SOLID", color: { red: 0.85, green: 0.85, blue: 0.85 } };
 
-      // Apply formatting to each sheet
-      const allSheetNames = ["Payable Summary", "Discrepancy Analysis", "SP Invoice Report", "HO Report Updated", "Draft Messages", ...driSheetNames];
-      
-      for (const sheetName of allSheetNames) {
+      // Helper to add standard sheet formatting
+      const addSheetFormatting = (sheetId: number, rowCount: number, colCount: number, headerRowIndices: number[] = [0]) => {
+        // Format all identified header rows
+        for (const rowIdx of headerRowIndices) {
+          formatRequests.push({
+            repeatCell: {
+              range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
+              cell: { userEnteredFormat: headerStyle },
+              fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
+            },
+          });
+        }
+        
+        // Freeze first header row
+        if (headerRowIndices.includes(0)) {
+          formatRequests.push({
+            updateSheetProperties: {
+              properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+              fields: "gridProperties.frozenRowCount",
+            },
+          });
+        }
+        
+        // Auto-resize all columns
+        formatRequests.push({
+          autoResizeDimensions: {
+            dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: colCount },
+          },
+        });
+        
+        // Borders around all data
+        formatRequests.push({
+          updateBorders: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
+            top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle,
+            innerHorizontal: lightBorder, innerVertical: lightBorder,
+          },
+        });
+      };
+
+      // Payable Summary (simple table with header at row 0)
+      const payableSheetId = sheetIdMap.get("Payable Summary");
+      if (payableSheetId !== undefined) {
+        addSheetFormatting(payableSheetId, payableSummaryData.length, 4, [0]);
+      }
+
+      // Discrepancy Analysis - find all header rows (section titles and table headers)
+      const discSheetId = sheetIdMap.get("Discrepancy Analysis");
+      if (discSheetId !== undefined) {
+        const discHeaderRows: number[] = [];
+        let maxCols = 1;
+        discrepancyData.forEach((row, idx) => {
+          maxCols = Math.max(maxCols, row.length);
+          const firstCell = String(row[0] || "");
+          // Section headers (single-cell rows with SUMMARY/ANALYSIS)
+          if (row.length === 1 && (firstCell.includes("SUMMARY") || firstCell.includes("ANALYSIS"))) {
+            discHeaderRows.push(idx);
+          }
+          // Table headers (multi-cell rows starting with Reason/TID)
+          else if (row.length > 1 && (firstCell === "Reason" || firstCell === "TID")) {
+            discHeaderRows.push(idx);
+          }
+        });
+        addSheetFormatting(discSheetId, discrepancyData.length, maxCols, discHeaderRows);
+      }
+
+      // SP Invoice Report - use header row (first row) length
+      const spSheetId = sheetIdMap.get("SP Invoice Report");
+      if (spSheetId !== undefined) {
+        // spReportData is 2D array with header at row 0
+        const spCols = spReportData.length > 0 && Array.isArray(spReportData[0]) ? spReportData[0].length : 5;
+        addSheetFormatting(spSheetId, spReportData.length, spCols, [0]);
+      }
+
+      // HO Report Updated - use header row (first row) length
+      const hoSheetId = sheetIdMap.get("HO Report Updated");
+      if (hoSheetId !== undefined) {
+        // hoReportData is 2D array with header at row 0
+        const hoCols = hoReportData.length > 0 && Array.isArray(hoReportData[0]) ? hoReportData[0].length : 11;
+        addSheetFormatting(hoSheetId, hoReportData.length, hoCols, [0]);
+      }
+
+      // Draft Messages - find header rows (section headers and table headers)
+      const draftSheetId = sheetIdMap.get("Draft Messages");
+      if (draftSheetId !== undefined) {
+        const draftHeaderRows: number[] = [];
+        let maxCols = 1;
+        draftMessagesData.forEach((row, idx) => {
+          maxCols = Math.max(maxCols, row.length);
+          const firstCell = String(row[0] || "");
+          // Section headers: "Draft messages - X" or table headers: "DRI Team", "TID"
+          if (firstCell.startsWith("Draft messages") || firstCell === "DRI Team" || firstCell === "TID") {
+            draftHeaderRows.push(idx);
+          }
+        });
+        addSheetFormatting(draftSheetId, draftMessagesData.length, maxCols, draftHeaderRows);
+      }
+
+      // DRI Views - simple tables with header at row 0
+      for (let i = 0; i < driSheetNames.length; i++) {
+        const sheetName = driSheetNames[i];
         const sheetId = sheetIdMap.get(sheetName);
         if (sheetId === undefined) continue;
         
-        // Format header row (row 0) - bold with gray background
-        formatRequests.push({
-          repeatCell: {
-            range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
-            cell: { userEnteredFormat: headerStyle },
-            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
-          },
-        });
-        
-        // Auto-resize columns
-        formatRequests.push({
-          autoResizeDimensions: {
-            dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 30 },
-          },
-        });
-        
-        // Freeze header row
-        formatRequests.push({
-          updateSheetProperties: {
-            properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
-            fields: "gridProperties.frozenRowCount",
-          },
-        });
-        
-        // Add thin borders to all data cells
-        formatRequests.push({
-          updateBorders: {
-            range: { sheetId, startRowIndex: 0, endRowIndex: 1000, startColumnIndex: 0, endColumnIndex: 30 },
-            top: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-            bottom: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-            left: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-            right: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
-            innerHorizontal: { style: "SOLID", color: { red: 0.9, green: 0.9, blue: 0.9 } },
-            innerVertical: { style: "SOLID", color: { red: 0.9, green: 0.9, blue: 0.9 } },
-          },
-        });
+        const driData = driSheetDataList[i]?.data || [];
+        const rowCount = driData.length;
+        const colCount = driData.length > 0 ? driData[0].length : 22;
+        addSheetFormatting(sheetId, rowCount, colCount, [0]);
       }
       
       // Apply all formatting in one batch
