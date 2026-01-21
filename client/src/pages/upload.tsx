@@ -141,6 +141,20 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       }));
   }, [primaryRows, unmappedRows, selectedPayableCurrency]);
 
+  const spDetails = useMemo(() => {
+    const firstRow = primaryRows[0];
+    if (!firstRow) return null;
+    const currencySet = new Set(primaryRows.map(r => r.hoCurrency));
+    const currencies = Array.from(currencySet);
+    return {
+      beId: firstRow.beId || "",
+      billingEntityName: firstRow.billingEntityName || "",
+      ticketId: firstRow.ticketId || "",
+      paymentBasis: firstRow.paymentBasis || "",
+      currency: currencies.join(", "),
+    };
+  }, [primaryRows]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -393,6 +407,31 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
+
+          {spDetails && hasResults && (
+            <div className="flex items-center gap-x-6 gap-y-2 flex-wrap text-sm border-b pb-3" data-testid="sp-details-section">
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">BE ID:</span>
+                <span className="font-mono font-medium" data-testid="text-sp-be-id">{spDetails.beId || "—"}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Entity:</span>
+                <span className="font-medium" data-testid="text-sp-entity-name">{spDetails.billingEntityName || "—"}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Ticket:</span>
+                <span className="font-mono font-medium" data-testid="text-sp-ticket-id">{spDetails.ticketId || "—"}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Payment:</span>
+                <span className="font-medium" data-testid="text-sp-payment-basis">{spDetails.paymentBasis || "—"}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Currency:</span>
+                <span className="font-mono font-medium" data-testid="text-sp-currency">{spDetails.currency || "—"}</span>
+              </div>
+            </div>
+          )}
 
           <Card>
             <CardHeader className="pb-3">
