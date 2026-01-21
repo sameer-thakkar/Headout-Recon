@@ -475,10 +475,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         <TableRow>
                           <TableHead>Reason</TableHead>
                           <TableHead>Currency</TableHead>
-                          <TableHead className="text-right">Discrepancy (LC)</TableHead>
-                          <TableHead className="text-right">Discrepancy (USD)</TableHead>
-                          <TableHead className="text-right">Count BID</TableHead>
-                          <TableHead className="w-8"></TableHead>
+                          <TableHead className="text-right">Disc. LC</TableHead>
+                          <TableHead className="text-right">Disc. USD</TableHead>
+                          <TableHead className="text-right">Count</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -507,11 +506,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                 {formatNumber(row.discrepancyUsd)}
                               </TableCell>
                               <TableCell className="text-right">{row.countBid}</TableCell>
-                              <TableCell>
-                                {isClickable && (
-                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                )}
-                              </TableCell>
                             </TableRow>
                           );
                         })}
