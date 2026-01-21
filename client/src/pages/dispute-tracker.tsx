@@ -456,6 +456,10 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                           <Badge className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
                             Written Off
                           </Badge>
+                        ) : dispute.closureType === "accept_ho_error" ? (
+                          <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                            HO Error Accepted
+                          </Badge>
                         ) : (
                           <Badge variant="secondary">Unknown</Badge>
                         )}
@@ -534,6 +538,10 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                         ) : selectedDispute.closureType === "manual_writeoff" ? (
                           <Badge className="bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
                             Written Off
+                          </Badge>
+                        ) : selectedDispute.closureType === "accept_ho_error" ? (
+                          <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                            HO Error Accepted
                           </Badge>
                         ) : (
                           <Badge variant="secondary">Unknown</Badge>
