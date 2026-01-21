@@ -544,34 +544,25 @@ export function AmountPayablePanel({
   return (
     <div className="h-full flex flex-col bg-background">
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-6">
-          <div className="bg-muted/50 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium">Reconciled Bookings</p>
-              <Badge variant="secondary">{reconciledBookings.length} bookings</Badge>
+        <div className="p-4 space-y-3">
+          <div className="border rounded-lg overflow-hidden">
+            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 items-center">
+              <div className="col-span-6 flex items-center gap-2">
+                <Check className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium">Reconciled</span>
+                <Badge variant="secondary" className="text-xs">{reconciledBookings.length}</Badge>
+              </div>
+              <div className="col-span-6 text-right">
+                <span className="text-sm font-mono font-semibold" data-testid="text-reconciled-total">
+                  {formatCurrency(reconciledTotal)} {currency}
+                </span>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mb-2">
-              For reconciled bookings, SP Net is always used as Final Net
-            </p>
-            <p className="text-xl font-bold font-mono" data-testid="text-reconciled-total">
-              {formatCurrency(reconciledTotal)} {currency}
-            </p>
           </div>
 
           {discrepancyBookings.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-sm font-medium">Discrepancy Bookings by Reason</p>
-                  <p className="text-xs text-muted-foreground">
-                    Select HO Net or SP Net as Final Net for each discrepancy type
-                  </p>
-                </div>
-                <Badge variant="outline">{discrepancyBookings.length} bookings</Badge>
-              </div>
-
-              <div className="space-y-3">
-                {Object.entries(bookingsByReasonAndTid).map(([reason, tidGroups]) => {
+            <div className="space-y-3">
+              {Object.entries(bookingsByReasonAndTid).map(([reason, tidGroups]) => {
                   const reasonBookings = bookingsByReason[reason] || [];
                   const reasonTotal = getReasonTotal(reason);
                   const tidKey = (tid: string) => `${reason}:${tid}`;
@@ -710,7 +701,6 @@ export function AmountPayablePanel({
                     </Collapsible>
                   );
                 })}
-              </div>
 
               <div className="flex justify-between items-center pt-3 mt-3 border-t">
                 <p className="text-sm font-medium">Discrepancy Total</p>
