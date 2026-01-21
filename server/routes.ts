@@ -3260,6 +3260,89 @@ export async function registerRoutes(
     }
   });
 
+  // Accept HO Error - close disputes and mark as HO error
+  // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
+  app.post("/api/disputes/accept-ho-error", async (req, res) => {
+    try {
+      const { disputeIds } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      // Close each dispute with accept_ho_error type
+      const closedDisputes = [];
+      for (const disputeId of disputeIds) {
+        const dispute = await storage.getDisputeById(disputeId);
+        if (dispute && dispute.closureStatus === "open") {
+          const updated = await storage.updateDispute(disputeId, {
+            closureStatus: "closed",
+            closureType: "accept_ho_error",
+            closedAt: new Date().toISOString(),
+          });
+          if (updated) closedDisputes.push(updated);
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        closedDisputes,
+        message: `${closedDisputes.length} dispute(s) closed as HO Error`
+      });
+    } catch (error) {
+      console.error("Accept HO error:", error);
+      res.status(500).json({ error: "Failed to close disputes" });
+    }
+  });
+
+  // Generate Excel report for Accept HO Error closure
+  // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
+  app.post("/api/disputes/accept-ho-error/download", async (req, res) => {
+    try {
+      const { disputeIds } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      // Get dispute details
+      const disputes = await Promise.all(
+        disputeIds.map(async (id: string) => {
+          return await storage.getDisputeById(id);
+        })
+      );
+      
+      const validDisputes = disputes.filter(d => d !== undefined);
+      
+      // Build Excel data with Booking ID and Final Reconciled Net Price
+      // Apply Indian number formatting to the final reconciled net price
+      const reportData = validDisputes.map(d => ({
+        "Booking ID": d!.bookingId,
+        "Final Reconciled Net Price": formatIndianNumber((d!.disputeAmount || 0) + (d!.reconciledNet || 0)),
+      }));
+      
+      // Create Excel workbook
+      const xlsx = await import("xlsx");
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(reportData);
+      
+      // Apply column widths for better readability
+      const colWidths = [{ wch: 25 }, { wch: 30 }];
+      ws["!cols"] = colWidths;
+      
+      xlsx.utils.book_append_sheet(wb, ws, "HO Error Closure");
+      
+      const buffer = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+      
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", "attachment; filename=HO_Error_Closure.xlsx");
+      res.send(buffer);
+    } catch (error) {
+      console.error("Download HO error report:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
   // Batch create/update disputes for a run
   app.post("/api/disputes/:runId", async (req, res) => {
     try {
@@ -3456,87 +3539,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Manual close disputes error:", error);
       res.status(500).json({ error: "Failed to write off disputes" });
-    }
-  });
-
-  // Accept HO Error - close disputes and mark as HO error
-  app.post("/api/disputes/accept-ho-error", async (req, res) => {
-    try {
-      const { disputeIds } = req.body;
-      
-      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
-        return res.status(400).json({ error: "disputeIds array is required" });
-      }
-      
-      // Close each dispute with accept_ho_error type
-      const closedDisputes = [];
-      for (const disputeId of disputeIds) {
-        const dispute = await storage.getDisputeById(disputeId);
-        if (dispute && dispute.closureStatus === "open") {
-          const updated = await storage.updateDispute(disputeId, {
-            closureStatus: "closed",
-            closureType: "accept_ho_error",
-            closedAt: new Date().toISOString(),
-          });
-          if (updated) closedDisputes.push(updated);
-        }
-      }
-      
-      res.json({ 
-        success: true, 
-        closedDisputes,
-        message: `${closedDisputes.length} dispute(s) closed as HO Error`
-      });
-    } catch (error) {
-      console.error("Accept HO error:", error);
-      res.status(500).json({ error: "Failed to close disputes" });
-    }
-  });
-
-  // Generate Excel report for Accept HO Error closure
-  app.post("/api/disputes/accept-ho-error/download", async (req, res) => {
-    try {
-      const { disputeIds } = req.body;
-      
-      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
-        return res.status(400).json({ error: "disputeIds array is required" });
-      }
-      
-      // Get dispute details
-      const disputes = await Promise.all(
-        disputeIds.map(async (id: string) => {
-          return await storage.getDisputeById(id);
-        })
-      );
-      
-      const validDisputes = disputes.filter(d => d !== undefined);
-      
-      // Build Excel data with Booking ID and Final Reconciled Net Price
-      // Apply Indian number formatting to the final reconciled net price
-      const reportData = validDisputes.map(d => ({
-        "Booking ID": d!.bookingId,
-        "Final Reconciled Net Price": formatIndianNumber((d!.disputeAmount || 0) + (d!.reconciledNet || 0)),
-      }));
-      
-      // Create Excel workbook
-      const xlsx = await import("xlsx");
-      const wb = xlsx.utils.book_new();
-      const ws = xlsx.utils.json_to_sheet(reportData);
-      
-      // Apply column widths for better readability
-      const colWidths = [{ wch: 25 }, { wch: 30 }];
-      ws["!cols"] = colWidths;
-      
-      xlsx.utils.book_append_sheet(wb, ws, "HO Error Closure");
-      
-      const buffer = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
-      
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", "attachment; filename=HO_Error_Closure.xlsx");
-      res.send(buffer);
-    } catch (error) {
-      console.error("Download HO error report:", error);
-      res.status(500).json({ error: "Failed to generate report" });
     }
   });
 
