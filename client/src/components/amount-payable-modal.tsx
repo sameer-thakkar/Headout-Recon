@@ -248,7 +248,9 @@ export function AmountPayableModal({
     const allBookings = bookings || [];
     const beId = allBookings.find(b => b.beId)?.beId || null;
     const billingEntityName = allBookings.find(b => b.billingEntityName)?.billingEntityName || null;
-    return { beId, billingEntityName };
+    const ticketId = allBookings.find(b => b.ticketId)?.ticketId || null;
+    const paymentBasis = allBookings.find(b => b.paymentBasis)?.paymentBasis || null;
+    return { beId, billingEntityName, ticketId, paymentBasis };
   }, [bookings]);
 
   const bookingsByReasonAndTid = useMemo(() => {
@@ -725,7 +727,7 @@ export function AmountPayableModal({
           </DialogTitle>
         </DialogHeader>
 
-        {(billingEntityInfo.beId || billingEntityInfo.billingEntityName) && (
+        {(billingEntityInfo.beId || billingEntityInfo.billingEntityName || billingEntityInfo.ticketId || billingEntityInfo.paymentBasis) && (
           <div className="flex-shrink-0 bg-primary/5 border border-primary/20 rounded-lg p-4 mb-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -738,6 +740,18 @@ export function AmountPayableModal({
                 <p className="text-xs text-muted-foreground mb-1">Billing Entity Name</p>
                 <p className="font-semibold" data-testid="text-be-name">
                   {billingEntityInfo.billingEntityName || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Ticket ID</p>
+                <p className="font-mono font-semibold" data-testid="text-ticket-id">
+                  {billingEntityInfo.ticketId || "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Payment Basis</p>
+                <p className="font-semibold" data-testid="text-payment-basis">
+                  {billingEntityInfo.paymentBasis || "—"}
                 </p>
               </div>
             </div>
