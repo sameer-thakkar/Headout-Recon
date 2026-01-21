@@ -323,87 +323,76 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="p-4 border-b flex-shrink-0">
-        <h1 className="text-2xl font-bold">Reconciliation</h1>
-        <p className="text-sm text-muted-foreground">
-          Upload files and view reconciliation results
-        </p>
+      <div className="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <h1 className="text-lg font-semibold">Reconciliation</h1>
+          {files.length > 0 && (
+            <div className="flex gap-2 flex-wrap">
+              {files.map((file) => (
+                <Badge
+                  key={file.id}
+                  variant="secondary"
+                  className="flex items-center gap-1.5 pr-1"
+                  data-testid={`file-item-${file.id}`}
+                >
+                  <FileSpreadsheet className="h-3 w-3" />
+                  <span className="max-w-[120px] truncate">{file.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                    data-testid={`button-remove-${file.id}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            id="file-input"
+            type="file"
+            accept=".xlsx,.csv"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+            data-testid="input-file"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById("file-input")?.click()}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            disabled={isUploading}
+            data-testid="dropzone"
+          >
+            <Upload className="h-4 w-4 mr-1.5" />
+            {isUploading ? "Uploading..." : "Upload"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+          >
+            <a
+              href="/sample-reconciliation-template.xlsx"
+              download="sample-reconciliation-template.xlsx"
+              data-testid="link-download-template"
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Template
+            </a>
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Upload Files</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-4 items-start">
-                <div
-                  className={`flex-1 border-2 border-dashed rounded-lg h-24 flex flex-col items-center justify-center cursor-pointer transition-colors ${
-                    isDragging
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/25 hover:border-primary/50"
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => document.getElementById("file-input")?.click()}
-                  data-testid="dropzone"
-                >
-                  <input
-                    id="file-input"
-                    type="file"
-                    accept=".xlsx,.csv"
-                    multiple
-                    className="hidden"
-                    onChange={handleFileSelect}
-                    data-testid="input-file"
-                  />
-                  <Upload className={`h-6 w-6 mb-1 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
-                  <p className="text-xs text-center font-medium">
-                    {isUploading ? "Uploading..." : "Drop files or click to upload"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">.xlsx, .csv</p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <a
-                    href="/sample-reconciliation-template.xlsx"
-                    download="sample-reconciliation-template.xlsx"
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                    data-testid="link-download-template"
-                  >
-                    <Download className="h-3 w-3" />
-                    Download template
-                  </a>
-                </div>
-
-                {files.length > 0 && (
-                  <div className="flex gap-2 flex-wrap">
-                    {files.map((file) => (
-                      <div
-                        key={file.id}
-                        className="flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50 text-xs"
-                        data-testid={`file-item-${file.id}`}
-                      >
-                        <FileSpreadsheet className="h-4 w-4 text-chart-2" />
-                        <span className="max-w-[120px] truncate">{file.name}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5"
-                          onClick={() => removeFile(file.id)}
-                          data-testid={`button-remove-${file.id}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader className="pb-3">
