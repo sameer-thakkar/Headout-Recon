@@ -10,6 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -17,7 +22,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
-import { AmountPayableModal, Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
+import { Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
+import { AmountPayablePanel } from "@/components/amount-payable-panel";
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 
 interface UploadPageProps {
@@ -65,12 +71,12 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [amountPayable, setAmountPayable] = useState<Record<string, number>>({});
-  const [isPayableModalOpen, setIsPayableModalOpen] = useState(false);
   const [selectedPayableCurrency, setSelectedPayableCurrency] = useState<string | null>(null);
   const [adjustmentsPerCurrency, setAdjustmentsPerCurrency] = useState<Record<string, Adjustment[]>>({});
   const [finalNetSelectionsPerCurrency, setFinalNetSelectionsPerCurrency] = useState<Record<string, FinalNetSelection>>({});
   const [isExportingGSheet, setIsExportingGSheet] = useState(false);
   const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(true);
   const { toast } = useToast();
 
   const { data: runResult } = useQuery<{
@@ -236,8 +242,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   };
 
   const openPayableCalculator = (currency: string) => {
-    setSelectedPayableCurrency(currency);
-    setIsPayableModalOpen(true);
+    if (selectedPayableCurrency === currency) {
+      setSelectedPayableCurrency(null);
+    } else {
+      setSelectedPayableCurrency(currency);
+    }
+  };
+
+  const closePayableCalculator = () => {
+    setSelectedPayableCurrency(null);
   };
 
   const handlePayableModalApply = useCallback((
@@ -433,115 +446,128 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             </div>
           )}
 
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-4">
-                <CardTitle className="text-base">Overall Reconciliation Summary</CardTitle>
-                {hasResults && (
-                  <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={isExportingGSheet} data-testid="button-export-dropdown">
-                          {isExportingGSheet ? "Exporting..." : (
-                            <>
-                              <FileDown className="h-4 w-4 mr-1" />
-                              Export
-                              <ChevronDown className="h-4 w-4 ml-1" />
-                            </>
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-excel">
-                          <FileSpreadsheet className="h-4 w-4 mr-2" />
-                          Excel (.xlsx)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleExportGSheet} data-testid="menu-export-gsheet">
-                          <SiGooglesheets className="h-4 w-4 mr-2" />
-                          Google Sheets
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    {gSheetUrl && (
-                      <a
-                        href={gSheetUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-green-600 hover:underline"
-                        data-testid="link-gsheet"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Open Sheet
-                      </a>
+          <Collapsible open={isSummaryOpen} onOpenChange={setIsSummaryOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="pb-3 cursor-pointer hover-elevate">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      {isSummaryOpen ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <CardTitle className="text-base">Overall Reconciliation Summary</CardTitle>
+                    </div>
+                    {hasResults && (
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" disabled={isExportingGSheet} data-testid="button-export-dropdown">
+                              {isExportingGSheet ? "Exporting..." : (
+                                <>
+                                  <FileDown className="h-4 w-4 mr-1" />
+                                  Export
+                                  <ChevronDown className="h-4 w-4 ml-1" />
+                                </>
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-excel">
+                              <FileSpreadsheet className="h-4 w-4 mr-2" />
+                              Excel (.xlsx)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportGSheet} data-testid="menu-export-gsheet">
+                              <SiGooglesheets className="h-4 w-4 mr-2" />
+                              Google Sheets
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        {gSheetUrl && (
+                          <a
+                            href={gSheetUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-sm text-green-600 hover:underline"
+                            data-testid="link-gsheet"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Open Sheet
+                          </a>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-              {!hasResults && (
-                <CardDescription>
-                  Upload a file to see reconciliation summary
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent>
-              {hasResults ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Currency</TableHead>
-                      <TableHead className="text-right">Discrepancy (LC)</TableHead>
-                      <TableHead className="text-right">Discrepancy (USD)</TableHead>
-                      <TableHead className="text-right">Count BID</TableHead>
-                      <TableHead className="w-8"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {overallSummary.map((row, index) => {
-                      const isClickable = row.reason !== "Reconciled";
-                      return (
-                        <TableRow
-                          key={`${row.reason}-${row.currency}-${index}`}
-                          className={isClickable ? "cursor-pointer hover-elevate" : ""}
-                          onClick={() => isClickable && handleReasonClick(row.reason)}
-                          data-testid={`summary-row-${row.reason}-${row.currency}`}
-                        >
-                          <TableCell>
-                            <Badge 
-                              variant={row.reason === "Reconciled" ? "default" : "secondary"}
-                              className="text-xs"
-                            >
-                              {row.reason}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{row.currency}</TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatNumber(row.discrepancyLc)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatNumber(row.discrepancyUsd)}
-                          </TableCell>
-                          <TableCell className="text-right">{row.countBid}</TableCell>
-                          <TableCell>
-                            {isClickable && (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </TableCell>
+                  {!hasResults && (
+                    <CardDescription>
+                      Upload a file to see reconciliation summary
+                    </CardDescription>
+                  )}
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="pt-0">
+                  {hasResults ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Reason</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead className="text-right">Discrepancy (LC)</TableHead>
+                          <TableHead className="text-right">Discrepancy (USD)</TableHead>
+                          <TableHead className="text-right">Count BID</TableHead>
+                          <TableHead className="w-8"></TableHead>
                         </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="h-24 flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <FileSpreadsheet className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No data yet - upload a file to get started</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {overallSummary.map((row, index) => {
+                          const isClickable = row.reason !== "Reconciled";
+                          return (
+                            <TableRow
+                              key={`${row.reason}-${row.currency}-${index}`}
+                              className={isClickable ? "cursor-pointer hover-elevate" : ""}
+                              onClick={() => isClickable && handleReasonClick(row.reason)}
+                              data-testid={`summary-row-${row.reason}-${row.currency}`}
+                            >
+                              <TableCell>
+                                <Badge 
+                                  variant={row.reason === "Reconciled" ? "default" : "secondary"}
+                                  className="text-xs"
+                                >
+                                  {row.reason}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{row.currency}</TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatNumber(row.discrepancyLc)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatNumber(row.discrepancyUsd)}
+                              </TableCell>
+                              <TableCell className="text-right">{row.countBid}</TableCell>
+                              <TableCell>
+                                {isClickable && (
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="h-24 flex items-center justify-center text-muted-foreground">
+                      <div className="text-center">
+                        <FileSpreadsheet className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No data yet - upload a file to get started</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
           <Card>
             <CardHeader className="pb-3">
@@ -608,6 +634,23 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               )}
             </CardContent>
           </Card>
+
+          {selectedPayableCurrency && (
+            <Card>
+              <CardContent className="p-0">
+                <AmountPayablePanel
+                  bookings={bookingsForPayableModal}
+                  currency={selectedPayableCurrency}
+                  adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
+                  finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency] || {}}
+                  onApply={handlePayableModalApply}
+                  onClose={closePayableCalculator}
+                  runId={currentRunId}
+                  allRows={primaryRows}
+                />
+              </CardContent>
+            </Card>
+          )}
         </div>
       </ScrollArea>
 
@@ -729,18 +772,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         </DialogContent>
       </Dialog>
 
-      {selectedPayableCurrency && (
-        <AmountPayableModal
-          open={isPayableModalOpen}
-          onOpenChange={setIsPayableModalOpen}
-          bookings={bookingsForPayableModal}
-          currency={selectedPayableCurrency}
-          adjustments={adjustmentsPerCurrency[selectedPayableCurrency] || []}
-          finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency] || {}}
-          onApply={handlePayableModalApply}
-          runId={currentRunId}
-        />
-      )}
     </div>
   );
 }
