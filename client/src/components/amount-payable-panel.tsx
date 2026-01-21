@@ -649,8 +649,9 @@ export function AmountPayablePanel({
                             <div className="col-span-3">TID / Booking ID</div>
                             <div className="col-span-2 text-right">HO Net</div>
                             <div className="col-span-2 text-right">SP Net</div>
-                            <div className="col-span-2 text-center">Final Net</div>
-                            <div className="col-span-3 text-right">Amount</div>
+                            <div className="col-span-1 text-center">Net</div>
+                            <div className="col-span-2 text-center">Dispute</div>
+                            <div className="col-span-2 text-right">Final</div>
                           </div>
 
                           <div className="max-h-80 overflow-y-auto">
@@ -690,7 +691,7 @@ export function AmountPayablePanel({
                                       <div className="col-span-2 text-right font-mono text-xs">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
                                       </div>
-                                      <div className="col-span-2 flex justify-center">
+                                      <div className="col-span-1 flex justify-center">
                                         {reason === "Unmapped" ? (
                                           <span className="text-xs text-muted-foreground">SP</span>
                                         ) : (
@@ -698,17 +699,23 @@ export function AmountPayablePanel({
                                             value=""
                                             onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
                                           >
-                                            <SelectTrigger className="w-16 h-6 text-xs" data-testid={`select-tid-${tid}`}>
-                                              <SelectValue placeholder="Bulk" />
+                                            <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-tid-${tid}`}>
+                                              <SelectValue placeholder="All" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                              <SelectItem value="ho">All HO</SelectItem>
-                                              <SelectItem value="sp">All SP</SelectItem>
+                                              <SelectItem value="ho">HO</SelectItem>
+                                              <SelectItem value="sp">SP</SelectItem>
                                             </SelectContent>
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-3 text-right font-mono text-xs font-semibold">
+                                      <div className="col-span-2 text-center text-xs text-muted-foreground">
+                                        {(() => {
+                                          const { disputed, disputable } = getTidDisputeCount(reason, tid);
+                                          return disputable > 0 ? `${disputed}/${disputable}` : "-";
+                                        })()}
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs font-semibold">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </div>
                                     </div>
@@ -717,6 +724,10 @@ export function AmountPayablePanel({
                                       <div className="bg-muted/20">
                                         {tidBookings.map((booking) => {
                                           const currentSelection = localSelections[booking.bookingId] || "sp";
+                                          const canDispute = isBookingDisputable(booking);
+                                          const isDisputed = activeDisputes.has(booking.bookingId);
+                                          const maxDispute = getMaxDisputeAmount(booking);
+                                          const currentDisputeAmt = disputeAmounts.get(booking.bookingId) ?? maxDispute;
                                           return (
                                             <div 
                                               key={booking.bookingId} 
@@ -733,7 +744,7 @@ export function AmountPayablePanel({
                                               <div className="col-span-2 text-right font-mono text-xs text-muted-foreground">
                                                 {formatCurrency(booking.spNet)}
                                               </div>
-                                              <div className="col-span-2 flex justify-center">
+                                              <div className="col-span-1 flex justify-center">
                                                 {reason === "Unmapped" ? (
                                                   <span className="text-xs text-muted-foreground">SP</span>
                                                 ) : (
@@ -742,7 +753,7 @@ export function AmountPayablePanel({
                                                     onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                   >
                                                     <SelectTrigger 
-                                                      className="w-14 h-5 text-xs" 
+                                                      className="w-12 h-5 text-xs" 
                                                       data-testid={`select-booking-${booking.bookingId}`}
                                                     >
                                                       <SelectValue />
@@ -754,7 +765,30 @@ export function AmountPayablePanel({
                                                   </Select>
                                                 )}
                                               </div>
-                                              <div className="col-span-3 text-right font-mono text-xs">
+                                              <div className="col-span-2 flex justify-center items-center gap-1">
+                                                {canDispute ? (
+                                                  <>
+                                                    <Checkbox
+                                                      checked={isDisputed}
+                                                      onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
+                                                      className="h-4 w-4"
+                                                      data-testid={`checkbox-dispute-${booking.bookingId}`}
+                                                    />
+                                                    {isDisputed && (
+                                                      <Input
+                                                        type="number"
+                                                        value={currentDisputeAmt}
+                                                        onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0)}
+                                                        className="w-16 h-5 text-xs font-mono px-1"
+                                                        data-testid={`input-dispute-amount-${booking.bookingId}`}
+                                                      />
+                                                    )}
+                                                  </>
+                                                ) : (
+                                                  <span className="text-xs text-muted-foreground">-</span>
+                                                )}
+                                              </div>
+                                              <div className="col-span-2 text-right font-mono text-xs">
                                                 {formatCurrency(getFinalNetPrice(booking))}
                                               </div>
                                             </div>
