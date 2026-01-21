@@ -3343,6 +3343,94 @@ export async function registerRoutes(
     }
   });
 
+  // NOTE: These routes MUST come before /api/disputes/:runId to avoid being matched as a runId
+  // Close disputes when used in post-recon adjustments (SP Error - auto-close)
+  app.post("/api/disputes/close", async (req, res) => {
+    try {
+      const { disputeIds, adjustmentAmount } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      if (typeof adjustmentAmount !== "number" || adjustmentAmount <= 0) {
+        return res.status(400).json({ error: "Valid adjustmentAmount is required" });
+      }
+      
+      // Get all disputes to validate amounts match
+      const allDisputes = await Promise.all(
+        disputeIds.map(async (id: string) => {
+          const dispute = await storage.getDisputeById(id);
+          return dispute;
+        })
+      );
+      
+      // Calculate total dispute amount from selected DIDs
+      const validDisputes = allDisputes.filter(d => d !== undefined);
+      const totalDisputeAmount = validDisputes.reduce((sum, d) => sum + (d?.disputeAmount || 0), 0);
+      
+      // Round for comparison (avoid floating point issues)
+      const roundedAdjustment = Math.round(adjustmentAmount * 100) / 100;
+      const roundedTotal = Math.round(totalDisputeAmount * 100) / 100;
+      
+      // Check if amounts match (required for closure)
+      if (roundedAdjustment !== roundedTotal) {
+        return res.status(400).json({ 
+          error: "Adjustment amount must match total dispute amount for closure",
+          adjustmentAmount: roundedAdjustment,
+          totalDisputeAmount: roundedTotal
+        });
+      }
+      
+      // Close the disputes as SP Error
+      const closedDisputes = await storage.closeDisputes(disputeIds, adjustmentAmount);
+      res.json({ 
+        success: true, 
+        closedDisputes,
+        message: `${closedDisputes.length} dispute(s) closed successfully`
+      });
+    } catch (error) {
+      console.error("Close disputes error:", error);
+      res.status(500).json({ error: "Failed to close disputes" });
+    }
+  });
+
+  // Manual close (write off) disputes
+  app.post("/api/disputes/manual-close", async (req, res) => {
+    try {
+      const { disputeIds, note } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      // Validate all disputes exist and are open
+      const existingDisputes = await Promise.all(
+        disputeIds.map(async (id: string) => {
+          const dispute = await storage.getDisputeById(id);
+          return dispute;
+        })
+      );
+      
+      const validDisputes = existingDisputes.filter(d => d !== undefined && d.closureStatus === "open");
+      
+      if (validDisputes.length === 0) {
+        return res.status(400).json({ error: "No valid open disputes found" });
+      }
+      
+      // Close the disputes with manual write-off type
+      const closedDisputes = await storage.manualCloseDisputes(disputeIds, note);
+      res.json({ 
+        success: true, 
+        closedDisputes,
+        message: `${closedDisputes.length} dispute(s) written off successfully`
+      });
+    } catch (error) {
+      console.error("Manual close disputes error:", error);
+      res.status(500).json({ error: "Failed to write off disputes" });
+    }
+  });
+
   // Batch create/update disputes for a run
   app.post("/api/disputes/:runId", async (req, res) => {
     try {
@@ -3449,96 +3537,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get open disputes error:", error);
       res.status(500).json({ error: "Failed to fetch open disputes" });
-    }
-  });
-
-  // Close disputes when used in post-recon adjustments
-  app.post("/api/disputes/close", async (req, res) => {
-    try {
-      const { disputeIds, adjustmentAmount } = req.body;
-      
-      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
-        return res.status(400).json({ error: "disputeIds array is required" });
-      }
-      
-      if (typeof adjustmentAmount !== "number" || adjustmentAmount <= 0) {
-        return res.status(400).json({ error: "Valid adjustmentAmount is required" });
-      }
-      
-      // Get all disputes to validate amounts match
-      // Fetch from all runs to find the disputes by their IDs
-      const allDisputes = await Promise.all(
-        disputeIds.map(async (id: string) => {
-          // Disputes are stored with their disputeId as key, search across all runs
-          // Get dispute directly by looking through storage
-          const dispute = await storage.getDisputeById(id);
-          return dispute;
-        })
-      );
-      
-      // Calculate total dispute amount from selected DIDs
-      const validDisputes = allDisputes.filter(d => d !== undefined);
-      const totalDisputeAmount = validDisputes.reduce((sum, d) => sum + (d?.disputeAmount || 0), 0);
-      
-      // Round for comparison (avoid floating point issues)
-      const roundedAdjustment = Math.round(adjustmentAmount * 100) / 100;
-      const roundedTotal = Math.round(totalDisputeAmount * 100) / 100;
-      
-      // Check if amounts match (required for closure)
-      if (roundedAdjustment !== roundedTotal) {
-        return res.status(400).json({ 
-          error: "Adjustment amount must match total dispute amount for closure",
-          adjustmentAmount: roundedAdjustment,
-          totalDisputeAmount: roundedTotal
-        });
-      }
-      
-      // Close the disputes
-      const closedDisputes = await storage.closeDisputes(disputeIds, adjustmentAmount);
-      res.json({ 
-        success: true, 
-        closedDisputes,
-        message: `${closedDisputes.length} dispute(s) closed successfully`
-      });
-    } catch (error) {
-      console.error("Close disputes error:", error);
-      res.status(500).json({ error: "Failed to close disputes" });
-    }
-  });
-
-  // Manual close (write off) disputes
-  app.post("/api/disputes/manual-close", async (req, res) => {
-    try {
-      const { disputeIds, note } = req.body;
-      
-      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
-        return res.status(400).json({ error: "disputeIds array is required" });
-      }
-      
-      // Validate all disputes exist and are open
-      const existingDisputes = await Promise.all(
-        disputeIds.map(async (id: string) => {
-          const dispute = await storage.getDisputeById(id);
-          return dispute;
-        })
-      );
-      
-      const validDisputes = existingDisputes.filter(d => d !== undefined && d.closureStatus === "open");
-      
-      if (validDisputes.length === 0) {
-        return res.status(400).json({ error: "No valid open disputes found" });
-      }
-      
-      // Close the disputes with manual write-off type
-      const closedDisputes = await storage.manualCloseDisputes(disputeIds, note);
-      res.json({ 
-        success: true, 
-        closedDisputes,
-        message: `${closedDisputes.length} dispute(s) written off successfully`
-      });
-    } catch (error) {
-      console.error("Manual close disputes error:", error);
-      res.status(500).json({ error: "Failed to write off disputes" });
     }
   });
 
