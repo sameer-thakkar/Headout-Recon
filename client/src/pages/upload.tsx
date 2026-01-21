@@ -535,7 +535,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               <div className="flex items-center justify-between gap-4">
                 <CardTitle className="text-base flex items-center gap-2">
                   <DollarSign className="h-4 w-4" />
-                  {spDetails?.billingEntityName || "Amount Payable"}
+                  Amount Payable to {spDetails?.billingEntityName || "Supplier"}
                 </CardTitle>
                 {hasResults && (
                   <Button
