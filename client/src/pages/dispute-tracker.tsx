@@ -605,8 +605,8 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                 <p className="text-sm text-muted-foreground mb-3">
                   Disputes grouped by TID (click to view Booking IDs)
                 </p>
-                <div className="rounded-md border">
-                  <ScrollArea className="max-h-[400px]">
+                <div className="rounded-md border overflow-hidden">
+                  <div className="max-h-[300px] overflow-y-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
@@ -700,7 +700,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                         })()}
                       </TableBody>
                     </Table>
-                  </ScrollArea>
+                  </div>
                 </div>
               </div>
 
