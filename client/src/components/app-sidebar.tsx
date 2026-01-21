@@ -4,7 +4,6 @@ import {
   Upload,
   LayoutDashboard,
   FileWarning,
-  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -22,7 +21,6 @@ import {
 const navItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Reconciliation", url: "/upload", icon: Upload },
-  { title: "Results", url: "/results", icon: BarChart3 },
   { title: "Dispute Tracker", url: "/dispute-tracker", icon: FileWarning },
 ];
 

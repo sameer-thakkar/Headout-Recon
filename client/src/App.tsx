@@ -13,7 +13,6 @@ import { LandingPage } from "@/pages/landing";
 import { UploadPage } from "@/pages/upload";
 import { MappingPage } from "@/pages/mapping";
 import { RunPage } from "@/pages/run";
-import { ResultsPage } from "@/pages/results";
 import { DiscrepancyAnalysisPage } from "@/pages/discrepancy-analysis";
 import { DraftsPage } from "@/pages/drafts";
 import { DriPage } from "@/pages/dri";
@@ -336,15 +335,6 @@ function AppContent() {
                   onRunReconciliation={handleRunReconciliation}
                   hasMapping={hasMapping}
                   isProcessing={status === "processing"}
-                />
-              </Route>
-              <Route path="/results">
-                <ResultsPage 
-                  runId={currentRunId} 
-                  uploadedFiles={uploadedFiles}
-                  onFilesUploaded={handleFilesUploaded}
-                  onLoadDemo={handleLoadDemo}
-                  onExportGSheet={handleExportGSheet}
                 />
               </Route>
               <Route path="/discrepancy-analysis">
