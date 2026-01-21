@@ -543,13 +543,6 @@ export function AmountPayablePanel({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex items-center justify-end p-2 border-b flex-shrink-0">
-        <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-panel" className="h-8 w-8">
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
           <div className="bg-muted/50 rounded-lg p-4">
