@@ -320,6 +320,7 @@ function AppContent() {
                   onLoadDemo={handleLoadDemo}
                   uploadedFiles={uploadedFiles}
                   currentRunId={currentRunId}
+                  onExportGSheet={handleExportGSheet}
                 />
               </Route>
               <Route path="/mapping">
@@ -343,6 +344,7 @@ function AppContent() {
                   uploadedFiles={uploadedFiles}
                   onFilesUploaded={handleFilesUploaded}
                   onLoadDemo={handleLoadDemo}
+                  onExportGSheet={handleExportGSheet}
                 />
               </Route>
               <Route path="/discrepancy-analysis">

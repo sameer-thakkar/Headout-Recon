@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, RefreshCw, Calendar, Download, Upload, FileSpreadsheet, X, Calculator } from "lucide-react";
+import { LayoutDashboard, RefreshCw, Calendar, Download, Upload, FileSpreadsheet, X, Calculator, ChevronDown, ExternalLink } from "lucide-react";
+import { SiGooglesheets } from "react-icons/si";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +12,13 @@ import { AmountPayablePanel } from "@/components/amount-payable-panel";
 import { Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
 import type { RunResult, OverallSummaryRow, PrimaryRow, UploadedFile } from "@shared/schema";
 
 interface ResultsPageProps {
@@ -18,6 +26,7 @@ interface ResultsPageProps {
   uploadedFiles: UploadedFile[];
   onFilesUploaded: (files: File[]) => Promise<UploadedFile[]>;
   onLoadDemo: () => void;
+  onExportGSheet: () => Promise<{ spreadsheetUrl?: string }>;
 }
 
 const summaryColumns: Column<OverallSummaryRow>[] = [
@@ -250,11 +259,14 @@ function FileUploadSection({
   );
 }
 
-export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo }: ResultsPageProps) {
+export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo, onExportGSheet }: ResultsPageProps) {
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [finalNetSelections, setFinalNetSelections] = useState<FinalNetSelection>({});
   const [showCalculator, setShowCalculator] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const { data, isLoading, isError, error } = useQuery<RunResult>({
     queryKey: [`/api/runs/${runId}/results`],
@@ -304,8 +316,33 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo 
     setFinalNetSelections(newSelections);
   }, []);
 
-  const handleExport = () => {
+  const handleExportExcel = () => {
+    if (!runId || !data) {
+      toast({ title: "No data to export", description: "Please run a reconciliation first", variant: "destructive" });
+      return;
+    }
     window.open(`/api/runs/${runId}/export`, "_blank");
+    toast({ title: "Export started", description: "Excel file download will begin shortly" });
+  };
+
+  const handleExportGSheet = async () => {
+    if (!runId || !data) {
+      toast({ title: "No data to export", description: "Please run a reconciliation first", variant: "destructive" });
+      return;
+    }
+    setIsExporting(true);
+    setGSheetUrl(null);
+    try {
+      const result = await onExportGSheet();
+      if (result.spreadsheetUrl) {
+        setGSheetUrl(result.spreadsheetUrl);
+        toast({ title: "Export complete", description: "Google Sheet created successfully" });
+      }
+    } catch (error) {
+      toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Empty state - no run yet
@@ -407,10 +444,43 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo 
                     </div>
                   </div>
                 </div>
-                <Button onClick={handleExport} size="sm" data-testid="button-export">
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Excel
-                </Button>
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" disabled={isExporting} data-testid="button-export-dropdown">
+                        {isExporting ? "Exporting..." : (
+                          <>
+                            <Download className="h-4 w-4 mr-2" />
+                            Export
+                            <ChevronDown className="h-4 w-4 ml-1" />
+                          </>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-excel">
+                        <FileSpreadsheet className="h-4 w-4 mr-2" />
+                        Excel (.xlsx)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleExportGSheet} data-testid="menu-export-gsheet">
+                        <SiGooglesheets className="h-4 w-4 mr-2" />
+                        Google Sheets
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {gSheetUrl && (
+                    <a
+                      href={gSheetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-sm text-green-600 hover:underline"
+                      data-testid="link-gsheet"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open Sheet
+                    </a>
+                  )}
+                </div>
               </div>
 
               {/* Stats Cards */}

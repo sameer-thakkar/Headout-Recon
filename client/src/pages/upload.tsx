@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink } from "lucide-react";
+import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { AmountPayableModal, Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
@@ -18,6 +25,7 @@ interface UploadPageProps {
   onLoadDemo: () => void;
   uploadedFiles: UploadedFile[];
   currentRunId: string | null;
+  onExportGSheet: () => Promise<{ spreadsheetUrl?: string }>;
 }
 
 function formatDateDDMMYYYY(value: unknown): string | null {
@@ -50,7 +58,7 @@ function formatNumber(value: number): string {
   }).format(value);
 }
 
-export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId }: UploadPageProps) {
+export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportGSheet }: UploadPageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [files, setFiles] = useState<UploadedFile[]>(uploadedFiles);
@@ -61,6 +69,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [selectedPayableCurrency, setSelectedPayableCurrency] = useState<string | null>(null);
   const [adjustmentsPerCurrency, setAdjustmentsPerCurrency] = useState<Record<string, Adjustment[]>>({});
   const [finalNetSelectionsPerCurrency, setFinalNetSelectionsPerCurrency] = useState<Record<string, FinalNetSelection>>({});
+  const [isExportingGSheet, setIsExportingGSheet] = useState(false);
+  const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: runResult } = useQuery<{
@@ -280,6 +290,31 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
   }, [currentRunId, primaryRows.length, toast]);
 
+  const handleExportGSheet = useCallback(async () => {
+    if (!currentRunId) {
+      toast({
+        title: "No data to export",
+        description: "Please run a reconciliation first",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsExportingGSheet(true);
+    setGSheetUrl(null);
+    try {
+      const result = await onExportGSheet();
+      if (result.spreadsheetUrl) {
+        setGSheetUrl(result.spreadsheetUrl);
+        toast({ title: "Export complete", description: "Google Sheet created successfully" });
+      }
+    } catch (error) {
+      toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
+    } finally {
+      setIsExportingGSheet(false);
+    }
+  }, [currentRunId, onExportGSheet, toast]);
+
   const hasResults = currentRunId && overallSummary.length > 0;
   const isMTBReason = selectedReason === "Multiple Tickets Booked";
   const isNPDReason = selectedReason === "Net Price Discrepancy";
@@ -382,15 +417,43 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               <div className="flex items-center justify-between gap-4">
                 <CardTitle className="text-base">Overall Reconciliation Summary</CardTitle>
                 {hasResults && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExportExcel}
-                    data-testid="button-export-excel"
-                  >
-                    <FileDown className="h-4 w-4 mr-1" />
-                    Export Excel
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={isExportingGSheet} data-testid="button-export-dropdown">
+                          {isExportingGSheet ? "Exporting..." : (
+                            <>
+                              <FileDown className="h-4 w-4 mr-1" />
+                              Export
+                              <ChevronDown className="h-4 w-4 ml-1" />
+                            </>
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-excel">
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          Excel (.xlsx)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleExportGSheet} data-testid="menu-export-gsheet">
+                          <SiGooglesheets className="h-4 w-4 mr-2" />
+                          Google Sheets
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {gSheetUrl && (
+                      <a
+                        href={gSheetUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-sm text-green-600 hover:underline"
+                        data-testid="link-gsheet"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open Sheet
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
               {!hasResults && (
