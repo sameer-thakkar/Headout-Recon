@@ -2180,6 +2180,84 @@ export async function registerRoutes(
         },
       });
 
+      // Get sheet IDs for formatting
+      const spreadsheetInfo = await sheets.spreadsheets.get({ spreadsheetId });
+      const sheetIdMap = new Map<string, number>();
+      for (const sheet of spreadsheetInfo.data.sheets || []) {
+        const title = sheet.properties?.title;
+        const sheetId = sheet.properties?.sheetId;
+        if (title && sheetId !== undefined && sheetId !== null) {
+          sheetIdMap.set(title, sheetId);
+        }
+      }
+
+      // Build formatting requests for consistent styling
+      const formatRequests: any[] = [];
+      
+      // Header style: bold, light gray background
+      const headerStyle = {
+        backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
+        textFormat: { bold: true },
+        horizontalAlignment: "CENTER",
+      };
+      
+      // Number format for currency columns
+      const currencyFormat = { type: "NUMBER", pattern: "#,##0.00" };
+      const percentFormat = { type: "PERCENT", pattern: "0.00%" };
+
+      // Apply formatting to each sheet
+      const allSheetNames = ["Payable Summary", "Discrepancy Analysis", "SP Invoice Report", "HO Report Updated", "Draft Messages", ...driSheetNames];
+      
+      for (const sheetName of allSheetNames) {
+        const sheetId = sheetIdMap.get(sheetName);
+        if (sheetId === undefined) continue;
+        
+        // Format header row (row 0) - bold with gray background
+        formatRequests.push({
+          repeatCell: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: 1 },
+            cell: { userEnteredFormat: headerStyle },
+            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
+          },
+        });
+        
+        // Auto-resize columns
+        formatRequests.push({
+          autoResizeDimensions: {
+            dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 30 },
+          },
+        });
+        
+        // Freeze header row
+        formatRequests.push({
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+            fields: "gridProperties.frozenRowCount",
+          },
+        });
+        
+        // Add thin borders to all data cells
+        formatRequests.push({
+          updateBorders: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: 1000, startColumnIndex: 0, endColumnIndex: 30 },
+            top: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+            bottom: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+            left: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+            right: { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } },
+            innerHorizontal: { style: "SOLID", color: { red: 0.9, green: 0.9, blue: 0.9 } },
+            innerVertical: { style: "SOLID", color: { red: 0.9, green: 0.9, blue: 0.9 } },
+          },
+        });
+      }
+      
+      // Apply all formatting in one batch
+      if (formatRequests.length > 0) {
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: { requests: formatRequests },
+        });
+      }
+
       res.json({
         success: true,
         spreadsheetId,
