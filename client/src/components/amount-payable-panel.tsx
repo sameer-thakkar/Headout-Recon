@@ -543,26 +543,8 @@ export function AmountPayablePanel({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Calculator className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Amount Payable Calculator</h2>
-          {availableCurrencies.length > 1 && onCurrencyChange ? (
-            <Select value={currency} onValueChange={onCurrencyChange}>
-              <SelectTrigger className="w-24 h-8" data-testid="select-currency">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableCurrencies.map((curr) => (
-                  <SelectItem key={curr} value={curr}>{curr}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <Badge variant="outline">{currency}</Badge>
-          )}
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-panel">
+      <div className="flex items-center justify-end p-2 border-b flex-shrink-0">
+        <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-panel" className="h-8 w-8">
           <X className="h-4 w-4" />
         </Button>
       </div>
