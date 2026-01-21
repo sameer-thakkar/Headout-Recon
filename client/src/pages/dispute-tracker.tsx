@@ -487,8 +487,8 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       )}
 
       <Dialog open={!!selectedDispute} onOpenChange={(open) => { if (!open) { setSelectedDispute(null); setAcceptHoError(false); } }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <FileWarning className="h-5 w-5" />
               Dispute Details - {selectedDispute?.displayId}
@@ -496,7 +496,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
           </DialogHeader>
           
           {selectedDispute && (
-            <ScrollArea className="flex-1 pr-4">
+            <ScrollArea className="flex-1 min-h-0 pr-4">
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
                   <div>
@@ -522,15 +522,9 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                     <p className="font-medium">{selectedDispute.bookingCount}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">TIDs</p>
+                    <p className="text-sm text-muted-foreground">Ticket ID</p>
                     <p className="font-mono font-medium text-sm">
-                      {(() => {
-                        const uniqueTids = Array.from(new Set(selectedDispute.disputes.map(d => d.ticketId || "Unknown")));
-                        if (uniqueTids.length <= 3) {
-                          return uniqueTids.join(", ");
-                        }
-                        return `${uniqueTids.slice(0, 3).join(", ")} +${uniqueTids.length - 3} more`;
-                      })()}
+                      {selectedDispute.disputes[0]?.ticketId || "-"}
                     </p>
                   </div>
                   <div>
