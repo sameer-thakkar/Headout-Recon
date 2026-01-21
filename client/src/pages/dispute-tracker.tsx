@@ -498,7 +498,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
           
           {selectedDispute && (
             <ScrollArea className="flex-1 min-h-0 pr-4">
-              <div className="space-y-4">
+              <div className="space-y-4 pb-4">
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
                   <div>
                     <p className="text-sm text-muted-foreground">Billing Entity ID</p>
@@ -606,7 +606,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                   Disputes grouped by TID (click to view Booking IDs)
                 </p>
                 <div className="rounded-md border overflow-hidden">
-                  <div className="max-h-[300px] overflow-y-auto">
+                  <div>
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-muted/50">
