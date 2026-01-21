@@ -653,48 +653,119 @@ export function AmountPayablePanel({
                             <div className="col-span-3 text-right">Amount</div>
                           </div>
 
-                          <div className="max-h-64 overflow-y-auto">
-                            {Object.entries(tidGroups).map(([tid, tidBookings]) => (
-                              <div key={tid} className="border-t">
-                                <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-background items-center">
-                                  <div className="col-span-3">
-                                    <span className="font-medium text-xs truncate block" title={tid}>
-                                      {tid}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
-                                    </span>
+                          <div className="max-h-80 overflow-y-auto">
+                            {Object.entries(tidGroups).map(([tid, tidBookings]) => {
+                              const tidKeyStr = `${reason}:${tid}`;
+                              const isTidExpanded = expandedTids.has(tidKeyStr);
+                              return (
+                                <Collapsible
+                                  key={tid}
+                                  open={isTidExpanded}
+                                  onOpenChange={() => toggleTid(tidKeyStr)}
+                                >
+                                  <div className="border-t">
+                                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-background items-center">
+                                      <div className="col-span-3 flex items-center gap-1">
+                                        <CollapsibleTrigger asChild>
+                                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
+                                            {isTidExpanded ? (
+                                              <ChevronDown className="h-3 w-3" />
+                                            ) : (
+                                              <ChevronRight className="h-3 w-3" />
+                                            )}
+                                          </Button>
+                                        </CollapsibleTrigger>
+                                        <div className="min-w-0">
+                                          <span className="font-medium text-xs truncate block" title={tid}>
+                                            {tid}
+                                          </span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
+                                      </div>
+                                      <div className="col-span-2 flex justify-center">
+                                        {reason === "Unmapped" ? (
+                                          <span className="text-xs text-muted-foreground">SP</span>
+                                        ) : (
+                                          <Select
+                                            value=""
+                                            onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
+                                          >
+                                            <SelectTrigger className="w-16 h-6 text-xs" data-testid={`select-tid-${tid}`}>
+                                              <SelectValue placeholder="Bulk" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="ho">All HO</SelectItem>
+                                              <SelectItem value="sp">All SP</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        )}
+                                      </div>
+                                      <div className="col-span-3 text-right font-mono text-xs font-semibold">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
+                                      </div>
+                                    </div>
+                                    
+                                    <CollapsibleContent>
+                                      <div className="bg-muted/20">
+                                        {tidBookings.map((booking) => {
+                                          const currentSelection = localSelections[booking.bookingId] || "sp";
+                                          return (
+                                            <div 
+                                              key={booking.bookingId} 
+                                              className="grid grid-cols-12 gap-2 px-3 py-1.5 border-t border-dashed items-center"
+                                            >
+                                              <div className="col-span-3 pl-6">
+                                                <span className="text-xs text-muted-foreground truncate block" title={booking.bookingId}>
+                                                  {booking.bookingId}
+                                                </span>
+                                              </div>
+                                              <div className="col-span-2 text-right font-mono text-xs text-muted-foreground">
+                                                {formatCurrency(booking.hoNet)}
+                                              </div>
+                                              <div className="col-span-2 text-right font-mono text-xs text-muted-foreground">
+                                                {formatCurrency(booking.spNet)}
+                                              </div>
+                                              <div className="col-span-2 flex justify-center">
+                                                {reason === "Unmapped" ? (
+                                                  <span className="text-xs text-muted-foreground">SP</span>
+                                                ) : (
+                                                  <Select
+                                                    value={currentSelection}
+                                                    onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
+                                                  >
+                                                    <SelectTrigger 
+                                                      className="w-14 h-5 text-xs" 
+                                                      data-testid={`select-booking-${booking.bookingId}`}
+                                                    >
+                                                      <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                      <SelectItem value="ho">HO</SelectItem>
+                                                      <SelectItem value="sp">SP</SelectItem>
+                                                    </SelectContent>
+                                                  </Select>
+                                                )}
+                                              </div>
+                                              <div className="col-span-3 text-right font-mono text-xs">
+                                                {formatCurrency(getFinalNetPrice(booking))}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </CollapsibleContent>
                                   </div>
-                                  <div className="col-span-2 text-right font-mono text-xs">
-                                    {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
-                                  </div>
-                                  <div className="col-span-2 text-right font-mono text-xs">
-                                    {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
-                                  </div>
-                                  <div className="col-span-2 flex justify-center">
-                                    {reason === "Unmapped" ? (
-                                      <span className="text-xs text-muted-foreground">SP</span>
-                                    ) : (
-                                      <Select
-                                        value=""
-                                        onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
-                                      >
-                                        <SelectTrigger className="w-16 h-6 text-xs" data-testid={`select-tid-${tid}`}>
-                                          <SelectValue placeholder="Net" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="ho">HO</SelectItem>
-                                          <SelectItem value="sp">SP</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    )}
-                                  </div>
-                                  <div className="col-span-3 text-right font-mono text-xs font-semibold">
-                                    {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                                </Collapsible>
+                              );
+                            })}
                           </div>
                         </CollapsibleContent>
                       </div>
