@@ -4,6 +4,7 @@ import {
   Upload,
   LayoutDashboard,
   FileWarning,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -21,6 +22,7 @@ import {
 const navItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Reconciliation", url: "/upload", icon: Upload },
+  { title: "Results", url: "/results", icon: BarChart3 },
   { title: "Dispute Tracker", url: "/dispute-tracker", icon: FileWarning },
 ];
 
@@ -46,7 +48,9 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
-                const isActive = location === item.url;
+                const isActive = item.url === "/" 
+                  ? location === "/" 
+                  : location.startsWith(item.url);
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
