@@ -827,11 +827,9 @@ export function AmountPayablePanel({
             </div>
           )}
 
-          <Separator />
-
-          <div className="border-t pt-4">
-            <p className="text-sm font-medium mb-1">Base Amount</p>
-            <p className="text-2xl font-bold font-mono" data-testid="text-base-amount">
+          <div className="flex justify-between items-center pt-3 mt-3 border-t">
+            <p className="text-sm font-medium">Payable for bookings reconciled</p>
+            <p className="text-lg font-bold font-mono" data-testid="text-base-amount">
               {formatCurrency(baseAmount)} {currency}
             </p>
           </div>
