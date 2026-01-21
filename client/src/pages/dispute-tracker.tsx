@@ -32,8 +32,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { FileWarning, AlertCircle, ChevronRight, XCircle, Check, Download } from "lucide-react";
+import { FileWarning, AlertCircle, ChevronRight, XCircle, Check, Download, ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -84,7 +86,18 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const [isWritingOff, setIsWritingOff] = useState(false);
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
+  const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  const toggleTid = (tid: string) => {
+    const newExpanded = new Set(expandedTids);
+    if (newExpanded.has(tid)) {
+      newExpanded.delete(tid);
+    } else {
+      newExpanded.add(tid);
+    }
+    setExpandedTids(newExpanded);
+  };
 
   const { data, isLoading } = useQuery<{ disputes: DisputeRecord[] }>({
     queryKey: [`/api/disputes/${runId}`],
@@ -581,35 +594,69 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
               <div>
                 <h4 className="font-medium mb-2">Booking Details</h4>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Individual booking disputes under this billing entity
+                  Individual booking disputes under this billing entity (click Ticket ID to view Booking IDs)
                 </p>
                 <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead className="font-semibold">Booking ID</TableHead>
-                        <TableHead className="font-semibold">Ticket ID</TableHead>
-                        <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
-                        <TableHead className="font-semibold text-center">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedDispute.disputes.map((d) => (
-                        <TableRow key={d.bookingId}>
-                          <TableCell className="font-mono text-sm">{d.bookingId}</TableCell>
-                          <TableCell className="font-mono text-sm" data-testid={`text-ticket-id-${d.bookingId}`}>
-                            {d.ticketId || "—"}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-orange-600 dark:text-orange-400">
-                            {formatCurrency(d.disputeAmount, d.currency)}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {getStatusBadge(d.status)}
-                          </TableCell>
+                  <ScrollArea className="max-h-[400px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/50">
+                          <TableHead className="w-[40px]"></TableHead>
+                          <TableHead className="font-semibold">Ticket ID</TableHead>
+                          <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
+                          <TableHead className="font-semibold text-center">Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedDispute.disputes.map((d) => {
+                          const isExpanded = expandedTids.has(d.disputeId);
+                          return (
+                            <Collapsible
+                              key={d.disputeId}
+                              open={isExpanded}
+                              onOpenChange={() => toggleTid(d.disputeId)}
+                              asChild
+                            >
+                              <>
+                                <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => toggleTid(d.disputeId)}>
+                                  <TableCell className="p-2">
+                                    <CollapsibleTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                                        {isExpanded ? (
+                                          <ChevronDown className="h-4 w-4" />
+                                        ) : (
+                                          <ChevronRight className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    </CollapsibleTrigger>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-sm" data-testid={`text-ticket-id-${d.bookingId}`}>
+                                    {d.ticketId || "—"}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono text-orange-600 dark:text-orange-400">
+                                    {formatCurrency(d.disputeAmount, d.currency)}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {getStatusBadge(d.status)}
+                                  </TableCell>
+                                </TableRow>
+                                <CollapsibleContent asChild>
+                                  <TableRow className="bg-muted/30">
+                                    <TableCell colSpan={4} className="py-2 pl-12 pr-4">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Booking ID:</span>
+                                        <span className="font-mono text-sm">{d.bookingId}</span>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                </CollapsibleContent>
+                              </>
+                            </Collapsible>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
                 </div>
               </div>
 
