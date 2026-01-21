@@ -86,3 +86,12 @@ shared/              # Shared code between client and server
 - Material Design 3 principles adapted for enterprise data tools
 - Inter font for UI, JetBrains Mono for numeric/code data
 - CSS custom properties for consistent theming
+
+### Export Formatting (Excel and Google Sheets)
+- **Indian Number Format**: Currency values use Indian notation (1,00,000.00) with lakhs/crores grouping
+- **Date Format**: All dates formatted as DD/MM/YYYY using UTC to avoid timezone issues
+- **Sorting**: Tables sorted by Discrepancy USD (negative highest to positive lowest)
+- **Tables**: Borders applied to all data tables, gridlines removed from sheets with tables
+- **Auto Column Width**: Applied to Discrepancy Analysis tab for optimal viewing
+- **SP Invoice Report**: Includes all original columns plus FX conversion data (SP Net in HO Currency, FX Rate Used)
+- **Helper Functions**: `formatIndianNumber()` and `formatDateValue()` in `server/routes.ts` handle formatting
