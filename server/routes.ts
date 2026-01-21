@@ -3512,9 +3512,10 @@ export async function registerRoutes(
       const validDisputes = disputes.filter(d => d !== undefined);
       
       // Build Excel data with Booking ID and Final Reconciled Net Price
+      // Apply Indian number formatting to the final reconciled net price
       const reportData = validDisputes.map(d => ({
         "Booking ID": d!.bookingId,
-        "Final Reconciled Net Price": (d!.disputeAmount || 0) + (d!.reconciledNet || 0),
+        "Final Reconciled Net Price": formatIndianNumber((d!.disputeAmount || 0) + (d!.reconciledNet || 0)),
       }));
       
       // Create Excel workbook
@@ -3522,8 +3523,8 @@ export async function registerRoutes(
       const wb = xlsx.utils.book_new();
       const ws = xlsx.utils.json_to_sheet(reportData);
       
-      // Apply Indian number formatting and column widths
-      const colWidths = [{ wch: 20 }, { wch: 25 }];
+      // Apply column widths for better readability
+      const colWidths = [{ wch: 25 }, { wch: 30 }];
       ws["!cols"] = colWidths;
       
       xlsx.utils.book_append_sheet(wb, ws, "HO Error Closure");
