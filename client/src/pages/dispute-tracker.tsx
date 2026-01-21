@@ -32,7 +32,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { FileWarning, AlertCircle, ChevronRight, XCircle } from "lucide-react";
+import { FileWarning, AlertCircle, ChevronRight, XCircle, Check, Download } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -45,10 +46,11 @@ interface DisputeRecord {
   currency: string;
   disputeAmount: number;
   maxDisputeAmount: number;
+  reconciledNet?: number;
   status: "pending" | "submitted" | "resolved" | "rejected";
   createdAt: string;
   closureStatus: "open" | "closed";
-  closureType?: "adjustment" | "manual_writeoff";
+  closureType?: "adjustment" | "manual_writeoff" | "accept_ho_error";
   closureNote?: string;
   closedAt?: string;
   closedByAdjustmentAmount?: number;
@@ -65,7 +67,7 @@ interface AggregatedDispute {
   actualDisputeIds: string[];
   status: "pending" | "submitted" | "resolved" | "rejected";
   closureStatus: "open" | "closed";
-  closureType?: "adjustment" | "manual_writeoff";
+  closureType?: "adjustment" | "manual_writeoff" | "accept_ho_error";
   closureNote?: string;
   closedAt?: string;
   closedByAdjustmentAmount?: number;
@@ -80,6 +82,8 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const [writeOffDispute, setWriteOffDispute] = useState<AggregatedDispute | null>(null);
   const [writeOffNote, setWriteOffNote] = useState("");
   const [isWritingOff, setIsWritingOff] = useState(false);
+  const [acceptHoError, setAcceptHoError] = useState(false);
+  const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
   const { toast } = useToast();
 
   const { data, isLoading } = useQuery<{ disputes: DisputeRecord[] }>({
@@ -116,6 +120,51 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       });
     } finally {
       setIsWritingOff(false);
+    }
+  };
+
+  const handleAcceptHoError = async () => {
+    if (!selectedDispute || !acceptHoError) return;
+    
+    setIsClosingWithHoError(true);
+    try {
+      const response = await apiRequest("POST", "/api/disputes/accept-ho-error", {
+        disputeIds: selectedDispute.actualDisputeIds,
+      });
+      
+      // Trigger Excel download
+      const blob = await fetch("/api/disputes/accept-ho-error/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeIds: selectedDispute.actualDisputeIds }),
+      }).then(res => res.blob());
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `HO_Error_Closure_${selectedDispute.displayId.replace("#", "")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Dispute Closed",
+        description: `${selectedDispute.displayId} has been closed as HO Error. Excel report downloaded.`,
+      });
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      setSelectedDispute(null);
+      setAcceptHoError(false);
+    } catch (error) {
+      console.error("Accept HO error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to close dispute. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClosingWithHoError(false);
     }
   };
 
@@ -432,7 +481,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         </Card>
       )}
 
-      <Dialog open={!!selectedDispute} onOpenChange={(open) => !open && setSelectedDispute(null)}>
+      <Dialog open={!!selectedDispute} onOpenChange={(open) => { if (!open) { setSelectedDispute(null); setAcceptHoError(false); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -555,6 +604,45 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                   </Table>
                 </div>
               </div>
+
+              {/* Accept HO Error section - only for open disputes */}
+              {selectedDispute.closureStatus === "open" && (
+                <div className="mt-6 pt-4 border-t space-y-4">
+                  <h4 className="font-medium">Close Dispute</h4>
+                  <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <Checkbox
+                      id="accept-ho-error"
+                      checked={acceptHoError}
+                      onCheckedChange={(checked) => setAcceptHoError(checked === true)}
+                      data-testid="checkbox-accept-ho-error"
+                    />
+                    <Label
+                      htmlFor="accept-ho-error"
+                      className="text-sm font-medium cursor-pointer flex-1"
+                    >
+                      Accept HO Error
+                    </Label>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Closing with "Accept HO Error" will generate an Excel report with Booking IDs and Final Reconciled Net Prices.
+                  </p>
+                  <Button
+                    onClick={handleAcceptHoError}
+                    disabled={!acceptHoError || isClosingWithHoError}
+                    className="w-full"
+                    data-testid="button-close-accept-ho-error"
+                  >
+                    {isClosingWithHoError ? (
+                      "Closing..."
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Close Dispute & Download Report
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
