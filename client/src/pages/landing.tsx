@@ -124,7 +124,7 @@ export function LandingPage({ runs, lastFxRefresh, onStartDemo }: LandingPagePro
                     <div
                       key={run.id}
                       className="flex items-center justify-between p-4 rounded-lg bg-background border hover-elevate cursor-pointer"
-                      onClick={() => setLocation("/results")}
+                      onClick={() => setLocation("/discrepancy-analysis")}
                       data-testid={`run-card-${run.id}`}
                     >
                       <div>

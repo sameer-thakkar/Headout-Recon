@@ -112,10 +112,10 @@ export function RunPage({ onRunReconciliation, hasMapping, isProcessing }: RunPa
                   Your results are ready to view
                 </p>
                 <Button
-                  onClick={() => setLocation("/results")}
+                  onClick={() => setLocation("/discrepancy-analysis")}
                   data-testid="button-view-results"
                 >
-                  View Results Dashboard
+                  View Discrepancy Analysis
                 </Button>
               </div>
             </CardContent>
