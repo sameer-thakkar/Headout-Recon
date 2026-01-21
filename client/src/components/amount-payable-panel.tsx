@@ -480,6 +480,7 @@ export function AmountPayablePanel({
         currency: string;
         billingEntityId: string;
         billingEntityName: string;
+        ticketId: string;
       }> = [];
       const removedDisputes: string[] = [];
 
@@ -496,6 +497,7 @@ export function AmountPayablePanel({
             currency: booking.currency,
             billingEntityId: booking.beId || "",
             billingEntityName: booking.billingEntityName || "",
+            ticketId: booking.ticketId || "",
           });
         } else if (wasDisputed && !isNowDisputed) {
           removedDisputes.push(booking.bookingId);

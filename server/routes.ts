@@ -3224,7 +3224,7 @@ export async function registerRoutes(
 
   app.post("/api/disputes", async (req, res) => {
     try {
-      const { runId, bookingId, billingEntityId, billingEntityName, currency, disputeAmount, maxDisputeAmount } = req.body;
+      const { runId, bookingId, billingEntityId, billingEntityName, ticketId, currency, disputeAmount, maxDisputeAmount } = req.body;
       
       // Check if dispute already exists for this booking
       const existing = await storage.getDisputeByBooking(runId, bookingId);
@@ -3234,6 +3234,7 @@ export async function registerRoutes(
           disputeAmount,
           billingEntityId,
           billingEntityName,
+          ticketId,
         });
         return res.json({ dispute: updated });
       }
@@ -3243,6 +3244,7 @@ export async function registerRoutes(
         bookingId,
         billingEntityId: billingEntityId || "",
         billingEntityName: billingEntityName || "",
+        ticketId: ticketId || "",
         currency: currency || "USD",
         disputeAmount: disputeAmount || 0,
         maxDisputeAmount: maxDisputeAmount || 0,
@@ -3253,6 +3255,56 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Create dispute error:", error);
       res.status(500).json({ error: "Failed to create dispute" });
+    }
+  });
+
+  // Batch create/update disputes for a run
+  app.post("/api/disputes/:runId", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const { disputes } = req.body;
+      
+      if (!Array.isArray(disputes)) {
+        return res.status(400).json({ error: "disputes must be an array" });
+      }
+      
+      const results = [];
+      for (const d of disputes) {
+        const { bookingId, disputeAmount, currency, billingEntityId, billingEntityName, ticketId } = d;
+        
+        // Check if dispute already exists for this booking
+        const existing = await storage.getDisputeByBooking(runId, bookingId);
+        if (existing) {
+          // Update existing dispute
+          const updated = await storage.updateDispute(existing.disputeId, {
+            disputeAmount,
+            billingEntityId,
+            billingEntityName,
+            ticketId,
+          });
+          if (updated) results.push(updated);
+        } else {
+          // Create new dispute
+          const dispute = await storage.createDispute({
+            runId,
+            bookingId,
+            billingEntityId: billingEntityId || "",
+            billingEntityName: billingEntityName || "",
+            ticketId: ticketId || "",
+            currency: currency || "USD",
+            disputeAmount: disputeAmount || 0,
+            maxDisputeAmount: disputeAmount || 0,
+            status: "pending",
+            closureStatus: "open",
+          });
+          results.push(dispute);
+        }
+      }
+      
+      res.json({ disputes: results });
+    } catch (error) {
+      console.error("Batch create disputes error:", error);
+      res.status(500).json({ error: "Failed to create disputes" });
     }
   });
 

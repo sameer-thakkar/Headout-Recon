@@ -643,6 +643,7 @@ export function AmountPayableModal({
             bookingId,
             billingEntityId: booking.beId || "",
             billingEntityName: booking.billingEntityName || "",
+            ticketId: booking.ticketId || "",
             currency: currency,
             disputeAmount,
             maxDisputeAmount: maxDispute,

@@ -41,6 +41,7 @@ interface DisputeRecord {
   bookingId: string;
   billingEntityId: string;
   billingEntityName: string;
+  ticketId?: string;
   currency: string;
   disputeAmount: number;
   maxDisputeAmount: number;
@@ -530,6 +531,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                     <TableHeader>
                       <TableRow className="bg-muted/50">
                         <TableHead className="font-semibold">Booking ID</TableHead>
+                        <TableHead className="font-semibold">Ticket ID</TableHead>
                         <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
                         <TableHead className="font-semibold text-center">Status</TableHead>
                       </TableRow>
@@ -538,6 +540,9 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                       {selectedDispute.disputes.map((d) => (
                         <TableRow key={d.bookingId}>
                           <TableCell className="font-mono text-sm">{d.bookingId}</TableCell>
+                          <TableCell className="font-mono text-sm" data-testid={`text-ticket-id-${d.bookingId}`}>
+                            {d.ticketId || "—"}
+                          </TableCell>
                           <TableCell className="text-right font-mono text-orange-600 dark:text-orange-400">
                             {formatCurrency(d.disputeAmount, d.currency)}
                           </TableCell>
