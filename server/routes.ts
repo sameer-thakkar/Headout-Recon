@@ -1750,12 +1750,13 @@ export async function registerRoutes(
       const discrepancySummary = result.overallSummary.filter(r => r.reason !== "Reconciled");
       const allPrimaryRows = result.primaryRows;
 
-      // Group by REASON + TID
+      // Group by REASON + TID (with full fields matching Excel)
       const tidGroups = new Map<string, {
         tid: string; currency: string; discrepancyLc: number; discrepancyUsd: number;
         fulfillmentMethod: string; spNetTotal: number; hoNetTotal: number;
         dates: string[]; bookingIds: Set<string>; driTeam: string; reason: string;
         hoTakeRates: number[]; actualTakeRates: number[]; discrepancyPercents: number[];
+        hasSoldAtLoss: boolean; lossLcTotal: number;
       }>();
 
       for (const row of discrepancyRows) {
@@ -1767,6 +1768,7 @@ export async function registerRoutes(
             fulfillmentMethod: row.fulfillmentMethod || "Unknown", spNetTotal: 0, hoNetTotal: 0,
             dates: [], bookingIds: new Set(), driTeam: row.driTeam || "Unknown", reason: row.reason,
             hoTakeRates: [], actualTakeRates: [], discrepancyPercents: [],
+            hasSoldAtLoss: false, lossLcTotal: 0,
           });
         }
         const group = tidGroups.get(compositeKey)!;
@@ -1780,11 +1782,19 @@ export async function registerRoutes(
         if (hsp && hsp > 0) {
           group.hoTakeRates.push((hsp - row.hoNet) / hsp * 100);
           group.actualTakeRates.push((hsp - row.spNetInHo) / hsp * 100);
+          // Check sold at loss (actual take rate < 0)
+          if ((hsp - row.spNetInHo) / hsp < 0) {
+            group.hasSoldAtLoss = true;
+            group.lossLcTotal += row.differenceLc;
+          }
         }
         if (row.hoNet !== 0) {
           group.discrepancyPercents.push(((row.hoNet - row.spNetInHo) / row.hoNet) * 100);
         }
       }
+      
+      // Get total BIDs in report for coverage calculations
+      const totalBidsInReport = allPrimaryRows.length;
 
       // Build discrepancy analysis data
       const discrepancyData: (string | number)[][] = [
@@ -1805,7 +1815,18 @@ export async function registerRoutes(
 
       for (const [reason, groups] of Array.from(tidByReason.entries())) {
         discrepancyData.push([`${reason.toUpperCase()} ANALYSIS`]);
-        discrepancyData.push(["TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Fulfillment", "Times Charged", "Start Date", "End Date", "BID Count", "Frequency", "DRI Team"]);
+        
+        // Use reason-specific columns matching Excel
+        const isMtb = reason.toLowerCase().includes("multiple") || reason === "MTB";
+        const isNpd = reason.toLowerCase().includes("price") || reason === "NPD";
+        
+        if (isMtb) {
+          discrepancyData.push(["TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Fulfillment", "Times Charged", "Start Date", "End Date", "BID Count", "BIDs in Duration", "Total BIDs", "Coverage %", "Frequency", "DRI Team"]);
+        } else if (isNpd) {
+          discrepancyData.push(["TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "HO Take Rate", "Actual Take Rate", "Start Date", "End Date", "BID Count", "BIDs in Duration", "Coverage %", "Discrepancy % Range", "Pattern", "Frequency", "Fulfillment", "DRI Team", "Sold at Loss", "Loss (LC)", "Loss (USD)"]);
+        } else {
+          discrepancyData.push(["TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Fulfillment", "Start Date", "End Date", "BID Count", "Total BIDs", "Coverage %", "Frequency", "DRI Team"]);
+        }
         
         for (const g of groups) {
           const sortedDates = g.dates.sort();
@@ -1813,10 +1834,63 @@ export async function registerRoutes(
           const endDate = sortedDates[sortedDates.length - 1] || "";
           const timesCharged = g.hoNetTotal !== 0 ? (g.spNetTotal / g.hoNetTotal).toFixed(2) + "x" : "N/A";
           const frequency = g.bookingIds.size >= 5 ? "Recurring" : "One-Off";
-          discrepancyData.push([
-            g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, g.fulfillmentMethod,
-            timesCharged, startDate, endDate, g.bookingIds.size, frequency, g.driTeam
-          ]);
+          const bidCount = g.bookingIds.size;
+          
+          // Calculate BIDs in duration (bookings for this TID within date range)
+          let bidsInDuration = bidCount;
+          if (startDate && endDate) {
+            bidsInDuration = allPrimaryRows.filter(r =>
+              r.tid === g.tid && r.bookingCreationDate &&
+              r.bookingCreationDate >= startDate && r.bookingCreationDate <= endDate
+            ).length;
+          }
+          const coveragePct = bidsInDuration > 0 ? ((bidCount / bidsInDuration) * 100).toFixed(2) + "%" : "N/A";
+          
+          // Calculate take rates and pattern
+          const avgHoTakeRate = g.hoTakeRates.length > 0
+            ? (g.hoTakeRates.reduce((a, b) => a + b, 0) / g.hoTakeRates.length).toFixed(2) + "%"
+            : "N/A";
+          const avgActualTakeRate = g.actualTakeRates.length > 0
+            ? (g.actualTakeRates.reduce((a, b) => a + b, 0) / g.actualTakeRates.length).toFixed(2) + "%"
+            : "N/A";
+          
+          let discPctRange = "";
+          let pattern = "";
+          if (g.discrepancyPercents.length > 0) {
+            const uniquePcts = Array.from(new Set(g.discrepancyPercents.map(p => Math.round(p * 100) / 100)));
+            const minPct = Math.min(...g.discrepancyPercents);
+            const maxPct = Math.max(...g.discrepancyPercents);
+            if (uniquePcts.length === 1) {
+              discPctRange = minPct.toFixed(2) + "%";
+              pattern = "Consistent";
+            } else {
+              discPctRange = minPct.toFixed(2) + "% to " + maxPct.toFixed(2) + "%";
+              pattern = "Scattered";
+            }
+          }
+          
+          // Calculate loss USD
+          const lossUsd = g.hasSoldAtLoss && g.discrepancyLc !== 0
+            ? Math.abs(g.lossLcTotal * g.discrepancyUsd / g.discrepancyLc)
+            : 0;
+          
+          if (isMtb) {
+            discrepancyData.push([
+              g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, g.fulfillmentMethod,
+              timesCharged, startDate, endDate, bidCount, bidsInDuration, totalBidsInReport, coveragePct, frequency, g.driTeam
+            ]);
+          } else if (isNpd) {
+            discrepancyData.push([
+              g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, avgHoTakeRate, avgActualTakeRate,
+              startDate, endDate, bidCount, bidsInDuration, coveragePct, discPctRange, pattern, frequency, g.fulfillmentMethod, g.driTeam,
+              g.hasSoldAtLoss ? "Yes" : "No", g.hasSoldAtLoss ? g.lossLcTotal : "", g.hasSoldAtLoss ? lossUsd : ""
+            ]);
+          } else {
+            discrepancyData.push([
+              g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, g.fulfillmentMethod,
+              startDate, endDate, bidCount, totalBidsInReport, coveragePct, frequency, g.driTeam
+            ]);
+          }
         }
         discrepancyData.push([]);
       }
@@ -1863,50 +1937,158 @@ export async function registerRoutes(
         ]);
       }
 
-      // ===== Sheet 5: Draft Messages =====
+      // ===== Sheet 5: Draft Messages (with TID tables matching Excel) =====
       const firstHoRow = originalHoData[0] as Record<string, unknown> | undefined;
       const billingEntityName = firstHoRow 
         ? String(firstHoRow["billingEntityName"] || firstHoRow["beId"] || "[Billing Entity]")
         : "[Billing Entity]";
 
-      const draftMessagesData: (string | number)[][] = [["Draft Messages - Reconciliation"]];
+      const draftMessagesData: (string | number)[][] = [];
       
-      // Group TIDs by DRI + reason
-      const driReasonTids = new Map<string, { tid: string; discrepancyUsd: number; dates: string[]; bidCount: number }[]>();
+      // Build enhanced TID summary for draft messages (matching Excel structure)
+      type DraftTidSummary = {
+        tid: string; discrepancyUsd: number; discrepancyLc: number; currency: string;
+        dates: string[]; bidCount: number; bidsInDuration: number; discPctRange: string;
+        pattern: string; frequency: string; fulfillmentMethod: string; timesCharged: string;
+        hasSoldAtLoss: boolean; lossLcTotal: number;
+      };
+      
+      const driReasonTids = new Map<string, DraftTidSummary[]>();
       for (const [, group] of Array.from(tidGroups.entries())) {
         const key = `${group.driTeam}:${group.reason}`;
         if (!driReasonTids.has(key)) driReasonTids.set(key, []);
         const sortedDates = group.dates.sort();
+        const startDate = sortedDates[0] || "";
+        const endDate = sortedDates[sortedDates.length - 1] || "";
+        const bidCount = group.bookingIds.size;
+        
+        let bidsInDuration = bidCount;
+        if (startDate && endDate) {
+          bidsInDuration = allPrimaryRows.filter(r =>
+            r.tid === group.tid && r.bookingCreationDate &&
+            r.bookingCreationDate >= startDate && r.bookingCreationDate <= endDate
+          ).length;
+        }
+        
+        const timesCharged = group.hoNetTotal !== 0 ? (group.spNetTotal / group.hoNetTotal).toFixed(2) + "x" : "N/A";
+        const frequency = bidCount >= 5 ? "Recurring" : "One-Off";
+        
+        let discPctRange = "";
+        let pattern = "";
+        if (group.discrepancyPercents.length > 0) {
+          const uniquePcts = Array.from(new Set(group.discrepancyPercents.map(p => Math.round(p * 100) / 100)));
+          const minPct = Math.min(...group.discrepancyPercents);
+          const maxPct = Math.max(...group.discrepancyPercents);
+          if (uniquePcts.length === 1) {
+            discPctRange = minPct.toFixed(2) + "%";
+            pattern = "Consistent";
+          } else {
+            discPctRange = minPct.toFixed(2) + "% to " + maxPct.toFixed(2) + "%";
+            pattern = "Scattered";
+          }
+        }
+        
         driReasonTids.get(key)!.push({
           tid: group.tid,
           discrepancyUsd: group.discrepancyUsd,
+          discrepancyLc: group.discrepancyLc,
+          currency: group.currency,
           dates: sortedDates,
-          bidCount: group.bookingIds.size,
+          bidCount,
+          bidsInDuration,
+          discPctRange,
+          pattern,
+          frequency,
+          fulfillmentMethod: group.fulfillmentMethod,
+          timesCharged,
+          hasSoldAtLoss: group.hasSoldAtLoss,
+          lossLcTotal: group.lossLcTotal,
         });
       }
 
-      for (const [key, tids] of Array.from(driReasonTids.entries())) {
-        const [driTeam, reason] = key.split(":");
-        const allDates = tids.flatMap(t => t.dates).filter(d => d).sort();
-        const overallStart = allDates[0] || "";
-        const overallEnd = allDates[allDates.length - 1] || "";
-        const totalDiscrepancy = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
-        const totalBidCount = tids.reduce((sum, t) => sum + t.bidCount, 0);
-        const tidList = tids.map(t => t.tid).join(", ");
-
-        let message = "";
-        if (reason === "Multiple Tickets Booked") {
-          message = `Hey ${driTeam} - Multiple tickets booked for TIDs ${tidList}. Discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Period: ${overallStart} to ${overallEnd}. Bookings: ${totalBidCount}. Please investigate.`;
-        } else if (reason === "Net Price Discrepancy") {
-          message = `Hey ${driTeam} - Price discrepancies for ${billingEntityName}. TIDs: ${tidList}. Discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Period: ${overallStart} to ${overallEnd}. Please review.`;
-        } else {
-          message = `Hey ${driTeam} - Discrepancies found for TIDs ${tidList}. Total: $${totalDiscrepancy.toFixed(2)} USD. Please investigate.`;
-        }
-
+      // MTB section
+      const mtbKeys = Array.from(driReasonTids.keys()).filter(k => k.endsWith(":Multiple Tickets Booked"));
+      if (mtbKeys.length > 0) {
+        draftMessagesData.push(["Draft messages - Multiple Tickets Booked"]);
         draftMessagesData.push([]);
-        draftMessagesData.push([`${reason} - ${driTeam}`]);
-        draftMessagesData.push(["DRI Team", "Slack Draft"]);
-        draftMessagesData.push([driTeam, message]);
+        
+        for (const key of mtbKeys) {
+          const [driTeam] = key.split(":");
+          const tids = driReasonTids.get(key) || [];
+          if (tids.length === 0) continue;
+          
+          const allDates = tids.flatMap(t => t.dates).filter(d => d).sort();
+          const overallStart = allDates[0] || "";
+          const overallEnd = allDates[allDates.length - 1] || "";
+          const totalDiscrepancy = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
+          const totalBidCount = tids.reduce((sum, t) => sum + t.bidCount, 0);
+          const totalBidsInDuration = tids.reduce((sum, t) => sum + t.bidsInDuration, 0);
+          const coveragePct = totalBidsInDuration > 0 ? ((totalBidCount / totalBidsInDuration) * 100).toFixed(2) + "%" : "N/A";
+          const tidList = tids.map(t => t.tid).join(", ");
+
+          let message = "";
+          if (driTeam === "Tech" || driTeam === "Tech (BAR)") {
+            message = `Hey @bar, we have observed multiple tickets booked for products on API. The TIDs involved here are ${tidList}. The amount of discrepancy in USD is ${totalDiscrepancy.toFixed(2)}. Period - ${overallStart} to ${overallEnd}. Bookings impacted - ${totalBidCount}/${totalBidsInDuration} (${coveragePct}).`;
+          } else if (driTeam === "Reservation Ops") {
+            message = `Hey Reservation Ops - We have observed multiple tickets booked for TIDs ${tidList}. Discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Period: ${overallStart} to ${overallEnd}. Bookings: ${totalBidCount}/${totalBidsInDuration} (${coveragePct}).`;
+          } else {
+            message = `Hey ${driTeam} - Multiple tickets booked for TIDs ${tidList}. Discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Period: ${overallStart} to ${overallEnd}. Bookings: ${totalBidCount}/${totalBidsInDuration} (${coveragePct}).`;
+          }
+
+          draftMessagesData.push([`Draft messages - ${driTeam} (MTB)`]);
+          draftMessagesData.push(["DRI Team", "Slack Draft"]);
+          draftMessagesData.push([driTeam, message]);
+          
+          // Add TID table for MTB (matching Excel structure)
+          draftMessagesData.push(["TID", "Discrepancy USD", "Start Date", "End Date", "BID Count", "BIDs in Duration", "Times Charged", "Fulfillment"]);
+          for (const t of tids.sort((a, b) => a.discrepancyUsd - b.discrepancyUsd)) {
+            const startDate = t.dates[0] || "";
+            const endDate = t.dates[t.dates.length - 1] || "";
+            draftMessagesData.push([t.tid, t.discrepancyUsd, startDate, endDate, t.bidCount, t.bidsInDuration, t.timesCharged, t.fulfillmentMethod]);
+          }
+          draftMessagesData.push([]);
+        }
+      }
+
+      // NPD section
+      const npdKeys = Array.from(driReasonTids.keys()).filter(k => k.endsWith(":Net Price Discrepancy"));
+      if (npdKeys.length > 0) {
+        draftMessagesData.push(["Draft messages - Net Price Discrepancy"]);
+        draftMessagesData.push([]);
+        
+        for (const key of npdKeys) {
+          const [driTeam] = key.split(":");
+          const tids = driReasonTids.get(key) || [];
+          if (tids.length === 0) continue;
+          
+          const allDates = tids.flatMap(t => t.dates).filter(d => d).sort();
+          const overallStart = allDates[0] || "";
+          const overallEnd = allDates[allDates.length - 1] || "";
+          const totalDiscrepancy = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
+          const totalBidCount = tids.reduce((sum, t) => sum + t.bidCount, 0);
+
+          let message = "";
+          if (driTeam === "BizOps" || driTeam === "Biz Ops") {
+            message = `Please review the attached sheet for price discrepancies for ${billingEntityName} during ${overallStart} to ${overallEnd}. Total discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Can you please share with RCA what went wrong here?`;
+          } else if (driTeam === "Inventory Ops") {
+            message = `Please review price discrepancies for ${billingEntityName} during ${overallStart} to ${overallEnd}. Total discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Since these are API products, can you confirm the price-sync status?`;
+          } else {
+            message = `Please review price discrepancies for ${billingEntityName} during ${overallStart} to ${overallEnd}. Total discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Please investigate and provide RCA.`;
+          }
+
+          draftMessagesData.push([`Draft messages - ${driTeam} (NPD)`]);
+          draftMessagesData.push(["DRI Team", "Slack Draft"]);
+          draftMessagesData.push([driTeam, message]);
+          
+          // Add TID table for NPD
+          draftMessagesData.push(["TID", "Discrepancy USD", "Start Date", "End Date", "BID Count", "BIDs in Duration", "Discrepancy %", "Pattern", "Frequency", "Fulfillment"]);
+          for (const t of tids.sort((a, b) => a.discrepancyUsd - b.discrepancyUsd)) {
+            const startDate = t.dates[0] || "";
+            const endDate = t.dates[t.dates.length - 1] || "";
+            draftMessagesData.push([t.tid, t.discrepancyUsd, startDate, endDate, t.bidCount, t.bidsInDuration, t.discPctRange, t.pattern, t.frequency, t.fulfillmentMethod]);
+          }
+          draftMessagesData.push([]);
+        }
       }
 
       // ===== DRI Sheets =====
@@ -1928,23 +2110,49 @@ export async function registerRoutes(
       let sheetIndex = 0;
       for (const [key, rows] of Array.from(driReasonRowGroups.entries())) {
         const sheetName = driSheetNames[sheetIndex++];
+        const [, reason] = key.split("_");
+        
+        // Determine comments based on reason
+        let defaultComment = "";
+        if (reason === "Multiple Tickets Booked") defaultComment = "MTB";
+        else if (reason === "Net Price Discrepancy") defaultComment = "NPD";
+        
         const sheetData: (string | number | null)[][] = [
-          ["Booking ID", "Creation Date", "TID", "Experience Name", "Currency", "HO Net", "SP Net", "Difference LC", "Difference %", "Difference USD", "DRI Team"],
+          ["Booking ID", "Creation Date", "Experience Date", "TGID", "Experience Name", "TID", "VID", "Currency", 
+           "Vendor Name", "Billing Entity", "Booking Status", "FF Method", "Payment Method", 
+           "HO SP", "HO Net", "HO Take Rate", "SP Net", "Actual Take Rate", 
+           "Difference LC", "Difference %", "Difference USD", "Comments"],
         ];
         
         for (const row of rows) {
+          const hoRow = hoDataLookup.get(row.bookingId);
+          const hoSp = row.headoutSellingPrice || 0;
+          const hoTakeRate = hoSp > 0 ? ((hoSp - row.hoNet) / hoSp * 100).toFixed(2) + "%" : "";
+          const actualTakeRate = hoSp > 0 ? ((hoSp - row.spNetInHo) / hoSp * 100).toFixed(2) + "%" : "";
+          
           sheetData.push([
             row.bookingId,
             row.bookingCreationDate || "",
-            row.tid || "",
+            getHoValue(hoRow, "experienceDate", "Experience Date", "experience_date", "tourDate") as string || "",
+            getHoValue(hoRow, "tgid", "TGID", "tourGroupId") as string || "",
             row.experienceName || "",
+            row.tid || "",
+            getHoValue(hoRow, "vid", "VID", "variantId", "Variant ID") as string || "",
             row.hoCurrency,
+            row.supplierName || "",
+            getHoValue(hoRow, "billingEntityName", "beId", "billing_entity_id") as string || "",
+            row.bookingStatus || "",
+            row.fulfillmentMethod || "",
+            getHoValue(hoRow, "paymentMethod", "Payment Method") as string || "",
+            hoSp || "",
             row.hoNet,
+            hoTakeRate,
             row.spNetInHo,
+            actualTakeRate,
             row.differenceLc,
             row.differencePct !== null ? `${(row.differencePct * 100).toFixed(2)}%` : "",
             row.differenceUsd,
-            row.driTeam || "",
+            defaultComment,
           ]);
         }
         
