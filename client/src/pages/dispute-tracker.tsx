@@ -503,7 +503,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       )}
 
       <Dialog open={!!selectedDispute} onOpenChange={(open) => { if (!open) { setSelectedDispute(null); setAcceptHoError(false); } }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileWarning className="h-5 w-5" />
@@ -512,39 +512,52 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
           </DialogHeader>
           
           {selectedDispute && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground">Billing Entity ID</p>
-                  <p className="font-mono font-medium">{selectedDispute.billingEntityId || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Billing Entity Name</p>
-                  <p className="font-medium">{selectedDispute.billingEntityName || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Currency</p>
-                  <p className="font-mono font-medium">{selectedDispute.currency}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Dispute Amount</p>
-                  <p className="font-mono font-medium text-orange-600 dark:text-orange-400">
-                    {formatCurrency(selectedDispute.totalDisputeAmount, selectedDispute.currency)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Bookings</p>
-                  <p className="font-medium">{selectedDispute.bookingCount}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <div className="flex items-center gap-2">
-                    {selectedDispute.closureStatus === "closed" 
-                      ? getClosureBadge("closed")
-                      : getStatusBadge(selectedDispute.status)
-                    }
+            <ScrollArea className="flex-1 pr-4">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Billing Entity ID</p>
+                    <p className="font-mono font-medium">{selectedDispute.billingEntityId || "-"}</p>
                   </div>
-                </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Billing Entity Name</p>
+                    <p className="font-medium">{selectedDispute.billingEntityName || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Currency</p>
+                    <p className="font-mono font-medium">{selectedDispute.currency}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Dispute Amount</p>
+                    <p className="font-mono font-medium text-orange-600 dark:text-orange-400">
+                      {formatCurrency(selectedDispute.totalDisputeAmount, selectedDispute.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Bookings</p>
+                    <p className="font-medium">{selectedDispute.bookingCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">TIDs</p>
+                    <p className="font-mono font-medium text-sm">
+                      {(() => {
+                        const uniqueTids = Array.from(new Set(selectedDispute.disputes.map(d => d.ticketId || "Unknown")));
+                        if (uniqueTids.length <= 3) {
+                          return uniqueTids.join(", ");
+                        }
+                        return `${uniqueTids.slice(0, 3).join(", ")} +${uniqueTids.length - 3} more`;
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <div className="flex items-center gap-2">
+                      {selectedDispute.closureStatus === "closed" 
+                        ? getClosureBadge("closed")
+                        : getStatusBadge(selectedDispute.status)
+                      }
+                    </div>
+                  </div>
                 {selectedDispute.closureStatus === "closed" && (
                   <>
                     <div>
@@ -750,7 +763,8 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                   </Button>
                 </div>
               )}
-            </div>
+              </div>
+            </ScrollArea>
           )}
         </DialogContent>
       </Dialog>
