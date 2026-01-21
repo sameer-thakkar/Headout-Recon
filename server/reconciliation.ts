@@ -69,6 +69,7 @@ interface HORow {
   priceSync?: string;
   beId?: string;
   billingEntityName?: string;
+  paymentBasis?: string;
 }
 
 // SP Row from parsed sheet
@@ -141,6 +142,7 @@ function parseHOData(sheet: SheetData): HORow[] {
       priceSync: getRowValue(row, "priceSync", "Price Sync", "price_sync", "PriceSync") ? String(getRowValue(row, "priceSync", "Price Sync", "price_sync", "PriceSync")) : undefined,
       beId: getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id") ? String(getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id")) : undefined,
       billingEntityName: getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName") ? String(getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName")) : undefined,
+      paymentBasis: getRowValue(row, "paymentBasis", "Payment Basis", "payment_basis", "PaymentBasis") ? String(getRowValue(row, "paymentBasis", "Payment Basis", "payment_basis", "PaymentBasis")) : undefined,
     };
   });
 }
@@ -591,6 +593,7 @@ function computeReconciliationRows(
       beId: spBundle?.beId || ho.beId,
       billingEntityName: ho.billingEntityName,
       ticketId: spBundle?.ticketId,
+      paymentBasis: ho.paymentBasis,
     });
   });
   

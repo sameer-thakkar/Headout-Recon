@@ -179,6 +179,8 @@ export function AmountPayablePanel({
     return {
       beId: firstBooking?.beId || "",
       billingEntityName: firstBooking?.billingEntityName || "",
+      ticketId: firstBooking?.ticketId || "",
+      paymentBasis: firstBooking?.paymentBasis || "",
     };
   }, [bookings]);
 
@@ -530,7 +532,7 @@ export function AmountPayablePanel({
         </Button>
       </div>
 
-      {(billingEntityInfo.beId || billingEntityInfo.billingEntityName) && (
+      {(billingEntityInfo.beId || billingEntityInfo.billingEntityName || billingEntityInfo.ticketId || billingEntityInfo.paymentBasis) && (
         <div className="flex-shrink-0 bg-primary/5 border-b border-primary/20 p-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -543,6 +545,18 @@ export function AmountPayablePanel({
               <p className="text-xs text-muted-foreground mb-1">Billing Entity Name</p>
               <p className="font-semibold" data-testid="text-be-name">
                 {billingEntityInfo.billingEntityName || "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Ticket ID</p>
+              <p className="font-mono font-semibold" data-testid="text-ticket-id">
+                {billingEntityInfo.ticketId || "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Payment Basis</p>
+              <p className="font-semibold" data-testid="text-payment-basis">
+                {billingEntityInfo.paymentBasis || "—"}
               </p>
             </div>
           </div>

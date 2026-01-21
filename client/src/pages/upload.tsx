@@ -136,6 +136,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         currency: row.hoCurrency,
         beId: row.beId,
         billingEntityName: row.billingEntityName,
+        ticketId: row.ticketId,
+        paymentBasis: row.paymentBasis,
       }));
   }, [primaryRows, unmappedRows, selectedPayableCurrency]);
 

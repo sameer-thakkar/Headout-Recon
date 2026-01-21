@@ -66,6 +66,9 @@ export const primaryRowSchema = z.object({
   
   // SP Invoice Report fields
   ticketId: z.string().optional(),
+  
+  // HO Report fields
+  paymentBasis: z.string().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 

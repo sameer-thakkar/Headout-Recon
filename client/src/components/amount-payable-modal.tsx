@@ -77,6 +77,7 @@ export interface BookingForPayable {
   beId?: string;
   billingEntityName?: string;
   ticketId?: string;
+  paymentBasis?: string;
 }
 
 export interface FinalNetSelection {

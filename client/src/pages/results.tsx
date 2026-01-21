@@ -286,6 +286,7 @@ export function ResultsPage({ runId, uploadedFiles, onFilesUploaded, onLoadDemo,
       beId: row.beId,
       billingEntityName: row.billingEntityName,
       ticketId: row.ticketId,
+      paymentBasis: row.paymentBasis,
     }));
   }, [data]);
 
