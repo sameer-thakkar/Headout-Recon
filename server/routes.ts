@@ -898,7 +898,7 @@ export async function registerRoutes(
         numCols: number,
         columns: string[]
       ) => {
-        const borderStyle = { style: "thin", color: { rgb: "000000" } };
+        const borderStyle = { style: "thin" as const, color: { rgb: "000000" } };
         const border = { top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle };
         
         for (let r = 0; r < numRows; r++) {
@@ -906,18 +906,22 @@ export async function registerRoutes(
             const cellRef = XLSX.utils.encode_cell({ r: startRow + r, c: startCol + c });
             if (!sheet[cellRef]) sheet[cellRef] = { v: "", t: "s" };
             
-            // Apply border
-            sheet[cellRef].s = sheet[cellRef].s || {};
-            sheet[cellRef].s.border = border;
+            // Merge into existing style object (preserve any existing properties)
+            const existingStyle = sheet[cellRef].s || {};
+            sheet[cellRef].s = {
+              ...existingStyle,
+              border: border,
+              alignment: existingStyle.alignment || { vertical: "center" }
+            };
             
             // Bold for header row (first row of table)
             if (r === 0) {
-              sheet[cellRef].s.font = { bold: true };
+              sheet[cellRef].s.font = { ...(sheet[cellRef].s.font || {}), bold: true };
             }
             
             // Left align first column
             if (c === 0) {
-              sheet[cellRef].s.alignment = { horizontal: "left" };
+              sheet[cellRef].s.alignment = { ...sheet[cellRef].s.alignment, horizontal: "left" };
             }
             
             // Apply number/date formats (skip header row)
@@ -930,21 +934,21 @@ export async function registerRoutes(
                 if (typeof sheet[cellRef].v === "number") {
                   sheet[cellRef].v = formatIndianNumber(sheet[cellRef].v);
                   sheet[cellRef].t = "s"; // Text type for formatted string
-                  sheet[cellRef].s.alignment = { horizontal: "right" };
+                  sheet[cellRef].s.alignment = { ...sheet[cellRef].s.alignment, horizontal: "right" };
                 }
               }
               if (colName.includes("loss") && !colName.includes("?")) {
                 if (typeof sheet[cellRef].v === "number") {
                   sheet[cellRef].v = formatIndianNumber(sheet[cellRef].v);
                   sheet[cellRef].t = "s";
-                  sheet[cellRef].s.alignment = { horizontal: "right" };
+                  sheet[cellRef].s.alignment = { ...sheet[cellRef].s.alignment, horizontal: "right" };
                 }
               }
               if (colName === "amount" || colName.includes("net") || colName.includes("price")) {
                 if (typeof sheet[cellRef].v === "number") {
                   sheet[cellRef].v = formatIndianNumber(sheet[cellRef].v);
                   sheet[cellRef].t = "s";
-                  sheet[cellRef].s.alignment = { horizontal: "right" };
+                  sheet[cellRef].s.alignment = { ...sheet[cellRef].s.alignment, horizontal: "right" };
                 }
               }
               
@@ -1053,9 +1057,9 @@ export async function registerRoutes(
       const spReportSheet = XLSX.utils.json_to_sheet(spReportData);
       spReportSheet["!sheetViews"] = [{ showGridLines: false }];
       
-      // Apply formatting to SP Invoice Report
+      // Apply formatting to SP Invoice Report (no fill colors)
       const spRange = XLSX.utils.decode_range(spReportSheet["!ref"] || "A1");
-      const spBorderStyle = { style: "thin", color: { rgb: "000000" } };
+      const spBorderStyle = { style: "thin" as const, color: { rgb: "000000" } };
       const spBorder = { top: spBorderStyle, bottom: spBorderStyle, left: spBorderStyle, right: spBorderStyle };
       
       // Get column headers for number/date formatting
@@ -1070,11 +1074,15 @@ export async function registerRoutes(
           const cellRef = XLSX.utils.encode_cell({ r, c });
           if (!spReportSheet[cellRef]) continue;
           
-          spReportSheet[cellRef].s = spReportSheet[cellRef].s || {};
-          spReportSheet[cellRef].s.border = spBorder;
+          // Merge into existing style (preserve any existing properties)
+          const existingStyle = spReportSheet[cellRef].s || {};
+          spReportSheet[cellRef].s = {
+            ...existingStyle,
+            border: spBorder
+          };
           
           if (r === 0) {
-            spReportSheet[cellRef].s.font = { bold: true };
+            spReportSheet[cellRef].s.font = { ...(spReportSheet[cellRef].s.font || {}), bold: true };
           }
           
           // Apply Indian number format and date format to data rows
@@ -1084,7 +1092,7 @@ export async function registerRoutes(
               if (typeof spReportSheet[cellRef].v === "number") {
                 spReportSheet[cellRef].v = formatIndianNumber(spReportSheet[cellRef].v);
                 spReportSheet[cellRef].t = "s";
-                spReportSheet[cellRef].s.alignment = { horizontal: "right" };
+                spReportSheet[cellRef].s.alignment = { ...(spReportSheet[cellRef].s.alignment || {}), horizontal: "right" };
               }
             }
             if (col.includes("date")) {
@@ -1306,9 +1314,9 @@ export async function registerRoutes(
       const hoReportSheet = XLSX.utils.json_to_sheet(hoReportData);
       hoReportSheet["!sheetViews"] = [{ showGridLines: false }];
       
-      // Apply formatting to HO Report Updated
+      // Apply formatting to HO Report Updated (no fill colors)
       const hoRange = XLSX.utils.decode_range(hoReportSheet["!ref"] || "A1");
-      const hoBorderStyle = { style: "thin", color: { rgb: "000000" } };
+      const hoBorderStyle = { style: "thin" as const, color: { rgb: "000000" } };
       const hoBorder = { top: hoBorderStyle, bottom: hoBorderStyle, left: hoBorderStyle, right: hoBorderStyle };
       
       // Get column headers for number/date formatting
@@ -1323,11 +1331,15 @@ export async function registerRoutes(
           const cellRef = XLSX.utils.encode_cell({ r, c });
           if (!hoReportSheet[cellRef]) continue;
           
-          hoReportSheet[cellRef].s = hoReportSheet[cellRef].s || {};
-          hoReportSheet[cellRef].s.border = hoBorder;
+          // Merge into existing style (preserve any existing properties)
+          const existingStyle = hoReportSheet[cellRef].s || {};
+          hoReportSheet[cellRef].s = {
+            ...existingStyle,
+            border: hoBorder
+          };
           
           if (r === 0) {
-            hoReportSheet[cellRef].s.font = { bold: true };
+            hoReportSheet[cellRef].s.font = { ...(hoReportSheet[cellRef].s.font || {}), bold: true };
           }
           
           // Apply Indian number format and date format to data rows
@@ -1340,7 +1352,7 @@ export async function registerRoutes(
                 if (typeof hoReportSheet[cellRef].v === "number") {
                   hoReportSheet[cellRef].v = formatIndianNumber(hoReportSheet[cellRef].v);
                   hoReportSheet[cellRef].t = "s";
-                  hoReportSheet[cellRef].s.alignment = { horizontal: "right" };
+                  hoReportSheet[cellRef].s.alignment = { ...(hoReportSheet[cellRef].s.alignment || {}), horizontal: "right" };
                 }
               }
             }
@@ -1683,8 +1695,8 @@ export async function registerRoutes(
       
       const draftMessagesSheet = XLSX.utils.aoa_to_sheet(draftRows);
       
-      // Apply styling: borders, number/date formats
-      const draftBorderStyle = { style: "thin", color: { rgb: "000000" } };
+      // Apply styling: borders, number/date formats (no fill colors)
+      const draftBorderStyle = { style: "thin" as const, color: { rgb: "000000" } };
       const draftBorder = { top: draftBorderStyle, bottom: draftBorderStyle, left: draftBorderStyle, right: draftBorderStyle };
       
       for (const region of tableRegions) {
@@ -1693,13 +1705,17 @@ export async function registerRoutes(
             const cellRef = XLSX.utils.encode_cell({ r, c });
             if (!draftMessagesSheet[cellRef]) draftMessagesSheet[cellRef] = { v: "", t: "s" };
             
-            // Apply border
-            draftMessagesSheet[cellRef].s = draftMessagesSheet[cellRef].s || {};
-            draftMessagesSheet[cellRef].s.border = draftBorder;
+            // Merge into existing style (preserve any existing properties)
+            const existingStyle = draftMessagesSheet[cellRef].s || {};
+            draftMessagesSheet[cellRef].s = {
+              ...existingStyle,
+              border: draftBorder,
+              alignment: existingStyle.alignment || {}
+            };
             
             // Bold for headers
             if (region.type === 'header' || (region.type === 'tid' && r === region.startRow) || (region.type === 'dri' && r === region.startRow)) {
-              draftMessagesSheet[cellRef].s.font = { bold: true };
+              draftMessagesSheet[cellRef].s.font = { ...(draftMessagesSheet[cellRef].s.font || {}), bold: true };
             }
             
             // Indian number format for Discrepancy USD (column 1 in TID table, index 1)
@@ -1707,7 +1723,7 @@ export async function registerRoutes(
               if (typeof draftMessagesSheet[cellRef].v === "number") {
                 draftMessagesSheet[cellRef].v = formatIndianNumber(draftMessagesSheet[cellRef].v);
                 draftMessagesSheet[cellRef].t = "s";
-                draftMessagesSheet[cellRef].s.alignment = { horizontal: "right" };
+                draftMessagesSheet[cellRef].s.alignment = { ...(draftMessagesSheet[cellRef].s.alignment || {}), horizontal: "right" };
               }
             }
             
@@ -1725,18 +1741,24 @@ export async function registerRoutes(
       // Remove gridlines
       draftMessagesSheet["!sheetViews"] = [{ showGridLines: false }];
       
+      // Column widths - Column B (Slack draft) limited to 30 characters wide
       draftMessagesSheet["!cols"] = [
         { wch: 15 }, { wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 25 }, 
         { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 18 }
       ];
       
-      // Apply wrapText to column B (Slack draft column, index 1)
+      // Apply wrapText to column B (Slack draft column, index 1) - MUST be done after table styling
       const range = XLSX.utils.decode_range(draftMessagesSheet["!ref"] || "A1");
       for (let r = 0; r <= range.e.r; r++) {
         const cellRef = XLSX.utils.encode_cell({ r, c: 1 });
         if (draftMessagesSheet[cellRef]) {
+          // Preserve existing style properties while adding wrap text
           draftMessagesSheet[cellRef].s = draftMessagesSheet[cellRef].s || {};
-          draftMessagesSheet[cellRef].s.alignment = { wrapText: true, vertical: "top" };
+          draftMessagesSheet[cellRef].s.alignment = { 
+            ...draftMessagesSheet[cellRef].s.alignment,
+            wrapText: true, 
+            vertical: "top" 
+          };
         }
       }
       XLSX.utils.book_append_sheet(workbook, draftMessagesSheet, "Draft Messages");
@@ -1825,31 +1847,45 @@ export async function registerRoutes(
         
         const driSheet = XLSX.utils.json_to_sheet(sheetData);
         
-        // Apply formatting
+        // Apply formatting with borders and no fill colors
         const driRange = XLSX.utils.decode_range(driSheet["!ref"] || "A1");
-        for (let r = 1; r <= driRange.e.r; r++) {
-          // Date format for Creation Date (col 1) and Experience Date (col 2)
-          for (const col of [1, 2]) {
-            const cellRef = XLSX.utils.encode_cell({ r, c: col });
-            if (driSheet[cellRef] && driSheet[cellRef].v) {
+        const driBorderStyle = { style: "thin" as const, color: { rgb: "000000" } };
+        const driBorder = { top: driBorderStyle, bottom: driBorderStyle, left: driBorderStyle, right: driBorderStyle };
+        
+        for (let r = 0; r <= driRange.e.r; r++) {
+          for (let c = 0; c <= driRange.e.c; c++) {
+            const cellRef = XLSX.utils.encode_cell({ r, c });
+            if (!driSheet[cellRef]) continue;
+            
+            // Merge into existing style (preserve any existing properties)
+            const existingStyle = driSheet[cellRef].s || {};
+            driSheet[cellRef].s = {
+              ...existingStyle,
+              border: driBorder
+            };
+            
+            // Bold header row
+            if (r === 0) {
+              driSheet[cellRef].s.font = { ...(driSheet[cellRef].s.font || {}), bold: true };
+            }
+            
+            // Date format for Creation Date (col 1) and Experience Date (col 2) in data rows
+            if (r > 0 && (c === 1 || c === 2)) {
               const val = driSheet[cellRef].v;
-              if (typeof val === "string" && val) {
-                const date = new Date(val);
-                if (!isNaN(date.getTime())) {
-                  driSheet[cellRef].v = Math.floor((date.getTime() / 86400000) + 25569);
-                  driSheet[cellRef].t = "n";
-                  driSheet[cellRef].z = "dd/mm/yyyy";
-                }
+              if (val) {
+                driSheet[cellRef].v = formatDateValue(val);
+                driSheet[cellRef].t = "s";
               }
             }
-          }
-          
-          // Number format for numeric columns
-          const numericCols = [13, 14, 16, 18, 20]; // HO SP, HO Net, SP Net, Difference LC, Difference USD
-          for (const col of numericCols) {
-            const cellRef = XLSX.utils.encode_cell({ r, c: col });
-            if (driSheet[cellRef] && typeof driSheet[cellRef].v === "number") {
-              driSheet[cellRef].z = "#,##0.00";
+            
+            // Indian number format for numeric columns in data rows
+            const numericCols = [13, 14, 16, 18, 20]; // HO SP, HO Net, SP Net, Difference LC, Difference USD
+            if (r > 0 && numericCols.includes(c)) {
+              if (typeof driSheet[cellRef].v === "number") {
+                driSheet[cellRef].v = formatIndianNumber(driSheet[cellRef].v);
+                driSheet[cellRef].t = "s";
+                driSheet[cellRef].s.alignment = { ...(driSheet[cellRef].s.alignment || {}), horizontal: "right" };
+              }
             }
           }
         }
