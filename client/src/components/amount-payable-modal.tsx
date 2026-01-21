@@ -638,6 +638,8 @@ export function AmountPayableModal({
         const disputeAmount = disputeAmounts.get(bookingId) || 0;
         if (booking && disputeAmount > 0) {
           const maxDispute = Math.abs(booking.hoNet - booking.spNet);
+          const selection = localSelections[bookingId] || "ho";
+          const reconciledNet = selection === "ho" ? booking.hoNet : booking.spNet;
           await apiRequest("POST", "/api/disputes", {
             runId,
             bookingId,
@@ -647,6 +649,7 @@ export function AmountPayableModal({
             currency: currency,
             disputeAmount,
             maxDisputeAmount: maxDispute,
+            reconciledNet,
           }).catch(err => console.error("Failed to create dispute:", err));
           createdCount++;
         } else {

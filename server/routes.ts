@@ -3224,7 +3224,7 @@ export async function registerRoutes(
 
   app.post("/api/disputes", async (req, res) => {
     try {
-      const { runId, bookingId, billingEntityId, billingEntityName, ticketId, currency, disputeAmount, maxDisputeAmount } = req.body;
+      const { runId, bookingId, billingEntityId, billingEntityName, ticketId, currency, disputeAmount, maxDisputeAmount, reconciledNet } = req.body;
       
       // Check if dispute already exists for this booking
       const existing = await storage.getDisputeByBooking(runId, bookingId);
@@ -3235,6 +3235,7 @@ export async function registerRoutes(
           billingEntityId,
           billingEntityName,
           ticketId,
+          reconciledNet,
         });
         return res.json({ dispute: updated });
       }
@@ -3248,6 +3249,7 @@ export async function registerRoutes(
         currency: currency || "USD",
         disputeAmount: disputeAmount || 0,
         maxDisputeAmount: maxDisputeAmount || 0,
+        reconciledNet: reconciledNet || 0,
         status: "pending",
         closureStatus: "open",
       });
@@ -3270,7 +3272,7 @@ export async function registerRoutes(
       
       const results = [];
       for (const d of disputes) {
-        const { bookingId, disputeAmount, currency, billingEntityId, billingEntityName, ticketId } = d;
+        const { bookingId, disputeAmount, currency, billingEntityId, billingEntityName, ticketId, reconciledNet } = d;
         
         // Check if dispute already exists for this booking
         const existing = await storage.getDisputeByBooking(runId, bookingId);
@@ -3281,6 +3283,7 @@ export async function registerRoutes(
             billingEntityId,
             billingEntityName,
             ticketId,
+            reconciledNet,
           });
           if (updated) results.push(updated);
         } else {
@@ -3294,6 +3297,7 @@ export async function registerRoutes(
             currency: currency || "USD",
             disputeAmount: disputeAmount || 0,
             maxDisputeAmount: disputeAmount || 0,
+            reconciledNet: reconciledNet || 0,
             status: "pending",
             closureStatus: "open",
           });
