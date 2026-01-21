@@ -1665,22 +1665,59 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Results not found" });
       }
 
+      // Get original upload data for enriched export
+      const upload = await storage.getUpload(run.uploadId);
+      const originalHoData = upload?.hoData?.rows || [];
+      const originalSpData = upload?.spData?.rows || [];
+
+      // Build lookup maps
+      const allRowsMap = new Map<string, typeof result.allRows[0][]>();
+      for (const r of result.allRows) {
+        const existing = allRowsMap.get(r.bookingId) || [];
+        existing.push(r);
+        allRowsMap.set(r.bookingId, existing);
+      }
+      const spFxMap = new Map(result.spFxDebugRows.map(r => [r.bookingId, r]));
+
       // Get Google Sheets client
       const sheets = await getUncachableGoogleSheetClient();
 
-      // Create a new spreadsheet
+      // Collect DRI sheets dynamically
+      const discrepancyRows = result.primaryRows.filter(r => r.reason !== "Reconciled");
+      const driReasonRowGroups = new Map<string, typeof discrepancyRows>();
+      for (const row of discrepancyRows) {
+        const key = `${row.driTeam || "Unknown"}_${row.reason}`;
+        if (!driReasonRowGroups.has(key)) {
+          driReasonRowGroups.set(key, []);
+        }
+        driReasonRowGroups.get(key)!.push(row);
+      }
+
+      // Build sheet definitions - main sheets + DRI sheets
+      const sheetDefs: { properties: { title: string } }[] = [
+        { properties: { title: "Payable Summary" } },
+        { properties: { title: "Discrepancy Analysis" } },
+        { properties: { title: "SP Invoice Report" } },
+        { properties: { title: "HO Report Updated" } },
+        { properties: { title: "Draft Messages" } },
+      ];
+
+      // Add DRI sheets
+      const driSheetNames: string[] = [];
+      for (const key of Array.from(driReasonRowGroups.keys())) {
+        const [driTeam, reason] = key.split("_");
+        const shortReason = reason === "Multiple Tickets Booked" ? "MTB" : reason === "Net Price Discrepancy" ? "NPD" : reason.substring(0, 10);
+        const sheetName = `${driTeam.substring(0, 20)}_${shortReason}`.substring(0, 31);
+        driSheetNames.push(sheetName);
+        sheetDefs.push({ properties: { title: sheetName } });
+      }
+
+      // Create spreadsheet with all sheets
       const spreadsheetTitle = `Reconciliation Export - ${new Date().toISOString().split("T")[0]}`;
       const createResponse = await sheets.spreadsheets.create({
         requestBody: {
-          properties: {
-            title: spreadsheetTitle,
-          },
-          sheets: [
-            { properties: { title: "Payable Summary" } },
-            { properties: { title: "Discrepancy Analysis" } },
-            { properties: { title: "SP Invoice Report" } },
-            { properties: { title: "HO Report Updated" } },
-          ],
+          properties: { title: spreadsheetTitle },
+          sheets: sheetDefs,
         },
       });
 
@@ -1691,71 +1728,130 @@ export async function registerRoutes(
         throw new Error("Failed to create spreadsheet");
       }
 
-      // Prepare sheet data
-
-      // Sheet 1: Payable Summary
+      // ===== Sheet 1: Payable Summary =====
       const spTotalByCurrency = new Map<string, number>();
       for (const r of result.spFxDebugRows) {
-        const ccy = r.spCurrency;
-        spTotalByCurrency.set(ccy, (spTotalByCurrency.get(ccy) || 0) + r.spNetOriginal);
+        spTotalByCurrency.set(r.spCurrency, (spTotalByCurrency.get(r.spCurrency) || 0) + r.spNetOriginal);
       }
-
       const hoTotalByCurrency = new Map<string, number>();
       for (const r of result.primaryRows) {
-        const ccy = r.hoCurrency;
-        hoTotalByCurrency.set(ccy, (hoTotalByCurrency.get(ccy) || 0) + r.hoNet);
+        hoTotalByCurrency.set(r.hoCurrency, (hoTotalByCurrency.get(r.hoCurrency) || 0) + r.hoNet);
       }
 
-      const payableSummaryData: (string | number)[][] = [
-        ["Description", "Currency", "Amount", "Note"],
-      ];
-
+      const payableSummaryData: (string | number)[][] = [["Description", "Currency", "Amount", "Note"]];
       Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
         payableSummaryData.push(["Payable as per SP", ccy, amount, "Sum of SP Invoice"]);
       });
-
       Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
         payableSummaryData.push(["Payable as per HO", ccy, amount, "Sum of HO Net (Primary only)"]);
       });
 
-      // Sheet 2: Discrepancy Analysis
+      // ===== Sheet 2: Discrepancy Analysis (with TID breakdown) =====
+      const discrepancySummary = result.overallSummary.filter(r => r.reason !== "Reconciled");
+      const allPrimaryRows = result.primaryRows;
+
+      // Group by REASON + TID
+      const tidGroups = new Map<string, {
+        tid: string; currency: string; discrepancyLc: number; discrepancyUsd: number;
+        fulfillmentMethod: string; spNetTotal: number; hoNetTotal: number;
+        dates: string[]; bookingIds: Set<string>; driTeam: string; reason: string;
+        hoTakeRates: number[]; actualTakeRates: number[]; discrepancyPercents: number[];
+      }>();
+
+      for (const row of discrepancyRows) {
+        const tid = row.tid || "Unknown";
+        const compositeKey = `${row.reason}:${tid}`;
+        if (!tidGroups.has(compositeKey)) {
+          tidGroups.set(compositeKey, {
+            tid, currency: row.hoCurrency, discrepancyLc: 0, discrepancyUsd: 0,
+            fulfillmentMethod: row.fulfillmentMethod || "Unknown", spNetTotal: 0, hoNetTotal: 0,
+            dates: [], bookingIds: new Set(), driTeam: row.driTeam || "Unknown", reason: row.reason,
+            hoTakeRates: [], actualTakeRates: [], discrepancyPercents: [],
+          });
+        }
+        const group = tidGroups.get(compositeKey)!;
+        group.discrepancyLc += row.differenceLc;
+        group.discrepancyUsd += row.differenceUsd;
+        group.spNetTotal += row.spNetInHo;
+        group.hoNetTotal += row.hoNet;
+        if (row.bookingCreationDate) group.dates.push(row.bookingCreationDate);
+        group.bookingIds.add(row.bookingId);
+        const hsp = row.headoutSellingPrice;
+        if (hsp && hsp > 0) {
+          group.hoTakeRates.push((hsp - row.hoNet) / hsp * 100);
+          group.actualTakeRates.push((hsp - row.spNetInHo) / hsp * 100);
+        }
+        if (row.hoNet !== 0) {
+          group.discrepancyPercents.push(((row.hoNet - row.spNetInHo) / row.hoNet) * 100);
+        }
+      }
+
+      // Build discrepancy analysis data
       const discrepancyData: (string | number)[][] = [
+        ["OVERALL DISCREPANCY SUMMARY"],
         ["Reason", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Count BID"],
       ];
-
-      result.overallSummary
-        .filter(r => r.reason !== "Reconciled")
-        .forEach(row => {
-          discrepancyData.push([
-            row.reason,
-            row.currency,
-            row.discrepancyLc,
-            row.discrepancyUsd,
-            row.countBid,
-          ]);
-        });
-
-      // Sheet 3: SP Invoice Report
-      const spReportData: (string | number | null)[][] = [
-        ["Booking ID", "SP Net (Original)", "SP Currency"],
-      ];
-
-      result.spFxDebugRows.forEach(row => {
-        spReportData.push([
-          row.bookingId,
-          row.spNetOriginal,
-          row.spCurrency,
-        ]);
+      discrepancySummary.forEach(row => {
+        discrepancyData.push([row.reason, row.currency, row.discrepancyLc, row.discrepancyUsd, row.countBid]);
       });
+      discrepancyData.push([]);
 
-      // Sheet 4: HO Report Updated
-      const hoReportData: (string | number | null)[][] = [
-        ["Booking ID", "HO Net", "Currency", "SP Net (in HO)", "Difference", "Difference %", "Reason", "DRI Team"],
+      // Add TID-level analysis
+      const tidByReason = new Map<string, typeof tidGroups extends Map<string, infer V> ? V[] : never>();
+      for (const [, group] of Array.from(tidGroups.entries())) {
+        if (!tidByReason.has(group.reason)) tidByReason.set(group.reason, []);
+        tidByReason.get(group.reason)!.push(group);
+      }
+
+      for (const [reason, groups] of Array.from(tidByReason.entries())) {
+        discrepancyData.push([`${reason.toUpperCase()} ANALYSIS`]);
+        discrepancyData.push(["TID", "Currency", "Discrepancy (LC)", "Discrepancy (USD)", "Fulfillment", "Times Charged", "Start Date", "End Date", "BID Count", "Frequency", "DRI Team"]);
+        
+        for (const g of groups) {
+          const sortedDates = g.dates.sort();
+          const startDate = sortedDates[0] || "";
+          const endDate = sortedDates[sortedDates.length - 1] || "";
+          const timesCharged = g.hoNetTotal !== 0 ? (g.spNetTotal / g.hoNetTotal).toFixed(2) + "x" : "N/A";
+          const frequency = g.bookingIds.size >= 5 ? "Recurring" : "One-Off";
+          discrepancyData.push([
+            g.tid, g.currency, g.discrepancyLc, g.discrepancyUsd, g.fulfillmentMethod,
+            timesCharged, startDate, endDate, g.bookingIds.size, frequency, g.driTeam
+          ]);
+        }
+        discrepancyData.push([]);
+      }
+
+      // ===== Sheet 3: SP Invoice Report (enriched) =====
+      const spReportData: (string | number | null)[][] = [
+        ["Booking ID", "SP Net (Original)", "SP Currency", "SP Net (HO Currency)", "FX Rate Used"],
       ];
+      for (const row of originalSpData as Record<string, unknown>[]) {
+        const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        const spFxRow = spFxMap.get(bookingId);
+        spReportData.push([
+          bookingId,
+          spFxRow?.spNetOriginal ?? "",
+          spFxRow?.spCurrency ?? "",
+          spFxRow?.spNetInHo ?? "",
+          spFxRow?.fxRateUsed ?? "",
+        ]);
+      }
 
-      result.primaryRows.forEach(row => {
+      // ===== Sheet 4: HO Report Updated (enriched) =====
+      const hoReportData: (string | number | null)[][] = [
+        ["Booking ID", "TID", "Experience Name", "HO Net", "Currency", "SP Net", "Difference", "Difference %", "Reason", "DRI Team", "Comments"],
+      ];
+      
+      for (const row of result.primaryRows) {
+        let comments = "";
+        if (row.reason === "Multiple Tickets Booked") comments = "MTB";
+        else if (row.reason === "Net Price Discrepancy") comments = "NPD";
+        else if (row.reason === "Reconciled") comments = "Reconciled";
+        
         hoReportData.push([
           row.bookingId,
+          row.tid || "",
+          row.experienceName || "",
           row.hoNet,
           row.hoCurrency,
           row.spNetInHo,
@@ -1763,20 +1859,116 @@ export async function registerRoutes(
           row.differencePct !== null ? `${(row.differencePct * 100).toFixed(2)}%` : "",
           row.reason,
           row.driTeam || "",
+          comments,
         ]);
-      });
+      }
 
-      // Write data to sheets
+      // ===== Sheet 5: Draft Messages =====
+      const firstHoRow = originalHoData[0] as Record<string, unknown> | undefined;
+      const billingEntityName = firstHoRow 
+        ? String(firstHoRow["billingEntityName"] || firstHoRow["beId"] || "[Billing Entity]")
+        : "[Billing Entity]";
+
+      const draftMessagesData: (string | number)[][] = [["Draft Messages - Reconciliation"]];
+      
+      // Group TIDs by DRI + reason
+      const driReasonTids = new Map<string, { tid: string; discrepancyUsd: number; dates: string[]; bidCount: number }[]>();
+      for (const [, group] of Array.from(tidGroups.entries())) {
+        const key = `${group.driTeam}:${group.reason}`;
+        if (!driReasonTids.has(key)) driReasonTids.set(key, []);
+        const sortedDates = group.dates.sort();
+        driReasonTids.get(key)!.push({
+          tid: group.tid,
+          discrepancyUsd: group.discrepancyUsd,
+          dates: sortedDates,
+          bidCount: group.bookingIds.size,
+        });
+      }
+
+      for (const [key, tids] of Array.from(driReasonTids.entries())) {
+        const [driTeam, reason] = key.split(":");
+        const allDates = tids.flatMap(t => t.dates).filter(d => d).sort();
+        const overallStart = allDates[0] || "";
+        const overallEnd = allDates[allDates.length - 1] || "";
+        const totalDiscrepancy = tids.reduce((sum, t) => sum + t.discrepancyUsd, 0);
+        const totalBidCount = tids.reduce((sum, t) => sum + t.bidCount, 0);
+        const tidList = tids.map(t => t.tid).join(", ");
+
+        let message = "";
+        if (reason === "Multiple Tickets Booked") {
+          message = `Hey ${driTeam} - Multiple tickets booked for TIDs ${tidList}. Discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Period: ${overallStart} to ${overallEnd}. Bookings: ${totalBidCount}. Please investigate.`;
+        } else if (reason === "Net Price Discrepancy") {
+          message = `Hey ${driTeam} - Price discrepancies for ${billingEntityName}. TIDs: ${tidList}. Discrepancy: $${totalDiscrepancy.toFixed(2)} USD. Period: ${overallStart} to ${overallEnd}. Please review.`;
+        } else {
+          message = `Hey ${driTeam} - Discrepancies found for TIDs ${tidList}. Total: $${totalDiscrepancy.toFixed(2)} USD. Please investigate.`;
+        }
+
+        draftMessagesData.push([]);
+        draftMessagesData.push([`${reason} - ${driTeam}`]);
+        draftMessagesData.push(["DRI Team", "Slack Draft"]);
+        draftMessagesData.push([driTeam, message]);
+      }
+
+      // ===== DRI Sheets =====
+      const hoDataLookup = new Map<string, Record<string, unknown>>();
+      for (const hoRow of originalHoData as Record<string, unknown>[]) {
+        const bookingId = String(hoRow["bookingId"] || hoRow["Booking ID"] || "");
+        if (bookingId) hoDataLookup.set(bookingId, hoRow);
+      }
+
+      const getHoValue = (hoRow: Record<string, unknown> | undefined, ...aliases: string[]): unknown => {
+        if (!hoRow) return "";
+        for (const alias of aliases) {
+          if (hoRow[alias] !== undefined && hoRow[alias] !== null) return hoRow[alias];
+        }
+        return "";
+      };
+
+      const driSheetDataList: { sheetName: string; data: (string | number | null)[][] }[] = [];
+      let sheetIndex = 0;
+      for (const [key, rows] of Array.from(driReasonRowGroups.entries())) {
+        const sheetName = driSheetNames[sheetIndex++];
+        const sheetData: (string | number | null)[][] = [
+          ["Booking ID", "Creation Date", "TID", "Experience Name", "Currency", "HO Net", "SP Net", "Difference LC", "Difference %", "Difference USD", "DRI Team"],
+        ];
+        
+        for (const row of rows) {
+          sheetData.push([
+            row.bookingId,
+            row.bookingCreationDate || "",
+            row.tid || "",
+            row.experienceName || "",
+            row.hoCurrency,
+            row.hoNet,
+            row.spNetInHo,
+            row.differenceLc,
+            row.differencePct !== null ? `${(row.differencePct * 100).toFixed(2)}%` : "",
+            row.differenceUsd,
+            row.driTeam || "",
+          ]);
+        }
+        
+        driSheetDataList.push({ sheetName, data: sheetData });
+      }
+
+      // Write all data to sheets
+      const batchData = [
+        { range: "Payable Summary!A1", values: payableSummaryData },
+        { range: "Discrepancy Analysis!A1", values: discrepancyData },
+        { range: "SP Invoice Report!A1", values: spReportData },
+        { range: "HO Report Updated!A1", values: hoReportData },
+        { range: "Draft Messages!A1", values: draftMessagesData },
+      ];
+
+      for (const { sheetName, data } of driSheetDataList) {
+        batchData.push({ range: `'${sheetName}'!A1`, values: data });
+      }
+
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId,
         requestBody: {
           valueInputOption: "USER_ENTERED",
-          data: [
-            { range: "Payable Summary!A1", values: payableSummaryData },
-            { range: "Discrepancy Analysis!A1", values: discrepancyData },
-            { range: "SP Invoice Report!A1", values: spReportData },
-            { range: "HO Report Updated!A1", values: hoReportData },
-          ],
+          data: batchData,
         },
       });
 
