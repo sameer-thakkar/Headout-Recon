@@ -11,6 +11,7 @@ import type {
   SummaryRow,
   DraftMessage,
   DisputeRecord,
+  IssueRecord,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -46,6 +47,12 @@ export interface IStorage {
   getDisputeByBooking(runId: string, bookingId: string): Promise<DisputeRecord | undefined>;
   closeDisputes(disputeIds: string[], adjustmentAmount: number): Promise<DisputeRecord[]>;
   manualCloseDisputes(disputeIds: string[], note?: string): Promise<DisputeRecord[]>;
+
+  // Issues
+  createIssue(issue: Omit<IssueRecord, "issueId" | "createdDate">): Promise<IssueRecord>;
+  getIssues(runId: string): Promise<IssueRecord[]>;
+  getIssueById(issueId: string): Promise<IssueRecord | undefined>;
+  deleteIssue(issueId: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -56,6 +63,8 @@ export class MemStorage implements IStorage {
   private tempFileData: Map<string, { headers: string[]; rawData: Record<string, unknown>[] }> = new Map();
   private disputes: Map<string, DisputeRecord> = new Map();
   private disputeCounter: number = 0;
+  private issues: Map<string, IssueRecord> = new Map();
+  private issueCounter: number = 0;
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -228,6 +237,48 @@ export class MemStorage implements IStorage {
 
   async getDisputeByBooking(runId: string, bookingId: string): Promise<DisputeRecord | undefined> {
     return Array.from(this.disputes.values()).find(d => d.runId === runId && d.bookingId === bookingId);
+  }
+
+  // Issue methods
+  async createIssue(issue: Omit<IssueRecord, "issueId" | "createdDate">): Promise<IssueRecord> {
+    // Ensure counter is higher than any existing IID to prevent duplicates
+    const existingIds = Array.from(this.issues.keys());
+    const maxExisting = existingIds.reduce((max, id) => {
+      const match = id.match(/IID-#(\d+)/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        return num > max ? num : max;
+      }
+      return max;
+    }, 0);
+    
+    if (maxExisting >= this.issueCounter) {
+      this.issueCounter = maxExisting;
+    }
+    
+    this.issueCounter++;
+    const issueId = `IID-#${this.issueCounter}`;
+    const newIssue: IssueRecord = {
+      ...issue,
+      issueId,
+      createdDate: new Date().toISOString(),
+    };
+    this.issues.set(issueId, newIssue);
+    return newIssue;
+  }
+
+  async getIssues(runId: string): Promise<IssueRecord[]> {
+    return Array.from(this.issues.values())
+      .filter(i => i.runId === runId)
+      .sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime());
+  }
+
+  async getIssueById(issueId: string): Promise<IssueRecord | undefined> {
+    return this.issues.get(issueId);
+  }
+
+  async deleteIssue(issueId: string): Promise<boolean> {
+    return this.issues.delete(issueId);
   }
 }
 

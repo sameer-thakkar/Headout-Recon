@@ -239,6 +239,23 @@ export const summaryRowSchema = z.object({
 });
 export type SummaryRow = z.infer<typeof summaryRowSchema>;
 
+// Issue record for tracking issues from Amount Payable Calculator
+export const issueRecordSchema = z.object({
+  issueId: z.string(),
+  runId: z.string(),
+  createdDate: z.string(),
+  billingEntityId: z.string(),
+  billingEntityName: z.string(),
+  currency: z.string(),
+  discrepancyLocal: z.number(),
+  discrepancyUsd: z.number(),
+  reason: z.string(),
+  driTeam: z.string(),
+  // Optional: bookingIds associated with this issue
+  bookingIds: z.array(z.string()).optional(),
+});
+export type IssueRecord = z.infer<typeof issueRecordSchema>;
+
 // Dispute record for tracking disputes from Amount Payable Calculator
 export const disputeStatusSchema = z.enum(["pending", "submitted", "resolved", "rejected"]);
 export type DisputeStatus = z.infer<typeof disputeStatusSchema>;
