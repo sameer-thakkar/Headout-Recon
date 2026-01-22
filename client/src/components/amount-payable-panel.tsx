@@ -86,6 +86,7 @@ export function AmountPayablePanel({
     billingEntityName: string;
     totalDisputeAmount: number; 
     bookingCount: number;
+    actualDisputeIds: string[];
   }>>([]);
   const [validationError, setValidationError] = useState<string>("");
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
@@ -113,20 +114,21 @@ export function AmountPayablePanel({
           setActiveDisputes(newActiveDisputes);
           setOriginalDisputes(new Map(newDisputeAmounts));
           
-          const groupedByBillingEntity = new Map<string, Array<{ billingEntityId: string; billingEntityName: string; disputeAmount: number }>>();
+          const groupedByBillingEntity = new Map<string, Array<{ id: string; billingEntityId: string; billingEntityName: string; disputeAmount: number }>>();
           for (const dispute of disputes) {
             const key = `${dispute.billingEntityId}-${dispute.currency}`;
             if (!groupedByBillingEntity.has(key)) {
               groupedByBillingEntity.set(key, []);
             }
             groupedByBillingEntity.get(key)!.push({
+              id: dispute.id,
               billingEntityId: dispute.billingEntityId,
               billingEntityName: dispute.billingEntityName,
               disputeAmount: dispute.disputeAmount,
             });
           }
           
-          const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number }> = [];
+          const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number; actualDisputeIds: string[] }> = [];
           let counter = 1;
           for (const group of Array.from(groupedByBillingEntity.values())) {
             if (group.length === 0) continue;
@@ -139,6 +141,7 @@ export function AmountPayablePanel({
               billingEntityName: first.billingEntityName,
               totalDisputeAmount: roundedTotal,
               bookingCount: group.length,
+              actualDisputeIds: group.map(d => d.id),
             });
             counter++;
           }
@@ -545,8 +548,52 @@ export function AmountPayablePanel({
       }
     }
     
+    // Auto-close disputes that match adjustments
+    if (runId) {
+      const disputeAdjustments = localAdjustments.filter(
+        a => a.nature === "Open Dispute Adjustments" && 
+             a.selectedDisputeIds && 
+             a.selectedDisputeIds.length > 0
+      );
+      
+      for (const adj of disputeAdjustments) {
+        if (adj.selectedDisputeIds && adj.amount > 0) {
+          // Get selected aggregated disputes
+          const selectedAggregated = openDisputes.filter(
+            d => adj.selectedDisputeIds!.includes(d.displayId)
+          );
+          
+          // Calculate total dispute amount from selected DIDs
+          const selectedTotal = selectedAggregated.reduce((sum, d) => sum + d.totalDisputeAmount, 0);
+          
+          // Collect all actual dispute IDs from selected aggregated groups
+          const actualDisputeIds = selectedAggregated.flatMap(d => d.actualDisputeIds);
+          
+          // Round for comparison
+          const roundedAdjAmount = Math.round(adj.amount * 100) / 100;
+          const roundedSelectedTotal = Math.round(selectedTotal * 100) / 100;
+          
+          // Only close if amounts match exactly
+          if (roundedAdjAmount === roundedSelectedTotal && actualDisputeIds.length > 0) {
+            try {
+              await apiRequest("POST", "/api/disputes/close", {
+                disputeIds: actualDisputeIds,
+                adjustmentAmount: adj.amount,
+              });
+              console.log(`Closed disputes: ${actualDisputeIds.join(", ")}`);
+            } catch (err) {
+              console.error("Failed to close disputes:", err);
+            }
+          }
+        }
+      }
+      
+      // Re-invalidate to pick up closed disputes
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    }
+    
     onApply(localAdjustments, localSelections, finalAmount);
-  }, [localAdjustments, localSelections, finalAmount, onApply]);
+  }, [localAdjustments, localSelections, finalAmount, onApply, runId, openDisputes]);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
