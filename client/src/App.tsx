@@ -18,6 +18,7 @@ import { DraftsPage } from "@/pages/drafts";
 import { DriPage } from "@/pages/dri";
 import { ExportPage } from "@/pages/export";
 import { DisputeTrackerPage } from "@/pages/dispute-tracker";
+import { IssueTrackerPage } from "@/pages/issue-tracker";
 import NotFound from "@/pages/not-found";
 
 import type {
@@ -361,6 +362,9 @@ function AppContent() {
               </Route>
               <Route path="/dispute-tracker">
                 <DisputeTrackerPage runId={currentRunId} />
+              </Route>
+              <Route path="/issue-tracker">
+                <IssueTrackerPage runId={currentRunId} />
               </Route>
               <Route component={NotFound} />
             </Switch>
