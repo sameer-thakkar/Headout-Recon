@@ -714,14 +714,15 @@ export function AmountPayablePanel({
                         </div>
 
                         <CollapsibleContent>
-                          <div className="grid grid-cols-16 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                          <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
                             <div className="col-span-2">TID / Booking ID</div>
                             <div className="col-span-2 text-right">HO Net</div>
                             <div className="col-span-2 text-right">SP Net</div>
                             <div className="col-span-1 text-center">Net</div>
                             <div className="col-span-2 text-right">Price Payable</div>
-                            <div className="col-span-3 text-center">Dispute Amt</div>
-                            <div className="col-span-4 text-right">Final Reconciled Net</div>
+                            <div className="col-span-1 text-center">Dispute</div>
+                            <div className="col-span-3 text-right">Dispute Amt</div>
+                            <div className="col-span-5 text-right">Final Reconciled Net</div>
                           </div>
 
                           <div className="max-h-80 overflow-y-auto">
@@ -735,7 +736,7 @@ export function AmountPayablePanel({
                                   onOpenChange={() => toggleTid(tidKeyStr)}
                                 >
                                   <div className="border-t">
-                                    <div className="grid grid-cols-16 gap-1 px-3 py-2 bg-background items-center">
+                                    <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-background items-center">
                                       <div className="col-span-2 flex items-center gap-1">
                                         <CollapsibleTrigger asChild>
                                           <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
@@ -785,24 +786,27 @@ export function AmountPayablePanel({
                                           return s + (sel === "ho" ? b.hoNet : b.spNet);
                                         }, 0))}
                                       </div>
-                                      <div className="col-span-3 flex justify-center items-center gap-1">
+                                      <div className="col-span-1 flex justify-center items-center">
                                         {(() => {
                                           const { disputed, disputable } = getTidDisputeCount(reason, tid);
                                           if (disputable === 0) return <span className="text-xs text-muted-foreground">-</span>;
                                           return (
-                                            <>
-                                              <Checkbox
-                                                checked={disputed === disputable}
-                                                onCheckedChange={() => toggleTidDispute(reason, tid)}
-                                                className="h-4 w-4"
-                                                data-testid={`checkbox-dispute-tid-${tid}`}
-                                              />
-                                              <span className="text-xs text-muted-foreground">{disputed}/{disputable}</span>
-                                            </>
+                                            <Checkbox
+                                              checked={disputed === disputable}
+                                              onCheckedChange={() => toggleTidDispute(reason, tid)}
+                                              className="h-4 w-4"
+                                              data-testid={`checkbox-dispute-tid-${tid}`}
+                                            />
                                           );
                                         })()}
                                       </div>
-                                      <div className="col-span-4 text-right font-mono text-xs font-semibold">
+                                      <div className="col-span-3 text-right font-mono text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => {
+                                          if (!activeDisputes.has(b.bookingId)) return s;
+                                          return s + (disputeAmounts.get(b.bookingId) || 0);
+                                        }, 0))}
+                                      </div>
+                                      <div className="col-span-5 text-right font-mono text-xs font-semibold">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </div>
                                     </div>
@@ -819,7 +823,7 @@ export function AmountPayablePanel({
                                           return (
                                             <div 
                                               key={booking.bookingId} 
-                                              className="grid grid-cols-16 gap-1 px-3 py-1.5 border-t border-dashed items-center"
+                                              className="grid grid-cols-18 gap-1 px-3 py-1.5 border-t border-dashed items-center"
                                             >
                                               <div className="col-span-2 pl-6">
                                                 <span className="text-xs text-muted-foreground truncate block" title={booking.bookingId}>
@@ -856,35 +860,37 @@ export function AmountPayablePanel({
                                               <div className="col-span-2 text-right font-mono text-xs">
                                                 {formatCurrency(pricePayable)}
                                               </div>
-                                              <div className="col-span-3 flex justify-center items-center gap-1">
+                                              <div className="col-span-1 flex justify-center items-center">
                                                 {canDispute ? (
-                                                  <>
-                                                    <Checkbox
-                                                      checked={isDisputed}
-                                                      onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
-                                                      className="h-4 w-4"
-                                                      data-testid={`checkbox-dispute-${booking.bookingId}`}
-                                                    />
-                                                    {isDisputed && (
-                                                      <div className="flex flex-col">
-                                                        <Input
-                                                          type="number"
-                                                          value={currentDisputeAmt}
-                                                          onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
-                                                          className={`w-16 h-5 text-xs font-mono px-1 ${disputeErrors.has(booking.bookingId) ? 'border-red-500' : ''}`}
-                                                          data-testid={`input-dispute-amount-${booking.bookingId}`}
-                                                        />
-                                                        {disputeErrors.has(booking.bookingId) && (
-                                                          <span className="text-[10px] text-red-500">{disputeErrors.get(booking.bookingId)}</span>
-                                                        )}
-                                                      </div>
-                                                    )}
-                                                  </>
+                                                  <Checkbox
+                                                    checked={isDisputed}
+                                                    onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
+                                                    className="h-4 w-4"
+                                                    data-testid={`checkbox-dispute-${booking.bookingId}`}
+                                                  />
                                                 ) : (
                                                   <span className="text-xs text-muted-foreground">-</span>
                                                 )}
                                               </div>
-                                              <div className="col-span-4 text-right font-mono text-xs">
+                                              <div className="col-span-3 text-right">
+                                                {canDispute && isDisputed ? (
+                                                  <div className="flex flex-col items-end">
+                                                    <Input
+                                                      type="number"
+                                                      value={currentDisputeAmt}
+                                                      onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
+                                                      className={`w-20 h-5 text-xs font-mono px-1 text-right ${disputeErrors.has(booking.bookingId) ? 'border-red-500' : ''}`}
+                                                      data-testid={`input-dispute-amount-${booking.bookingId}`}
+                                                    />
+                                                    {disputeErrors.has(booking.bookingId) && (
+                                                      <span className="text-[10px] text-red-500">{disputeErrors.get(booking.bookingId)}</span>
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <span className="text-xs text-muted-foreground font-mono">-</span>
+                                                )}
+                                              </div>
+                                              <div className="col-span-5 text-right font-mono text-xs">
                                                 {formatCurrency(getFinalNetPrice(booking))}
                                               </div>
                                             </div>
