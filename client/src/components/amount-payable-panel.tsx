@@ -126,7 +126,7 @@ export function AmountPayablePanel({
               groupedByBillingEntity.set(key, []);
             }
             groupedByBillingEntity.get(key)!.push({
-              id: dispute.id,
+              id: dispute.disputeId,
               billingEntityId: dispute.billingEntityId,
               billingEntityName: dispute.billingEntityName,
               disputeAmount: dispute.disputeAmount,
