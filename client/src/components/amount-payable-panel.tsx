@@ -719,8 +719,8 @@ export function AmountPayablePanel({
                             <div className="col-span-2 text-right">HO Net</div>
                             <div className="col-span-2 text-right">SP Net</div>
                             <div className="col-span-1 text-center">Net</div>
-                            <div className="col-span-2 text-right">Price Payable</div>
                             <div className="col-span-1 text-center">Dispute</div>
+                            <div className="col-span-2 text-right">Price Payable</div>
                             <div className="col-span-3 text-right">Dispute Amt</div>
                             <div className="col-span-5 text-right">Final Reconciled Net</div>
                           </div>
@@ -780,12 +780,6 @@ export function AmountPayablePanel({
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-2 text-right font-mono text-xs">
-                                        {formatCurrency(tidBookings.reduce((s, b) => {
-                                          const sel = localSelections[b.bookingId] || "sp";
-                                          return s + (sel === "ho" ? b.hoNet : b.spNet);
-                                        }, 0))}
-                                      </div>
                                       <div className="col-span-1 flex justify-center items-center">
                                         {(() => {
                                           const { disputed, disputable } = getTidDisputeCount(reason, tid);
@@ -799,6 +793,12 @@ export function AmountPayablePanel({
                                             />
                                           );
                                         })()}
+                                      </div>
+                                      <div className="col-span-2 text-right font-mono text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => {
+                                          const sel = localSelections[b.bookingId] || "sp";
+                                          return s + (sel === "ho" ? b.hoNet : b.spNet);
+                                        }, 0))}
                                       </div>
                                       <div className="col-span-3 text-right font-mono text-xs">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
@@ -857,9 +857,6 @@ export function AmountPayablePanel({
                                                   </Select>
                                                 )}
                                               </div>
-                                              <div className="col-span-2 text-right font-mono text-xs">
-                                                {formatCurrency(pricePayable)}
-                                              </div>
                                               <div className="col-span-1 flex justify-center items-center">
                                                 {canDispute ? (
                                                   <Checkbox
@@ -871,6 +868,9 @@ export function AmountPayablePanel({
                                                 ) : (
                                                   <span className="text-xs text-muted-foreground">-</span>
                                                 )}
+                                              </div>
+                                              <div className="col-span-2 text-right font-mono text-xs">
+                                                {formatCurrency(pricePayable)}
                                               </div>
                                               <div className="col-span-3 text-right">
                                                 {canDispute && isDisputed ? (
