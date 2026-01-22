@@ -3544,5 +3544,64 @@ export async function registerRoutes(
     }
   });
 
+  // ========== Issue Tracker Endpoints ==========
+
+  // Get all issues for a run
+  app.get("/api/issues/:runId", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const issues = await storage.getIssues(runId);
+      res.json({ issues });
+    } catch (error) {
+      console.error("Get issues error:", error);
+      res.status(500).json({ error: "Failed to fetch issues" });
+    }
+  });
+
+  // Create a new issue
+  app.post("/api/issues", async (req, res) => {
+    try {
+      const { runId, billingEntityId, billingEntityName, currency, discrepancyLocal, discrepancyUsd, reason, driTeam, bookingIds } = req.body;
+      
+      if (!runId || !billingEntityId || !reason || !driTeam) {
+        res.status(400).json({ error: "Missing required fields: runId, billingEntityId, reason, driTeam" });
+        return;
+      }
+
+      const issue = await storage.createIssue({
+        runId,
+        billingEntityId,
+        billingEntityName: billingEntityName || billingEntityId,
+        currency: currency || "USD",
+        discrepancyLocal: discrepancyLocal || 0,
+        discrepancyUsd: discrepancyUsd || 0,
+        reason,
+        driTeam,
+        bookingIds: bookingIds || [],
+      });
+
+      res.json({ issue });
+    } catch (error) {
+      console.error("Create issue error:", error);
+      res.status(500).json({ error: "Failed to create issue" });
+    }
+  });
+
+  // Delete an issue
+  app.delete("/api/issues/:issueId", async (req, res) => {
+    try {
+      const { issueId } = req.params;
+      const deleted = await storage.deleteIssue(issueId);
+      if (deleted) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "Issue not found" });
+      }
+    } catch (error) {
+      console.error("Delete issue error:", error);
+      res.status(500).json({ error: "Failed to delete issue" });
+    }
+  });
+
   return httpServer;
 }
