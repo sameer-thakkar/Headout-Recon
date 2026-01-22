@@ -606,6 +606,62 @@ export function AmountPayablePanel({
     }
   }, [runId, allRows, currency, toast]);
 
+  const handleLogIssueTid = useCallback(async (reason: string, tid: string, tidBookings: BookingForPayable[]) => {
+    if (!runId || tidBookings.length === 0) return;
+    
+    const issueKey = `${reason}:${tid}`;
+    setLoggingIssues(prev => new Set(prev).add(issueKey));
+    try {
+      const firstBooking = tidBookings[0];
+      
+      const matchingRows = allRows.filter(r => r.reason === reason && (r.tid === tid || r.bookingId === tid));
+      const driTeam = matchingRows.find(r => 
+        tidBookings.some(b => b.bookingId === r.bookingId)
+      )?.driTeam || matchingRows[0]?.driTeam || "Unknown";
+      
+      const discrepancyLocal = tidBookings.reduce((sum, b) => {
+        return sum + Math.abs(b.hoNet - b.spNet);
+      }, 0);
+      
+      const discrepancyUsd = tidBookings.reduce((sum, b) => {
+        const matchingRow = allRows.find(r => r.bookingId === b.bookingId);
+        return sum + Math.abs(matchingRow?.differenceUsd || 0);
+      }, 0);
+
+      await apiRequest("POST", "/api/issues", {
+        runId,
+        billingEntityId: firstBooking.beId || "",
+        billingEntityName: firstBooking.billingEntityName || firstBooking.beId || "",
+        currency,
+        discrepancyLocal,
+        discrepancyUsd,
+        reason: `${reason} - TID: ${tid}`,
+        driTeam,
+        bookingIds: tidBookings.map(b => b.bookingId),
+      });
+
+      toast({
+        title: "Issue Logged",
+        description: `Issue for TID ${tid} has been logged to the Issue Tracker.`,
+      });
+
+      await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+    } catch (error) {
+      console.error("Failed to log issue:", error);
+      toast({
+        title: "Error",
+        description: "Failed to log issue. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoggingIssues(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(issueKey);
+        return newSet;
+      });
+    }
+  }, [runId, allRows, currency, toast]);
+
   const handleApply = useCallback(async () => {
     setValidationError("");
     
@@ -816,7 +872,7 @@ export function AmountPayablePanel({
                                             )}
                                           </Button>
                                         </CollapsibleTrigger>
-                                        <div className="min-w-0">
+                                        <div className="min-w-0 flex-1">
                                           <span className="font-medium text-xs truncate block" title={tid}>
                                             {tid}
                                           </span>
@@ -824,6 +880,19 @@ export function AmountPayablePanel({
                                             {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
                                           </span>
                                         </div>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-5 px-1.5 text-xs shrink-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleLogIssueTid(reason, tid, tidBookings);
+                                          }}
+                                          disabled={loggingIssues.has(`${reason}:${tid}`)}
+                                          data-testid={`button-log-issue-tid-${tid}`}
+                                        >
+                                          <FileWarning className="h-3 w-3" />
+                                        </Button>
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
