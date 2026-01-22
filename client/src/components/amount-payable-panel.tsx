@@ -714,13 +714,14 @@ export function AmountPayablePanel({
                         </div>
 
                         <CollapsibleContent>
-                          <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
-                            <div className="col-span-3">TID / Booking ID</div>
+                          <div className="grid grid-cols-16 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                            <div className="col-span-2">TID / Booking ID</div>
                             <div className="col-span-2 text-right">HO Net</div>
                             <div className="col-span-2 text-right">SP Net</div>
                             <div className="col-span-1 text-center">Net</div>
-                            <div className="col-span-2 text-center">Dispute</div>
-                            <div className="col-span-2 text-right">Final</div>
+                            <div className="col-span-2 text-right">Price Payable</div>
+                            <div className="col-span-3 text-center">Dispute Amt</div>
+                            <div className="col-span-4 text-right">Final Reconciled Net</div>
                           </div>
 
                           <div className="max-h-80 overflow-y-auto">
@@ -734,8 +735,8 @@ export function AmountPayablePanel({
                                   onOpenChange={() => toggleTid(tidKeyStr)}
                                 >
                                   <div className="border-t">
-                                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-background items-center">
-                                      <div className="col-span-3 flex items-center gap-1">
+                                    <div className="grid grid-cols-16 gap-1 px-3 py-2 bg-background items-center">
+                                      <div className="col-span-2 flex items-center gap-1">
                                         <CollapsibleTrigger asChild>
                                           <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
                                             {isTidExpanded ? (
@@ -778,7 +779,13 @@ export function AmountPayablePanel({
                                           </Select>
                                         )}
                                       </div>
-                                      <div className="col-span-2 flex justify-center items-center gap-1">
+                                      <div className="col-span-2 text-right font-mono text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => {
+                                          const sel = localSelections[b.bookingId] || "sp";
+                                          return s + (sel === "ho" ? b.hoNet : b.spNet);
+                                        }, 0))}
+                                      </div>
+                                      <div className="col-span-3 flex justify-center items-center gap-1">
                                         {(() => {
                                           const { disputed, disputable } = getTidDisputeCount(reason, tid);
                                           if (disputable === 0) return <span className="text-xs text-muted-foreground">-</span>;
@@ -795,7 +802,7 @@ export function AmountPayablePanel({
                                           );
                                         })()}
                                       </div>
-                                      <div className="col-span-2 text-right font-mono text-xs font-semibold">
+                                      <div className="col-span-4 text-right font-mono text-xs font-semibold">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </div>
                                     </div>
@@ -808,12 +815,13 @@ export function AmountPayablePanel({
                                           const isDisputed = activeDisputes.has(booking.bookingId);
                                           const maxDispute = getMaxDisputeAmount(booking);
                                           const currentDisputeAmt = disputeAmounts.get(booking.bookingId) ?? maxDispute;
+                                          const pricePayable = currentSelection === "ho" ? booking.hoNet : booking.spNet;
                                           return (
                                             <div 
                                               key={booking.bookingId} 
-                                              className="grid grid-cols-12 gap-2 px-3 py-1.5 border-t border-dashed items-center"
+                                              className="grid grid-cols-16 gap-1 px-3 py-1.5 border-t border-dashed items-center"
                                             >
-                                              <div className="col-span-3 pl-6">
+                                              <div className="col-span-2 pl-6">
                                                 <span className="text-xs text-muted-foreground truncate block" title={booking.bookingId}>
                                                   {booking.bookingId}
                                                 </span>
@@ -845,7 +853,10 @@ export function AmountPayablePanel({
                                                   </Select>
                                                 )}
                                               </div>
-                                              <div className="col-span-2 flex justify-center items-center gap-1">
+                                              <div className="col-span-2 text-right font-mono text-xs">
+                                                {formatCurrency(pricePayable)}
+                                              </div>
+                                              <div className="col-span-3 flex justify-center items-center gap-1">
                                                 {canDispute ? (
                                                   <>
                                                     <Checkbox
@@ -873,7 +884,7 @@ export function AmountPayablePanel({
                                                   <span className="text-xs text-muted-foreground">-</span>
                                                 )}
                                               </div>
-                                              <div className="col-span-2 text-right font-mono text-xs">
+                                              <div className="col-span-4 text-right font-mono text-xs">
                                                 {formatCurrency(getFinalNetPrice(booking))}
                                               </div>
                                             </div>
