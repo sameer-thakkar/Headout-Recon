@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,6 +92,8 @@ export function AmountPayablePanel({
   const [validationError, setValidationError] = useState<string>("");
   const [disputeErrors, setDisputeErrors] = useState<Map<string, string>>(new Map());
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
+  const [loggingIssues, setLoggingIssues] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
 
   useEffect(() => {
     const presets = createPresetAdjustments();
@@ -548,6 +551,61 @@ export function AmountPayablePanel({
     }
   }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
 
+  const handleLogIssue = useCallback(async (reason: string, reasonBookings: BookingForPayable[]) => {
+    if (!runId || reasonBookings.length === 0) return;
+    
+    setLoggingIssues(prev => new Set(prev).add(reason));
+    try {
+      const firstBooking = reasonBookings[0];
+      
+      const matchingRows = allRows.filter(r => r.reason === reason);
+      const driTeam = matchingRows.find(r => 
+        reasonBookings.some(b => b.bookingId === r.bookingId)
+      )?.driTeam || matchingRows[0]?.driTeam || "Unknown";
+      
+      const discrepancyLocal = reasonBookings.reduce((sum, b) => {
+        return sum + Math.abs(b.hoNet - b.spNet);
+      }, 0);
+      
+      const discrepancyUsd = reasonBookings.reduce((sum, b) => {
+        const matchingRow = allRows.find(r => r.bookingId === b.bookingId);
+        return sum + Math.abs(matchingRow?.differenceUsd || 0);
+      }, 0);
+
+      await apiRequest("POST", "/api/issues", {
+        runId,
+        billingEntityId: firstBooking.beId || "",
+        billingEntityName: firstBooking.billingEntityName || firstBooking.beId || "",
+        currency,
+        discrepancyLocal,
+        discrepancyUsd,
+        reason,
+        driTeam,
+        bookingIds: reasonBookings.map(b => b.bookingId),
+      });
+
+      toast({
+        title: "Issue Logged",
+        description: `Issue for ${reason} has been logged to the Issue Tracker.`,
+      });
+
+      await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+    } catch (error) {
+      console.error("Failed to log issue:", error);
+      toast({
+        title: "Error",
+        description: "Failed to log issue. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoggingIssues(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(reason);
+        return newSet;
+      });
+    }
+  }, [runId, allRows, currency, toast]);
+
   const handleApply = useCallback(async () => {
     setValidationError("");
     
@@ -706,6 +764,17 @@ export function AmountPayablePanel({
                               data-testid={`button-clear-${reason}`}
                             >
                               Clear
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-6 px-2 text-xs"
+                              onClick={() => handleLogIssue(reason, reasonBookings)}
+                              disabled={loggingIssues.has(reason)}
+                              data-testid={`button-log-issue-${reason}`}
+                            >
+                              <FileWarning className="h-3 w-3 mr-1" />
+                              {loggingIssues.has(reason) ? "Logging..." : "Log Issue"}
                             </Button>
                           </div>
                           <div className="col-span-4 text-right font-mono text-sm font-semibold">
