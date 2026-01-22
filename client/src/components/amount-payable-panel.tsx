@@ -646,39 +646,50 @@ export function AmountPayablePanel({
     // Auto-close disputes that match adjustments
     if (runId) {
       const disputeAdjustments = localAdjustments.filter(
-        a => a.nature === "Open Dispute Adjustments" && 
-             a.selectedDisputeIds && 
-             a.selectedDisputeIds.length > 0
+        a => a.nature === "Open Dispute Adjustments" && a.amount > 0
       );
       
       for (const adj of disputeAdjustments) {
-        if (adj.selectedDisputeIds && adj.amount > 0) {
-          // Get selected aggregated disputes
-          const selectedAggregated = openDisputes.filter(
+        let selectedAggregated: typeof openDisputes = [];
+        
+        // Check if selectedDisputeIds is populated (from dropdown selection)
+        if (adj.selectedDisputeIds && adj.selectedDisputeIds.length > 0) {
+          selectedAggregated = openDisputes.filter(
             d => adj.selectedDisputeIds!.includes(d.displayId)
           );
-          
-          // Calculate total dispute amount from selected DIDs
-          const selectedTotal = selectedAggregated.reduce((sum, d) => sum + d.totalDisputeAmount, 0);
-          
-          // Collect all actual dispute IDs from selected aggregated groups
-          const actualDisputeIds = selectedAggregated.flatMap(d => d.actualDisputeIds);
-          
-          // Round for comparison
-          const roundedAdjAmount = Math.round(adj.amount * 100) / 100;
-          const roundedSelectedTotal = Math.round(selectedTotal * 100) / 100;
-          
-          // Only close if amounts match exactly
-          if (roundedAdjAmount === roundedSelectedTotal && actualDisputeIds.length > 0) {
-            try {
-              await apiRequest("POST", "/api/disputes/close", {
-                disputeIds: actualDisputeIds,
-                adjustmentAmount: adj.amount,
-              });
-              console.log(`Closed disputes: ${actualDisputeIds.join(", ")}`);
-            } catch (err) {
-              console.error("Failed to close disputes:", err);
-            }
+        } else if (adj.reference && adj.reference.trim()) {
+          // Parse reference field for manually typed DID patterns like "DID-#1, DID-#2"
+          const didPattern = /DID-#\d+/g;
+          const matches = adj.reference.match(didPattern);
+          if (matches && matches.length > 0) {
+            selectedAggregated = openDisputes.filter(
+              d => matches.includes(d.displayId)
+            );
+          }
+        }
+        
+        if (selectedAggregated.length === 0) continue;
+        
+        // Calculate total dispute amount from selected DIDs
+        const selectedTotal = selectedAggregated.reduce((sum, d) => sum + d.totalDisputeAmount, 0);
+        
+        // Collect all actual dispute IDs from selected aggregated groups
+        const actualDisputeIds = selectedAggregated.flatMap(d => d.actualDisputeIds);
+        
+        // Round for comparison
+        const roundedAdjAmount = Math.round(adj.amount * 100) / 100;
+        const roundedSelectedTotal = Math.round(selectedTotal * 100) / 100;
+        
+        // Only close if amounts match exactly
+        if (roundedAdjAmount === roundedSelectedTotal && actualDisputeIds.length > 0) {
+          try {
+            await apiRequest("POST", "/api/disputes/close", {
+              disputeIds: actualDisputeIds,
+              adjustmentAmount: adj.amount,
+            });
+            console.log(`Closed disputes: ${actualDisputeIds.join(", ")}`);
+          } catch (err) {
+            console.error("Failed to close disputes:", err);
           }
         }
       }
