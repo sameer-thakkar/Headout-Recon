@@ -92,7 +92,8 @@ export function AmountPayablePanel({
   const [validationError, setValidationError] = useState<string>("");
   const [disputeErrors, setDisputeErrors] = useState<Map<string, string>>(new Map());
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
-  const [loggingIssues, setLoggingIssues] = useState<Set<string>>(new Set());
+  const [selectedIssues, setSelectedIssues] = useState<Set<string>>(new Set());
+  const [isLoggingIssues, setIsLoggingIssues] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -551,116 +552,85 @@ export function AmountPayablePanel({
     }
   }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
 
-  const handleLogIssue = useCallback(async (reason: string, reasonBookings: BookingForPayable[]) => {
-    if (!runId || reasonBookings.length === 0) return;
-    
-    setLoggingIssues(prev => new Set(prev).add(reason));
-    try {
-      const firstBooking = reasonBookings[0];
-      
-      const matchingRows = allRows.filter(r => r.reason === reason);
-      const driTeam = matchingRows.find(r => 
-        reasonBookings.some(b => b.bookingId === r.bookingId)
-      )?.driTeam || matchingRows[0]?.driTeam || "Unknown";
-      
-      const discrepancyLocal = reasonBookings.reduce((sum, b) => {
-        return sum + Math.abs(b.hoNet - b.spNet);
-      }, 0);
-      
-      const discrepancyUsd = reasonBookings.reduce((sum, b) => {
-        const matchingRow = allRows.find(r => r.bookingId === b.bookingId);
-        return sum + Math.abs(matchingRow?.differenceUsd || 0);
-      }, 0);
-
-      await apiRequest("POST", "/api/issues", {
-        runId,
-        billingEntityId: firstBooking.beId || "",
-        billingEntityName: firstBooking.billingEntityName || firstBooking.beId || "",
-        currency,
-        discrepancyLocal,
-        discrepancyUsd,
-        reason,
-        driTeam,
-        bookingIds: reasonBookings.map(b => b.bookingId),
-      });
-
-      toast({
-        title: "Issue Logged",
-        description: `Issue for ${reason} has been logged to the Issue Tracker.`,
-      });
-
-      await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
-    } catch (error) {
-      console.error("Failed to log issue:", error);
-      toast({
-        title: "Error",
-        description: "Failed to log issue. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoggingIssues(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(reason);
-        return newSet;
-      });
-    }
-  }, [runId, allRows, currency, toast]);
-
-  const handleLogIssueTid = useCallback(async (reason: string, tid: string, tidBookings: BookingForPayable[]) => {
-    if (!runId || tidBookings.length === 0) return;
-    
+  const toggleIssueSelection = useCallback((reason: string, tid: string) => {
     const issueKey = `${reason}:${tid}`;
-    setLoggingIssues(prev => new Set(prev).add(issueKey));
-    try {
-      const firstBooking = tidBookings[0];
-      
-      const matchingRows = allRows.filter(r => r.reason === reason && (r.tid === tid || r.bookingId === tid));
-      const driTeam = matchingRows.find(r => 
-        tidBookings.some(b => b.bookingId === r.bookingId)
-      )?.driTeam || matchingRows[0]?.driTeam || "Unknown";
-      
-      const discrepancyLocal = tidBookings.reduce((sum, b) => {
-        return sum + Math.abs(b.hoNet - b.spNet);
-      }, 0);
-      
-      const discrepancyUsd = tidBookings.reduce((sum, b) => {
-        const matchingRow = allRows.find(r => r.bookingId === b.bookingId);
-        return sum + Math.abs(matchingRow?.differenceUsd || 0);
-      }, 0);
+    setSelectedIssues(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(issueKey)) {
+        newSet.delete(issueKey);
+      } else {
+        newSet.add(issueKey);
+      }
+      return newSet;
+    });
+  }, []);
 
-      await apiRequest("POST", "/api/issues", {
-        runId,
-        billingEntityId: firstBooking.beId || "",
-        billingEntityName: firstBooking.billingEntityName || firstBooking.beId || "",
-        currency,
-        discrepancyLocal,
-        discrepancyUsd,
-        reason: `${reason} - TID: ${tid}`,
-        driTeam,
-        bookingIds: tidBookings.map(b => b.bookingId),
-      });
+  const handleLogIssues = useCallback(async () => {
+    if (!runId || selectedIssues.size === 0) return;
+    
+    setIsLoggingIssues(true);
+    try {
+      const issuesByReason = new Map<string, { reason: string; bookings: BookingForPayable[]; driTeam: string }>();
+      
+      const selectedArray = Array.from(selectedIssues);
+      for (const issueKey of selectedArray) {
+        const [reason, tid] = issueKey.split(":");
+        const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
+        if (tidBookings.length === 0) continue;
+        
+        const matchingRows = allRows.filter(r => r.reason === reason);
+        const driTeam = matchingRows.find(r => 
+          tidBookings.some(b => b.bookingId === r.bookingId)
+        )?.driTeam || matchingRows[0]?.driTeam || "Unknown";
+        
+        if (!issuesByReason.has(reason)) {
+          issuesByReason.set(reason, { reason, bookings: [], driTeam });
+        }
+        issuesByReason.get(reason)!.bookings.push(...tidBookings);
+      }
+      
+      const issuesArray = Array.from(issuesByReason.values());
+      for (const { reason, bookings, driTeam } of issuesArray) {
+        if (bookings.length === 0) continue;
+        
+        const firstBooking = bookings[0];
+        const discrepancyLocal = bookings.reduce((sum: number, b: BookingForPayable) => sum + Math.abs(b.hoNet - b.spNet), 0);
+        const discrepancyUsd = bookings.reduce((sum: number, b: BookingForPayable) => {
+          const matchingRow = allRows.find(r => r.bookingId === b.bookingId);
+          return sum + Math.abs(matchingRow?.differenceUsd || 0);
+        }, 0);
+
+        await apiRequest("POST", "/api/issues", {
+          runId,
+          billingEntityId: firstBooking.beId || "",
+          billingEntityName: firstBooking.billingEntityName || firstBooking.beId || "",
+          currency,
+          discrepancyLocal,
+          discrepancyUsd,
+          reason,
+          driTeam,
+          bookingIds: bookings.map((b: BookingForPayable) => b.bookingId),
+        });
+      }
 
       toast({
-        title: "Issue Logged",
-        description: `Issue for TID ${tid} has been logged to the Issue Tracker.`,
+        title: "Issues Logged",
+        description: `${issuesByReason.size} issue(s) logged to the Issue Tracker.`,
       });
 
+      setSelectedIssues(new Set());
       await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
     } catch (error) {
-      console.error("Failed to log issue:", error);
+      console.error("Failed to log issues:", error);
       toast({
         title: "Error",
-        description: "Failed to log issue. Please try again.",
+        description: "Failed to log issues. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setLoggingIssues(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(issueKey);
-        return newSet;
-      });
+      setIsLoggingIssues(false);
     }
-  }, [runId, allRows, currency, toast]);
+  }, [runId, selectedIssues, bookingsByReasonAndTid, allRows, currency, toast]);
 
   const handleApply = useCallback(async () => {
     setValidationError("");
@@ -821,17 +791,6 @@ export function AmountPayablePanel({
                             >
                               Clear
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-6 px-2 text-xs"
-                              onClick={() => handleLogIssue(reason, reasonBookings)}
-                              disabled={loggingIssues.has(reason)}
-                              data-testid={`button-log-issue-${reason}`}
-                            >
-                              <FileWarning className="h-3 w-3 mr-1" />
-                              {loggingIssues.has(reason) ? "Logging..." : "Log Issue"}
-                            </Button>
                           </div>
                           <div className="col-span-4 text-right font-mono text-sm font-semibold">
                             {formatCurrency(reasonTotal)} {currency}
@@ -882,16 +841,15 @@ export function AmountPayablePanel({
                                         </div>
                                         <Button
                                           size="sm"
-                                          variant="ghost"
-                                          className="h-5 px-1.5 text-xs shrink-0"
+                                          variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "ghost"}
+                                          className={`h-5 px-1.5 text-xs shrink-0 ${selectedIssues.has(`${reason}:${tid}`) ? "bg-amber-100 dark:bg-amber-900" : ""}`}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleLogIssueTid(reason, tid, tidBookings);
+                                            toggleIssueSelection(reason, tid);
                                           }}
-                                          disabled={loggingIssues.has(`${reason}:${tid}`)}
-                                          data-testid={`button-log-issue-tid-${tid}`}
+                                          data-testid={`button-select-issue-tid-${tid}`}
                                         >
-                                          <FileWarning className="h-3 w-3" />
+                                          <FileWarning className={`h-3 w-3 ${selectedIssues.has(`${reason}:${tid}`) ? "text-amber-600 dark:text-amber-400" : ""}`} />
                                         </Button>
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs">
@@ -1050,6 +1008,19 @@ export function AmountPayablePanel({
               <div className="flex justify-between items-center pt-3 mt-3 border-t gap-2">
                 <p className="text-sm font-medium">Discrepancy Total</p>
                 <div className="flex items-center gap-2">
+                  {selectedIssues.size > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleLogIssues}
+                      disabled={isLoggingIssues}
+                      className="h-7 text-xs"
+                      data-testid="button-log-issues"
+                    >
+                      <FileWarning className="h-3 w-3 mr-1" />
+                      {isLoggingIssues ? "Logging..." : `Log Issues (${selectedIssues.size})`}
+                    </Button>
+                  )}
                   {activeDisputes.size > 0 && (
                     <Button
                       size="sm"
