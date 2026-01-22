@@ -475,18 +475,13 @@ export function AmountPayablePanel({
     );
   }, [openDisputes]);
 
-  const handleApply = useCallback(async () => {
-    setValidationError("");
+  const [isLoggingDisputes, setIsLoggingDisputes] = useState(false);
+
+  const handleLogDisputes = useCallback(async () => {
+    if (!runId) return;
     
-    const manualAdjustments = localAdjustments.filter(a => !a.isPreset);
-    for (const adj of manualAdjustments) {
-      if (!adj.nature.trim() || !adj.reference.trim() || adj.amount === 0) {
-        setValidationError("Please fill in all fields (Nature, Reference No, Amount) for manually added adjustment rows before applying.");
-        return;
-      }
-    }
-    
-    if (runId) {
+    setIsLoggingDisputes(true);
+    try {
       const newDisputes: Array<{
         bookingId: string;
         disputeAmount: number;
@@ -532,10 +527,26 @@ export function AmountPayablePanel({
       }
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      
+      setOriginalDisputes(new Map(disputeAmounts));
+    } finally {
+      setIsLoggingDisputes(false);
+    }
+  }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
+
+  const handleApply = useCallback(async () => {
+    setValidationError("");
+    
+    const manualAdjustments = localAdjustments.filter(a => !a.isPreset);
+    for (const adj of manualAdjustments) {
+      if (!adj.nature.trim() || !adj.reference.trim() || adj.amount === 0) {
+        setValidationError("Please fill in all fields (Nature, Reference No, Amount) for manually added adjustment rows before applying.");
+        return;
+      }
     }
     
     onApply(localAdjustments, localSelections, finalAmount);
-  }, [localAdjustments, localSelections, finalAmount, onApply, runId, disputeAmounts, originalDisputes, bookings, activeDisputes]);
+  }, [localAdjustments, localSelections, finalAmount, onApply]);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -818,11 +829,25 @@ export function AmountPayablePanel({
                   );
                 })}
 
-              <div className="flex justify-between items-center pt-3 mt-3 border-t">
+              <div className="flex justify-between items-center pt-3 mt-3 border-t gap-2">
                 <p className="text-sm font-medium">Discrepancy Total</p>
-                <p className="text-lg font-bold font-mono" data-testid="text-discrepancy-total">
-                  {formatCurrency(discrepancyTotal)} {currency}
-                </p>
+                <div className="flex items-center gap-2">
+                  {activeDisputes.size > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleLogDisputes}
+                      disabled={isLoggingDisputes}
+                      className="h-7 text-xs"
+                      data-testid="button-log-disputes"
+                    >
+                      {isLoggingDisputes ? "Logging..." : `Log Disputes (${activeDisputes.size})`}
+                    </Button>
+                  )}
+                  <p className="text-lg font-bold font-mono" data-testid="text-discrepancy-total">
+                    {formatCurrency(discrepancyTotal)} {currency}
+                  </p>
+                </div>
               </div>
             </div>
           )}
