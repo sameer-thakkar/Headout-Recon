@@ -89,6 +89,7 @@ export function AmountPayablePanel({
     actualDisputeIds: string[];
   }>>([]);
   const [validationError, setValidationError] = useState<string>("");
+  const [disputeErrors, setDisputeErrors] = useState<Map<string, string>>(new Map());
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
 
   useEffect(() => {
@@ -354,9 +355,19 @@ export function AmountPayablePanel({
     });
   }, [isBookingDisputable, disputeAmounts, getMaxDisputeAmount]);
 
-  const updateDisputeAmount = useCallback((bookingId: string, amount: number) => {
+  const updateDisputeAmount = useCallback((bookingId: string, amount: number, booking: BookingForPayable) => {
+    const maxAmount = getMaxDisputeAmount(booking);
+    if (amount > maxAmount) {
+      setDisputeErrors(prev => new Map(prev).set(bookingId, `Max: ${formatCurrency(maxAmount)}`));
+      return;
+    }
+    setDisputeErrors(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(bookingId);
+      return newMap;
+    });
     setDisputeAmounts(prev => new Map(prev).set(bookingId, amount));
-  }, []);
+  }, [getMaxDisputeAmount]);
 
   const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
     const reasonBookings = bookingsByReason[reason] || [];
@@ -844,13 +855,18 @@ export function AmountPayablePanel({
                                                       data-testid={`checkbox-dispute-${booking.bookingId}`}
                                                     />
                                                     {isDisputed && (
-                                                      <Input
-                                                        type="number"
-                                                        value={currentDisputeAmt}
-                                                        onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0)}
-                                                        className="w-16 h-5 text-xs font-mono px-1"
-                                                        data-testid={`input-dispute-amount-${booking.bookingId}`}
-                                                      />
+                                                      <div className="flex flex-col">
+                                                        <Input
+                                                          type="number"
+                                                          value={currentDisputeAmt}
+                                                          onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
+                                                          className={`w-16 h-5 text-xs font-mono px-1 ${disputeErrors.has(booking.bookingId) ? 'border-red-500' : ''}`}
+                                                          data-testid={`input-dispute-amount-${booking.bookingId}`}
+                                                        />
+                                                        {disputeErrors.has(booking.bookingId) && (
+                                                          <span className="text-[10px] text-red-500">{disputeErrors.get(booking.bookingId)}</span>
+                                                        )}
+                                                      </div>
                                                     )}
                                                   </>
                                                 ) : (
