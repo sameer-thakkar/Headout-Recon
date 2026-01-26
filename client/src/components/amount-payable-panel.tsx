@@ -91,6 +91,7 @@ export function AmountPayablePanel({
     bookingCount: number;
     actualDisputeIds: string[];
   }>>([]);
+  const [disputeIdMapping, setDisputeIdMapping] = useState<Map<string, string>>(new Map());
   const [spErrorClosedAdjustments, setSpErrorClosedAdjustments] = useState<number>(0);
   // Closed disputes with editable state
   const [closedDisputes, setClosedDisputes] = useState<Array<{
@@ -160,20 +161,54 @@ export function AmountPayablePanel({
           setActiveDisputes(newActiveDisputes);
           setOriginalDisputes(new Map(newDisputeAmounts));
           
-          const groupedByBillingEntity = new Map<string, Array<{ id: string; billingEntityId: string; billingEntityName: string; disputeAmount: number }>>();
-          const openDisputesOnly = disputes.filter((d: { closureStatus?: string }) => d.closureStatus === "open");
-          for (const dispute of openDisputesOnly) {
+          // Group ALL disputes by billing entity first (for consistent display ID mapping)
+          const allGroupedByBillingEntity = new Map<string, Array<{ id: string; billingEntityId: string; billingEntityName: string; disputeAmount: number; closureStatus: string }>>();
+          for (const dispute of disputes) {
             const key = `${dispute.billingEntityId}-${dispute.currency}`;
-            if (!groupedByBillingEntity.has(key)) {
-              groupedByBillingEntity.set(key, []);
+            if (!allGroupedByBillingEntity.has(key)) {
+              allGroupedByBillingEntity.set(key, []);
             }
-            groupedByBillingEntity.get(key)!.push({
+            allGroupedByBillingEntity.get(key)!.push({
               id: dispute.disputeId,
               billingEntityId: dispute.billingEntityId,
               billingEntityName: dispute.billingEntityName,
               disputeAmount: dispute.disputeAmount,
+              closureStatus: dispute.closureStatus || "open",
             });
           }
+          
+          // Build display ID mapping from ALL disputes and create aggregated open disputes
+          const disputeIdToDisplayIdMap = new Map<string, string>();
+          const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number; actualDisputeIds: string[] }> = [];
+          let counter = 1;
+          for (const group of Array.from(allGroupedByBillingEntity.values())) {
+            if (group.length === 0) continue;
+            const first = group[0];
+            const displayId = `DID-#${counter}`;
+            
+            // Map ALL dispute IDs in this group to the display ID
+            for (const d of group) {
+              disputeIdToDisplayIdMap.set(d.id, displayId);
+            }
+            
+            // Only include OPEN disputes in the aggregated list for display
+            const openInGroup = group.filter(d => d.closureStatus === "open");
+            if (openInGroup.length > 0) {
+              const totalAmount = openInGroup.reduce((sum, d) => sum + d.disputeAmount, 0);
+              const roundedTotal = Math.round(totalAmount * 100) / 100;
+              aggregatedDisputes.push({
+                displayId,
+                billingEntityId: first.billingEntityId,
+                billingEntityName: first.billingEntityName,
+                totalDisputeAmount: roundedTotal,
+                bookingCount: openInGroup.length,
+                actualDisputeIds: openInGroup.map(d => d.id),
+              });
+            }
+            counter++;
+          }
+          setOpenDisputes(aggregatedDisputes);
+          setDisputeIdMapping(disputeIdToDisplayIdMap);
           
           // Calculate total SP Error closed adjustments and populate closed disputes for editing
           const allClosedDisputes = disputes.filter((d: { closureStatus?: string; closureType?: string }) => 
@@ -206,25 +241,6 @@ export function AmountPayablePanel({
             .filter((d: { closureType: string }) => d.closureType === "sp_error")
             .reduce((sum: number, d: { closedAmount: number }) => sum + d.closedAmount, 0);
           setSpErrorClosedAdjustments(spErrorTotal);
-          
-          const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number; actualDisputeIds: string[] }> = [];
-          let counter = 1;
-          for (const group of Array.from(groupedByBillingEntity.values())) {
-            if (group.length === 0) continue;
-            const first = group[0];
-            const totalAmount = group.reduce((sum, d) => sum + d.disputeAmount, 0);
-            const roundedTotal = Math.round(totalAmount * 100) / 100;
-            aggregatedDisputes.push({
-              displayId: `DID-#${counter}`,
-              billingEntityId: first.billingEntityId,
-              billingEntityName: first.billingEntityName,
-              totalDisputeAmount: roundedTotal,
-              bookingCount: group.length,
-              actualDisputeIds: group.map(d => d.id),
-            });
-            counter++;
-          }
-          setOpenDisputes(aggregatedDisputes);
           setDisputesLoaded(true);
         })
         .catch(err => {
@@ -304,39 +320,6 @@ export function AmountPayablePanel({
     [discrepancyBookings, getFinalNetPrice]
   );
 
-  // Create reverse mapping from database disputeId to displayId (DID-#X)
-  const disputeIdToDisplayId = useMemo(() => {
-    const mapping = new Map<string, string>();
-    for (const dispute of openDisputes) {
-      for (const actualId of dispute.actualDisputeIds) {
-        mapping.set(actualId, dispute.displayId);
-      }
-    }
-    // Also check closedDisputes for disputes that may no longer be in openDisputes
-    // Group closed disputes by billingEntityName to assign display IDs
-    const closedByBillingEntity = new Map<string, string[]>();
-    for (const cd of closedDisputes) {
-      if (!mapping.has(cd.disputeId)) {
-        const existing = closedByBillingEntity.get(cd.billingEntityName) || [];
-        if (!existing.includes(cd.disputeId)) {
-          existing.push(cd.disputeId);
-        }
-        closedByBillingEntity.set(cd.billingEntityName, existing);
-      }
-    }
-    // Assign display IDs to closed disputes not in openDisputes
-    let counter = openDisputes.length + 1;
-    for (const [, disputeIds] of Array.from(closedByBillingEntity.entries())) {
-      for (const id of disputeIds) {
-        if (!mapping.has(id)) {
-          mapping.set(id, `DID-#${counter}`);
-          counter++;
-        }
-      }
-    }
-    return mapping;
-  }, [openDisputes, closedDisputes]);
-
   // Group closed disputes by displayId for display in adjustments section (only SP Error disputes)
   const groupedClosedDisputes = useMemo(() => {
     const groups = new Map<string, {
@@ -350,7 +333,8 @@ export function AmountPayablePanel({
     const spErrorDisputes = closedDisputes.filter(d => d.closureType === "sp_error");
     
     for (const dispute of spErrorDisputes) {
-      const displayId = disputeIdToDisplayId.get(dispute.disputeId) || dispute.disputeId;
+      // Use the pre-computed mapping from the fetch to get display ID
+      const displayId = disputeIdMapping.get(dispute.disputeId) || dispute.disputeId;
       const existing = groups.get(displayId);
       if (existing) {
         existing.totalAmount += dispute.closedAmount;
@@ -366,7 +350,7 @@ export function AmountPayablePanel({
     }
     
     return Array.from(groups.values());
-  }, [closedDisputes, disputeIdToDisplayId]);
+  }, [closedDisputes, disputeIdMapping]);
 
   const baseAmount = reconciledTotal + discrepancyTotal;
 
