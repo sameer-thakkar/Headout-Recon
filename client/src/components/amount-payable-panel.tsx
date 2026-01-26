@@ -304,10 +304,43 @@ export function AmountPayablePanel({
     [discrepancyBookings, getFinalNetPrice]
   );
 
-  // Group closed disputes by disputeId for display in adjustments section (only SP Error disputes)
+  // Create reverse mapping from database disputeId to displayId (DID-#X)
+  const disputeIdToDisplayId = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const dispute of openDisputes) {
+      for (const actualId of dispute.actualDisputeIds) {
+        mapping.set(actualId, dispute.displayId);
+      }
+    }
+    // Also check closedDisputes for disputes that may no longer be in openDisputes
+    // Group closed disputes by billingEntityName to assign display IDs
+    const closedByBillingEntity = new Map<string, string[]>();
+    for (const cd of closedDisputes) {
+      if (!mapping.has(cd.disputeId)) {
+        const existing = closedByBillingEntity.get(cd.billingEntityName) || [];
+        if (!existing.includes(cd.disputeId)) {
+          existing.push(cd.disputeId);
+        }
+        closedByBillingEntity.set(cd.billingEntityName, existing);
+      }
+    }
+    // Assign display IDs to closed disputes not in openDisputes
+    let counter = openDisputes.length + 1;
+    for (const [, disputeIds] of Array.from(closedByBillingEntity.entries())) {
+      for (const id of disputeIds) {
+        if (!mapping.has(id)) {
+          mapping.set(id, `DID-#${counter}`);
+          counter++;
+        }
+      }
+    }
+    return mapping;
+  }, [openDisputes, closedDisputes]);
+
+  // Group closed disputes by displayId for display in adjustments section (only SP Error disputes)
   const groupedClosedDisputes = useMemo(() => {
     const groups = new Map<string, {
-      disputeId: string;
+      displayId: string;
       totalAmount: number;
       closureType: "sp_error" | "ho_error";
       bookingCount: number;
@@ -317,13 +350,14 @@ export function AmountPayablePanel({
     const spErrorDisputes = closedDisputes.filter(d => d.closureType === "sp_error");
     
     for (const dispute of spErrorDisputes) {
-      const existing = groups.get(dispute.disputeId);
+      const displayId = disputeIdToDisplayId.get(dispute.disputeId) || dispute.disputeId;
+      const existing = groups.get(displayId);
       if (existing) {
         existing.totalAmount += dispute.closedAmount;
         existing.bookingCount += 1;
       } else {
-        groups.set(dispute.disputeId, {
-          disputeId: dispute.disputeId,
+        groups.set(displayId, {
+          displayId,
           totalAmount: dispute.closedAmount,
           closureType: dispute.closureType,
           bookingCount: 1,
@@ -332,7 +366,7 @@ export function AmountPayablePanel({
     }
     
     return Array.from(groups.values());
-  }, [closedDisputes]);
+  }, [closedDisputes, disputeIdToDisplayId]);
 
   const baseAmount = reconciledTotal + discrepancyTotal;
 
@@ -1604,7 +1638,7 @@ export function AmountPayablePanel({
                 const isDisputeAdjustment = adj.nature === "Open Dispute Adjustments";
                 const isPreset = adj.isPreset === true;
                 const hasClosedDisputes = isDisputeAdjustment && groupedClosedDisputes.length > 0;
-                const closedDisputeIds = groupedClosedDisputes.map(g => g.disputeId).join(", ");
+                const closedDisputeIds = groupedClosedDisputes.map(g => g.displayId).join(", ");
                 const closedDisputeTotal = groupedClosedDisputes.reduce((sum, g) => sum + g.totalAmount, 0);
                 const closedBookingCount = groupedClosedDisputes.reduce((sum, g) => sum + g.bookingCount, 0);
                 
