@@ -90,6 +90,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
   const [closingTid, setClosingTid] = useState<string | null>(null);
+  const [closingBookingId, setClosingBookingId] = useState<string | null>(null);
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
@@ -236,6 +237,67 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       });
     } finally {
       setClosingTid(null);
+    }
+  };
+
+  const handleCloseBooking = async (disputeId: string, bookingId: string, closureType: "ho_error" | "sp_error") => {
+    const dispute = disputes.find(d => d.disputeId === disputeId);
+    if (dispute?.closureStatus === "closed") {
+      toast({
+        title: "Already Closed",
+        description: `Booking ${bookingId} has already been closed.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setClosingBookingId(bookingId);
+    try {
+      if (closureType === "ho_error") {
+        await apiRequest("POST", "/api/disputes/accept-ho-error", {
+          disputeIds: [disputeId],
+        });
+        
+        const blob = await fetch("/api/disputes/accept-ho-error/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ disputeIds: [disputeId] }),
+        }).then(res => res.blob());
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `HO_Error_Booking_${bookingId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Booking Closed as HO Error",
+          description: `Booking ${bookingId} closed. Excel report downloaded.`,
+        });
+      } else {
+        await apiRequest("POST", "/api/disputes/close-sp-error", {
+          disputeIds: [disputeId],
+        });
+        
+        toast({
+          title: "Booking Closed as SP Error",
+          description: `Booking ${bookingId} closed. No HO Net update needed.`,
+        });
+      }
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      console.error("Close booking error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to close booking. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setClosingBookingId(null);
     }
   };
 
@@ -808,9 +870,45 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                                                   </Badge>
                                                 )}
                                               </div>
-                                              <span className="font-mono text-sm text-muted-foreground">
-                                                {formatCurrency(d.disputeAmount, d.currency)}
-                                              </span>
+                                              <div className="flex items-center gap-3">
+                                                <span className="font-mono text-sm text-muted-foreground">
+                                                  {formatCurrency(d.disputeAmount, d.currency)}
+                                                </span>
+                                                {d.closureStatus !== "closed" && (
+                                                  closingBookingId === d.bookingId ? (
+                                                    <Badge variant="outline" className="text-xs">Closing...</Badge>
+                                                  ) : (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                        <Button
+                                                          size="sm"
+                                                          variant="ghost"
+                                                          data-testid={`button-close-booking-${d.bookingId}`}
+                                                        >
+                                                          Close
+                                                          <ChevronDown className="h-3 w-3 ml-1" />
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                                        <DropdownMenuItem
+                                                          onClick={() => handleCloseBooking(d.disputeId, d.bookingId, "ho_error")}
+                                                          data-testid={`menuitem-close-booking-ho-error-${d.bookingId}`}
+                                                        >
+                                                          <Download className="h-4 w-4 mr-2 text-amber-600" />
+                                                          <span>HO Error</span>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                          onClick={() => handleCloseBooking(d.disputeId, d.bookingId, "sp_error")}
+                                                          data-testid={`menuitem-close-booking-sp-error-${d.bookingId}`}
+                                                        >
+                                                          <Check className="h-4 w-4 mr-2 text-cyan-600" />
+                                                          <span>SP Error</span>
+                                                        </DropdownMenuItem>
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )
+                                                )}
+                                              </div>
                                             </div>
                                           </TableCell>
                                         </TableRow>
