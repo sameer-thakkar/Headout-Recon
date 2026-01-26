@@ -106,17 +106,31 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const handleAcceptHoError = async () => {
     if (!selectedDispute || !acceptHoError) return;
     
+    // Only close bookings that are still open (not already closed at booking-level)
+    const openDisputeIds = selectedDispute.disputes
+      .filter(d => d.closureStatus !== "closed")
+      .map(d => d.disputeId);
+    
+    if (openDisputeIds.length === 0) {
+      toast({
+        title: "No Open Bookings",
+        description: "All bookings in this dispute have already been closed.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsClosingWithHoError(true);
     try {
       const response = await apiRequest("POST", "/api/disputes/accept-ho-error", {
-        disputeIds: selectedDispute.actualDisputeIds,
+        disputeIds: openDisputeIds,
       });
       
-      // Trigger Excel download
+      // Trigger Excel download - only for the bookings we just closed
       const blob = await fetch("/api/disputes/accept-ho-error/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ disputeIds: selectedDispute.actualDisputeIds }),
+        body: JSON.stringify({ disputeIds: openDisputeIds }),
       }).then(res => res.blob());
       
       const url = window.URL.createObjectURL(blob);
@@ -130,7 +144,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       
       toast({
         title: "Dispute Closed",
-        description: `${selectedDispute.displayId} has been closed as HO Error. Excel report downloaded.`,
+        description: `${openDisputeIds.length} booking(s) in ${selectedDispute.displayId} closed as HO Error. Excel report downloaded.`,
       });
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
@@ -353,7 +367,24 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                         {formatCurrency(dispute.totalDisputeAmount, dispute.currency)}
                       </TableCell>
                       <TableCell className="text-center" data-testid={`cell-bookings-${dispute.displayId}`}>
-                        <Badge variant="outline">{dispute.bookingCount}</Badge>
+                        {(() => {
+                          const closedCount = dispute.disputes.filter(d => d.closureStatus === "closed").length;
+                          if (closedCount === dispute.bookingCount) {
+                            return (
+                              <Badge className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20">
+                                All Closed
+                              </Badge>
+                            );
+                          } else if (closedCount > 0) {
+                            return (
+                              <div className="flex items-center justify-center gap-1">
+                                <Badge variant="outline">{dispute.bookingCount - closedCount}</Badge>
+                                <span className="text-xs text-muted-foreground">/ {dispute.bookingCount}</span>
+                              </div>
+                            );
+                          }
+                          return <Badge variant="outline">{dispute.bookingCount}</Badge>;
+                        })()}
                       </TableCell>
                       <TableCell className="text-center" data-testid={`cell-status-${dispute.displayId}`}>
                         {getStatusBadge(dispute.status)}
@@ -642,13 +673,21 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                                   <CollapsibleContent asChild>
                                     <>
                                       {disputes.map((d) => (
-                                        <TableRow key={d.bookingId} className="bg-muted/30">
+                                        <TableRow key={d.bookingId} className={`bg-muted/30 ${d.closureStatus === "closed" ? "opacity-60" : ""}`}>
                                           <TableCell></TableCell>
                                           <TableCell colSpan={3} className="py-2 pl-4">
                                             <div className="flex items-center justify-between">
                                               <div className="flex items-center gap-2">
                                                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Booking ID:</span>
                                                 <span className="font-mono text-sm">{d.bookingId}</span>
+                                                {d.closureStatus === "closed" && (
+                                                  <Badge 
+                                                    className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 text-xs"
+                                                    data-testid={`badge-booking-closed-${d.bookingId}`}
+                                                  >
+                                                    Closed ({d.closureType === "sp_error" ? "SP Error" : d.closureType === "accept_ho_error" ? "HO Error" : d.closureType})
+                                                  </Badge>
+                                                )}
                                               </div>
                                               <span className="font-mono text-sm text-muted-foreground">
                                                 {formatCurrency(d.disputeAmount, d.currency)}
@@ -671,43 +710,75 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
               </div>
 
               {/* Accept HO Error section - only for open disputes */}
-              {selectedDispute.closureStatus === "open" && (
-                <div className="mt-6 pt-4 border-t space-y-4">
-                  <h4 className="font-medium">Close Dispute</h4>
-                  <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-                    <Checkbox
-                      id="accept-ho-error"
-                      checked={acceptHoError}
-                      onCheckedChange={(checked) => setAcceptHoError(checked === true)}
-                      data-testid="checkbox-accept-ho-error"
-                    />
-                    <Label
-                      htmlFor="accept-ho-error"
-                      className="text-sm font-medium cursor-pointer flex-1"
-                    >
-                      Accept HO Error
-                    </Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Closing with "Accept HO Error" will generate an Excel report with Booking IDs and Final Reconciled Net Prices.
-                  </p>
-                  <Button
-                    onClick={handleAcceptHoError}
-                    disabled={!acceptHoError || isClosingWithHoError}
-                    className="w-full"
-                    data-testid="button-close-accept-ho-error"
-                  >
-                    {isClosingWithHoError ? (
-                      "Closing..."
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Close Dispute & Download Report
-                      </>
+              {selectedDispute.closureStatus === "open" && (() => {
+                // Check if all individual bookings are already closed at booking-level
+                const openBookings = selectedDispute.disputes.filter(d => d.closureStatus !== "closed");
+                const allBookingsClosed = openBookings.length === 0;
+                const someBookingsClosed = selectedDispute.disputes.some(d => d.closureStatus === "closed");
+                
+                if (allBookingsClosed) {
+                  return (
+                    <div className="mt-6 pt-4 border-t space-y-4">
+                      <h4 className="font-medium">Close Dispute</h4>
+                      <div className="p-4 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Check className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                          <span className="font-medium text-purple-700 dark:text-purple-300">All Bookings Already Closed</span>
+                        </div>
+                        <p className="text-sm text-purple-600 dark:text-purple-400">
+                          All {selectedDispute.disputes.length} booking(s) in this dispute have been closed individually via the Amount Payable Calculator.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="mt-6 pt-4 border-t space-y-4">
+                    <h4 className="font-medium">Close Dispute</h4>
+                    {someBookingsClosed && (
+                      <div className="p-3 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-lg mb-3">
+                        <p className="text-sm text-purple-600 dark:text-purple-400">
+                          {selectedDispute.disputes.length - openBookings.length} of {selectedDispute.disputes.length} booking(s) already closed individually. 
+                          This action will only affect the remaining {openBookings.length} open booking(s).
+                        </p>
+                      </div>
                     )}
-                  </Button>
-                </div>
-              )}
+                    <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <Checkbox
+                        id="accept-ho-error"
+                        checked={acceptHoError}
+                        onCheckedChange={(checked) => setAcceptHoError(checked === true)}
+                        data-testid="checkbox-accept-ho-error"
+                      />
+                      <Label
+                        htmlFor="accept-ho-error"
+                        className="text-sm font-medium cursor-pointer flex-1"
+                      >
+                        Accept HO Error
+                      </Label>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Closing with "Accept HO Error" will generate an Excel report with Booking IDs and Final Reconciled Net Prices.
+                    </p>
+                    <Button
+                      onClick={handleAcceptHoError}
+                      disabled={!acceptHoError || isClosingWithHoError}
+                      className="w-full"
+                      data-testid="button-close-accept-ho-error"
+                    >
+                      {isClosingWithHoError ? (
+                        "Closing..."
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          Close Dispute & Download Report
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                );
+              })()}
               </div>
             </div>
           )}
