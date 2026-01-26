@@ -83,6 +83,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const [selectedDispute, setSelectedDispute] = useState<AggregatedDispute | null>(null);
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
+  const [closingTid, setClosingTid] = useState<string | null>(null);
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
@@ -159,6 +160,63 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       });
     } finally {
       setIsClosingWithHoError(false);
+    }
+  };
+
+  const handleCloseTid = async (tid: string, tidDisputes: DisputeRecord[]) => {
+    if (!selectedDispute) return;
+    
+    // Only close bookings that are still open under this TID
+    const openDisputeIds = tidDisputes
+      .filter(d => d.closureStatus !== "closed")
+      .map(d => d.disputeId);
+    
+    if (openDisputeIds.length === 0) {
+      toast({
+        title: "No Open Bookings",
+        description: `All bookings under TID ${tid} have already been closed.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setClosingTid(tid);
+    try {
+      await apiRequest("POST", "/api/disputes/accept-ho-error", {
+        disputeIds: openDisputeIds,
+      });
+      
+      // Trigger Excel download for the TID bookings
+      const blob = await fetch("/api/disputes/accept-ho-error/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeIds: openDisputeIds }),
+      }).then(res => res.blob());
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `HO_Error_TID_${tid}_${selectedDispute.displayId.replace("#", "")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "TID Closed",
+        description: `${openDisputeIds.length} booking(s) under TID ${tid} closed as HO Error. Excel report downloaded.`,
+      });
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      console.error("Close TID error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to close TID. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setClosingTid(null);
     }
   };
 
@@ -611,6 +669,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                           <TableHead className="font-semibold">TID</TableHead>
                           <TableHead className="font-semibold text-right">Dispute Amount</TableHead>
                           <TableHead className="font-semibold text-center">Status</TableHead>
+                          <TableHead className="font-semibold text-center">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -669,13 +728,40 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                                         : <Badge variant="outline" data-testid="badge-tid-open">Open</Badge>
                                       }
                                     </TableCell>
+                                    <TableCell className="text-center">
+                                      {isTidClosed ? (
+                                        <Badge className="bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20 text-xs">
+                                          All Closed
+                                        </Badge>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={closingTid === tid}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCloseTid(tid, disputes);
+                                          }}
+                                          data-testid={`button-close-tid-${tid}`}
+                                        >
+                                          {closingTid === tid ? (
+                                            "Closing..."
+                                          ) : (
+                                            <>
+                                              <Check className="h-3 w-3 mr-1" />
+                                              Close TID
+                                            </>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </TableCell>
                                   </TableRow>
                                   <CollapsibleContent asChild>
                                     <>
                                       {disputes.map((d) => (
                                         <TableRow key={d.bookingId} className={`bg-muted/30 ${d.closureStatus === "closed" ? "opacity-60" : ""}`}>
                                           <TableCell></TableCell>
-                                          <TableCell colSpan={3} className="py-2 pl-4">
+                                          <TableCell colSpan={4} className="py-2 pl-4">
                                             <div className="flex items-center justify-between">
                                               <div className="flex items-center gap-2">
                                                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Booking ID:</span>
