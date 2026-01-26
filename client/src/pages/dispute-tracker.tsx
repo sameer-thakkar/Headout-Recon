@@ -37,7 +37,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { FileWarning, AlertCircle, ChevronRight, Check, Download, ChevronDown } from "lucide-react";
+import { FileWarning, AlertCircle, ChevronRight, Check, Download, ChevronDown, AlertTriangle } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -92,7 +93,20 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const [closingTid, setClosingTid] = useState<string | null>(null);
   const [closingBookingId, setClosingBookingId] = useState<string | null>(null);
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
+  const [editableDisputeAmounts, setEditableDisputeAmounts] = useState<Record<string, number>>({});
   const { toast } = useToast();
+
+  const getDisputeAmount = (d: DisputeRecord) => {
+    return editableDisputeAmounts[d.bookingId] ?? d.disputeAmount;
+  };
+
+  const setDisputeAmount = (bookingId: string, amount: number, maxAmount: number) => {
+    const clampedAmount = Math.min(Math.max(0, amount), maxAmount);
+    setEditableDisputeAmounts(prev => ({
+      ...prev,
+      [bookingId]: clampedAmount,
+    }));
+  };
 
   const toggleTid = (tid: string) => {
     const newExpanded = new Set(expandedTids);
@@ -251,17 +265,20 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       return;
     }
     
+    const customAmount = dispute ? getDisputeAmount(dispute) : undefined;
+    
     setClosingBookingId(bookingId);
     try {
       if (closureType === "ho_error") {
         await apiRequest("POST", "/api/disputes/accept-ho-error", {
           disputeIds: [disputeId],
+          customAmount,
         });
         
         const blob = await fetch("/api/disputes/accept-ho-error/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ disputeIds: [disputeId] }),
+          body: JSON.stringify({ disputeIds: [disputeId], customAmount }),
         }).then(res => res.blob());
         
         const url = window.URL.createObjectURL(blob);
@@ -280,6 +297,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       } else {
         await apiRequest("POST", "/api/disputes/close-sp-error", {
           disputeIds: [disputeId],
+          customAmount,
         });
         
         toast({
@@ -871,9 +889,34 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                                                 )}
                                               </div>
                                               <div className="flex items-center gap-3">
-                                                <span className="font-mono text-sm text-muted-foreground">
-                                                  {formatCurrency(d.disputeAmount, d.currency)}
-                                                </span>
+                                                {d.closureStatus === "closed" ? (
+                                                  <span className="font-mono text-sm text-muted-foreground">
+                                                    {formatCurrency(d.closedByAdjustmentAmount ?? d.disputeAmount, d.currency)}
+                                                  </span>
+                                                ) : (
+                                                  <div className="flex items-center gap-1">
+                                                    <span className="text-xs text-muted-foreground">{d.currency}</span>
+                                                    <Input
+                                                      type="number"
+                                                      value={getDisputeAmount(d)}
+                                                      onChange={(e) => setDisputeAmount(d.bookingId, parseFloat(e.target.value) || 0, d.maxDisputeAmount)}
+                                                      onClick={(e) => e.stopPropagation()}
+                                                      className="w-24 h-8 font-mono text-sm"
+                                                      data-testid={`input-dispute-amount-${d.bookingId}`}
+                                                    />
+                                                    {getDisputeAmount(d) >= d.maxDisputeAmount && (
+                                                      <span title={`Max dispute amount: ${formatCurrency(d.maxDisputeAmount, d.currency)}`}>
+                                                        <AlertTriangle 
+                                                          className="h-4 w-4 text-amber-500" 
+                                                          data-testid={`warning-max-amount-${d.bookingId}`}
+                                                        />
+                                                      </span>
+                                                    )}
+                                                    <span className="text-xs text-muted-foreground">
+                                                      / {formatCurrency(d.maxDisputeAmount, d.currency)}
+                                                    </span>
+                                                  </div>
+                                                )}
                                                 {d.closureStatus !== "closed" && (
                                                   closingBookingId === d.bookingId ? (
                                                     <Badge variant="outline" className="text-xs">Closing...</Badge>

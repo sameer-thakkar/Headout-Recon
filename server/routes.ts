@@ -3391,11 +3391,14 @@ export async function registerRoutes(
   // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
   app.post("/api/disputes/accept-ho-error", async (req, res) => {
     try {
-      const { disputeIds } = req.body;
+      const { disputeIds, customAmount } = req.body;
       
       if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
         return res.status(400).json({ error: "disputeIds array is required" });
       }
+      
+      // customAmount only applies to single-dispute closures
+      const useCustomAmount = customAmount !== undefined && disputeIds.length === 1;
       
       // Close each dispute with accept_ho_error type
       const closedDisputes = [];
@@ -3406,6 +3409,7 @@ export async function registerRoutes(
             closureStatus: "closed",
             closureType: "accept_ho_error",
             closedAt: new Date().toISOString(),
+            closedByAdjustmentAmount: useCustomAmount ? customAmount : dispute.disputeAmount,
           });
           if (updated) closedDisputes.push(updated);
         }
@@ -3426,7 +3430,7 @@ export async function registerRoutes(
   // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
   app.post("/api/disputes/accept-ho-error/download", async (req, res) => {
     try {
-      const { disputeIds } = req.body;
+      const { disputeIds, customAmount } = req.body;
       
       if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
         return res.status(400).json({ error: "disputeIds array is required" });
@@ -3443,10 +3447,15 @@ export async function registerRoutes(
       
       // Build Excel data with Booking ID and Final Reconciled Net Price
       // Apply Indian number formatting to the final reconciled net price
-      const reportData = validDisputes.map(d => ({
-        "Booking ID": d!.bookingId,
-        "Final Reconciled Net Price": formatIndianNumber((d!.disputeAmount || 0) + (d!.reconciledNet || 0)),
-      }));
+      // Use customAmount only for single-dispute downloads
+      const useCustomAmount = customAmount !== undefined && validDisputes.length === 1;
+      const reportData = validDisputes.map(d => {
+        const disputeAmount = useCustomAmount ? customAmount : (d!.closedByAdjustmentAmount ?? d!.disputeAmount ?? 0);
+        return {
+          "Booking ID": d!.bookingId,
+          "Final Reconciled Net Price": formatIndianNumber(disputeAmount + (d!.reconciledNet || 0)),
+        };
+      });
       
       // Create Excel workbook
       const xlsx = await import("xlsx");
@@ -3474,11 +3483,14 @@ export async function registerRoutes(
   // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
   app.post("/api/disputes/close-sp-error", async (req, res) => {
     try {
-      const { disputeIds } = req.body;
+      const { disputeIds, customAmount } = req.body;
       
       if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
         return res.status(400).json({ error: "disputeIds array is required" });
       }
+      
+      // customAmount only applies to single-dispute closures
+      const useCustomAmount = customAmount !== undefined && disputeIds.length === 1;
       
       // Close each dispute with sp_error type
       const closedDisputes = [];
@@ -3489,6 +3501,7 @@ export async function registerRoutes(
             closureStatus: "closed",
             closureType: "sp_error",
             closedAt: new Date().toISOString(),
+            closedByAdjustmentAmount: useCustomAmount ? customAmount : dispute.disputeAmount,
           });
           if (updated) closedDisputes.push(updated);
         }
