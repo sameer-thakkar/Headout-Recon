@@ -3702,6 +3702,46 @@ export async function registerRoutes(
     }
   });
 
+  // Update closure amount for a closed dispute
+  // NOTE: This specific route must come before the generic :disputeId route
+  app.patch("/api/disputes/:disputeId/update-closure", async (req, res) => {
+    try {
+      const { disputeId } = req.params;
+      const { closedByAdjustmentAmount } = req.body;
+      
+      if (closedByAdjustmentAmount === undefined) {
+        return res.status(400).json({ error: "closedByAdjustmentAmount is required" });
+      }
+      
+      const existing = await storage.getDisputeById(disputeId);
+      if (!existing) {
+        return res.status(404).json({ error: "Dispute not found" });
+      }
+      
+      if (existing.closureStatus !== "closed") {
+        return res.status(400).json({ error: "Can only update closure amount for closed disputes" });
+      }
+      
+      // Validate amount doesn't exceed original dispute amount
+      if (closedByAdjustmentAmount > existing.disputeAmount) {
+        return res.status(400).json({ error: "Amount cannot exceed original dispute amount" });
+      }
+      
+      const updated = await storage.updateDispute(disputeId, {
+        closedByAdjustmentAmount,
+      });
+      
+      if (!updated) {
+        return res.status(500).json({ error: "Failed to update dispute" });
+      }
+      
+      res.json({ dispute: updated });
+    } catch (error) {
+      console.error("Update closure amount error:", error);
+      res.status(500).json({ error: "Failed to update closure amount" });
+    }
+  });
+
   app.patch("/api/disputes/:disputeId", async (req, res) => {
     try {
       const { disputeId } = req.params;

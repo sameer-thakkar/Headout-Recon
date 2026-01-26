@@ -124,6 +124,14 @@ export function AmountPayablePanel({
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
   const [isClosingWithSpError, setIsClosingWithSpError] = useState(false);
   const [isReopeningDispute, setIsReopeningDispute] = useState<string | null>(null);
+  const [editingClosedDispute, setEditingClosedDispute] = useState<string | null>(null);
+  const [editClosedDisputeAmount, setEditClosedDisputeAmount] = useState<number>(0);
+  const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
+  const [pendingApplyData, setPendingApplyData] = useState<{
+    adjustments: Adjustment[];
+    selections: FinalNetSelection;
+    amount: number;
+  } | null>(null);
   // Booking-level closure state
   const [bookingClosures, setBookingClosures] = useState<Map<string, {
     disputeId: string;
@@ -1206,6 +1214,76 @@ export function AmountPayablePanel({
     }
   }, [closedDisputes, toast]);
 
+  const handleStartEditClosedDispute = useCallback((disputeId: string, currentAmount: number) => {
+    setEditingClosedDispute(disputeId);
+    setEditClosedDisputeAmount(currentAmount);
+  }, []);
+
+  const handleSaveEditClosedDispute = useCallback(async (disputeId: string) => {
+    const dispute = closedDisputes.find(d => d.disputeId === disputeId);
+    if (!dispute) return;
+    
+    // Validate: can't exceed original amount
+    if (editClosedDisputeAmount > dispute.originalAmount) {
+      toast({
+        title: "Invalid Amount",
+        description: `Amount cannot exceed the original dispute amount of ${formatCurrency(dispute.originalAmount)}`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsSavingClosedDispute(disputeId);
+    try {
+      // Update the dispute on the backend with new closure amount
+      const response = await fetch(`/api/disputes/${encodeURIComponent(disputeId)}/update-closure`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ closedByAdjustmentAmount: editClosedDisputeAmount }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update dispute");
+      }
+      
+      // Update local state
+      const oldAmount = dispute.closedAmount;
+      const newAmount = editClosedDisputeAmount;
+      
+      setClosedDisputes(prev => prev.map(d => 
+        d.disputeId === disputeId 
+          ? { ...d, closedAmount: newAmount }
+          : d
+      ));
+      
+      // Recalculate SP Error total if it's an SP Error dispute
+      if (dispute.closureType === "sp_error") {
+        setSpErrorClosedAdjustments(prev => prev - oldAmount + newAmount);
+      }
+      
+      setEditingClosedDispute(null);
+      
+      toast({
+        title: "Dispute Updated",
+        description: "The dispute amount has been updated successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update dispute",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingClosedDispute(null);
+    }
+  }, [closedDisputes, editClosedDisputeAmount, toast]);
+
+  const handleCancelEditClosedDispute = useCallback(() => {
+    setEditingClosedDispute(null);
+    setEditClosedDisputeAmount(0);
+  }, []);
+
   const handleApply = useCallback(async () => {
     setValidationError("");
     
@@ -1217,9 +1295,23 @@ export function AmountPayablePanel({
       }
     }
     
+    // Store pending data and show confirmation dialog
+    setPendingApplyData({
+      adjustments: localAdjustments,
+      selections: localSelections,
+      amount: finalAmount,
+    });
+    setShowApplyConfirmation(true);
+  }, [localAdjustments, localSelections, finalAmount]);
+
+  const handleConfirmApply = useCallback(async () => {
+    if (!pendingApplyData) return;
+    
+    setShowApplyConfirmation(false);
+    
     // Auto-close disputes that match adjustments
     if (runId) {
-      const disputeAdjustments = localAdjustments.filter(
+      const disputeAdjustments = pendingApplyData.adjustments.filter(
         a => a.nature === "Open Dispute Adjustments" && a.amount > 0
       );
       
@@ -1261,7 +1353,12 @@ export function AmountPayablePanel({
               disputeIds: actualDisputeIds,
               adjustmentAmount: adj.amount,
             });
-            console.log(`Closed disputes: ${actualDisputeIds.join(", ")}`);
+            
+            // Show success message for dispute creation
+            toast({
+              title: "Dispute Created",
+              description: `${actualDisputeIds.length} dispute(s) logged to the Dispute Tracker.`,
+            });
           } catch (err) {
             console.error("Failed to close disputes:", err);
           }
@@ -1272,8 +1369,14 @@ export function AmountPayablePanel({
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
     }
     
-    onApply(localAdjustments, localSelections, finalAmount);
-  }, [localAdjustments, localSelections, finalAmount, onApply, runId, openDisputes]);
+    onApply(pendingApplyData.adjustments, pendingApplyData.selections, pendingApplyData.amount);
+    setPendingApplyData(null);
+  }, [pendingApplyData, runId, openDisputes, onApply, toast]);
+
+  const handleCancelApply = useCallback(() => {
+    setShowApplyConfirmation(false);
+    setPendingApplyData(null);
+  }, []);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1898,7 +2001,7 @@ export function AmountPayablePanel({
                 Closed disputes where supplier pays - deducted from Amount Payable
               </p>
               
-              {/* Show individual closed SP Error disputes with Reopen buttons */}
+              {/* Show individual closed SP Error disputes with Edit and Reopen buttons */}
               {closedDisputes.filter(d => d.closureType === "sp_error").length > 0 && (
                 <div className="mt-3 space-y-2">
                   {closedDisputes
@@ -1917,21 +2020,72 @@ export function AmountPayablePanel({
                               {dispute.billingEntityName}
                             </span>
                           </div>
-                          <span className="text-sm font-mono text-green-800 dark:text-green-200">
-                            -{formatCurrency(dispute.closedAmount)} {currency}
-                          </span>
+                          {editingClosedDispute === dispute.disputeId ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <Input
+                                type="number"
+                                value={editClosedDisputeAmount}
+                                onChange={(e) => setEditClosedDisputeAmount(parseFloat(e.target.value) || 0)}
+                                className="h-6 w-24 text-xs font-mono"
+                                step="0.01"
+                                min="0"
+                                max={dispute.originalAmount}
+                                data-testid={`input-edit-amount-${dispute.disputeId}`}
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                / {formatCurrency(dispute.originalAmount)}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSaveEditClosedDispute(dispute.disputeId)}
+                                disabled={isSavingClosedDispute === dispute.disputeId}
+                                className="h-6 px-2 text-xs text-green-600 hover:text-green-700"
+                                data-testid={`button-save-edit-${dispute.disputeId}`}
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleCancelEditClosedDispute}
+                                className="h-6 px-2 text-xs text-muted-foreground"
+                                data-testid={`button-cancel-edit-${dispute.disputeId}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-sm font-mono text-green-800 dark:text-green-200">
+                              -{formatCurrency(dispute.closedAmount)} {currency}
+                            </span>
+                          )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleReopenDispute(dispute.disputeId)}
-                          disabled={isReopeningDispute === dispute.disputeId}
-                          className="h-7 px-2 text-xs hover:bg-green-100 dark:hover:bg-green-900/50"
-                          data-testid={`button-reopen-${dispute.disputeId}`}
-                        >
-                          <RotateCcw className={`h-3 w-3 mr-1 ${isReopeningDispute === dispute.disputeId ? 'animate-spin' : ''}`} />
-                          Reopen
-                        </Button>
+                        {editingClosedDispute !== dispute.disputeId && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleStartEditClosedDispute(dispute.disputeId, dispute.closedAmount)}
+                              className="h-7 px-2 text-xs hover:bg-green-100 dark:hover:bg-green-900/50"
+                              data-testid={`button-edit-${dispute.disputeId}`}
+                            >
+                              <Pencil className="h-3 w-3 mr-1" />
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleReopenDispute(dispute.disputeId)}
+                              disabled={isReopeningDispute === dispute.disputeId}
+                              className="h-7 px-2 text-xs hover:bg-green-100 dark:hover:bg-green-900/50"
+                              data-testid={`button-reopen-${dispute.disputeId}`}
+                            >
+                              <RotateCcw className={`h-3 w-3 mr-1 ${isReopeningDispute === dispute.disputeId ? 'animate-spin' : ''}`} />
+                              Reopen
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -2180,6 +2334,39 @@ export function AmountPayablePanel({
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Confirmation Dialog */}
+      <Dialog open={showApplyConfirmation} onOpenChange={setShowApplyConfirmation}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Amount Payable</DialogTitle>
+            <DialogDescription>
+              Do you confirm the amount payable to SP?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 my-4">
+            <p className="text-sm text-muted-foreground">Final Amount Payable</p>
+            <p className="text-2xl font-bold font-mono text-primary">
+              {formatCurrency(pendingApplyData?.amount || finalAmount)} {currency}
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={handleCancelApply}
+              data-testid="button-confirm-no"
+            >
+              No
+            </Button>
+            <Button
+              onClick={handleConfirmApply}
+              data-testid="button-confirm-yes"
+            >
+              Yes
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
