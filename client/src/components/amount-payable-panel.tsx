@@ -679,6 +679,10 @@ export function AmountPayablePanel({
 
       if (newDisputes.length > 0) {
         await apiRequest("POST", `/api/disputes/${runId}`, { disputes: newDisputes });
+        toast({
+          title: "Dispute Created",
+          description: `${newDisputes.length} dispute(s) logged to the Dispute Tracker.`,
+        });
       }
       
       if (removedDisputes.length > 0) {
@@ -691,7 +695,7 @@ export function AmountPayablePanel({
     } finally {
       setIsLoggingDisputes(false);
     }
-  }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
+  }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections, toast]);
 
   const openDisputeDialog = useCallback(async (dispute: typeof selectedDispute) => {
     if (!dispute || !runId) return;
