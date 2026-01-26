@@ -468,9 +468,9 @@ function assignReason(
       } else {
         // SP Net > 0 - check Cancellation Insurance
         if (cancellationInsurance?.toLowerCase() === "yes") {
-          // Cancellation Insurance = "Yes" → Reconciled, chargedLoss = TRUE
+          // Cancellation Insurance = "Yes" → Cancelled-Insured Booking, chargedLoss = TRUE
           return {
-            reason: "Reconciled",
+            reason: "Cancelled-Insured Booking",
             chargedLoss: "TRUE",
             comment: "Cancelled-Insured Booking"
           };
@@ -479,14 +479,14 @@ function assignReason(
           if (isChargedLossTrue) {
             // chargedLoss = TRUE → "Cancelled-DSS policy"
             return {
-              reason: "Reconciled",
+              reason: "Cancelled-DSS policy",
               chargedLoss: "TRUE",
               comment: "Cancelled-DSS policy"
             };
           } else {
             // chargedLoss = FALSE → "Cancelled-Check for Charge loss"
             return {
-              reason: "Reconciled",
+              reason: "Cancelled-Check for Charge loss",
               chargedLoss: "FALSE",
               comment: "Cancelled-Check for Charge loss"
             };

@@ -360,6 +360,9 @@ export const reasonCodes = [
   "Duplicate Fulfillment",
   "Unmapped",
   "Cancelled-SP error",
+  "Cancelled-Insured Booking",
+  "Cancelled-DSS policy",
+  "Cancelled-Check for Charge loss",
 ] as const;
 
 // Cancellation comment codes (for comment column in exports)
