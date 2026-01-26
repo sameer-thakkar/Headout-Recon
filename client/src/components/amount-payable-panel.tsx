@@ -854,7 +854,7 @@ export function AmountPayablePanel({
     
     setIsSavingClosedDispute(disputeId);
     try {
-      const response = await apiRequest("PATCH", `/api/disputes/${disputeId}`, {
+      const response = await apiRequest("PATCH", `/api/disputes/${encodeURIComponent(disputeId)}`, {
         closedByAdjustmentAmount: cappedAmount,
         closureType: dispute.editClosureType === "ho_error" ? "accept_ho_error" : "sp_error",
       });
@@ -915,7 +915,7 @@ export function AmountPayablePanel({
   const reopenClosedDispute = useCallback(async (disputeId: string) => {
     setIsSavingClosedDispute(disputeId);
     try {
-      const response = await apiRequest("PATCH", `/api/disputes/${disputeId}`, {
+      const response = await apiRequest("PATCH", `/api/disputes/${encodeURIComponent(disputeId)}`, {
         closureStatus: "open",
         closureType: null,
         closedByAdjustmentAmount: null,
