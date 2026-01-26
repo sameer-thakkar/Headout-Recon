@@ -430,10 +430,26 @@ function assignReason(
   differenceLc: number,
   differencePct: number | null,
   sameCurrency: boolean,
-  spNetInHo: number
+  spNetInHo: number,
+  hoBeId: string | undefined,
+  spBeId: string | undefined
 ): ReasonResult {
   // Normalize chargedLoss to check if it's already TRUE
   const isChargedLossTrue = chargedLossOriginal?.toUpperCase() === "TRUE";
+  
+  // 0) HIGHEST PRIORITY: Secondary Vendor - BE ID mismatch between HO and SP
+  // Only check if both beIds exist and they don't match
+  if (hoBeId && spBeId && hoBeId.trim() !== "" && spBeId.trim() !== "") {
+    const normalizedHoBeId = hoBeId.trim().toLowerCase();
+    const normalizedSpBeId = spBeId.trim().toLowerCase();
+    if (normalizedHoBeId !== normalizedSpBeId) {
+      return {
+        reason: "Secondary Vendor",
+        chargedLoss: chargedLossOriginal || "FALSE",
+        comment: `BE mismatch: HO=${hoBeId}, SP=${spBeId}`
+      };
+    }
+  }
   
   // 1) Cancelled cases - NEW LOGIC per user requirements
   if (bookingStatus.toLowerCase() === "cancelled") {
@@ -573,6 +589,11 @@ function getDriTeam(
     return "Unknown";
   }
   
+  // Secondary Vendor (BE ID mismatch) - highest priority, needs Supply team review
+  if (reason === "Secondary Vendor") {
+    return "Supply";
+  }
+  
   // Cancelled-Insured Booking and Cancelled-DSS policy - no action needed, informational only
   if (reason === "Cancelled-Insured Booking" || reason === "Cancelled-DSS policy") {
     return "N/A";
@@ -646,6 +667,7 @@ function computeReconciliationRows(
     const differenceUsd = differenceLc / hoRate;
     
     // STEP G: Assign reason (now returns ReasonResult with chargedLoss and comment)
+    // Note: Secondary Vendor check compares HO beId with SP beId (highest priority)
     const reasonResult = assignReason(
       ho.bookingStatus,
       ho.cancellable,
@@ -654,7 +676,9 @@ function computeReconciliationRows(
       differenceLc,
       differencePct,
       sameCurrency,
-      spNetInHo
+      spNetInHo,
+      ho.beId,
+      spBundle?.beId
     );
     
     // Compute DRI team based on reason and fulfillment method

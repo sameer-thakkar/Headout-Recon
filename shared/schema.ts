@@ -350,8 +350,10 @@ export const headerAliases: Record<string, string[]> = {
 };
 
 // Reason codes for new pipeline
+// Order reflects priority - Secondary Vendor is highest priority issue
 export const reasonCodes = [
   "Reconciled",
+  "Secondary Vendor",
   "Net Price Discrepancy",
   "Multiple Tickets Booked",
   "Charge loss",
