@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -96,6 +99,11 @@ export function AmountPayablePanel({
   const [isLoggingIssues, setIsLoggingIssues] = useState(false);
   const [selectedDisputesToClose, setSelectedDisputesToClose] = useState<Set<string>>(new Set());
   const [isClosingDisputes, setIsClosingDisputes] = useState(false);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [acceptHoError, setAcceptHoError] = useState(false);
+  const [writeOffNote, setWriteOffNote] = useState("");
+  const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
+  const [isWritingOff, setIsWritingOff] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -562,43 +570,115 @@ export function AmountPayablePanel({
     }
   }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
 
-  const handleManualCloseDisputes = useCallback(async () => {
-    if (!runId || selectedDisputesToClose.size === 0) return;
+  const openCloseDialog = useCallback(() => {
+    if (selectedDisputesToClose.size === 0) return;
+    setShowCloseDialog(true);
+  }, [selectedDisputesToClose.size]);
+
+  const getSelectedDisputeIds = useCallback(() => {
+    const selectedAggregated = openDisputes.filter(d => selectedDisputesToClose.has(d.displayId));
+    return selectedAggregated.flatMap(d => d.actualDisputeIds);
+  }, [openDisputes, selectedDisputesToClose]);
+
+  const getSelectedDisputeTotal = useMemo(() => {
+    const selectedAggregated = openDisputes.filter(d => selectedDisputesToClose.has(d.displayId));
+    return selectedAggregated.reduce((sum, d) => sum + d.totalDisputeAmount, 0);
+  }, [openDisputes, selectedDisputesToClose]);
+
+  const handleAcceptHoError = useCallback(async () => {
+    if (!runId || !acceptHoError) return;
     
-    setIsClosingDisputes(true);
+    const disputeIds = getSelectedDisputeIds();
+    if (disputeIds.length === 0) return;
+    
+    setIsClosingWithHoError(true);
     try {
-      const selectedAggregated = openDisputes.filter(d => selectedDisputesToClose.has(d.displayId));
-      const disputeIds = selectedAggregated.flatMap(d => d.actualDisputeIds);
+      const closeResponse = await apiRequest("POST", "/api/disputes/accept-ho-error", { disputeIds });
+      if (!closeResponse.ok) {
+        const errorData = await closeResponse.json();
+        throw new Error(errorData.error || "Failed to close disputes");
+      }
       
+      const downloadResponse = await fetch("/api/disputes/accept-ho-error/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeIds }),
+      });
+      if (!downloadResponse.ok) {
+        throw new Error("Failed to download report");
+      }
+      const blob = await downloadResponse.blob();
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `HO_Error_Closure_${Array.from(selectedDisputesToClose).join("_").replace(/#/g, "")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Disputes Closed",
+        description: `${selectedDisputesToClose.size} dispute(s) closed as HO Error. Report downloaded.`,
+      });
+      
+      setDisputesLoaded(false);
+      setSelectedDisputesToClose(new Set());
+      setShowCloseDialog(false);
+      setAcceptHoError(false);
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to close disputes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClosingWithHoError(false);
+    }
+  }, [runId, acceptHoError, getSelectedDisputeIds, selectedDisputesToClose, toast]);
+
+  const handleWriteOff = useCallback(async () => {
+    if (!runId) return;
+    
+    const disputeIds = getSelectedDisputeIds();
+    if (disputeIds.length === 0) return;
+    
+    setIsWritingOff(true);
+    try {
       const response = await apiRequest("POST", "/api/disputes/manual-close", {
         disputeIds,
-        note: "Closed from Amount Payable Calculator",
+        note: writeOffNote || undefined,
       });
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to close disputes");
+        throw new Error(errorData.error || "Failed to write off disputes");
       }
+      
+      toast({
+        title: "Disputes Written Off",
+        description: `${selectedDisputesToClose.size} dispute(s) closed as write-off.`,
+      });
       
       setDisputesLoaded(false);
       setSelectedDisputesToClose(new Set());
+      setShowCloseDialog(false);
+      setWriteOffNote("");
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
-      
-      toast({
-        title: "Disputes Closed",
-        description: `Successfully closed ${selectedAggregated.length} dispute(s)`,
-      });
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to close disputes",
+        description: error instanceof Error ? error.message : "Failed to write off disputes",
         variant: "destructive",
       });
     } finally {
-      setIsClosingDisputes(false);
+      setIsWritingOff(false);
     }
-  }, [runId, selectedDisputesToClose, openDisputes, toast]);
+  }, [runId, getSelectedDisputeIds, selectedDisputesToClose, writeOffNote, toast]);
 
   const toggleDisputeToClose = useCallback((displayId: string) => {
     setSelectedDisputesToClose(prev => {
@@ -1307,11 +1387,11 @@ export function AmountPayablePanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={handleManualCloseDisputes}
-                  disabled={selectedDisputesToClose.size === 0 || isClosingDisputes}
+                  onClick={openCloseDialog}
+                  disabled={selectedDisputesToClose.size === 0}
                   data-testid="button-close-disputes"
                 >
-                  {isClosingDisputes ? "Closing..." : `Close Selected (${selectedDisputesToClose.size})`}
+                  Close Selected ({selectedDisputesToClose.size})
                 </Button>
               </div>
               <div className="space-y-1">
@@ -1436,6 +1516,94 @@ export function AmountPayablePanel({
                 </TableBody>
               </Table>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCloseDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowCloseDialog(false);
+          setAcceptHoError(false);
+          setWriteOffNote("");
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Close Disputes</DialogTitle>
+            <DialogDescription>
+              Select how to close the selected dispute(s). This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Selected Disputes</span>
+                <span className="font-mono font-medium">{selectedDisputesToClose.size}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Total Amount</span>
+                <span className="font-mono font-medium">{formatCurrency(getSelectedDisputeTotal)} {currency}</span>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Option 1: Accept as HO Error</h4>
+                <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <Checkbox
+                    id="accept-ho-error-apc"
+                    checked={acceptHoError}
+                    onCheckedChange={(checked) => setAcceptHoError(checked === true)}
+                    data-testid="checkbox-accept-ho-error"
+                  />
+                  <Label
+                    htmlFor="accept-ho-error-apc"
+                    className="text-sm cursor-pointer flex-1"
+                  >
+                    I confirm this is a Headout error and accept the discrepancy
+                  </Label>
+                </div>
+                <Button
+                  onClick={handleAcceptHoError}
+                  disabled={!acceptHoError || isClosingWithHoError}
+                  className="w-full"
+                  data-testid="button-close-ho-error"
+                >
+                  {isClosingWithHoError ? (
+                    "Closing..."
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Close as HO Error & Download Report
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              <Separator />
+              
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium">Option 2: Write Off</h4>
+                <Textarea
+                  placeholder="Optional note for write-off..."
+                  value={writeOffNote}
+                  onChange={(e) => setWriteOffNote(e.target.value)}
+                  className="resize-none"
+                  rows={2}
+                  data-testid="textarea-writeoff-note"
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleWriteOff}
+                  disabled={isWritingOff}
+                  className="w-full"
+                  data-testid="button-writeoff"
+                >
+                  {isWritingOff ? "Writing Off..." : "Write Off Dispute(s)"}
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
