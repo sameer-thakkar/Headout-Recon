@@ -96,9 +96,14 @@ export function AmountPayablePanel({
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
   const [selectedIssues, setSelectedIssues] = useState<Set<string>>(new Set());
   const [isLoggingIssues, setIsLoggingIssues] = useState(false);
-  const [selectedDisputesToClose, setSelectedDisputesToClose] = useState<Set<string>>(new Set());
-  const [isClosingDisputes, setIsClosingDisputes] = useState(false);
-  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [selectedDispute, setSelectedDispute] = useState<{ 
+    displayId: string; 
+    billingEntityId: string;
+    billingEntityName: string;
+    totalDisputeAmount: number; 
+    bookingCount: number;
+    actualDisputeIds: string[];
+  } | null>(null);
   const [closureType, setClosureType] = useState<"sp_error" | "ho_error" | null>(null);
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
@@ -569,25 +574,22 @@ export function AmountPayablePanel({
     }
   }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
 
-  const openCloseDialog = useCallback(() => {
-    if (selectedDisputesToClose.size === 0) return;
-    setShowCloseDialog(true);
-  }, [selectedDisputesToClose.size]);
+  const openDisputeDialog = useCallback((dispute: typeof selectedDispute) => {
+    setSelectedDispute(dispute);
+    setClosureType(null);
+    setAcceptHoError(false);
+  }, []);
 
-  const getSelectedDisputeIds = useCallback(() => {
-    const selectedAggregated = openDisputes.filter(d => selectedDisputesToClose.has(d.displayId));
-    return selectedAggregated.flatMap(d => d.actualDisputeIds);
-  }, [openDisputes, selectedDisputesToClose]);
-
-  const getSelectedDisputeTotal = useMemo(() => {
-    const selectedAggregated = openDisputes.filter(d => selectedDisputesToClose.has(d.displayId));
-    return selectedAggregated.reduce((sum, d) => sum + d.totalDisputeAmount, 0);
-  }, [openDisputes, selectedDisputesToClose]);
+  const closeDisputeDialog = useCallback(() => {
+    setSelectedDispute(null);
+    setClosureType(null);
+    setAcceptHoError(false);
+  }, []);
 
   const handleAcceptHoError = useCallback(async () => {
-    if (!runId || !acceptHoError) return;
+    if (!runId || !acceptHoError || !selectedDispute) return;
     
-    const disputeIds = getSelectedDisputeIds();
+    const disputeIds = selectedDispute.actualDisputeIds;
     if (disputeIds.length === 0) return;
     
     setIsClosingWithHoError(true);
@@ -611,39 +613,36 @@ export function AmountPayablePanel({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `HO_Error_Closure_${Array.from(selectedDisputesToClose).join("_").replace(/#/g, "")}.xlsx`;
+      a.download = `HO_Error_Closure_${selectedDispute.displayId.replace(/#/g, "")}.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       
       toast({
-        title: "Disputes Closed",
-        description: `${selectedDisputesToClose.size} dispute(s) closed as HO Error. Report downloaded.`,
+        title: "Dispute Closed",
+        description: `${selectedDispute.displayId} closed as HO Error. Report downloaded.`,
       });
       
       setDisputesLoaded(false);
-      setSelectedDisputesToClose(new Set());
-      setShowCloseDialog(false);
-      setClosureType(null);
-      setAcceptHoError(false);
+      closeDisputeDialog();
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to close disputes. Please try again.",
+        description: "Failed to close dispute. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsClosingWithHoError(false);
     }
-  }, [runId, acceptHoError, getSelectedDisputeIds, selectedDisputesToClose, toast]);
+  }, [runId, acceptHoError, selectedDispute, closeDisputeDialog, toast]);
 
   const handleCloseAsSpError = useCallback(async () => {
-    if (!runId) return;
+    if (!runId || !selectedDispute) return;
     
-    const disputeIds = getSelectedDisputeIds();
+    const disputeIds = selectedDispute.actualDisputeIds;
     if (disputeIds.length === 0) return;
     
     setIsClosingWithSpError(true);
@@ -655,38 +654,24 @@ export function AmountPayablePanel({
       }
       
       toast({
-        title: "Disputes Closed",
-        description: `${selectedDisputesToClose.size} dispute(s) closed as SP Error.`,
+        title: "Dispute Closed",
+        description: `${selectedDispute.displayId} closed as SP Error.`,
       });
       
       setDisputesLoaded(false);
-      setSelectedDisputesToClose(new Set());
-      setShowCloseDialog(false);
-      setClosureType(null);
+      closeDisputeDialog();
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to close disputes. Please try again.",
+        description: "Failed to close dispute. Please try again.",
         variant: "destructive",
       });
     } finally {
       setIsClosingWithSpError(false);
     }
-  }, [runId, getSelectedDisputeIds, selectedDisputesToClose, toast]);
-
-  const toggleDisputeToClose = useCallback((displayId: string) => {
-    setSelectedDisputesToClose(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(displayId)) {
-        newSet.delete(displayId);
-      } else {
-        newSet.add(displayId);
-      }
-      return newSet;
-    });
-  }, []);
+  }, [runId, selectedDispute, closeDisputeDialog, toast]);
 
   const toggleIssueSelection = useCallback((reason: string, tid: string) => {
     const issueKey = `${reason}:${tid}`;
@@ -1378,49 +1363,32 @@ export function AmountPayablePanel({
 
           {openDisputes.length > 0 && (
             <div className="border rounded-lg p-3">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium">Manage Open Disputes</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={openCloseDialog}
-                  disabled={selectedDisputesToClose.size === 0}
-                  data-testid="button-close-disputes"
-                >
-                  Close Selected ({selectedDisputesToClose.size})
-                </Button>
-              </div>
+              <p className="text-sm font-medium mb-3">Open Disputes</p>
               <div className="space-y-1">
-                {openDisputes.map((dispute) => {
-                  const isSelected = selectedDisputesToClose.has(dispute.displayId);
-                  return (
-                    <div
-                      key={dispute.displayId}
-                      className="flex items-center gap-3 p-2 rounded hover-elevate cursor-pointer"
-                      onClick={() => toggleDisputeToClose(dispute.displayId)}
-                      data-testid={`dispute-row-${dispute.displayId}`}
-                    >
-                      <Checkbox 
-                        checked={isSelected}
-                        data-testid={`checkbox-dispute-${dispute.displayId}`}
-                      />
-                      <div className="flex-1 flex items-center gap-2">
-                        <span className="text-sm font-mono font-medium">{dispute.displayId}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {dispute.billingEntityName}
-                        </span>
-                      </div>
-                      <span className="text-sm font-mono">
-                        {formatCurrency(dispute.totalDisputeAmount)} {currency}
+                {openDisputes.map((dispute) => (
+                  <div
+                    key={dispute.displayId}
+                    className="flex items-center gap-3 p-2 rounded hover-elevate cursor-pointer"
+                    onClick={() => openDisputeDialog(dispute)}
+                    data-testid={`dispute-row-${dispute.displayId}`}
+                  >
+                    <div className="flex-1 flex items-center gap-2">
+                      <span className="text-sm font-mono font-medium">{dispute.displayId}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {dispute.billingEntityName}
                       </span>
-                      {dispute.bookingCount > 1 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {dispute.bookingCount} bookings
-                        </Badge>
-                      )}
                     </div>
-                  );
-                })}
+                    <span className="text-sm font-mono">
+                      {formatCurrency(dispute.totalDisputeAmount)} {currency}
+                    </span>
+                    {dispute.bookingCount > 1 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {dispute.bookingCount} bookings
+                      </Badge>
+                    )}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1516,138 +1484,149 @@ export function AmountPayablePanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showCloseDialog} onOpenChange={(open) => {
+      <Dialog open={!!selectedDispute} onOpenChange={(open) => {
         if (!open) {
-          setShowCloseDialog(false);
-          setClosureType(null);
-          setAcceptHoError(false);
+          closeDisputeDialog();
         }
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Close Disputes</DialogTitle>
+            <DialogTitle>{selectedDispute?.displayId}</DialogTitle>
             <DialogDescription>
-              Select the error type to close the selected dispute(s). This action cannot be undone.
+              Manage this dispute - view details or close it.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
-            <div className="p-3 bg-muted/30 rounded-lg space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Selected Disputes</span>
-                <span className="font-mono font-medium">{selectedDisputesToClose.size}</span>
+          {selectedDispute && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Billing Entity</span>
+                  <span className="font-medium text-sm">{selectedDispute.billingEntityName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Total Amount</span>
+                  <span className="font-mono font-medium">{formatCurrency(selectedDispute.totalDisputeAmount)} {currency}</span>
+                </div>
+                {selectedDispute.bookingCount > 1 && (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Bookings</span>
+                    <span className="font-medium">{selectedDispute.bookingCount}</span>
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Total Amount</span>
-                <span className="font-mono font-medium">{formatCurrency(getSelectedDisputeTotal)} {currency}</span>
+              
+              <Separator />
+              
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Close Dispute</p>
+                
+                {!closureType && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        onClick={() => setClosureType("sp_error")}
+                        data-testid="button-select-sp-error"
+                      >
+                        SP Error
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        onClick={() => setClosureType("ho_error")}
+                        data-testid="button-select-ho-error"
+                      >
+                        HO Error
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-center">
+                      <span className="text-xs text-muted-foreground">Supplier to pay</span>
+                      <span className="text-xs text-muted-foreground">Headout to absorb</span>
+                    </div>
+                  </div>
+                )}
+                
+                {closureType === "sp_error" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setClosureType(null)}
+                        data-testid="button-back-sp-error"
+                      >
+                        <ChevronDown className="h-4 w-4 rotate-90" />
+                        Back
+                      </Button>
+                      <span className="text-sm font-medium">SP Error</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      This dispute is a supplier error. The supplier is responsible for the discrepancy.
+                    </p>
+                    <Button
+                      onClick={handleCloseAsSpError}
+                      disabled={isClosingWithSpError}
+                      className="w-full"
+                      data-testid="button-close-sp-error"
+                    >
+                      {isClosingWithSpError ? "Closing..." : "Close as SP Error"}
+                    </Button>
+                  </div>
+                )}
+                
+                {closureType === "ho_error" && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setClosureType(null);
+                          setAcceptHoError(false);
+                        }}
+                        data-testid="button-back-ho-error"
+                      >
+                        <ChevronDown className="h-4 w-4 rotate-90" />
+                        Back
+                      </Button>
+                      <span className="text-sm font-medium">HO Error</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <Checkbox
+                        id="accept-ho-error-apc"
+                        checked={acceptHoError}
+                        onCheckedChange={(checked) => setAcceptHoError(checked === true)}
+                        data-testid="checkbox-accept-ho-error"
+                      />
+                      <Label
+                        htmlFor="accept-ho-error-apc"
+                        className="text-sm cursor-pointer flex-1"
+                      >
+                        I confirm this is a Headout error and accept the discrepancy
+                      </Label>
+                    </div>
+                    <Button
+                      onClick={handleAcceptHoError}
+                      disabled={!acceptHoError || isClosingWithHoError}
+                      className="w-full"
+                      data-testid="button-close-ho-error"
+                    >
+                      {isClosingWithHoError ? (
+                        "Closing..."
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          Close as HO Error & Download Report
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
-            
-            {!closureType && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Select error type:</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => setClosureType("sp_error")}
-                    data-testid="button-select-sp-error"
-                  >
-                    SP Error
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => setClosureType("ho_error")}
-                    data-testid="button-select-ho-error"
-                  >
-                    HO Error
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <span className="text-xs text-muted-foreground">Supplier to pay</span>
-                  <span className="text-xs text-muted-foreground">Headout to absorb</span>
-                </div>
-              </div>
-            )}
-            
-            {closureType === "sp_error" && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setClosureType(null)}
-                    data-testid="button-back-sp-error"
-                  >
-                    <ChevronDown className="h-4 w-4 rotate-90" />
-                    Back
-                  </Button>
-                  <span className="text-sm font-medium">SP Error</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  This dispute is a supplier error. The supplier is responsible for the discrepancy.
-                </p>
-                <Button
-                  onClick={handleCloseAsSpError}
-                  disabled={isClosingWithSpError}
-                  className="w-full"
-                  data-testid="button-close-sp-error"
-                >
-                  {isClosingWithSpError ? "Closing..." : "Close as SP Error"}
-                </Button>
-              </div>
-            )}
-            
-            {closureType === "ho_error" && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setClosureType(null);
-                      setAcceptHoError(false);
-                    }}
-                    data-testid="button-back-ho-error"
-                  >
-                    <ChevronDown className="h-4 w-4 rotate-90" />
-                    Back
-                  </Button>
-                  <span className="text-sm font-medium">HO Error</span>
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <Checkbox
-                    id="accept-ho-error-apc"
-                    checked={acceptHoError}
-                    onCheckedChange={(checked) => setAcceptHoError(checked === true)}
-                    data-testid="checkbox-accept-ho-error"
-                  />
-                  <Label
-                    htmlFor="accept-ho-error-apc"
-                    className="text-sm cursor-pointer flex-1"
-                  >
-                    I confirm this is a Headout error and accept the discrepancy
-                  </Label>
-                </div>
-                <Button
-                  onClick={handleAcceptHoError}
-                  disabled={!acceptHoError || isClosingWithHoError}
-                  className="w-full"
-                  data-testid="button-close-ho-error"
-                >
-                  {isClosingWithHoError ? (
-                    "Closing..."
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Close as HO Error & Download Report
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
