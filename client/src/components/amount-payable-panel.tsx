@@ -304,6 +304,33 @@ export function AmountPayablePanel({
     [discrepancyBookings, getFinalNetPrice]
   );
 
+  // Group closed disputes by disputeId for display in adjustments section
+  const groupedClosedDisputes = useMemo(() => {
+    const groups = new Map<string, {
+      disputeId: string;
+      totalAmount: number;
+      closureType: "sp_error" | "ho_error";
+      bookings: typeof closedDisputes;
+    }>();
+    
+    for (const dispute of closedDisputes) {
+      const existing = groups.get(dispute.disputeId);
+      if (existing) {
+        existing.totalAmount += dispute.closedAmount;
+        existing.bookings.push(dispute);
+      } else {
+        groups.set(dispute.disputeId, {
+          disputeId: dispute.disputeId,
+          totalAmount: dispute.closedAmount,
+          closureType: dispute.closureType,
+          bookings: [dispute],
+        });
+      }
+    }
+    
+    return Array.from(groups.values());
+  }, [closedDisputes]);
+
   const baseAmount = reconciledTotal + discrepancyTotal;
 
   const finalAmount = useMemo(() => {
@@ -1718,6 +1745,61 @@ export function AmountPayablePanel({
                   </div>
                 );
               })}
+              
+              {/* Closed dispute adjustments as line items */}
+              {groupedClosedDisputes.map((group, index) => (
+                <div
+                  key={group.disputeId}
+                  className={`grid grid-cols-12 gap-2 items-center p-2 rounded-md ${
+                    group.closureType === "sp_error" 
+                      ? "bg-green-50/50 dark:bg-green-950/20 border border-green-200 dark:border-green-800" 
+                      : "bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800"
+                  }`}
+                  data-testid={`row-closed-dispute-${index}`}
+                >
+                  <div className="col-span-3">
+                    <div 
+                      className="h-8 px-3 flex items-center text-sm bg-transparent"
+                      data-testid={`text-closed-nature-${index}`}
+                    >
+                      Open Dispute Adjustments
+                    </div>
+                  </div>
+
+                  <div className="col-span-3">
+                    <div 
+                      className="h-8 px-3 flex items-center text-sm font-mono bg-transparent"
+                      data-testid={`text-closed-ref-${index}`}
+                    >
+                      {group.disputeId}
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    <Badge 
+                      variant={group.closureType === "sp_error" ? "default" : "secondary"}
+                      className={group.closureType === "sp_error" 
+                        ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" 
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                      }
+                    >
+                      {group.closureType === "sp_error" ? "Less (SP)" : "HO Error"}
+                    </Badge>
+                  </div>
+
+                  <div className="col-span-2 text-right">
+                    <span className="font-mono text-sm font-medium">
+                      {group.closureType === "sp_error" ? "-" : ""}{formatCurrency(group.totalAmount)}
+                    </span>
+                  </div>
+
+                  <div className="col-span-2 flex justify-end gap-1">
+                    <Badge variant="outline" className="text-xs">
+                      {group.bookings.length} booking{group.bookings.length > 1 ? "s" : ""}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -1750,144 +1832,6 @@ export function AmountPayablePanel({
                   </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {closedDisputes.length > 0 && (
-            <div className="border rounded-lg p-3">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium">Closed Disputes</p>
-                <Badge variant="secondary" className="text-xs">
-                  {closedDisputes.length} closed
-                </Badge>
-              </div>
-              <ScrollArea className="max-h-[250px] pr-2">
-                <div className="space-y-2">
-                  {closedDisputes.map((dispute) => (
-                    <div
-                      key={dispute.disputeId}
-                      className={`p-3 rounded-lg border ${
-                        dispute.closureType === "sp_error" 
-                          ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20" 
-                          : "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"
-                      }`}
-                      data-testid={`closed-dispute-row-${dispute.bookingId}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-sm font-medium">{dispute.bookingId}</span>
-                              <span className="text-xs text-muted-foreground">{dispute.billingEntityName}</span>
-                            </div>
-                            <Badge 
-                              variant={dispute.closureType === "sp_error" ? "default" : "secondary"}
-                              className={dispute.closureType === "sp_error" 
-                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" 
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                              }
-                            >
-                              {dispute.closureType === "sp_error" ? "SP Error" : "HO Error"}
-                            </Badge>
-                          </div>
-                          
-                          {dispute.isEditing ? (
-                            <div className="flex items-center gap-3">
-                              <div className="flex-1">
-                                <Label className="text-xs text-muted-foreground">Adjustment Amount</Label>
-                                <Input
-                                  type="number"
-                                  value={dispute.editAmount}
-                                  onChange={(e) => 
-                                    updateClosedDisputeEdit(dispute.disputeId, { 
-                                      editAmount: parseFloat(e.target.value) || 0 
-                                    })
-                                  }
-                                  max={dispute.originalAmount}
-                                  className="h-8 font-mono"
-                                  data-testid={`input-edit-amount-${dispute.bookingId}`}
-                                />
-                              </div>
-                              <div className="w-32">
-                                <Label className="text-xs text-muted-foreground">Error Type</Label>
-                                <Select
-                                  value={dispute.editClosureType}
-                                  onValueChange={(value: "sp_error" | "ho_error") => 
-                                    updateClosedDisputeEdit(dispute.disputeId, { editClosureType: value })
-                                  }
-                                >
-                                  <SelectTrigger className="h-8" data-testid={`select-edit-type-${dispute.bookingId}`}>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="sp_error">SP Error</SelectItem>
-                                    <SelectItem value="ho_error">HO Error</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">
-                                Original: {formatCurrency(dispute.originalAmount)} {currency}
-                              </span>
-                              <span className="font-mono font-medium">
-                                Closed: {formatCurrency(dispute.closedAmount)} {currency}
-                              </span>
-                            </div>
-                          )}
-                          
-                          <div className="flex items-center gap-2 pt-1">
-                            {dispute.isEditing ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => saveClosedDisputeEdit(dispute.disputeId)}
-                                  disabled={isSavingClosedDispute === dispute.disputeId}
-                                  data-testid={`button-save-edit-${dispute.bookingId}`}
-                                >
-                                  {isSavingClosedDispute === dispute.disputeId ? "Saving..." : "Apply"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => cancelClosedDisputeEdit(dispute.disputeId)}
-                                  disabled={isSavingClosedDispute === dispute.disputeId}
-                                  data-testid={`button-cancel-edit-${dispute.bookingId}`}
-                                >
-                                  Cancel
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => toggleClosedDisputeEdit(dispute.disputeId)}
-                                  data-testid={`button-edit-closed-${dispute.bookingId}`}
-                                >
-                                  <Pencil className="h-3 w-3 mr-1" />
-                                  Edit
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => reopenClosedDispute(dispute.disputeId)}
-                                  disabled={isSavingClosedDispute === dispute.disputeId}
-                                  data-testid={`button-reopen-${dispute.bookingId}`}
-                                >
-                                  <RotateCcw className="h-3 w-3 mr-1" />
-                                  Reopen
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
             </div>
           )}
 
