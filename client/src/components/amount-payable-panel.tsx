@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,19 @@ export function AmountPayablePanel({
     actualDisputeIds: string[];
   }>>([]);
   const [spErrorClosedAdjustments, setSpErrorClosedAdjustments] = useState<number>(0);
+  // Closed disputes with editable state
+  const [closedDisputes, setClosedDisputes] = useState<Array<{
+    disputeId: string;
+    bookingId: string;
+    billingEntityName: string;
+    originalAmount: number;
+    closedAmount: number;
+    closureType: "sp_error" | "ho_error";
+    isEditing: boolean;
+    editAmount: number;
+    editClosureType: "sp_error" | "ho_error";
+  }>>([]);
+  const [isSavingClosedDispute, setIsSavingClosedDispute] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string>("");
   const [disputeErrors, setDisputeErrors] = useState<Map<string, string>>(new Map());
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
@@ -162,13 +175,36 @@ export function AmountPayablePanel({
             });
           }
           
-          // Calculate total SP Error closed adjustments
-          const spErrorClosed = disputes.filter((d: { closureStatus?: string; closureType?: string }) => 
-            d.closureStatus === "closed" && d.closureType === "sp_error"
+          // Calculate total SP Error closed adjustments and populate closed disputes for editing
+          const allClosedDisputes = disputes.filter((d: { closureStatus?: string; closureType?: string }) => 
+            d.closureStatus === "closed" && (d.closureType === "sp_error" || d.closureType === "accept_ho_error")
           );
-          const spErrorTotal = spErrorClosed.reduce((sum: number, d: { closedByAdjustmentAmount?: number; disputeAmount: number }) => 
-            sum + (d.closedByAdjustmentAmount ?? d.disputeAmount), 0
-          );
+          
+          // Map closed disputes for editing
+          const closedDisputesForEdit = allClosedDisputes.map((d: { 
+            disputeId: string; 
+            bookingId: string; 
+            billingEntityName: string;
+            disputeAmount: number;
+            closedByAdjustmentAmount?: number;
+            closureType: string;
+          }) => ({
+            disputeId: d.disputeId,
+            bookingId: d.bookingId,
+            billingEntityName: d.billingEntityName,
+            originalAmount: d.disputeAmount,
+            closedAmount: d.closedByAdjustmentAmount ?? d.disputeAmount,
+            closureType: (d.closureType === "accept_ho_error" ? "ho_error" : "sp_error") as "sp_error" | "ho_error",
+            isEditing: false,
+            editAmount: d.closedByAdjustmentAmount ?? d.disputeAmount,
+            editClosureType: (d.closureType === "accept_ho_error" ? "ho_error" : "sp_error") as "sp_error" | "ho_error",
+          }));
+          setClosedDisputes(closedDisputesForEdit);
+          
+          // Calculate SP Error total from current closedAmount values
+          const spErrorTotal = closedDisputesForEdit
+            .filter((d: { closureType: string }) => d.closureType === "sp_error")
+            .reduce((sum: number, d: { closedAmount: number }) => sum + d.closedAmount, 0);
           setSpErrorClosedAdjustments(spErrorTotal);
           
           const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number; actualDisputeIds: string[] }> = [];
@@ -781,6 +817,134 @@ export function AmountPayablePanel({
       setIsProcessingClosures(false);
     }
   }, [runId, selectedDispute, bookingClosures, closureSummary, acceptHoError, closeDisputeDialog, toast]);
+
+  // Toggle edit mode for a closed dispute
+  const toggleClosedDisputeEdit = useCallback((disputeId: string) => {
+    setClosedDisputes(prev => prev.map(d => 
+      d.disputeId === disputeId 
+        ? { ...d, isEditing: !d.isEditing, editAmount: d.closedAmount, editClosureType: d.closureType }
+        : d
+    ));
+  }, []);
+
+  // Update edit values for a closed dispute
+  const updateClosedDisputeEdit = useCallback((disputeId: string, updates: { editAmount?: number; editClosureType?: "sp_error" | "ho_error" }) => {
+    setClosedDisputes(prev => prev.map(d => 
+      d.disputeId === disputeId 
+        ? { ...d, ...updates }
+        : d
+    ));
+  }, []);
+
+  // Save edited closed dispute
+  const saveClosedDisputeEdit = useCallback(async (disputeId: string) => {
+    const dispute = closedDisputes.find(d => d.disputeId === disputeId);
+    if (!dispute) return;
+    
+    // Validate amount
+    const cappedAmount = Math.min(dispute.editAmount, dispute.originalAmount);
+    if (cappedAmount < 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Adjustment amount cannot be negative.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsSavingClosedDispute(disputeId);
+    try {
+      const response = await apiRequest("PATCH", `/api/disputes/${disputeId}`, {
+        closedByAdjustmentAmount: cappedAmount,
+        closureType: dispute.editClosureType === "ho_error" ? "accept_ho_error" : "sp_error",
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to update dispute");
+      }
+      
+      // Update local state
+      setClosedDisputes(prev => prev.map(d => 
+        d.disputeId === disputeId 
+          ? { 
+              ...d, 
+              closedAmount: cappedAmount, 
+              closureType: dispute.editClosureType,
+              isEditing: false 
+            }
+          : d
+      ));
+      
+      // Recalculate SP Error total
+      const newSpErrorTotal = closedDisputes
+        .map(d => d.disputeId === disputeId 
+          ? { ...d, closedAmount: cappedAmount, closureType: dispute.editClosureType }
+          : d
+        )
+        .filter(d => d.closureType === "sp_error")
+        .reduce((sum, d) => sum + d.closedAmount, 0);
+      setSpErrorClosedAdjustments(newSpErrorTotal);
+      
+      toast({
+        title: "Dispute Updated",
+        description: "The closed dispute has been updated successfully.",
+      });
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update dispute. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingClosedDispute(null);
+    }
+  }, [closedDisputes, runId, toast]);
+
+  // Cancel edit mode
+  const cancelClosedDisputeEdit = useCallback((disputeId: string) => {
+    setClosedDisputes(prev => prev.map(d => 
+      d.disputeId === disputeId 
+        ? { ...d, isEditing: false, editAmount: d.closedAmount, editClosureType: d.closureType }
+        : d
+    ));
+  }, []);
+
+  // Reopen a closed dispute (set back to open status)
+  const reopenClosedDispute = useCallback(async (disputeId: string) => {
+    setIsSavingClosedDispute(disputeId);
+    try {
+      const response = await apiRequest("PATCH", `/api/disputes/${disputeId}`, {
+        closureStatus: "open",
+        closureType: null,
+        closedByAdjustmentAmount: null,
+        closedAt: null,
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to reopen dispute");
+      }
+      
+      // Remove from closed disputes and reload
+      setDisputesLoaded(false);
+      
+      toast({
+        title: "Dispute Reopened",
+        description: "The dispute is now open and can be managed again.",
+      });
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to reopen dispute. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingClosedDispute(null);
+    }
+  }, [runId, toast]);
 
   const handleAcceptHoError = useCallback(async () => {
     if (!runId || !acceptHoError || !selectedDispute) return;
@@ -1586,6 +1750,144 @@ export function AmountPayablePanel({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {closedDisputes.length > 0 && (
+            <div className="border rounded-lg p-3">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium">Closed Disputes</p>
+                <Badge variant="secondary" className="text-xs">
+                  {closedDisputes.length} closed
+                </Badge>
+              </div>
+              <ScrollArea className="max-h-[250px] pr-2">
+                <div className="space-y-2">
+                  {closedDisputes.map((dispute) => (
+                    <div
+                      key={dispute.disputeId}
+                      className={`p-3 rounded-lg border ${
+                        dispute.closureType === "sp_error" 
+                          ? "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20" 
+                          : "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"
+                      }`}
+                      data-testid={`closed-dispute-row-${dispute.bookingId}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-sm font-medium">{dispute.bookingId}</span>
+                              <span className="text-xs text-muted-foreground">{dispute.billingEntityName}</span>
+                            </div>
+                            <Badge 
+                              variant={dispute.closureType === "sp_error" ? "default" : "secondary"}
+                              className={dispute.closureType === "sp_error" 
+                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" 
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                              }
+                            >
+                              {dispute.closureType === "sp_error" ? "SP Error" : "HO Error"}
+                            </Badge>
+                          </div>
+                          
+                          {dispute.isEditing ? (
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1">
+                                <Label className="text-xs text-muted-foreground">Adjustment Amount</Label>
+                                <Input
+                                  type="number"
+                                  value={dispute.editAmount}
+                                  onChange={(e) => 
+                                    updateClosedDisputeEdit(dispute.disputeId, { 
+                                      editAmount: parseFloat(e.target.value) || 0 
+                                    })
+                                  }
+                                  max={dispute.originalAmount}
+                                  className="h-8 font-mono"
+                                  data-testid={`input-edit-amount-${dispute.bookingId}`}
+                                />
+                              </div>
+                              <div className="w-32">
+                                <Label className="text-xs text-muted-foreground">Error Type</Label>
+                                <Select
+                                  value={dispute.editClosureType}
+                                  onValueChange={(value: "sp_error" | "ho_error") => 
+                                    updateClosedDisputeEdit(dispute.disputeId, { editClosureType: value })
+                                  }
+                                >
+                                  <SelectTrigger className="h-8" data-testid={`select-edit-type-${dispute.bookingId}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="sp_error">SP Error</SelectItem>
+                                    <SelectItem value="ho_error">HO Error</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">
+                                Original: {formatCurrency(dispute.originalAmount)} {currency}
+                              </span>
+                              <span className="font-mono font-medium">
+                                Closed: {formatCurrency(dispute.closedAmount)} {currency}
+                              </span>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center gap-2 pt-1">
+                            {dispute.isEditing ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => saveClosedDisputeEdit(dispute.disputeId)}
+                                  disabled={isSavingClosedDispute === dispute.disputeId}
+                                  data-testid={`button-save-edit-${dispute.bookingId}`}
+                                >
+                                  {isSavingClosedDispute === dispute.disputeId ? "Saving..." : "Apply"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => cancelClosedDisputeEdit(dispute.disputeId)}
+                                  disabled={isSavingClosedDispute === dispute.disputeId}
+                                  data-testid={`button-cancel-edit-${dispute.bookingId}`}
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => toggleClosedDisputeEdit(dispute.disputeId)}
+                                  data-testid={`button-edit-closed-${dispute.bookingId}`}
+                                >
+                                  <Pencil className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => reopenClosedDispute(dispute.disputeId)}
+                                  disabled={isSavingClosedDispute === dispute.disputeId}
+                                  data-testid={`button-reopen-${dispute.bookingId}`}
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1" />
+                                  Reopen
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
           )}
 
