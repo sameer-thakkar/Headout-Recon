@@ -573,6 +573,16 @@ function getDriTeam(
     return "Unknown";
   }
   
+  // Cancelled-Insured Booking and Cancelled-DSS policy - no action needed, informational only
+  if (reason === "Cancelled-Insured Booking" || reason === "Cancelled-DSS policy") {
+    return "N/A";
+  }
+  
+  // Cancelled-Check for Charge loss - needs review by Biz Ops
+  if (reason === "Cancelled-Check for Charge loss") {
+    return "Biz Ops";
+  }
+  
   // NPD (Net Price Discrepancy) - based on fulfillment method and price sync
   if (reason === "Net Price Discrepancy") {
     if (isFreesale) return "Biz Ops";
