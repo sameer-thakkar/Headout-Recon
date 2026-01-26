@@ -60,6 +60,8 @@ interface HORow {
   bookingStatus: string;
   cancellable: string | null;
   cancellationInsurance: string | null;
+  chargedLoss: string | null;
+  comment: string | null;
   experienceName?: string;
   supplierName?: string;
   tid?: string;
@@ -70,6 +72,13 @@ interface HORow {
   beId?: string;
   billingEntityName?: string;
   paymentBasis?: string;
+}
+
+// Result from reason assignment
+interface ReasonResult {
+  reason: string;
+  chargedLoss: string;
+  comment: string;
 }
 
 // SP Row from parsed sheet
@@ -125,6 +134,9 @@ function parseHOData(sheet: SheetData): HORow[] {
     const currency = getRowValue(row, "currency", "Currency", "Billing Currency");
     const bookingStatus = getRowValue(row, "bookingStatus", "Booking Status", "booking_status", "status");
     
+    const chargedLoss = getRowValue(row, "chargedLoss", "Charged Loss", "charged_loss", "charge_loss");
+    const commentValue = getRowValue(row, "comment", "Comment", "comments", "Comments", "notes", "Notes");
+    
     return {
       bookingId: String(bookingId || ""),
       netPrice: Number(netPrice) || 0,
@@ -133,6 +145,8 @@ function parseHOData(sheet: SheetData): HORow[] {
       bookingStatus: String(bookingStatus || ""),
       cancellable: getRowValue(row, "Cancellable", "cancellable") ? String(getRowValue(row, "Cancellable", "cancellable")) : null,
       cancellationInsurance: getRowValue(row, "Cancellation Insurance", "cancellationInsurance") ? String(getRowValue(row, "Cancellation Insurance", "cancellationInsurance")) : null,
+      chargedLoss: chargedLoss ? String(chargedLoss) : null,
+      comment: commentValue ? String(commentValue) : null,
       experienceName: getRowValue(row, "experienceName", "Experience Name") ? String(getRowValue(row, "experienceName", "Experience Name")) : undefined,
       supplierName: getRowValue(row, "vendorName", "supplierName", "Vendor Name", "Supplier Name") ? String(getRowValue(row, "vendorName", "supplierName", "Vendor Name", "Supplier Name")) : undefined,
       tid: getRowValue(row, "tid", "TID", "tourId", "Tour ID", "tour_id") ? String(getRowValue(row, "tid", "TID", "tourId", "Tour ID", "tour_id")) : undefined,
@@ -406,58 +420,126 @@ function buildSPLookup(
 
 /**
  * STEP G: Reason logic for Primary rows
+ * Updated to return reason, chargedLoss, and comment for cancellation handling
  */
 function assignReason(
   bookingStatus: string,
   cancellable: string | null,
   cancellationInsurance: string | null,
+  chargedLossOriginal: string | null,
   differenceLc: number,
   differencePct: number | null,
   sameCurrency: boolean,
   spNetInHo: number
-): string {
-  // 1) Cancelled cases
+): ReasonResult {
+  // Normalize chargedLoss to check if it's already TRUE
+  const isChargedLossTrue = chargedLossOriginal?.toUpperCase() === "TRUE";
+  
+  // 1) Cancelled cases - NEW LOGIC per user requirements
   if (bookingStatus.toLowerCase() === "cancelled") {
-    // a) If Cancellable == "Yes" AND spNetInHo > 0 => "Charge loss"
-    if (cancellable?.toLowerCase() === "yes" && spNetInHo > 0) {
-      return "Charge loss";
+    // Case 1: Cancellable = "Yes"
+    if (cancellable?.toLowerCase() === "yes") {
+      if (spNetInHo === 0) {
+        // SP Net = 0 → Reconciled, Comment = "Cancelled-OK"
+        return {
+          reason: "Reconciled",
+          chargedLoss: chargedLossOriginal || "FALSE",
+          comment: "Cancelled-OK"
+        };
+      } else {
+        // SP Net > 0 → "Cancelled-SP error", chargedLoss = TRUE
+        return {
+          reason: "Cancelled-SP error",
+          chargedLoss: "TRUE",
+          comment: "Cancelled-SP error"
+        };
+      }
     }
-    // b) If Cancellable == "No" AND Cancellation Insurance == "Yes" => "Cancellation Insurance"
-    if (cancellable?.toLowerCase() === "no" && cancellationInsurance?.toLowerCase() === "yes") {
-      return "Cancellation Insurance";
+    
+    // Case 2: Cancellable = "No"
+    if (cancellable?.toLowerCase() === "no") {
+      if (spNetInHo === 0) {
+        // SP Net = 0 → Reconciled, Comment = "Cancelled-OK"
+        return {
+          reason: "Reconciled",
+          chargedLoss: chargedLossOriginal || "FALSE",
+          comment: "Cancelled-OK"
+        };
+      } else {
+        // SP Net > 0 - check Cancellation Insurance
+        if (cancellationInsurance?.toLowerCase() === "yes") {
+          // Cancellation Insurance = "Yes" → Reconciled, chargedLoss = TRUE
+          return {
+            reason: "Reconciled",
+            chargedLoss: "TRUE",
+            comment: "Cancelled-Insured Booking"
+          };
+        } else {
+          // Cancellation Insurance = "No" - check chargedLoss
+          if (isChargedLossTrue) {
+            // chargedLoss = TRUE → "Cancelled-DSS policy"
+            return {
+              reason: "Reconciled",
+              chargedLoss: "TRUE",
+              comment: "Cancelled-DSS policy"
+            };
+          } else {
+            // chargedLoss = FALSE → "Cancelled-Check for Charge loss"
+            return {
+              reason: "Reconciled",
+              chargedLoss: "FALSE",
+              comment: "Cancelled-Check for Charge loss"
+            };
+          }
+        }
+      }
     }
-    // c) If Cancellable == "No" AND Cancellation Insurance == "No" => "HO policy cancellation"
-    if (cancellable?.toLowerCase() === "no" && cancellationInsurance?.toLowerCase() === "no") {
-      return "HO policy cancellation";
-    }
-    // d) Default for cancelled
-    return "HO policy cancellation";
+    
+    // Default for cancelled (if Cancellable field is missing/other)
+    return {
+      reason: "Reconciled",
+      chargedLoss: chargedLossOriginal || "FALSE",
+      comment: "Cancelled-OK"
+    };
   }
   
-  // 2) Not Cancelled cases
+  // 2) Not Cancelled cases - keep original logic
   if (differencePct !== null) {
     // a) MTB rule: HO Net < SP Net (differencePct is negative) AND abs(differencePct) >= 95%
-    // differencePct = (hoNet - spNet) / hoNet, so negative means SP claims more than HO
     if (differencePct <= -0.95) {
-      return "Multiple Tickets Booked";
+      return {
+        reason: "Multiple Tickets Booked",
+        chargedLoss: chargedLossOriginal || "FALSE",
+        comment: ""
+      };
     }
     
     // b) Reconciled rules
     if (sameCurrency) {
-      // reconciled if abs(differenceLc) < 1 AND abs(differencePct) < 0.01
       if (Math.abs(differenceLc) < 1 && Math.abs(differencePct) < 0.01) {
-        return "Reconciled";
+        return {
+          reason: "Reconciled",
+          chargedLoss: chargedLossOriginal || "FALSE",
+          comment: ""
+        };
       }
     } else {
-      // different currency: reconciled if abs(differencePct) < 0.03
       if (Math.abs(differencePct) < 0.03) {
-        return "Reconciled";
+        return {
+          reason: "Reconciled",
+          chargedLoss: chargedLossOriginal || "FALSE",
+          comment: ""
+        };
       }
     }
   }
   
   // c) Else => "Net Price Discrepancy"
-  return "Net Price Discrepancy";
+  return {
+    reason: "Net Price Discrepancy",
+    chargedLoss: chargedLossOriginal || "FALSE",
+    comment: ""
+  };
 }
 
 /**
@@ -479,8 +561,9 @@ function getDriTeam(
   const isVendorApi = fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api" || fm === "vendor_api";
   const isVendorRequest = fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request" || fm === "vendor_request";
   
-  // MTB (Multiple Tickets Booked) - based on fulfillment method only
-  if (reason === "Multiple Tickets Booked") {
+  // MTB (Multiple Tickets Booked) and Cancelled-SP error - based on fulfillment method only
+  // Cancelled-SP error uses the same DRI logic as MTB
+  if (reason === "Multiple Tickets Booked" || reason === "Cancelled-SP error") {
     if (isFreesale) return "Tech";
     if (isManual) return "Reservation Ops";
     if (isSelenium) return "Selenium";
@@ -552,11 +635,12 @@ function computeReconciliationRows(
     const hoRate = usdToCcy[ho.currency] || 1;
     const differenceUsd = differenceLc / hoRate;
     
-    // STEP G: Assign reason
-    const reason = assignReason(
+    // STEP G: Assign reason (now returns ReasonResult with chargedLoss and comment)
+    const reasonResult = assignReason(
       ho.bookingStatus,
       ho.cancellable,
       ho.cancellationInsurance,
+      ho.chargedLoss,
       differenceLc,
       differencePct,
       sameCurrency,
@@ -564,7 +648,7 @@ function computeReconciliationRows(
     );
     
     // Compute DRI team based on reason and fulfillment method
-    const driTeam = getDriTeam(reason, ho.fulfillmentMethod, ho.priceSync);
+    const driTeam = getDriTeam(reasonResult.reason, ho.fulfillmentMethod, ho.priceSync);
     
     primaryRows.push({
       bookingId,
@@ -583,7 +667,7 @@ function computeReconciliationRows(
       differenceLc,
       differencePct,
       differenceUsd,
-      reason,
+      reason: reasonResult.reason,
       experienceName: ho.experienceName,
       supplierName: ho.supplierName,
       tid: ho.tid,
@@ -594,6 +678,8 @@ function computeReconciliationRows(
       billingEntityName: ho.billingEntityName,
       ticketId: spBundle?.ticketId,
       paymentBasis: ho.paymentBasis,
+      chargedLoss: reasonResult.chargedLoss,
+      comment: reasonResult.comment,
     });
   });
   

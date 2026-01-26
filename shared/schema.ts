@@ -69,6 +69,10 @@ export const primaryRowSchema = z.object({
   
   // HO Report fields
   paymentBasis: z.string().optional(),
+  
+  // Cancellation-related fields
+  chargedLoss: z.string().optional(),
+  comment: z.string().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
@@ -317,6 +321,7 @@ export const optionalFields = [
   "cancellable",
   "cancellationInsurance",
   "bnpl",
+  "comment",
 ] as const;
 
 // Header aliases for auto-detection
@@ -341,6 +346,7 @@ export const headerAliases: Record<string, string[]> = {
   cancellable: ["Cancellable", "cancellable", "is_cancellable"],
   cancellationInsurance: ["Cancellation Insurance", "cancellationInsurance", "cancellation_insurance"],
   bnpl: ["BNPL", "bnpl", "buy_now_pay_later"],
+  comment: ["comment", "Comment", "comments", "Comments", "notes", "Notes"],
 };
 
 // Reason codes for new pipeline
@@ -353,6 +359,16 @@ export const reasonCodes = [
   "HO policy cancellation",
   "Duplicate Fulfillment",
   "Unmapped",
+  "Cancelled-SP error",
+] as const;
+
+// Cancellation comment codes (for comment column in exports)
+export const cancellationComments = [
+  "Cancelled-OK",
+  "Cancelled-SP error",
+  "Cancelled-Insured Booking",
+  "Cancelled-DSS policy",
+  "Cancelled-Check for Charge loss",
 ] as const;
 
 // DRI Teams

@@ -461,21 +461,30 @@ export async function registerRoutes(
   app.post("/api/demo", async (req, res) => {
     try {
       // Create demo HO and SP data
+      // Demo data includes various cancellation scenarios to test the new logic:
+      // BK003: Cancelled + Cancellable=Yes + SP Net>0 → Cancelled-SP error
+      // BK004: Cancelled + Cancellable=No + Insurance=No + chargedLoss=FALSE → Cancelled-Check for Charge loss
+      // BK011: Cancelled + Cancellable=Yes + SP Net=0 → Cancelled-OK (Reconciled)
+      // BK012: Cancelled + Cancellable=No + Insurance=Yes + SP Net>0 → Cancelled-Insured Booking
+      // BK013: Cancelled + Cancellable=No + Insurance=No + chargedLoss=TRUE → Cancelled-DSS policy
       const hoData: SheetData = {
         name: "HO Data",
-        headers: ["bookingId", "netPrice", "currency", "bookingCreationDate", "bookingStatus", "Cancellable", "Cancellation Insurance", "billingEntityName", "beId", "paymentBasis"],
+        headers: ["bookingId", "netPrice", "currency", "bookingCreationDate", "bookingStatus", "Cancellable", "Cancellation Insurance", "chargedLoss", "billingEntityName", "beId", "paymentBasis", "fulfillmentMethod"],
         rows: [
-          { bookingId: "BK001", netPrice: 100, currency: "USD", bookingCreationDate: "2024-01-15", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking" },
-          { bookingId: "BK001", netPrice: 50, currency: "USD", bookingCreationDate: "2024-01-10", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking" }, // Duplicate - Secondary
-          { bookingId: "BK002", netPrice: 150, currency: "EUR", bookingCreationDate: "2024-01-16", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "Yes", billingEntityName: "Euro Adventures", beId: "BE-002", paymentBasis: "Per Ticket" },
-          { bookingId: "BK003", netPrice: 200, currency: "USD", bookingCreationDate: "2024-01-17", bookingStatus: "CANCELLED", Cancellable: "Yes", "Cancellation Insurance": "No", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking" },
-          { bookingId: "BK004", netPrice: 75, currency: "GBP", bookingCreationDate: "2024-01-18", bookingStatus: "CANCELLED", Cancellable: "No", "Cancellation Insurance": "No", billingEntityName: "British Excursions", beId: "BE-003", paymentBasis: "Per Pax" },
-          { bookingId: "BK005", netPrice: 300, currency: "USD", bookingCreationDate: "2024-01-19", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking" },
-          { bookingId: "BK006", netPrice: 125, currency: "USD", bookingCreationDate: "2024-01-20", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "No", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Ticket" },
-          { bookingId: "BK007", netPrice: 50, currency: "EUR", bookingCreationDate: "2024-01-21", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "Yes", billingEntityName: "Euro Adventures", beId: "BE-002", paymentBasis: "Per Booking" },
-          { bookingId: "BK008", netPrice: 180, currency: "USD", bookingCreationDate: "2024-01-22", bookingStatus: "PENDING", Cancellable: "No", "Cancellation Insurance": "No", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Pax" },
-          { bookingId: "BK009", netPrice: 220, currency: "USD", bookingCreationDate: "2024-01-23", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking" },
-          { bookingId: "BK010", netPrice: 90, currency: "GBP", bookingCreationDate: "2024-01-24", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "Yes", billingEntityName: "British Excursions", beId: "BE-003", paymentBasis: "Per Ticket" },
+          { bookingId: "BK001", netPrice: 100, currency: "USD", bookingCreationDate: "2024-01-15", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking", fulfillmentMethod: "Freesale" },
+          { bookingId: "BK001", netPrice: 50, currency: "USD", bookingCreationDate: "2024-01-10", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking", fulfillmentMethod: "Freesale" }, // Duplicate - Secondary
+          { bookingId: "BK002", netPrice: 150, currency: "EUR", bookingCreationDate: "2024-01-16", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "Yes", chargedLoss: "FALSE", billingEntityName: "Euro Adventures", beId: "BE-002", paymentBasis: "Per Ticket", fulfillmentMethod: "Manual" },
+          { bookingId: "BK003", netPrice: 200, currency: "USD", bookingCreationDate: "2024-01-17", bookingStatus: "CANCELLED", Cancellable: "Yes", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking", fulfillmentMethod: "Freesale" }, // Cancelled-SP error (SP Net=50 > 0)
+          { bookingId: "BK004", netPrice: 75, currency: "GBP", bookingCreationDate: "2024-01-18", bookingStatus: "CANCELLED", Cancellable: "No", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "British Excursions", beId: "BE-003", paymentBasis: "Per Pax", fulfillmentMethod: "Manual" }, // Cancelled-Check for Charge loss (SP Net=25 > 0)
+          { bookingId: "BK005", netPrice: 300, currency: "USD", bookingCreationDate: "2024-01-19", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking", fulfillmentMethod: "Vendor API" },
+          { bookingId: "BK006", netPrice: 125, currency: "USD", bookingCreationDate: "2024-01-20", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Ticket", fulfillmentMethod: "Selenium" },
+          { bookingId: "BK007", netPrice: 50, currency: "EUR", bookingCreationDate: "2024-01-21", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "Yes", chargedLoss: "FALSE", billingEntityName: "Euro Adventures", beId: "BE-002", paymentBasis: "Per Booking", fulfillmentMethod: "Pre Purchase" },
+          { bookingId: "BK008", netPrice: 180, currency: "USD", bookingCreationDate: "2024-01-22", bookingStatus: "PENDING", Cancellable: "No", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Pax", fulfillmentMethod: "Freesale" },
+          { bookingId: "BK009", netPrice: 220, currency: "USD", bookingCreationDate: "2024-01-23", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking", fulfillmentMethod: "Manual" },
+          { bookingId: "BK010", netPrice: 90, currency: "GBP", bookingCreationDate: "2024-01-24", bookingStatus: "CONFIRMED", Cancellable: "No", "Cancellation Insurance": "Yes", chargedLoss: "FALSE", billingEntityName: "British Excursions", beId: "BE-003", paymentBasis: "Per Ticket", fulfillmentMethod: "Vendor Request" },
+          { bookingId: "BK011", netPrice: 100, currency: "USD", bookingCreationDate: "2024-01-25", bookingStatus: "CANCELLED", Cancellable: "Yes", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking", fulfillmentMethod: "Freesale" }, // Cancelled-OK (SP Net=0)
+          { bookingId: "BK012", netPrice: 150, currency: "USD", bookingCreationDate: "2024-01-26", bookingStatus: "CANCELLED", Cancellable: "No", "Cancellation Insurance": "Yes", chargedLoss: "FALSE", billingEntityName: "Euro Adventures", beId: "BE-002", paymentBasis: "Per Ticket", fulfillmentMethod: "Manual" }, // Cancelled-Insured Booking (SP Net=60 > 0)
+          { bookingId: "BK013", netPrice: 80, currency: "USD", bookingCreationDate: "2024-01-27", bookingStatus: "CANCELLED", Cancellable: "No", "Cancellation Insurance": "No", chargedLoss: "TRUE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Pax", fulfillmentMethod: "Selenium" }, // Cancelled-DSS policy (SP Net=40 > 0, chargedLoss=TRUE)
         ],
       };
 
@@ -485,12 +494,16 @@ export async function registerRoutes(
         rows: [
           { bookingId: "BK001", netPrice: 95, "Billing Currency": "USD", fulfilmentDate: "2024-01-16", ticketId: "TKT-2024-001" },
           { bookingId: "BK002", netPrice: 150, "Billing Currency": "EUR", fulfilmentDate: "2024-01-17", ticketId: "TKT-2024-002" },
-          { bookingId: "BK003", netPrice: 50, "Billing Currency": "USD", fulfilmentDate: "2024-01-18", ticketId: "TKT-2024-003" },
+          { bookingId: "BK003", netPrice: 50, "Billing Currency": "USD", fulfilmentDate: "2024-01-18", ticketId: "TKT-2024-003" }, // SP Net > 0 for cancelled booking
+          { bookingId: "BK004", netPrice: 25, "Billing Currency": "GBP", fulfilmentDate: "2024-01-18", ticketId: "TKT-2024-004" }, // SP Net > 0 for cancelled booking
           { bookingId: "BK005", netPrice: 290, "Billing Currency": "USD", fulfilmentDate: "2024-01-20", ticketId: "TKT-2024-005" },
           { bookingId: "BK006", netPrice: 125, "Billing Currency": "USD", fulfilmentDate: "2024-01-21", ticketId: "TKT-2024-006" },
           { bookingId: "BK007", netPrice: 48, "Billing Currency": "EUR", fulfilmentDate: "2024-01-22", ticketId: "TKT-2024-007" },
           { bookingId: "BK009", netPrice: 215, "Billing Currency": "USD", fulfilmentDate: "2024-01-24", ticketId: "TKT-2024-009" },
           { bookingId: "BK010", netPrice: 85, "Billing Currency": "GBP", fulfilmentDate: "2024-01-25", ticketId: "TKT-2024-010" },
+          // BK011 has NO SP row → SP Net = 0 → Cancelled-OK
+          { bookingId: "BK012", netPrice: 60, "Billing Currency": "USD", fulfilmentDate: "2024-01-26", ticketId: "TKT-2024-012" }, // SP Net > 0, Insurance=Yes → Cancelled-Insured Booking
+          { bookingId: "BK013", netPrice: 40, "Billing Currency": "USD", fulfilmentDate: "2024-01-27", ticketId: "TKT-2024-013" }, // SP Net > 0, chargedLoss=TRUE → Cancelled-DSS policy
           { bookingId: "BK999", netPrice: 500, "Billing Currency": "USD", fulfilmentDate: "2024-01-26", ticketId: "TKT-2024-999" }, // Unmapped
         ],
       };
@@ -1210,24 +1223,57 @@ export async function registerRoutes(
           ? ((hoNet - reconRow.spNetInHo) / hoNet * 100).toFixed(2) + "%" 
           : "";
         
-        // Determine finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
+        // Determine finalNetPrice, errorTeamAttribution, errorBucket, comments, chargedLoss based on reason
         let finalNetPrice: number | string = "";
         let errorTeamAttribution = row["errorTeamAttribution"] || row["Error Team Attribution"] || "";
         let errorBucket = row["errorBucket"] || row["Error Bucket"] || "";
         let comments = row["comments"] || row["Comments"] || "";
+        // Get chargedLoss from reconRow (reconciliation result) or from original row
+        let chargedLoss = reconRow?.chargedLoss || String(row["chargedLoss"] || row["Charged Loss"] || row["charged_loss"] || "FALSE");
         
         const reason = reconRow?.reason || "Reconciled";
         const fulfillmentMethod = String(reconRow?.fulfillmentMethod || row["fulfillmentMethod"] || row["Fulfillment Method"] || "");
         const priceSync = String(row["priceSync"] || row["Price Sync"] || row["PriceSync"] || "");
         
+        // Get the comment from reconciliation (for cancellation scenarios)
+        const reconComment = reconRow?.comment || "";
+        
         if (isSecondary) {
           // Secondary rows: finalNetPrice = 0, comments = "Duplicate Fulfillment"
           finalNetPrice = 0;
           comments = "Duplicate Fulfillment";
-        } else if (reason === "Reconciled") {
-          // Reconciled: finalNetPrice = SP Net, comments = "Reconciled"
+        } else if (reason === "Cancelled-SP error") {
+          // Cancelled-SP error: finalNetPrice = SP Net, chargedLoss = TRUE
           finalNetPrice = spNet;
-          comments = "Reconciled";
+          chargedLoss = "TRUE";
+          comments = reconComment || "Cancelled-SP error";
+          errorBucket = "Cancelled-SP error";
+          
+          // Same DRI logic as MTB
+          if (fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") {
+            errorTeamAttribution = "Tech";
+          } else if (fulfillmentMethod.toLowerCase() === "manual") {
+            errorTeamAttribution = "Reservation Ops";
+          } else if (fulfillmentMethod.toLowerCase() === "selenium") {
+            errorTeamAttribution = "Selenium";
+          } else if (fulfillmentMethod.toLowerCase().includes("freesale")) {
+            errorTeamAttribution = "Tech";
+          } else if (fulfillmentMethod.toLowerCase().includes("pre") || fulfillmentMethod.toLowerCase().includes("prepurchase")) {
+            errorTeamAttribution = "Inventory Ops";
+          }
+        } else if (reason === "Reconciled") {
+          // Reconciled: finalNetPrice = SP Net
+          finalNetPrice = spNet;
+          // Use cancellation comment if present, otherwise "Reconciled"
+          if (reconComment && reconComment.startsWith("Cancelled")) {
+            comments = reconComment;
+            // Update chargedLoss for cancellation scenarios that require it
+            if (reconComment === "Cancelled-Insured Booking" || reconComment === "Cancelled-DSS policy") {
+              chargedLoss = "TRUE";
+            }
+          } else {
+            comments = "Reconciled";
+          }
         } else if (reason.toLowerCase().includes("multiple") || reason === "MTB") {
           // Multiple Tickets Booked
           finalNetPrice = spNet;
@@ -1290,8 +1336,10 @@ export async function registerRoutes(
             newRow[key] = errorTeamAttribution;
           } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
             newRow[key] = errorBucket;
-          } else if (keyLower === "comments") {
+          } else if (keyLower === "comments" || keyLower === "comment") {
             newRow[key] = comments;
+          } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
+            newRow[key] = chargedLoss;
           } else {
             newRow[key] = row[key];
           }
@@ -1307,6 +1355,7 @@ export async function registerRoutes(
           newRow["errorTeamAttribution"] = errorTeamAttribution;
           newRow["errorBucket"] = errorBucket;
           newRow["comments"] = comments;
+          newRow["chargedLoss"] = chargedLoss;
         }
         
         return newRow;
@@ -2320,7 +2369,7 @@ export async function registerRoutes(
         gsHeaderRow.push(key);
       }
       if (!gsInsertedNewCols) {
-        gsHeaderRow.push("SP Net", "Difference", "Difference %", "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments");
+        gsHeaderRow.push("SP Net", "Difference", "Difference %", "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss");
       }
       
       const hoReportData: (string | number | null)[][] = [gsHeaderRow];
@@ -2340,22 +2389,55 @@ export async function registerRoutes(
           ? ((hoNet - reconRow.spNetInHo) / hoNet * 100).toFixed(2) + "%" 
           : "";
         
-        // Determine finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
+        // Determine finalNetPrice, errorTeamAttribution, errorBucket, comments, chargedLoss based on reason
         let finalNetPrice: number | string = "";
         let errorTeamAttribution = row["errorTeamAttribution"] || row["Error Team Attribution"] || "";
         let errorBucket = row["errorBucket"] || row["Error Bucket"] || "";
         let comments = row["comments"] || row["Comments"] || "";
+        // Get chargedLoss from reconRow (reconciliation result) or from original row
+        let chargedLoss = reconRow?.chargedLoss || String(row["chargedLoss"] || row["Charged Loss"] || row["charged_loss"] || "FALSE");
         
         const reason = reconRow?.reason || "Reconciled";
         const fulfillmentMethod = String(reconRow?.fulfillmentMethod || row["fulfillmentMethod"] || row["Fulfillment Method"] || "");
         const priceSync = String(row["priceSync"] || row["Price Sync"] || row["PriceSync"] || "");
         
+        // Get the comment from reconciliation (for cancellation scenarios)
+        const reconComment = reconRow?.comment || "";
+        
         if (isSecondary) {
           finalNetPrice = 0;
           comments = "Duplicate Fulfillment";
+        } else if (reason === "Cancelled-SP error") {
+          // Cancelled-SP error: finalNetPrice = SP Net, chargedLoss = TRUE
+          finalNetPrice = spNet;
+          chargedLoss = "TRUE";
+          comments = reconComment || "Cancelled-SP error";
+          errorBucket = "Cancelled-SP error";
+          
+          // Same DRI logic as MTB
+          if (fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") {
+            errorTeamAttribution = "Tech";
+          } else if (fulfillmentMethod.toLowerCase() === "manual") {
+            errorTeamAttribution = "Reservation Ops";
+          } else if (fulfillmentMethod.toLowerCase() === "selenium") {
+            errorTeamAttribution = "Selenium";
+          } else if (fulfillmentMethod.toLowerCase().includes("freesale")) {
+            errorTeamAttribution = "Tech";
+          } else if (fulfillmentMethod.toLowerCase().includes("pre") || fulfillmentMethod.toLowerCase().includes("prepurchase")) {
+            errorTeamAttribution = "Inventory Ops";
+          }
         } else if (reason === "Reconciled") {
           finalNetPrice = spNet;
-          comments = "Reconciled";
+          // Use cancellation comment if present, otherwise "Reconciled"
+          if (reconComment && reconComment.startsWith("Cancelled")) {
+            comments = reconComment;
+            // Update chargedLoss for cancellation scenarios that require it
+            if (reconComment === "Cancelled-Insured Booking" || reconComment === "Cancelled-DSS policy") {
+              chargedLoss = "TRUE";
+            }
+          } else {
+            comments = "Reconciled";
+          }
         } else if (reason.toLowerCase().includes("multiple") || reason === "MTB") {
           finalNetPrice = spNet;
           errorBucket = "Multiple Tickets Booked";
@@ -2409,8 +2491,10 @@ export async function registerRoutes(
             value = String(errorTeamAttribution);
           } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
             value = String(errorBucket);
-          } else if (keyLower === "comments") {
+          } else if (keyLower === "comments" || keyLower === "comment") {
             value = String(comments);
+          } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
+            value = String(chargedLoss);
           } else if (keyLower === "honet" || keyLower === "ho net" || keyLower === "ho_net") {
             value = typeof value === "number" ? formatIndianNumber(value) : value;
           } else if (keyLower.includes("date") && value) {
@@ -2429,6 +2513,7 @@ export async function registerRoutes(
           dataRow.push(String(errorTeamAttribution));
           dataRow.push(String(errorBucket));
           dataRow.push(String(comments));
+          dataRow.push(String(chargedLoss));
         }
         
         hoReportData.push(dataRow);
