@@ -33,7 +33,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -101,9 +100,7 @@ export function AmountPayablePanel({
   const [isClosingDisputes, setIsClosingDisputes] = useState(false);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [acceptHoError, setAcceptHoError] = useState(false);
-  const [writeOffNote, setWriteOffNote] = useState("");
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
-  const [isWritingOff, setIsWritingOff] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -639,46 +636,6 @@ export function AmountPayablePanel({
       setIsClosingWithHoError(false);
     }
   }, [runId, acceptHoError, getSelectedDisputeIds, selectedDisputesToClose, toast]);
-
-  const handleWriteOff = useCallback(async () => {
-    if (!runId) return;
-    
-    const disputeIds = getSelectedDisputeIds();
-    if (disputeIds.length === 0) return;
-    
-    setIsWritingOff(true);
-    try {
-      const response = await apiRequest("POST", "/api/disputes/manual-close", {
-        disputeIds,
-        note: writeOffNote || undefined,
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to write off disputes");
-      }
-      
-      toast({
-        title: "Disputes Written Off",
-        description: `${selectedDisputesToClose.size} dispute(s) closed as write-off.`,
-      });
-      
-      setDisputesLoaded(false);
-      setSelectedDisputesToClose(new Set());
-      setShowCloseDialog(false);
-      setWriteOffNote("");
-      
-      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to write off disputes",
-        variant: "destructive",
-      });
-    } finally {
-      setIsWritingOff(false);
-    }
-  }, [runId, getSelectedDisputeIds, selectedDisputesToClose, writeOffNote, toast]);
 
   const toggleDisputeToClose = useCallback((displayId: string) => {
     setSelectedDisputesToClose(prev => {
@@ -1524,14 +1481,13 @@ export function AmountPayablePanel({
         if (!open) {
           setShowCloseDialog(false);
           setAcceptHoError(false);
-          setWriteOffNote("");
         }
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Close Disputes</DialogTitle>
+            <DialogTitle>Close Disputes as HO Error</DialogTitle>
             <DialogDescription>
-              Select how to close the selected dispute(s). This action cannot be undone.
+              Confirm that this is a Headout error to close the selected dispute(s). This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           
@@ -1547,62 +1503,36 @@ export function AmountPayablePanel({
               </div>
             </div>
             
-            <div className="space-y-4">
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium">Option 1: Accept as HO Error</h4>
-                <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <Checkbox
-                    id="accept-ho-error-apc"
-                    checked={acceptHoError}
-                    onCheckedChange={(checked) => setAcceptHoError(checked === true)}
-                    data-testid="checkbox-accept-ho-error"
-                  />
-                  <Label
-                    htmlFor="accept-ho-error-apc"
-                    className="text-sm cursor-pointer flex-1"
-                  >
-                    I confirm this is a Headout error and accept the discrepancy
-                  </Label>
-                </div>
-                <Button
-                  onClick={handleAcceptHoError}
-                  disabled={!acceptHoError || isClosingWithHoError}
-                  className="w-full"
-                  data-testid="button-close-ho-error"
-                >
-                  {isClosingWithHoError ? (
-                    "Closing..."
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Close as HO Error & Download Report
-                    </>
-                  )}
-                </Button>
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium">Option 2: Write Off</h4>
-                <Textarea
-                  placeholder="Optional note for write-off..."
-                  value={writeOffNote}
-                  onChange={(e) => setWriteOffNote(e.target.value)}
-                  className="resize-none"
-                  rows={2}
-                  data-testid="textarea-writeoff-note"
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <Checkbox
+                  id="accept-ho-error-apc"
+                  checked={acceptHoError}
+                  onCheckedChange={(checked) => setAcceptHoError(checked === true)}
+                  data-testid="checkbox-accept-ho-error"
                 />
-                <Button
-                  variant="outline"
-                  onClick={handleWriteOff}
-                  disabled={isWritingOff}
-                  className="w-full"
-                  data-testid="button-writeoff"
+                <Label
+                  htmlFor="accept-ho-error-apc"
+                  className="text-sm cursor-pointer flex-1"
                 >
-                  {isWritingOff ? "Writing Off..." : "Write Off Dispute(s)"}
-                </Button>
+                  I confirm this is a Headout error and accept the discrepancy
+                </Label>
               </div>
+              <Button
+                onClick={handleAcceptHoError}
+                disabled={!acceptHoError || isClosingWithHoError}
+                className="w-full"
+                data-testid="button-close-ho-error"
+              >
+                {isClosingWithHoError ? (
+                  "Closing..."
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Close as HO Error & Download Report
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </DialogContent>

@@ -30,9 +30,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { FileWarning, AlertCircle, ChevronRight, XCircle, Check, Download, ChevronDown } from "lucide-react";
+import { FileWarning, AlertCircle, ChevronRight, Check, Download, ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -82,9 +81,6 @@ interface DisputeTrackerPageProps {
 
 export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   const [selectedDispute, setSelectedDispute] = useState<AggregatedDispute | null>(null);
-  const [writeOffDispute, setWriteOffDispute] = useState<AggregatedDispute | null>(null);
-  const [writeOffNote, setWriteOffNote] = useState("");
-  const [isWritingOff, setIsWritingOff] = useState(false);
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
@@ -106,36 +102,6 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
   });
 
   const disputes = data?.disputes || [];
-
-  const handleWriteOff = async () => {
-    if (!writeOffDispute) return;
-    
-    setIsWritingOff(true);
-    try {
-      await apiRequest("POST", "/api/disputes/manual-close", {
-        disputeIds: writeOffDispute.actualDisputeIds,
-        note: writeOffNote || undefined,
-      });
-      
-      toast({
-        title: "Dispute Written Off",
-        description: `${writeOffDispute.displayId} has been closed as a write-off.`,
-      });
-      
-      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
-      setWriteOffDispute(null);
-      setWriteOffNote("");
-    } catch (error) {
-      console.error("Write off error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to write off dispute. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsWritingOff(false);
-    }
-  };
 
   const handleAcceptHoError = async () => {
     if (!selectedDispute || !acceptHoError) return;
@@ -748,85 +714,6 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Write Off Confirmation Dialog */}
-      <Dialog open={!!writeOffDispute} onOpenChange={(open) => {
-        if (!open) {
-          setWriteOffDispute(null);
-          setWriteOffNote("");
-        }
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-orange-600">
-              <XCircle className="h-5 w-5" />
-              Write Off Dispute
-            </DialogTitle>
-            <DialogDescription>
-              This will close the dispute as a write-off (Headout loss). This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {writeOffDispute && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted/30 rounded-lg space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Dispute ID</span>
-                  <span className="font-mono font-medium">{writeOffDispute.displayId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Billing Entity</span>
-                  <span className="font-medium">{writeOffDispute.billingEntityName || "-"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Amount</span>
-                  <span className="font-mono font-medium text-orange-600 dark:text-orange-400">
-                    {formatCurrency(writeOffDispute.totalDisputeAmount, writeOffDispute.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Bookings</span>
-                  <span className="font-medium">{writeOffDispute.bookingCount}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="writeoff-note">Note (optional)</Label>
-                <Textarea
-                  id="writeoff-note"
-                  placeholder="e.g., SP rejected claim - Headout to absorb loss"
-                  value={writeOffNote}
-                  onChange={(e) => setWriteOffNote(e.target.value)}
-                  className="min-h-[80px]"
-                  data-testid="input-writeoff-note"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setWriteOffDispute(null);
-                setWriteOffNote("");
-              }}
-              disabled={isWritingOff}
-              data-testid="button-cancel-writeoff"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="default"
-              className="bg-orange-600 hover:bg-orange-700 text-white"
-              onClick={handleWriteOff}
-              disabled={isWritingOff}
-              data-testid="button-confirm-writeoff"
-            >
-              {isWritingOff ? "Writing Off..." : "Confirm Write Off"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
