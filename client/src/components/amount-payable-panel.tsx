@@ -1938,8 +1938,8 @@ export function AmountPayablePanel({
           closeDisputeDialog();
         }
       }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Close Dispute - {selectedDispute?.displayId}</DialogTitle>
             <DialogDescription>
               {selectedDispute?.billingEntityName} · {selectedDispute?.bookingCount} booking(s)
@@ -1947,14 +1947,14 @@ export function AmountPayablePanel({
           </DialogHeader>
           
           {selectedDispute && (
-            <div className="space-y-4">
+            <div className="flex-1 flex flex-col min-h-0 space-y-4 overflow-hidden">
               {isLoadingBookingDetails ? (
                 <div className="flex items-center justify-center py-8">
                   <span className="text-sm text-muted-foreground">Loading booking details...</span>
                 </div>
               ) : (
                 <>
-                  <ScrollArea className="max-h-[400px] pr-4">
+                  <ScrollArea className="flex-1 min-h-0 pr-4">
                     <div className="space-y-3">
                       {Array.from(bookingClosures.values()).map((closure) => (
                         <div 
@@ -2018,9 +2018,9 @@ export function AmountPayablePanel({
                     </div>
                   </ScrollArea>
                   
-                  <Separator />
+                  <Separator className="flex-shrink-0" />
                   
-                  <div className="space-y-3">
+                  <div className="flex-shrink-0 space-y-3">
                     <p className="text-sm font-medium">Summary</p>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 bg-muted/30 rounded-lg">
