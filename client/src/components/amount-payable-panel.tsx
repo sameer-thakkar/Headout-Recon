@@ -213,8 +213,15 @@ export function AmountPayablePanel({
       return booking.spNet;
     }
     const selection = localSelections[booking.bookingId] || "sp";
-    return selection === "ho" ? booking.hoNet : booking.spNet;
-  }, [localSelections]);
+    const pricePayable = selection === "ho" ? booking.hoNet : booking.spNet;
+    
+    if (activeDisputes.has(booking.bookingId)) {
+      const disputeAmt = disputeAmounts.get(booking.bookingId) || 0;
+      return pricePayable - disputeAmt;
+    }
+    
+    return pricePayable;
+  }, [localSelections, activeDisputes, disputeAmounts]);
 
   const getReasonTotal = useCallback((reason: string): number => {
     const reasonBookings = bookingsByReason[reason] || [];
