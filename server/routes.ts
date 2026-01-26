@@ -3345,6 +3345,41 @@ export async function registerRoutes(
     }
   });
 
+  // Close disputes as SP Error (Supplier Error - no Excel download needed)
+  // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
+  app.post("/api/disputes/close-sp-error", async (req, res) => {
+    try {
+      const { disputeIds } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      // Close each dispute with sp_error type
+      const closedDisputes = [];
+      for (const disputeId of disputeIds) {
+        const dispute = await storage.getDisputeById(disputeId);
+        if (dispute && dispute.closureStatus === "open") {
+          const updated = await storage.updateDispute(disputeId, {
+            closureStatus: "closed",
+            closureType: "sp_error",
+            closedAt: new Date().toISOString(),
+          });
+          if (updated) closedDisputes.push(updated);
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        closedDisputes,
+        message: `${closedDisputes.length} dispute(s) closed as SP Error`
+      });
+    } catch (error) {
+      console.error("Close SP error:", error);
+      res.status(500).json({ error: "Failed to close disputes" });
+    }
+  });
+
   // NOTE: These routes MUST come before /api/disputes/:runId to avoid being matched as a runId
   // Close disputes when used in post-recon adjustments (SP Error - auto-close)
   app.post("/api/disputes/close", async (req, res) => {

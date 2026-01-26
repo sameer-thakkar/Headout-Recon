@@ -99,8 +99,10 @@ export function AmountPayablePanel({
   const [selectedDisputesToClose, setSelectedDisputesToClose] = useState<Set<string>>(new Set());
   const [isClosingDisputes, setIsClosingDisputes] = useState(false);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [closureType, setClosureType] = useState<"sp_error" | "ho_error" | null>(null);
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
+  const [isClosingWithSpError, setIsClosingWithSpError] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -623,6 +625,7 @@ export function AmountPayablePanel({
       setDisputesLoaded(false);
       setSelectedDisputesToClose(new Set());
       setShowCloseDialog(false);
+      setClosureType(null);
       setAcceptHoError(false);
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
@@ -636,6 +639,42 @@ export function AmountPayablePanel({
       setIsClosingWithHoError(false);
     }
   }, [runId, acceptHoError, getSelectedDisputeIds, selectedDisputesToClose, toast]);
+
+  const handleCloseAsSpError = useCallback(async () => {
+    if (!runId) return;
+    
+    const disputeIds = getSelectedDisputeIds();
+    if (disputeIds.length === 0) return;
+    
+    setIsClosingWithSpError(true);
+    try {
+      const response = await apiRequest("POST", "/api/disputes/close-sp-error", { disputeIds });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to close disputes");
+      }
+      
+      toast({
+        title: "Disputes Closed",
+        description: `${selectedDisputesToClose.size} dispute(s) closed as SP Error.`,
+      });
+      
+      setDisputesLoaded(false);
+      setSelectedDisputesToClose(new Set());
+      setShowCloseDialog(false);
+      setClosureType(null);
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to close disputes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClosingWithSpError(false);
+    }
+  }, [runId, getSelectedDisputeIds, selectedDisputesToClose, toast]);
 
   const toggleDisputeToClose = useCallback((displayId: string) => {
     setSelectedDisputesToClose(prev => {
@@ -1480,14 +1519,15 @@ export function AmountPayablePanel({
       <Dialog open={showCloseDialog} onOpenChange={(open) => {
         if (!open) {
           setShowCloseDialog(false);
+          setClosureType(null);
           setAcceptHoError(false);
         }
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Close Disputes as HO Error</DialogTitle>
+            <DialogTitle>Close Disputes</DialogTitle>
             <DialogDescription>
-              Confirm that this is a Headout error to close the selected dispute(s). This action cannot be undone.
+              Select the error type to close the selected dispute(s). This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           
@@ -1503,37 +1543,110 @@ export function AmountPayablePanel({
               </div>
             </div>
             
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-                <Checkbox
-                  id="accept-ho-error-apc"
-                  checked={acceptHoError}
-                  onCheckedChange={(checked) => setAcceptHoError(checked === true)}
-                  data-testid="checkbox-accept-ho-error"
-                />
-                <Label
-                  htmlFor="accept-ho-error-apc"
-                  className="text-sm cursor-pointer flex-1"
-                >
-                  I confirm this is a Headout error and accept the discrepancy
-                </Label>
+            {!closureType && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Select error type:</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setClosureType("sp_error")}
+                    data-testid="button-select-sp-error"
+                  >
+                    SP Error
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setClosureType("ho_error")}
+                    data-testid="button-select-ho-error"
+                  >
+                    HO Error
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <span className="text-xs text-muted-foreground">Supplier to pay</span>
+                  <span className="text-xs text-muted-foreground">Headout to absorb</span>
+                </div>
               </div>
-              <Button
-                onClick={handleAcceptHoError}
-                disabled={!acceptHoError || isClosingWithHoError}
-                className="w-full"
-                data-testid="button-close-ho-error"
-              >
-                {isClosingWithHoError ? (
-                  "Closing..."
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 mr-2" />
-                    Close as HO Error & Download Report
-                  </>
-                )}
-              </Button>
-            </div>
+            )}
+            
+            {closureType === "sp_error" && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setClosureType(null)}
+                    data-testid="button-back-sp-error"
+                  >
+                    <ChevronDown className="h-4 w-4 rotate-90" />
+                    Back
+                  </Button>
+                  <span className="text-sm font-medium">SP Error</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  This dispute is a supplier error. The supplier is responsible for the discrepancy.
+                </p>
+                <Button
+                  onClick={handleCloseAsSpError}
+                  disabled={isClosingWithSpError}
+                  className="w-full"
+                  data-testid="button-close-sp-error"
+                >
+                  {isClosingWithSpError ? "Closing..." : "Close as SP Error"}
+                </Button>
+              </div>
+            )}
+            
+            {closureType === "ho_error" && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setClosureType(null);
+                      setAcceptHoError(false);
+                    }}
+                    data-testid="button-back-ho-error"
+                  >
+                    <ChevronDown className="h-4 w-4 rotate-90" />
+                    Back
+                  </Button>
+                  <span className="text-sm font-medium">HO Error</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <Checkbox
+                    id="accept-ho-error-apc"
+                    checked={acceptHoError}
+                    onCheckedChange={(checked) => setAcceptHoError(checked === true)}
+                    data-testid="checkbox-accept-ho-error"
+                  />
+                  <Label
+                    htmlFor="accept-ho-error-apc"
+                    className="text-sm cursor-pointer flex-1"
+                  >
+                    I confirm this is a Headout error and accept the discrepancy
+                  </Label>
+                </div>
+                <Button
+                  onClick={handleAcceptHoError}
+                  disabled={!acceptHoError || isClosingWithHoError}
+                  className="w-full"
+                  data-testid="button-close-ho-error"
+                >
+                  {isClosingWithHoError ? (
+                    "Closing..."
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Close as HO Error & Download Report
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
