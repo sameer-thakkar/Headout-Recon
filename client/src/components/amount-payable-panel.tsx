@@ -1723,7 +1723,7 @@ export function AmountPayablePanel({
                 </div>
               ) : (
                 <>
-                  <ScrollArea className="max-h-[300px]">
+                  <ScrollArea className="max-h-[400px] pr-4">
                     <div className="space-y-3">
                       {Array.from(bookingClosures.values()).map((closure) => (
                         <div 
