@@ -94,6 +94,8 @@ export function AmountPayablePanel({
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
   const [selectedIssues, setSelectedIssues] = useState<Set<string>>(new Set());
   const [isLoggingIssues, setIsLoggingIssues] = useState(false);
+  const [selectedDisputesToClose, setSelectedDisputesToClose] = useState<Set<string>>(new Set());
+  const [isClosingDisputes, setIsClosingDisputes] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -120,7 +122,8 @@ export function AmountPayablePanel({
           setOriginalDisputes(new Map(newDisputeAmounts));
           
           const groupedByBillingEntity = new Map<string, Array<{ id: string; billingEntityId: string; billingEntityName: string; disputeAmount: number }>>();
-          for (const dispute of disputes) {
+          const openDisputesOnly = disputes.filter((d: { closureStatus?: string }) => d.closureStatus === "open");
+          for (const dispute of openDisputesOnly) {
             const key = `${dispute.billingEntityId}-${dispute.currency}`;
             if (!groupedByBillingEntity.has(key)) {
               groupedByBillingEntity.set(key, []);
@@ -551,6 +554,56 @@ export function AmountPayablePanel({
       setIsLoggingDisputes(false);
     }
   }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
+
+  const handleManualCloseDisputes = useCallback(async () => {
+    if (!runId || selectedDisputesToClose.size === 0) return;
+    
+    setIsClosingDisputes(true);
+    try {
+      const selectedAggregated = openDisputes.filter(d => selectedDisputesToClose.has(d.displayId));
+      const disputeIds = selectedAggregated.flatMap(d => d.actualDisputeIds);
+      
+      const response = await apiRequest("POST", "/api/disputes/manual-close", {
+        disputeIds,
+        note: "Closed from Amount Payable Calculator",
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to close disputes");
+      }
+      
+      setDisputesLoaded(false);
+      setSelectedDisputesToClose(new Set());
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      
+      toast({
+        title: "Disputes Closed",
+        description: `Successfully closed ${selectedAggregated.length} dispute(s)`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to close disputes",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClosingDisputes(false);
+    }
+  }, [runId, selectedDisputesToClose, openDisputes, toast]);
+
+  const toggleDisputeToClose = useCallback((displayId: string) => {
+    setSelectedDisputesToClose(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(displayId)) {
+        newSet.delete(displayId);
+      } else {
+        newSet.add(displayId);
+      }
+      return newSet;
+    });
+  }, []);
 
   const toggleIssueSelection = useCallback((reason: string, tid: string) => {
     const issueKey = `${reason}:${tid}`;
@@ -1239,6 +1292,55 @@ export function AmountPayablePanel({
               })}
             </div>
           </div>
+
+          {openDisputes.length > 0 && (
+            <div className="border rounded-lg p-3">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium">Manage Open Disputes</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleManualCloseDisputes}
+                  disabled={selectedDisputesToClose.size === 0 || isClosingDisputes}
+                  data-testid="button-close-disputes"
+                >
+                  {isClosingDisputes ? "Closing..." : `Close Selected (${selectedDisputesToClose.size})`}
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {openDisputes.map((dispute) => {
+                  const isSelected = selectedDisputesToClose.has(dispute.displayId);
+                  return (
+                    <div
+                      key={dispute.displayId}
+                      className="flex items-center gap-3 p-2 rounded hover-elevate cursor-pointer"
+                      onClick={() => toggleDisputeToClose(dispute.displayId)}
+                      data-testid={`dispute-row-${dispute.displayId}`}
+                    >
+                      <Checkbox 
+                        checked={isSelected}
+                        data-testid={`checkbox-dispute-${dispute.displayId}`}
+                      />
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="text-sm font-mono font-medium">{dispute.displayId}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {dispute.billingEntityName}
+                        </span>
+                      </div>
+                      <span className="text-sm font-mono">
+                        {formatCurrency(dispute.totalDisputeAmount)} {currency}
+                      </span>
+                      {dispute.bookingCount > 1 && (
+                        <Badge variant="secondary" className="text-xs">
+                          {dispute.bookingCount} bookings
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <Separator />
 
