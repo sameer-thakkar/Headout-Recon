@@ -30,6 +30,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { FileWarning, AlertCircle, ChevronRight, Check, Download, ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -163,7 +169,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
     }
   };
 
-  const handleCloseTid = async (tid: string, tidDisputes: DisputeRecord[]) => {
+  const handleCloseTid = async (tid: string, tidDisputes: DisputeRecord[], closureType: "ho_error" | "sp_error") => {
     if (!selectedDispute) return;
     
     // Only close bookings that are still open under this TID
@@ -182,30 +188,43 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
     
     setClosingTid(tid);
     try {
-      await apiRequest("POST", "/api/disputes/accept-ho-error", {
-        disputeIds: openDisputeIds,
-      });
-      
-      // Trigger Excel download for the TID bookings
-      const blob = await fetch("/api/disputes/accept-ho-error/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ disputeIds: openDisputeIds }),
-      }).then(res => res.blob());
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `HO_Error_TID_${tid}_${selectedDispute.displayId.replace("#", "")}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      toast({
-        title: "TID Closed",
-        description: `${openDisputeIds.length} booking(s) under TID ${tid} closed as HO Error. Excel report downloaded.`,
-      });
+      if (closureType === "ho_error") {
+        // HO Error: Close and download Excel report
+        await apiRequest("POST", "/api/disputes/accept-ho-error", {
+          disputeIds: openDisputeIds,
+        });
+        
+        // Trigger Excel download for the TID bookings
+        const blob = await fetch("/api/disputes/accept-ho-error/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ disputeIds: openDisputeIds }),
+        }).then(res => res.blob());
+        
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `HO_Error_TID_${tid}_${selectedDispute.displayId.replace("#", "")}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        toast({
+          title: "TID Closed as HO Error",
+          description: `${openDisputeIds.length} booking(s) under TID ${tid} closed. Excel report downloaded.`,
+        });
+      } else {
+        // SP Error: Close without Excel (HO was correct, no update needed)
+        await apiRequest("POST", "/api/disputes/close-sp-error", {
+          disputeIds: openDisputeIds,
+        });
+        
+        toast({
+          title: "TID Closed as SP Error",
+          description: `${openDisputeIds.length} booking(s) under TID ${tid} closed. No HO Net update needed.`,
+        });
+      }
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
     } catch (error) {
@@ -734,25 +753,39 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
                                           All Closed
                                         </Badge>
                                       ) : (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          disabled={closingTid === tid}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleCloseTid(tid, disputes);
-                                          }}
-                                          data-testid={`button-close-tid-${tid}`}
-                                        >
-                                          {closingTid === tid ? (
-                                            "Closing..."
-                                          ) : (
-                                            <>
-                                              <Check className="h-3 w-3 mr-1" />
-                                              Close TID
-                                            </>
-                                          )}
-                                        </Button>
+                                        closingTid === tid ? (
+                                          <Badge variant="outline">Closing...</Badge>
+                                        ) : (
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                data-testid={`button-close-tid-${tid}`}
+                                              >
+                                                <Check className="h-3 w-3 mr-1" />
+                                                Close TID
+                                                <ChevronDown className="h-3 w-3 ml-1" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                              <DropdownMenuItem
+                                                onClick={() => handleCloseTid(tid, disputes, "ho_error")}
+                                                data-testid={`menuitem-close-tid-ho-error-${tid}`}
+                                              >
+                                                <Download className="h-4 w-4 mr-2 text-amber-600" />
+                                                <span>Close as HO Error</span>
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem
+                                                onClick={() => handleCloseTid(tid, disputes, "sp_error")}
+                                                data-testid={`menuitem-close-tid-sp-error-${tid}`}
+                                              >
+                                                <Check className="h-4 w-4 mr-2 text-cyan-600" />
+                                                <span>Close as SP Error</span>
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        )
                                       )}
                                     </TableCell>
                                   </TableRow>
