@@ -3518,6 +3518,48 @@ export async function registerRoutes(
     }
   });
 
+  // Reopen a closed dispute
+  // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
+  app.post("/api/disputes/reopen", async (req, res) => {
+    try {
+      const { disputeId } = req.body;
+      
+      if (!disputeId) {
+        return res.status(400).json({ error: "disputeId is required" });
+      }
+      
+      const dispute = await storage.getDisputeById(disputeId);
+      if (!dispute) {
+        return res.status(404).json({ error: "Dispute not found" });
+      }
+      
+      if (dispute.closureStatus === "open") {
+        return res.status(400).json({ error: "Dispute is already open" });
+      }
+      
+      // Reopen the dispute by clearing closure fields
+      const updated = await storage.updateDispute(disputeId, {
+        closureStatus: "open",
+        closureType: undefined,
+        closedAt: undefined,
+        closedByAdjustmentAmount: undefined,
+      });
+      
+      if (updated) {
+        res.json({ 
+          success: true, 
+          dispute: updated,
+          message: "Dispute reopened successfully"
+        });
+      } else {
+        res.status(500).json({ error: "Failed to reopen dispute" });
+      }
+    } catch (error) {
+      console.error("Reopen dispute error:", error);
+      res.status(500).json({ error: "Failed to reopen dispute" });
+    }
+  });
+
   // NOTE: These routes MUST come before /api/disputes/:runId to avoid being matched as a runId
   // Close disputes when used in post-recon adjustments (SP Error - auto-close)
   app.post("/api/disputes/close", async (req, res) => {

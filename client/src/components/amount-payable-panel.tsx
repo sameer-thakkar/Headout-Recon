@@ -123,6 +123,7 @@ export function AmountPayablePanel({
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
   const [isClosingWithSpError, setIsClosingWithSpError] = useState(false);
+  const [isReopeningDispute, setIsReopeningDispute] = useState<string | null>(null);
   // Booking-level closure state
   const [bookingClosures, setBookingClosures] = useState<Map<string, {
     disputeId: string;
@@ -1161,6 +1162,50 @@ export function AmountPayablePanel({
     }
   }, [runId, selectedIssues, bookingsByReasonAndTid, allRows, currency, toast]);
 
+  const handleReopenDispute = useCallback(async (disputeId: string) => {
+    setIsReopeningDispute(disputeId);
+    try {
+      const response = await fetch("/api/disputes/reopen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeId }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to reopen dispute");
+      }
+      
+      // Remove from closed disputes
+      setClosedDisputes(prev => prev.filter(d => d.disputeId !== disputeId));
+      
+      // Recalculate SP Error total
+      setSpErrorClosedAdjustments(prev => {
+        const closedDispute = closedDisputes.find(d => d.disputeId === disputeId);
+        if (closedDispute && closedDispute.closureType === "sp_error") {
+          return prev - closedDispute.closedAmount;
+        }
+        return prev;
+      });
+      
+      // Refresh disputes to show reopened dispute in open list
+      setDisputesLoaded(false);
+      
+      toast({
+        title: "Dispute Reopened",
+        description: "The dispute has been reopened and is now available for review.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to reopen dispute",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReopeningDispute(null);
+    }
+  }, [closedDisputes, toast]);
+
   const handleApply = useCallback(async () => {
     setValidationError("");
     
@@ -1852,6 +1897,45 @@ export function AmountPayablePanel({
               <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                 Closed disputes where supplier pays - deducted from Amount Payable
               </p>
+              
+              {/* Show individual closed SP Error disputes with Reopen buttons */}
+              {closedDisputes.filter(d => d.closureType === "sp_error").length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {closedDisputes
+                    .filter(d => d.closureType === "sp_error")
+                    .map(dispute => (
+                      <div
+                        key={dispute.disputeId}
+                        className="flex items-center justify-between gap-2 p-2 bg-white/50 dark:bg-black/20 rounded border border-green-200/50 dark:border-green-800/50"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-green-700 dark:text-green-300 truncate">
+                              {dispute.bookingId}
+                            </span>
+                            <span className="text-xs text-muted-foreground truncate">
+                              {dispute.billingEntityName}
+                            </span>
+                          </div>
+                          <span className="text-sm font-mono text-green-800 dark:text-green-200">
+                            -{formatCurrency(dispute.closedAmount)} {currency}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReopenDispute(dispute.disputeId)}
+                          disabled={isReopeningDispute === dispute.disputeId}
+                          className="h-7 px-2 text-xs hover:bg-green-100 dark:hover:bg-green-900/50"
+                          data-testid={`button-reopen-${dispute.disputeId}`}
+                        >
+                          <RotateCcw className={`h-3 w-3 mr-1 ${isReopeningDispute === dispute.disputeId ? 'animate-spin' : ''}`} />
+                          Reopen
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
 
