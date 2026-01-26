@@ -91,6 +91,7 @@ export function AmountPayablePanel({
     bookingCount: number;
     actualDisputeIds: string[];
   }>>([]);
+  const [spErrorClosedAdjustments, setSpErrorClosedAdjustments] = useState<number>(0);
   const [validationError, setValidationError] = useState<string>("");
   const [disputeErrors, setDisputeErrors] = useState<Map<string, string>>(new Map());
   const [selectedReasonModal, setSelectedReasonModal] = useState<string | null>(null);
@@ -108,6 +109,17 @@ export function AmountPayablePanel({
   const [acceptHoError, setAcceptHoError] = useState(false);
   const [isClosingWithHoError, setIsClosingWithHoError] = useState(false);
   const [isClosingWithSpError, setIsClosingWithSpError] = useState(false);
+  // Booking-level closure state
+  const [bookingClosures, setBookingClosures] = useState<Map<string, {
+    disputeId: string;
+    bookingId: string;
+    originalAmount: number;
+    adjustmentAmount: number;
+    closureType: "sp_error" | "ho_error";
+    confirmed: boolean;
+  }>>(new Map());
+  const [isLoadingBookingDetails, setIsLoadingBookingDetails] = useState(false);
+  const [isProcessingClosures, setIsProcessingClosures] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -124,7 +136,9 @@ export function AmountPayablePanel({
           const newDisputeAmounts = new Map<string, number>();
           const newActiveDisputes = new Set<string>();
           
-          for (const dispute of disputes) {
+          // Only include OPEN disputes in active disputes (not closed ones)
+          const openOnlyDisputes = disputes.filter((d: { closureStatus?: string }) => d.closureStatus === "open");
+          for (const dispute of openOnlyDisputes) {
             newDisputeAmounts.set(dispute.bookingId, dispute.disputeAmount);
             newActiveDisputes.add(dispute.bookingId);
           }
@@ -147,6 +161,15 @@ export function AmountPayablePanel({
               disputeAmount: dispute.disputeAmount,
             });
           }
+          
+          // Calculate total SP Error closed adjustments
+          const spErrorClosed = disputes.filter((d: { closureStatus?: string; closureType?: string }) => 
+            d.closureStatus === "closed" && d.closureType === "sp_error"
+          );
+          const spErrorTotal = spErrorClosed.reduce((sum: number, d: { closedByAdjustmentAmount?: number; disputeAmount: number }) => 
+            sum + (d.closedByAdjustmentAmount ?? d.disputeAmount), 0
+          );
+          setSpErrorClosedAdjustments(spErrorTotal);
           
           const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number; actualDisputeIds: string[] }> = [];
           let counter = 1;
@@ -248,15 +271,18 @@ export function AmountPayablePanel({
   const baseAmount = reconciledTotal + discrepancyTotal;
 
   const finalAmount = useMemo(() => {
-    const result = localAdjustments.reduce((total, adj) => {
+    const adjustmentsResult = localAdjustments.reduce((total, adj) => {
       if (adj.type === "add") {
         return total + adj.amount;
       } else {
         return total - adj.amount;
       }
     }, baseAmount);
+    
+    // Deduct SP Error closed dispute adjustments
+    const result = adjustmentsResult - spErrorClosedAdjustments;
     return Math.round(result * 100) / 100;
-  }, [baseAmount, localAdjustments]);
+  }, [baseAmount, localAdjustments, spErrorClosedAdjustments]);
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
@@ -574,17 +600,187 @@ export function AmountPayablePanel({
     }
   }, [runId, disputeAmounts, originalDisputes, bookings, activeDisputes, localSelections]);
 
-  const openDisputeDialog = useCallback((dispute: typeof selectedDispute) => {
+  const openDisputeDialog = useCallback(async (dispute: typeof selectedDispute) => {
+    if (!dispute || !runId) return;
+    
     setSelectedDispute(dispute);
     setClosureType(null);
     setAcceptHoError(false);
-  }, []);
+    setIsLoadingBookingDetails(true);
+    
+    try {
+      // Fetch booking details for each dispute ID
+      const response = await fetch(`/api/disputes/details`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ disputeIds: dispute.actualDisputeIds, runId }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const initialClosures = new Map<string, {
+          disputeId: string;
+          bookingId: string;
+          originalAmount: number;
+          adjustmentAmount: number;
+          closureType: "sp_error" | "ho_error";
+          confirmed: boolean;
+        }>();
+        
+        for (const d of data.disputes || []) {
+          initialClosures.set(d.disputeId, {
+            disputeId: d.disputeId,
+            bookingId: d.bookingId,
+            originalAmount: d.disputeAmount,
+            adjustmentAmount: d.disputeAmount, // Default to original amount
+            closureType: "sp_error", // Default to SP Error
+            confirmed: false,
+          });
+        }
+        setBookingClosures(initialClosures);
+      }
+    } catch (error) {
+      console.error("Failed to load booking details:", error);
+    } finally {
+      setIsLoadingBookingDetails(false);
+    }
+  }, [runId]);
 
   const closeDisputeDialog = useCallback(() => {
     setSelectedDispute(null);
     setClosureType(null);
     setAcceptHoError(false);
+    setBookingClosures(new Map());
   }, []);
+
+  // Update booking closure settings
+  const updateBookingClosure = useCallback((disputeId: string, updates: Partial<{
+    adjustmentAmount: number;
+    closureType: "sp_error" | "ho_error";
+    confirmed: boolean;
+  }>) => {
+    setBookingClosures(prev => {
+      const newMap = new Map(prev);
+      const existing = newMap.get(disputeId);
+      if (existing) {
+        newMap.set(disputeId, { ...existing, ...updates });
+      }
+      return newMap;
+    });
+  }, []);
+
+  // Calculate summary totals for booking closures
+  const closureSummary = useMemo(() => {
+    let spErrorTotal = 0;
+    let hoErrorTotal = 0;
+    let confirmedCount = 0;
+    
+    for (const closure of Array.from(bookingClosures.values())) {
+      if (closure.confirmed) {
+        confirmedCount++;
+        if (closure.closureType === "sp_error") {
+          spErrorTotal += closure.adjustmentAmount;
+        } else {
+          hoErrorTotal += closure.adjustmentAmount;
+        }
+      }
+    }
+    
+    return { spErrorTotal, hoErrorTotal, confirmedCount, totalBookings: bookingClosures.size };
+  }, [bookingClosures]);
+
+  // Handle processing all confirmed booking closures
+  const handleProcessBookingClosures = useCallback(async () => {
+    if (!runId || !selectedDispute || closureSummary.confirmedCount === 0) return;
+    
+    // Enforce HO Error confirmation - must be checked if any HO errors are being closed
+    if (closureSummary.hoErrorTotal > 0 && !acceptHoError) {
+      toast({
+        title: "HO Error Confirmation Required",
+        description: "Please confirm that HO Error bookings are Headout's responsibility.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsProcessingClosures(true);
+    try {
+      const closures: Array<{
+        disputeId: string;
+        adjustmentAmount: number;
+        closureType: "sp_error" | "ho_error";
+      }> = [];
+      
+      for (const closure of Array.from(bookingClosures.values())) {
+        if (closure.confirmed) {
+          // Client-side validation: cap adjustment to original amount
+          const validatedAmount = Math.min(closure.adjustmentAmount, closure.originalAmount);
+          if (validatedAmount < 0) continue;
+          
+          closures.push({
+            disputeId: closure.disputeId,
+            adjustmentAmount: validatedAmount,
+            closureType: closure.closureType,
+          });
+        }
+      }
+      
+      const response = await apiRequest("POST", "/api/disputes/close-bookings", { closures, runId });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to close bookings");
+      }
+      
+      const result = await response.json();
+      
+      // Download HO Error report if any HO errors were closed
+      if (result.hoErrorDisputeIds && result.hoErrorDisputeIds.length > 0) {
+        const downloadResponse = await fetch("/api/disputes/accept-ho-error/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ disputeIds: result.hoErrorDisputeIds }),
+        });
+        if (downloadResponse.ok) {
+          const blob = await downloadResponse.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `HO_Error_Closure_${selectedDispute.displayId.replace(/#/g, "")}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }
+      }
+      
+      // Show errors if any
+      if (result.errors && result.errors.length > 0) {
+        toast({
+          title: "Some bookings failed to close",
+          description: `${result.closedDisputes?.length || 0} closed, ${result.errors.length} failed.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Bookings Closed",
+          description: `${closureSummary.confirmedCount} booking(s) closed successfully.`,
+        });
+      }
+      
+      setDisputesLoaded(false);
+      closeDisputeDialog();
+      
+      await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to close bookings. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingClosures(false);
+    }
+  }, [runId, selectedDispute, bookingClosures, closureSummary, acceptHoError, closeDisputeDialog, toast]);
 
   const handleAcceptHoError = useCallback(async () => {
     if (!runId || !acceptHoError || !selectedDispute) return;
@@ -1393,6 +1589,23 @@ export function AmountPayablePanel({
             </div>
           )}
 
+          {spErrorClosedAdjustments > 0 && (
+            <div className="border border-green-200 dark:border-green-800 rounded-lg p-3 bg-green-50 dark:bg-green-950/30">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200">SP Error Deductions</p>
+                </div>
+                <span className="font-mono font-medium text-green-800 dark:text-green-200">
+                  -{formatCurrency(spErrorClosedAdjustments)} {currency}
+                </span>
+              </div>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                Closed disputes where supplier pays - deducted from Amount Payable
+              </p>
+            </div>
+          )}
+
           <Separator />
 
           <div className="bg-primary/5 rounded-lg p-4 border border-primary/20">
@@ -1411,6 +1624,11 @@ export function AmountPayablePanel({
                   {formatCurrency(adj.amount)}
                 </span>
               ))}
+              {spErrorClosedAdjustments > 0 && (
+                <span className="text-green-600 dark:text-green-400">
+                  {" - "}SP Error Deductions ({formatCurrency(spErrorClosedAdjustments)})
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -1489,142 +1707,144 @@ export function AmountPayablePanel({
           closeDisputeDialog();
         }
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedDispute?.displayId}</DialogTitle>
+            <DialogTitle>Close Dispute - {selectedDispute?.displayId}</DialogTitle>
             <DialogDescription>
-              Manage this dispute - view details or close it.
+              {selectedDispute?.billingEntityName} · {selectedDispute?.bookingCount} booking(s)
             </DialogDescription>
           </DialogHeader>
           
           {selectedDispute && (
             <div className="space-y-4">
-              <div className="p-3 bg-muted/30 rounded-lg space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Billing Entity</span>
-                  <span className="font-medium text-sm">{selectedDispute.billingEntityName}</span>
+              {isLoadingBookingDetails ? (
+                <div className="flex items-center justify-center py-8">
+                  <span className="text-sm text-muted-foreground">Loading booking details...</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Total Amount</span>
-                  <span className="font-mono font-medium">{formatCurrency(selectedDispute.totalDisputeAmount)} {currency}</span>
-                </div>
-                {selectedDispute.bookingCount > 1 && (
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Bookings</span>
-                    <span className="font-medium">{selectedDispute.bookingCount}</span>
-                  </div>
-                )}
-              </div>
-              
-              <Separator />
-              
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Close Dispute</p>
-                
-                {!closureType && (
-                  <div className="space-y-2">
+              ) : (
+                <>
+                  <ScrollArea className="max-h-[300px]">
+                    <div className="space-y-3">
+                      {Array.from(bookingClosures.values()).map((closure) => (
+                        <div 
+                          key={closure.disputeId}
+                          className={`p-3 rounded-lg border ${closure.confirmed ? "border-primary/50 bg-primary/5" : "border-border"}`}
+                          data-testid={`booking-closure-row-${closure.bookingId}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              checked={closure.confirmed}
+                              onCheckedChange={(checked) => 
+                                updateBookingClosure(closure.disputeId, { confirmed: checked === true })
+                              }
+                              data-testid={`checkbox-confirm-${closure.bookingId}`}
+                            />
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-mono text-sm font-medium">{closure.bookingId}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  Dispute: {formatCurrency(closure.originalAmount)} {currency}
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1">
+                                  <Label className="text-xs text-muted-foreground">Adjustment Amount</Label>
+                                  <Input
+                                    type="number"
+                                    value={closure.adjustmentAmount}
+                                    onChange={(e) => 
+                                      updateBookingClosure(closure.disputeId, { 
+                                        adjustmentAmount: parseFloat(e.target.value) || 0 
+                                      })
+                                    }
+                                    className="h-8 font-mono"
+                                    data-testid={`input-adjustment-${closure.bookingId}`}
+                                  />
+                                </div>
+                                <div className="w-32">
+                                  <Label className="text-xs text-muted-foreground">Error Type</Label>
+                                  <Select
+                                    value={closure.closureType}
+                                    onValueChange={(value: "sp_error" | "ho_error") => 
+                                      updateBookingClosure(closure.disputeId, { closureType: value })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-8" data-testid={`select-error-type-${closure.bookingId}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="sp_error">SP Error</SelectItem>
+                                      <SelectItem value="ho_error">HO Error</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium">Summary</p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        onClick={() => setClosureType("sp_error")}
-                        data-testid="button-select-sp-error"
-                      >
-                        SP Error
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="lg"
-                        onClick={() => setClosureType("ho_error")}
-                        data-testid="button-select-ho-error"
-                      >
-                        HO Error
-                      </Button>
+                      <div className="p-3 bg-muted/30 rounded-lg">
+                        <p className="text-xs text-muted-foreground">SP Error (Deducted)</p>
+                        <p className="font-mono font-medium text-sm">
+                          {formatCurrency(closureSummary.spErrorTotal)} {currency}
+                        </p>
+                      </div>
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+                        <p className="text-xs text-muted-foreground">HO Error (Absorbed)</p>
+                        <p className="font-mono font-medium text-sm">
+                          {formatCurrency(closureSummary.hoErrorTotal)} {currency}
+                        </p>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 text-center">
-                      <span className="text-xs text-muted-foreground">Supplier to pay</span>
-                      <span className="text-xs text-muted-foreground">Headout to absorb</span>
-                    </div>
-                  </div>
-                )}
-                
-                {closureType === "sp_error" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setClosureType(null)}
-                        data-testid="button-back-sp-error"
-                      >
-                        <ChevronDown className="h-4 w-4 rotate-90" />
-                        Back
-                      </Button>
-                      <span className="text-sm font-medium">SP Error</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      This dispute is a supplier error. The supplier is responsible for the discrepancy.
-                    </p>
+                    
+                    {closureSummary.hoErrorTotal > 0 && (
+                      <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <Checkbox
+                          id="accept-ho-error-all"
+                          checked={acceptHoError}
+                          onCheckedChange={(checked) => setAcceptHoError(checked === true)}
+                          data-testid="checkbox-accept-ho-error-all"
+                        />
+                        <Label
+                          htmlFor="accept-ho-error-all"
+                          className="text-xs cursor-pointer flex-1"
+                        >
+                          I confirm the HO Error bookings are Headout's responsibility
+                        </Label>
+                      </div>
+                    )}
+                    
                     <Button
-                      onClick={handleCloseAsSpError}
-                      disabled={isClosingWithSpError}
+                      onClick={handleProcessBookingClosures}
+                      disabled={
+                        isProcessingClosures || 
+                        closureSummary.confirmedCount === 0 ||
+                        (closureSummary.hoErrorTotal > 0 && !acceptHoError)
+                      }
                       className="w-full"
-                      data-testid="button-close-sp-error"
+                      data-testid="button-process-closures"
                     >
-                      {isClosingWithSpError ? "Closing..." : "Close as SP Error"}
-                    </Button>
-                  </div>
-                )}
-                
-                {closureType === "ho_error" && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setClosureType(null);
-                          setAcceptHoError(false);
-                        }}
-                        data-testid="button-back-ho-error"
-                      >
-                        <ChevronDown className="h-4 w-4 rotate-90" />
-                        Back
-                      </Button>
-                      <span className="text-sm font-medium">HO Error</span>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-                      <Checkbox
-                        id="accept-ho-error-apc"
-                        checked={acceptHoError}
-                        onCheckedChange={(checked) => setAcceptHoError(checked === true)}
-                        data-testid="checkbox-accept-ho-error"
-                      />
-                      <Label
-                        htmlFor="accept-ho-error-apc"
-                        className="text-sm cursor-pointer flex-1"
-                      >
-                        I confirm this is a Headout error and accept the discrepancy
-                      </Label>
-                    </div>
-                    <Button
-                      onClick={handleAcceptHoError}
-                      disabled={!acceptHoError || isClosingWithHoError}
-                      className="w-full"
-                      data-testid="button-close-ho-error"
-                    >
-                      {isClosingWithHoError ? (
-                        "Closing..."
+                      {isProcessingClosures ? (
+                        "Processing..."
                       ) : (
                         <>
-                          <Download className="h-4 w-4 mr-2" />
-                          Close as HO Error & Download Report
+                          <Check className="h-4 w-4 mr-2" />
+                          Close {closureSummary.confirmedCount} Booking(s)
                         </>
                       )}
                     </Button>
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
           )}
         </DialogContent>

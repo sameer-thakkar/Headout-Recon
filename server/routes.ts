@@ -3262,6 +3262,131 @@ export async function registerRoutes(
     }
   });
 
+  // Get dispute details for multiple dispute IDs
+  // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
+  app.post("/api/disputes/details", async (req, res) => {
+    try {
+      const { disputeIds, runId } = req.body;
+      
+      if (!disputeIds || !Array.isArray(disputeIds) || disputeIds.length === 0) {
+        return res.status(400).json({ error: "disputeIds array is required" });
+      }
+      
+      const disputes = await Promise.all(
+        disputeIds.map(async (id: string) => {
+          return await storage.getDisputeById(id);
+        })
+      );
+      
+      // Filter to valid disputes that are open and optionally match runId
+      const validDisputes = disputes.filter(d => {
+        if (!d) return false;
+        if (d.closureStatus !== "open") return false;
+        if (runId && d.runId !== runId) return false;
+        return true;
+      });
+      
+      res.json({ disputes: validDisputes });
+    } catch (error) {
+      console.error("Get dispute details error:", error);
+      res.status(500).json({ error: "Failed to fetch dispute details" });
+    }
+  });
+
+  // Close bookings with individual amounts and closure types
+  // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
+  app.post("/api/disputes/close-bookings", async (req, res) => {
+    try {
+      const { closures, runId } = req.body;
+      
+      if (!runId) {
+        return res.status(400).json({ error: "runId is required" });
+      }
+      
+      if (!closures || !Array.isArray(closures) || closures.length === 0) {
+        return res.status(400).json({ error: "closures array is required" });
+      }
+      
+      const closedDisputes = [];
+      const hoErrorDisputeIds: string[] = [];
+      const errors: Array<{ disputeId: string; error: string }> = [];
+      
+      for (const closure of closures) {
+        const { disputeId, adjustmentAmount, closureType } = closure;
+        
+        // Validate required fields
+        if (!disputeId) {
+          errors.push({ disputeId: "unknown", error: "Missing disputeId" });
+          continue;
+        }
+        
+        if (adjustmentAmount === undefined || typeof adjustmentAmount !== "number") {
+          errors.push({ disputeId, error: "Invalid or missing adjustmentAmount" });
+          continue;
+        }
+        
+        if (adjustmentAmount < 0) {
+          errors.push({ disputeId, error: "Adjustment amount cannot be negative" });
+          continue;
+        }
+        
+        if (!closureType || !["sp_error", "ho_error"].includes(closureType)) {
+          errors.push({ disputeId, error: "Invalid closureType (must be sp_error or ho_error)" });
+          continue;
+        }
+        
+        const dispute = await storage.getDisputeById(disputeId);
+        
+        if (!dispute) {
+          errors.push({ disputeId, error: "Dispute not found" });
+          continue;
+        }
+        
+        if (dispute.closureStatus !== "open") {
+          errors.push({ disputeId, error: "Dispute is already closed" });
+          continue;
+        }
+        
+        // Verify runId matches
+        if (dispute.runId !== runId) {
+          errors.push({ disputeId, error: "Dispute does not belong to this run" });
+          continue;
+        }
+        
+        // Validate adjustment amount doesn't exceed original dispute amount
+        if (adjustmentAmount > dispute.disputeAmount) {
+          errors.push({ disputeId, error: `Adjustment amount (${adjustmentAmount}) exceeds dispute amount (${dispute.disputeAmount})` });
+          continue;
+        }
+        
+        const updated = await storage.updateDispute(disputeId, {
+          closureStatus: "closed",
+          closureType: closureType === "ho_error" ? "accept_ho_error" : "sp_error",
+          closedByAdjustmentAmount: adjustmentAmount,
+          closedAt: new Date().toISOString(),
+        });
+        
+        if (updated) {
+          closedDisputes.push(updated);
+          if (closureType === "ho_error") {
+            hoErrorDisputeIds.push(disputeId);
+          }
+        }
+      }
+      
+      res.json({ 
+        success: closedDisputes.length > 0, 
+        closedDisputes,
+        hoErrorDisputeIds,
+        errors: errors.length > 0 ? errors : undefined,
+        message: `${closedDisputes.length} booking(s) closed successfully${errors.length > 0 ? `, ${errors.length} failed` : ""}`
+      });
+    } catch (error) {
+      console.error("Close bookings error:", error);
+      res.status(500).json({ error: "Failed to close bookings" });
+    }
+  });
+
   // Accept HO Error - close disputes and mark as HO error
   // NOTE: This route MUST come before /api/disputes/:runId to avoid being matched as a runId
   app.post("/api/disputes/accept-ho-error", async (req, res) => {
