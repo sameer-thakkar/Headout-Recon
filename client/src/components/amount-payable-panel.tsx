@@ -304,26 +304,29 @@ export function AmountPayablePanel({
     [discrepancyBookings, getFinalNetPrice]
   );
 
-  // Group closed disputes by disputeId for display in adjustments section
+  // Group closed disputes by disputeId for display in adjustments section (only SP Error disputes)
   const groupedClosedDisputes = useMemo(() => {
     const groups = new Map<string, {
       disputeId: string;
       totalAmount: number;
       closureType: "sp_error" | "ho_error";
-      bookings: typeof closedDisputes;
+      bookingCount: number;
     }>();
     
-    for (const dispute of closedDisputes) {
+    // Only include SP Error disputes since they reduce Amount Payable
+    const spErrorDisputes = closedDisputes.filter(d => d.closureType === "sp_error");
+    
+    for (const dispute of spErrorDisputes) {
       const existing = groups.get(dispute.disputeId);
       if (existing) {
         existing.totalAmount += dispute.closedAmount;
-        existing.bookings.push(dispute);
+        existing.bookingCount += 1;
       } else {
         groups.set(dispute.disputeId, {
           disputeId: dispute.disputeId,
           totalAmount: dispute.closedAmount,
           closureType: dispute.closureType,
-          bookings: [dispute],
+          bookingCount: 1,
         });
       }
     }
@@ -1600,11 +1603,19 @@ export function AmountPayablePanel({
               {localAdjustments.map((adj, index) => {
                 const isDisputeAdjustment = adj.nature === "Open Dispute Adjustments";
                 const isPreset = adj.isPreset === true;
+                const hasClosedDisputes = isDisputeAdjustment && groupedClosedDisputes.length > 0;
+                const closedDisputeIds = groupedClosedDisputes.map(g => g.disputeId).join(", ");
+                const closedDisputeTotal = groupedClosedDisputes.reduce((sum, g) => sum + g.totalAmount, 0);
+                const closedBookingCount = groupedClosedDisputes.reduce((sum, g) => sum + g.bookingCount, 0);
                 
                 return (
                   <div
                     key={adj.id}
-                    className="grid grid-cols-12 gap-2 items-center"
+                    className={`grid grid-cols-12 gap-2 items-center ${
+                      hasClosedDisputes 
+                        ? "p-2 rounded-md bg-green-50/50 dark:bg-green-950/20 border border-green-200 dark:border-green-800" 
+                        : ""
+                    }`}
                     data-testid={`row-adjustment-${index}`}
                   >
                     <div className="col-span-3">
@@ -1628,6 +1639,14 @@ export function AmountPayablePanel({
 
                     <div className="col-span-3">
                       {isDisputeAdjustment ? (
+                        hasClosedDisputes ? (
+                          <div 
+                            className="h-8 px-3 flex items-center text-sm font-mono bg-transparent"
+                            data-testid={`text-closed-disputes-ref-${index}`}
+                          >
+                            {closedDisputeIds}
+                          </div>
+                        ) : (
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
@@ -1683,6 +1702,7 @@ export function AmountPayablePanel({
                             )}
                           </PopoverContent>
                         </Popover>
+                        )
                       ) : (
                         <ScrollArea className="w-full">
                           <Input
@@ -1697,7 +1717,14 @@ export function AmountPayablePanel({
                     </div>
 
                     <div className="col-span-2">
-                      {isDisputeAdjustment ? (
+                      {hasClosedDisputes ? (
+                        <Badge 
+                          variant="default"
+                          className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                        >
+                          Less (SP)
+                        </Badge>
+                      ) : isDisputeAdjustment ? (
                         <div className="h-8 px-3 flex items-center text-sm bg-muted/50 rounded-md border">
                           Less
                         </div>
@@ -1718,19 +1745,32 @@ export function AmountPayablePanel({
                     </div>
 
                     <div className="col-span-2">
-                      <Input
-                        type="number"
-                        placeholder="0.00"
-                        value={adj.amount || ""}
-                        onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}
-                        className={`font-mono h-8 ${isDisputeAdjustment ? "bg-muted" : ""}`}
-                        readOnly={isDisputeAdjustment}
-                        data-testid={`input-amount-${index}`}
-                      />
+                      {hasClosedDisputes ? (
+                        <div 
+                          className="h-8 px-3 flex items-center justify-end text-sm font-mono font-medium text-green-700 dark:text-green-300"
+                          data-testid={`text-closed-amount-${index}`}
+                        >
+                          -{formatCurrency(closedDisputeTotal)}
+                        </div>
+                      ) : (
+                        <Input
+                          type="number"
+                          placeholder="0.00"
+                          value={adj.amount || ""}
+                          onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}
+                          className={`font-mono h-8 ${isDisputeAdjustment ? "bg-muted" : ""}`}
+                          readOnly={isDisputeAdjustment}
+                          data-testid={`input-amount-${index}`}
+                        />
+                      )}
                     </div>
 
                     <div className="col-span-2 flex justify-end">
-                      {!isPreset && (
+                      {hasClosedDisputes ? (
+                        <Badge variant="outline" className="text-xs">
+                          {closedBookingCount} booking{closedBookingCount > 1 ? "s" : ""}
+                        </Badge>
+                      ) : !isPreset && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1745,61 +1785,6 @@ export function AmountPayablePanel({
                   </div>
                 );
               })}
-              
-              {/* Closed dispute adjustments as line items */}
-              {groupedClosedDisputes.map((group, index) => (
-                <div
-                  key={group.disputeId}
-                  className={`grid grid-cols-12 gap-2 items-center p-2 rounded-md ${
-                    group.closureType === "sp_error" 
-                      ? "bg-green-50/50 dark:bg-green-950/20 border border-green-200 dark:border-green-800" 
-                      : "bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800"
-                  }`}
-                  data-testid={`row-closed-dispute-${index}`}
-                >
-                  <div className="col-span-3">
-                    <div 
-                      className="h-8 px-3 flex items-center text-sm bg-transparent"
-                      data-testid={`text-closed-nature-${index}`}
-                    >
-                      Open Dispute Adjustments
-                    </div>
-                  </div>
-
-                  <div className="col-span-3">
-                    <div 
-                      className="h-8 px-3 flex items-center text-sm font-mono bg-transparent"
-                      data-testid={`text-closed-ref-${index}`}
-                    >
-                      {group.disputeId}
-                    </div>
-                  </div>
-
-                  <div className="col-span-2">
-                    <Badge 
-                      variant={group.closureType === "sp_error" ? "default" : "secondary"}
-                      className={group.closureType === "sp_error" 
-                        ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" 
-                        : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                      }
-                    >
-                      {group.closureType === "sp_error" ? "Less (SP)" : "HO Error"}
-                    </Badge>
-                  </div>
-
-                  <div className="col-span-2 text-right">
-                    <span className="font-mono text-sm font-medium">
-                      {group.closureType === "sp_error" ? "-" : ""}{formatCurrency(group.totalAmount)}
-                    </span>
-                  </div>
-
-                  <div className="col-span-2 flex justify-end gap-1">
-                    <Badge variant="outline" className="text-xs">
-                      {group.bookings.length} booking{group.bookings.length > 1 ? "s" : ""}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
