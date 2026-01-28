@@ -1826,20 +1826,20 @@ export function AmountPayablePanel({
               open={isAlreadyReconciledExpanded}
               onOpenChange={setIsAlreadyReconciledExpanded}
             >
-              <div className="border rounded-lg overflow-hidden border-amber-300 dark:border-amber-700">
+              <div className="border rounded-lg overflow-hidden">
                 <CollapsibleTrigger asChild>
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 items-center cursor-pointer hover-elevate">
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center cursor-pointer hover-elevate">
                     <div className="col-span-6 flex items-center gap-2">
                       <Button variant="ghost" size="icon" className="h-6 w-6">
                         {isAlreadyReconciledExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-amber-600" />
+                          <ChevronDown className="h-4 w-4" />
                         ) : (
-                          <ChevronRight className="h-4 w-4 text-amber-600" />
+                          <ChevronRight className="h-4 w-4" />
                         )}
                       </Button>
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Already Reconciled</span>
-                      <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                      <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Already Reconciled</span>
+                      <Badge variant="secondary" className="text-xs">
                         {alreadyReconciledBookings.length}
                       </Badge>
                     </div>
@@ -1878,7 +1878,7 @@ export function AmountPayablePanel({
                       <div className="col-span-2">
                         <Badge 
                           variant="secondary" 
-                          className={`text-xs ${booking.reason.includes("Same") ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"}`}
+                          className="text-xs"
                         >
                           {booking.reason.includes("Same") ? "Same BE" : "Diff BE"}
                         </Badge>
@@ -1984,20 +1984,20 @@ export function AmountPayablePanel({
               open={isCancellationsExpanded}
               onOpenChange={setIsCancellationsExpanded}
             >
-              <div className="border rounded-lg overflow-hidden border-red-300 dark:border-red-700">
+              <div className="border rounded-lg overflow-hidden">
                 <CollapsibleTrigger asChild>
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-red-50 dark:bg-red-950/30 items-center cursor-pointer hover-elevate">
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center cursor-pointer hover-elevate">
                     <div className="col-span-6 flex items-center gap-2">
                       <Button variant="ghost" size="icon" className="h-6 w-6">
                         {isCancellationsExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-red-600" />
+                          <ChevronDown className="h-4 w-4" />
                         ) : (
-                          <ChevronRight className="h-4 w-4 text-red-600" />
+                          <ChevronRight className="h-4 w-4" />
                         )}
                       </Button>
-                      <XCircle className="h-4 w-4 text-red-600" />
-                      <span className="text-sm font-medium text-red-700 dark:text-red-400">Cancellations</span>
-                      <Badge variant="secondary" className="text-xs bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
+                      <XCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Cancellations</span>
+                      <Badge variant="secondary" className="text-xs">
                         {cancellationBookings.length}
                       </Badge>
                     </div>
@@ -2026,8 +2026,8 @@ export function AmountPayablePanel({
                           open={expandedReasons.has(reason)}
                           onOpenChange={() => toggleReason(reason)}
                         >
-                          <div className="border rounded-lg overflow-hidden border-red-200 dark:border-red-800/50">
-                            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-red-50/50 dark:bg-red-950/20 items-center">
+                          <div className="border rounded-lg overflow-hidden">
+                            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/20 items-center">
                               <div className="col-span-4 flex items-center gap-2">
                                 <CollapsibleTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -2040,7 +2040,7 @@ export function AmountPayablePanel({
                                 </CollapsibleTrigger>
                                 <Button
                                   variant="ghost"
-                                  className="p-0 h-auto font-semibold text-sm hover:text-primary hover:bg-transparent text-red-700 dark:text-red-400"
+                                  className="p-0 h-auto font-semibold text-sm hover:text-primary hover:bg-transparent"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedReasonModal(reason);
@@ -2088,7 +2088,7 @@ export function AmountPayablePanel({
                                   Clear
                                 </Button>
                               </div>
-                              <div className="col-span-4 text-right font-mono text-sm font-semibold text-red-700 dark:text-red-400">
+                              <div className="col-span-4 text-right font-mono text-sm font-semibold">
                                 {formatCurrency(reasonTotal)} {currency}
                               </div>
                             </div>
@@ -2380,14 +2380,14 @@ export function AmountPayablePanel({
                                         <Button
                                           size="sm"
                                           variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "ghost"}
-                                          className={`h-5 px-1.5 text-xs shrink-0 ${selectedIssues.has(`${reason}:${tid}`) ? "bg-amber-100 dark:bg-amber-900" : ""}`}
+                                          className={`h-5 px-1.5 text-xs shrink-0 ${selectedIssues.has(`${reason}:${tid}`) ? "bg-muted" : ""}`}
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             toggleIssueSelection(reason, tid);
                                           }}
                                           data-testid={`button-select-issue-tid-${tid}`}
                                         >
-                                          <FileWarning className={`h-3 w-3 ${selectedIssues.has(`${reason}:${tid}`) ? "text-amber-600 dark:text-amber-400" : ""}`} />
+                                          <FileWarning className="h-3 w-3" />
                                         </Button>
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs">
@@ -2577,18 +2577,18 @@ export function AmountPayablePanel({
 
           {/* Secondary Vendor Section - Full Interactive (BE ID Mismatch) */}
           {secondaryVendorBookings.length > 0 && (
-            <div className="space-y-3 pt-4 mt-4 border-t-2 border-dashed border-amber-500/50">
+            <div className="space-y-3 pt-4 mt-4 border-t-2 border-dashed">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-600" />
-                  <p className="text-base font-semibold text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+                  <p className="text-base font-semibold">
                     Secondary Vendor (BE ID Mismatch)
                   </p>
-                  <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">
+                  <Badge variant="outline">
                     {secondaryVendorBookings.length} bookings
                   </Badge>
                 </div>
-                <p className="text-lg font-bold font-mono text-amber-700 dark:text-amber-400" data-testid="text-secondary-vendor-total">
+                <p className="text-lg font-bold font-mono" data-testid="text-secondary-vendor-total">
                   {formatCurrency(secondaryVendorTotal)} {currency}
                 </p>
               </div>
@@ -2604,8 +2604,8 @@ export function AmountPayablePanel({
                     open={expandedReasons.has(`sv-${reason}`)}
                     onOpenChange={() => toggleReason(`sv-${reason}`)}
                   >
-                    <div className="border border-amber-300 dark:border-amber-700 rounded-lg overflow-hidden bg-amber-50/30 dark:bg-amber-950/20">
-                      <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-amber-100/50 dark:bg-amber-900/30 items-center">
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center">
                         <div className="col-span-4 flex items-center gap-2">
                           <CollapsibleTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -2616,8 +2616,8 @@ export function AmountPayablePanel({
                               )}
                             </Button>
                           </CollapsibleTrigger>
-                          <span className="text-sm font-medium text-amber-800 dark:text-amber-300">{reason}</span>
-                          <Badge variant="secondary" className="text-xs bg-amber-200 dark:bg-amber-800">
+                          <span className="text-sm font-medium">{reason}</span>
+                          <Badge variant="secondary" className="text-xs">
                             {reasonBookings.length}
                           </Badge>
                         </div>
@@ -2661,13 +2661,13 @@ export function AmountPayablePanel({
                             </>
                           )}
                         </div>
-                        <div className="col-span-4 text-right font-mono text-sm font-semibold text-amber-800 dark:text-amber-300">
+                        <div className="col-span-4 text-right font-mono text-sm font-semibold">
                           {formatCurrency(reasonTotal)} {currency}
                         </div>
                       </div>
 
                       <CollapsibleContent>
-                        <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-amber-50/50 dark:bg-amber-950/30 text-xs font-medium text-muted-foreground border-t border-amber-200 dark:border-amber-800">
+                        <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
                           <div className="col-span-2">TID / Booking ID</div>
                           <div className="col-span-2 text-right">HO Net</div>
                           <div className="col-span-2 text-right">SP Net</div>
@@ -2688,8 +2688,8 @@ export function AmountPayablePanel({
                                 open={isTidExpanded}
                                 onOpenChange={() => toggleTid(tidKeyStr)}
                               >
-                                <div className="border-t border-amber-200 dark:border-amber-800">
-                                  <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-amber-50/30 dark:bg-amber-950/10 items-center">
+                                <div className="border-t">
+                                  <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-muted/20 items-center">
                                     <div className="col-span-2 flex items-center gap-1">
                                       <CollapsibleTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
@@ -2776,7 +2776,7 @@ export function AmountPayablePanel({
                                       return (
                                         <div
                                           key={booking.bookingId}
-                                          className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-amber-50/20 dark:bg-amber-950/5 items-center border-t border-amber-100 dark:border-amber-900"
+                                          className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/10 items-center border-t"
                                         >
                                           <div className="col-span-2 pl-6">
                                             <span className="text-xs font-mono">{booking.bookingId}</span>
@@ -2941,7 +2941,7 @@ export function AmountPayablePanel({
           {alreadyReconciledBookings.length > 0 && (
             <div className="flex justify-between items-center pt-3 mt-3 border-t">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-medium">Already Reconciled ({alreadyReconciledBookings.length} bookings)</p>
               </div>
               <div className="flex items-center gap-2">
@@ -2949,7 +2949,7 @@ export function AmountPayablePanel({
                   {formatCurrency(alreadyReconciledTotal)} {currency}
                 </p>
                 {alreadyReconciledAdjustment !== 0 && (
-                  <span className="text-sm font-mono text-amber-600">
+                  <span className="text-sm font-mono text-muted-foreground">
                     ({alreadyReconciledAdjustment > 0 ? "+" : ""}{formatCurrency(alreadyReconciledAdjustment)})
                   </span>
                 )}
@@ -3353,7 +3353,7 @@ export function AmountPayablePanel({
                 </span>
               )}
               {alreadyReconciledAdjustment !== 0 && (
-                <span className="text-amber-600 dark:text-amber-400">
+                <span className="text-muted-foreground">
                   {alreadyReconciledAdjustment > 0 ? " + " : " - "}Already Reconciled Adj ({formatCurrency(Math.abs(alreadyReconciledAdjustment))})
                 </span>
               )}
@@ -3532,7 +3532,7 @@ export function AmountPayablePanel({
                           {formatCurrency(closureSummary.spErrorTotal)} {currency}
                         </p>
                       </div>
-                      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+                      <div className="p-3 bg-muted/30 rounded-lg">
                         <p className="text-xs text-muted-foreground">HO Error (Absorbed)</p>
                         <p className="font-mono font-medium text-sm">
                           {formatCurrency(closureSummary.hoErrorTotal)} {currency}
@@ -3541,7 +3541,7 @@ export function AmountPayablePanel({
                     </div>
                     
                     {closureSummary.hoErrorTotal > 0 && (
-                      <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <div className="flex items-center gap-3 p-3 bg-muted/30 border rounded-lg">
                         <Checkbox
                           id="accept-ho-error-all"
                           checked={acceptHoError}
