@@ -22,6 +22,27 @@ function sanitizeSheetName(name: string): string {
 }
 
 /**
+ * Get a unique sheet name by appending a number if the name already exists.
+ * Tracks used names in the provided Set and updates it.
+ */
+function getUniqueSheetName(baseName: string, usedNames: Set<string>): string {
+  let sanitized = sanitizeSheetName(baseName);
+  let finalName = sanitized;
+  let counter = 1;
+  
+  while (usedNames.has(finalName)) {
+    // Reserve space for the suffix (e.g., "_2") within 31 char limit
+    const suffix = `_${counter}`;
+    const maxBaseLength = 31 - suffix.length;
+    finalName = sanitized.substring(0, maxBaseLength) + suffix;
+    counter++;
+  }
+  
+  usedNames.add(finalName);
+  return finalName;
+}
+
+/**
  * Format a number in Indian notation (1,00,000.00)
  * Uses lakhs/crores grouping: X,XX,XX,XXX.XX
  */
@@ -616,6 +637,7 @@ export async function registerRoutes(
 
       // Create workbook
       const workbook = XLSX.utils.book_new();
+      const usedSheetNames = new Set<string>();
 
       // =====================================================
       // SHEET 1: Payable Summary
@@ -686,7 +708,7 @@ export async function registerRoutes(
         }
       }
       
-      XLSX.utils.book_append_sheet(workbook, payableSheet, "Payable Summary");
+      XLSX.utils.book_append_sheet(workbook, payableSheet, getUniqueSheetName("Payable Summary", usedSheetNames));
 
       // =====================================================
       // SHEET 2: Discrepancy Analysis
@@ -1062,7 +1084,7 @@ export async function registerRoutes(
         return { wch: 18 }; // Other columns
       });
       
-      XLSX.utils.book_append_sheet(workbook, discrepancySheet, "Discrepancy Analysis");
+      XLSX.utils.book_append_sheet(workbook, discrepancySheet, getUniqueSheetName("Discrepancy Analysis", usedSheetNames));
 
       // =====================================================
       // SHEET 3: SP Invoice Report
@@ -1127,7 +1149,7 @@ export async function registerRoutes(
         }
       }
       
-      XLSX.utils.book_append_sheet(workbook, spReportSheet, "SP Invoice Report");
+      XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
 
       // =====================================================
       // SHEET 4: HO Report Updated
@@ -1424,7 +1446,7 @@ export async function registerRoutes(
         }
       }
       
-      XLSX.utils.book_append_sheet(workbook, hoReportSheet, "HO Report Updated");
+      XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
 
       // =====================================================
       // SHEET 5: Draft Messages
@@ -1821,7 +1843,7 @@ export async function registerRoutes(
           };
         }
       }
-      XLSX.utils.book_append_sheet(workbook, draftMessagesSheet, "Draft Messages");
+      XLSX.utils.book_append_sheet(workbook, draftMessagesSheet, getUniqueSheetName("Draft Messages", usedSheetNames));
 
       // =====================================================
       // DRI TEAM TABS - One sheet per DRI + Reason combination
@@ -1979,10 +2001,10 @@ export async function registerRoutes(
         // Remove gridlines
         driSheet["!sheetViews"] = [{ showGridLines: false }];
         
-        // Create sheet name (Excel limits to 31 chars, sanitize illegal characters)
+        // Create sheet name (Excel limits to 31 chars, sanitize illegal characters, ensure uniqueness)
         const shortReason = reason === "Multiple Tickets Booked" ? "MTB" : reason === "Net Price Discrepancy" ? "NPD" : reason.substring(0, 10);
         const rawSheetName = `${driTeam.substring(0, 20)}_${shortReason}`;
-        const sheetName = sanitizeSheetName(rawSheetName);
+        const sheetName = getUniqueSheetName(rawSheetName, usedSheetNames);
         
         XLSX.utils.book_append_sheet(workbook, driSheet, sheetName);
       }
