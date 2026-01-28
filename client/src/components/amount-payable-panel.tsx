@@ -537,7 +537,7 @@ export function AmountPayablePanel({
     [alreadyReconciledBookings]
   );
 
-  const baseAmount = reconciledTotal + discrepancyTotal + alreadyReconciledTotal + secondaryVendorTotal;
+  const baseAmount = reconciledTotal + discrepancyTotal + alreadyReconciledTotal + secondaryVendorTotal + Math.abs(cancellationsTotal);
 
   const finalAmount = useMemo(() => {
     const adjustmentsResult = localAdjustments.reduce((total, adj) => {
@@ -3637,7 +3637,7 @@ export function AmountPayablePanel({
             </div>
             <div className="flex justify-between items-center py-2 border-b border-border/50">
               <span className="text-muted-foreground">Cancellations ({cancellationBookings.length}):</span>
-              <span className="font-mono text-sm text-red-600">({formatCurrency(Math.abs(cancellationsTotal))})</span>
+              <span className="font-mono text-sm">{formatCurrency(Math.abs(cancellationsTotal))}</span>
             </div>
             {secondaryVendorBookings.length > 0 && (
               <div className="flex justify-between items-center py-2 border-b border-border/50">
