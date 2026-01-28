@@ -1843,10 +1843,8 @@ export function AmountPayablePanel({
                         {alreadyReconciledBookings.length}
                       </Badge>
                     </div>
-                    <div className="col-span-6 text-right">
-                      <span className="text-xs text-muted-foreground">
-                        {isAlreadyReconciledExpanded ? "Decide payment for each booking" : "Click to expand"}
-                      </span>
+                    <div className="col-span-6 text-right font-mono text-sm">
+                      {formatCurrency(alreadyReconciledTotal)} {currency}
                     </div>
                   </div>
                 </CollapsibleTrigger>
@@ -2001,10 +1999,8 @@ export function AmountPayablePanel({
                         {cancellationBookings.length}
                       </Badge>
                     </div>
-                    <div className="col-span-6 text-right">
-                      <span className="text-xs text-muted-foreground">
-                        {isCancellationsExpanded ? "View cancellation types" : "Click to expand"}
-                      </span>
+                    <div className="col-span-6 text-right font-mono text-sm">
+                      {formatCurrency(Math.abs(cancellationsTotal))} {currency}
                     </div>
                   </div>
                 </CollapsibleTrigger>
