@@ -137,6 +137,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       billingEntityName: firstRow.billingEntityName || "",
       ticketId: firstRow.ticketId || "",
       paymentBasis: firstRow.paymentBasis || "",
+      paymentMethod: firstRow.paymentMethod || "",
       currency: currencies.join(", "),
     };
   }, [primaryRows]);
@@ -399,6 +400,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Payment Basis</p>
                 <p className="font-medium" data-testid="text-sp-payment-basis">{spDetails.paymentBasis || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Payment Method</p>
+                <p className="font-medium" data-testid="text-sp-payment-method">{spDetails.paymentMethod || "—"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Currency</p>

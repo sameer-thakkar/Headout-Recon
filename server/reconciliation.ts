@@ -72,6 +72,7 @@ interface HORow {
   beId?: string;
   billingEntityName?: string;
   paymentBasis?: string;
+  paymentMethod?: string;
 }
 
 // Result from reason assignment
@@ -157,6 +158,7 @@ function parseHOData(sheet: SheetData): HORow[] {
       beId: getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id") ? String(getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id")) : undefined,
       billingEntityName: getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName") ? String(getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName")) : undefined,
       paymentBasis: getRowValue(row, "paymentBasis", "Payment Basis", "payment_basis", "PaymentBasis") ? String(getRowValue(row, "paymentBasis", "Payment Basis", "payment_basis", "PaymentBasis")) : undefined,
+      paymentMethod: getRowValue(row, "paymentMethod", "Payment Method", "payment_method", "PaymentMethod") ? String(getRowValue(row, "paymentMethod", "Payment Method", "payment_method", "PaymentMethod")) : undefined,
     };
   });
 }
@@ -712,6 +714,7 @@ function computeReconciliationRows(
       billingEntityName: ho.billingEntityName,
       ticketId: spBundle?.ticketId,
       paymentBasis: ho.paymentBasis,
+      paymentMethod: ho.paymentMethod,
       chargedLoss: reasonResult.chargedLoss,
       comment: reasonResult.comment,
     });
