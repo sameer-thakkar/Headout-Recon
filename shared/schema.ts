@@ -309,8 +309,19 @@ export const disputeRecordSchema = z.object({
   closureNote: z.string().optional(),
   closedAt: z.string().optional(),
   closedByAdjustmentAmount: z.number().optional(),
+  adjustedInTicketId: z.string().optional(), // Ticket ID where adjustment is credited (for cross-ticket adjustments)
 });
 export type DisputeRecord = z.infer<typeof disputeRecordSchema>;
+
+// Vendor ID Correction - for payment method mismatch and secondary vendor bookings
+export const vendorCorrectionSchema = z.object({
+  runId: z.string(),
+  bookingId: z.string(),
+  finalVendorId: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+});
+export type VendorCorrection = z.infer<typeof vendorCorrectionSchema>;
 
 // Required field names for column mapping (not used with new pipeline)
 export const requiredFields = [

@@ -12,6 +12,7 @@ import type {
   DraftMessage,
   DisputeRecord,
   IssueRecord,
+  VendorCorrection,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -53,6 +54,13 @@ export interface IStorage {
   getIssues(runId: string): Promise<IssueRecord[]>;
   getIssueById(issueId: string): Promise<IssueRecord | undefined>;
   deleteIssue(issueId: string): Promise<boolean>;
+
+  // Vendor Corrections
+  setVendorCorrection(runId: string, bookingId: string, finalVendorId: string): Promise<VendorCorrection>;
+  getVendorCorrections(runId: string): Promise<VendorCorrection[]>;
+  getVendorCorrection(runId: string, bookingId: string): Promise<VendorCorrection | undefined>;
+  deleteVendorCorrection(runId: string, bookingId: string): Promise<boolean>;
+  bulkSetVendorCorrections(runId: string, corrections: { bookingId: string; finalVendorId: string }[]): Promise<VendorCorrection[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -65,6 +73,7 @@ export class MemStorage implements IStorage {
   private disputeCounter: number = 0;
   private issues: Map<string, IssueRecord> = new Map();
   private issueCounter: number = 0;
+  private vendorCorrections: Map<string, VendorCorrection> = new Map(); // key: runId:bookingId
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -279,6 +288,45 @@ export class MemStorage implements IStorage {
 
   async deleteIssue(issueId: string): Promise<boolean> {
     return this.issues.delete(issueId);
+  }
+
+  // Vendor Correction methods
+  async setVendorCorrection(runId: string, bookingId: string, finalVendorId: string): Promise<VendorCorrection> {
+    const key = `${runId}:${bookingId}`;
+    const existing = this.vendorCorrections.get(key);
+    
+    const correction: VendorCorrection = {
+      runId,
+      bookingId,
+      finalVendorId,
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    
+    this.vendorCorrections.set(key, correction);
+    return correction;
+  }
+
+  async getVendorCorrections(runId: string): Promise<VendorCorrection[]> {
+    return Array.from(this.vendorCorrections.values())
+      .filter(vc => vc.runId === runId);
+  }
+
+  async getVendorCorrection(runId: string, bookingId: string): Promise<VendorCorrection | undefined> {
+    return this.vendorCorrections.get(`${runId}:${bookingId}`);
+  }
+
+  async deleteVendorCorrection(runId: string, bookingId: string): Promise<boolean> {
+    return this.vendorCorrections.delete(`${runId}:${bookingId}`);
+  }
+
+  async bulkSetVendorCorrections(runId: string, corrections: { bookingId: string; finalVendorId: string }[]): Promise<VendorCorrection[]> {
+    const results: VendorCorrection[] = [];
+    for (const { bookingId, finalVendorId } of corrections) {
+      const correction = await this.setVendorCorrection(runId, bookingId, finalVendorId);
+      results.push(correction);
+    }
+    return results;
   }
 }
 

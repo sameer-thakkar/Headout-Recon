@@ -88,6 +88,7 @@ export function AmountPayablePanel({
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
+  const [vendorCorrectionsLoaded, setVendorCorrectionsLoaded] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
@@ -272,6 +273,63 @@ export function AmountPayablePanel({
         });
     }
   }, [runId, disputesLoaded, adjustments, finalNetSelections]);
+
+  // Load vendor corrections on mount
+  useEffect(() => {
+    if (runId && !vendorCorrectionsLoaded) {
+      fetch(`/api/vendor-corrections/${runId}`)
+        .then(res => res.json())
+        .then(data => {
+          const corrections = data.corrections || [];
+          const newMap = new Map<string, string>();
+          for (const vc of corrections) {
+            newMap.set(vc.bookingId, vc.finalVendorId);
+          }
+          setFinalVendorIds(newMap);
+          setVendorCorrectionsLoaded(true);
+        })
+        .catch(err => {
+          console.error("Failed to load vendor corrections:", err);
+          setVendorCorrectionsLoaded(true);
+        });
+    }
+  }, [runId, vendorCorrectionsLoaded]);
+
+  // Save or delete a single vendor correction
+  const saveVendorCorrection = useCallback(async (bookingId: string, finalVendorId: string) => {
+    if (!runId) return;
+    try {
+      if (finalVendorId.trim()) {
+        // Save the vendor correction
+        await fetch(`/api/vendor-corrections/${runId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId, finalVendorId: finalVendorId.trim() }),
+        });
+      } else {
+        // Delete the vendor correction if value is cleared
+        await fetch(`/api/vendor-corrections/${runId}/${bookingId}`, {
+          method: "DELETE",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to save/delete vendor correction:", err);
+    }
+  }, [runId]);
+
+  // Save bulk vendor corrections
+  const saveBulkVendorCorrections = useCallback(async (corrections: { bookingId: string; finalVendorId: string }[]) => {
+    if (!runId || corrections.length === 0) return;
+    try {
+      await fetch(`/api/vendor-corrections/${runId}/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ corrections }),
+      });
+    } catch (err) {
+      console.error("Failed to save bulk vendor corrections:", err);
+    }
+  }, [runId]);
 
   const reconciledBookings = useMemo(() => 
     (bookings || []).filter(b => b.reason === "Reconciled"), 
@@ -2897,8 +2955,13 @@ export function AmountPayablePanel({
                       onClick={() => {
                         if (bulkVendorId.trim()) {
                           const newMap = new Map(finalVendorIds);
-                          vendorCorrectionBookings.forEach((b) => newMap.set(b.bookingId, bulkVendorId.trim()));
+                          const corrections: { bookingId: string; finalVendorId: string }[] = [];
+                          vendorCorrectionBookings.forEach((b) => {
+                            newMap.set(b.bookingId, bulkVendorId.trim());
+                            corrections.push({ bookingId: b.bookingId, finalVendorId: bulkVendorId.trim() });
+                          });
                           setFinalVendorIds(newMap);
+                          saveBulkVendorCorrections(corrections);
                         }
                       }}
                       disabled={!bulkVendorId.trim()}
@@ -2939,6 +3002,9 @@ export function AmountPayablePanel({
                               const newMap = new Map(finalVendorIds);
                               newMap.set(booking.bookingId, e.target.value);
                               setFinalVendorIds(newMap);
+                            }}
+                            onBlur={(e) => {
+                              saveVendorCorrection(booking.bookingId, e.target.value);
                             }}
                             className="h-5 text-xs px-1"
                             data-testid={`input-final-vendor-${booking.bookingId}`}

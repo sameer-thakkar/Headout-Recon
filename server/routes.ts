@@ -624,6 +624,30 @@ export async function registerRoutes(
       const originalHoData = upload?.hoData?.rows || [];
       const originalSpData = upload?.spData?.rows || [];
 
+      // Get disputes and vendor corrections for populating HO Report columns
+      const allDisputes = await storage.getDisputes(runId);
+      const disputesByBooking = new Map<string, typeof allDisputes[0]>();
+      for (const d of allDisputes) {
+        disputesByBooking.set(d.bookingId, d);
+      }
+      
+      const vendorCorrections = await storage.getVendorCorrections(runId);
+      const vendorCorrectionsByBooking = new Map<string, string>();
+      for (const vc of vendorCorrections) {
+        vendorCorrectionsByBooking.set(vc.bookingId, vc.finalVendorId);
+      }
+      
+      // Create SP ticket ID lookup by booking ID
+      const spTicketIdByBooking = new Map<string, string>();
+      for (const spRow of originalSpData) {
+        const row = spRow as Record<string, unknown>;
+        const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        const ticketId = String(row["ticketId"] || row["Ticket ID"] || row["ticket_id"] || row["TicketID"] || "");
+        if (bookingId && ticketId) {
+          spTicketIdByBooking.set(bookingId, ticketId);
+        }
+      }
+
       // Create lookup maps for reconciled rows
       // For HO report, we need to match by bookingId AND fulfillmentIdentifier
       // to correctly handle cases where same bookingId has both Primary and Secondary
@@ -1271,6 +1295,37 @@ export async function registerRoutes(
         // Get the comment from reconciliation (for cancellation scenarios)
         const reconComment = reconRow?.comment || "";
         
+        // ========== 8 Reconciliation Columns ==========
+        // 1. finalVendorId - from vendor ID corrections
+        const finalVendorIdValue = vendorCorrectionsByBooking.get(bookingId) || "";
+        
+        // 2. Ticket ID - from SP Invoice data
+        const ticketIdValue = spTicketIdByBooking.get(bookingId) || "";
+        
+        // 3-6. Dispute-related columns
+        const dispute = disputesByBooking.get(bookingId);
+        const disputedAmount = dispute?.disputeAmount ?? "";
+        const adjustedInTicketId = dispute?.adjustedInTicketId || "";
+        const closedByAmount = dispute?.closedByAdjustmentAmount ?? 0;
+        const finalDisputeAmount = dispute 
+          ? (dispute.disputeAmount - closedByAmount)
+          : "";
+        
+        // 6. Dispute status - OPEN or CLOSED
+        const disputeStatus = dispute 
+          ? (dispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
+          : "";
+        
+        // 7. Reconciled Net price - HO Net + Final Dispute when CLOSED
+        // If dispute is closed, reconciled net = hoNet + finalDisputeAmount
+        // If no dispute or dispute is open, leave blank
+        const reconciledNetPrice = dispute && dispute.closureStatus === "closed" && typeof finalDisputeAmount === "number"
+          ? hoNet + finalDisputeAmount
+          : "";
+        
+        // 8. UTR number - blank for now (manual entry later)
+        const utrNumber = "";
+        
         if (isSecondary) {
           // Secondary rows: finalNetPrice = 0, comments = "Duplicate Fulfillment"
           finalNetPrice = 0;
@@ -1373,6 +1428,24 @@ export async function registerRoutes(
             newRow[key] = comments;
           } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
             newRow[key] = chargedLoss;
+          } 
+          // ========== 8 Reconciliation Columns ==========
+          else if (keyLower === "finalvendorid" || keyLower === "final vendor id" || keyLower === "final_vendor_id") {
+            newRow[key] = finalVendorIdValue;
+          } else if (keyLower === "ticketid" || keyLower === "ticket id" || keyLower === "ticket_id") {
+            newRow[key] = ticketIdValue;
+          } else if (keyLower === "disputedamount" || keyLower === "disputed amount" || keyLower === "disputed_amount") {
+            newRow[key] = disputedAmount;
+          } else if (keyLower === "adjustedinticketid" || keyLower === "adjusted in ticket id" || keyLower === "adjusted_in_ticket_id") {
+            newRow[key] = adjustedInTicketId;
+          } else if (keyLower === "finaldisputeamount" || keyLower === "final dispute amount" || keyLower === "final_dispute_amount") {
+            newRow[key] = finalDisputeAmount;
+          } else if (keyLower === "disputestatus" || keyLower === "dispute status" || keyLower === "dispute_status") {
+            newRow[key] = disputeStatus;
+          } else if (keyLower === "reconcilednetprice" || keyLower === "reconciled net price" || keyLower === "reconciled_net_price") {
+            newRow[key] = reconciledNetPrice;
+          } else if (keyLower === "utrnumber" || keyLower === "utr number" || keyLower === "utr_number" || keyLower === "utr") {
+            newRow[key] = utrNumber;
           } else {
             newRow[key] = row[key];
           }
@@ -1389,6 +1462,33 @@ export async function registerRoutes(
           newRow["errorBucket"] = errorBucket;
           newRow["comments"] = comments;
           newRow["chargedLoss"] = chargedLoss;
+        }
+        
+        // Always append the 8 reconciliation columns if not already set (in case they don't exist in original)
+        const hasReconCols = (col: string) => {
+          const lc = col.toLowerCase();
+          return lc === "finalvendorid" || lc === "final vendor id" || lc === "final_vendor_id" ||
+                 lc === "ticketid" || lc === "ticket id" || lc === "ticket_id" ||
+                 lc === "disputedamount" || lc === "disputed amount" || lc === "disputed_amount" ||
+                 lc === "adjustedinticketid" || lc === "adjusted in ticket id" || lc === "adjusted_in_ticket_id" ||
+                 lc === "finaldisputeamount" || lc === "final dispute amount" || lc === "final_dispute_amount" ||
+                 lc === "disputestatus" || lc === "dispute status" || lc === "dispute_status" ||
+                 lc === "reconcilednetprice" || lc === "reconciled net price" || lc === "reconciled_net_price" ||
+                 lc === "utrnumber" || lc === "utr number" || lc === "utr_number" || lc === "utr";
+        };
+        
+        // Check if any reconciliation columns exist in original
+        const hasAnyReconCol = originalKeys.some(k => hasReconCols(k));
+        if (!hasAnyReconCol) {
+          // Append all 8 reconciliation columns
+          newRow["finalVendorId"] = finalVendorIdValue;
+          newRow["Ticket ID"] = ticketIdValue;
+          newRow["Disputed amount"] = disputedAmount;
+          newRow["Adjusted in Ticket ID"] = adjustedInTicketId;
+          newRow["Final Dispute amount"] = finalDisputeAmount;
+          newRow["Dispute status"] = disputeStatus;
+          newRow["Reconciled Net price"] = reconciledNetPrice;
+          newRow["UTR number"] = utrNumber;
         }
         
         return newRow;
@@ -3977,6 +4077,68 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Delete issue error:", error);
       res.status(500).json({ error: "Failed to delete issue" });
+    }
+  });
+
+  // ========== Vendor Correction Endpoints ==========
+
+  // Get all vendor corrections for a run
+  app.get("/api/vendor-corrections/:runId", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const corrections = await storage.getVendorCorrections(runId);
+      res.json({ corrections });
+    } catch (error) {
+      console.error("Get vendor corrections error:", error);
+      res.status(500).json({ error: "Failed to fetch vendor corrections" });
+    }
+  });
+
+  // Set a single vendor correction
+  app.post("/api/vendor-corrections/:runId", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const { bookingId, finalVendorId } = req.body;
+      
+      if (!bookingId || !finalVendorId) {
+        return res.status(400).json({ error: "Missing required fields: bookingId, finalVendorId" });
+      }
+
+      const correction = await storage.setVendorCorrection(runId, bookingId, finalVendorId);
+      res.json({ correction });
+    } catch (error) {
+      console.error("Set vendor correction error:", error);
+      res.status(500).json({ error: "Failed to set vendor correction" });
+    }
+  });
+
+  // Bulk set vendor corrections
+  app.post("/api/vendor-corrections/:runId/bulk", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const { corrections } = req.body;
+      
+      if (!Array.isArray(corrections)) {
+        return res.status(400).json({ error: "corrections must be an array" });
+      }
+
+      const results = await storage.bulkSetVendorCorrections(runId, corrections);
+      res.json({ corrections: results });
+    } catch (error) {
+      console.error("Bulk set vendor corrections error:", error);
+      res.status(500).json({ error: "Failed to set vendor corrections" });
+    }
+  });
+
+  // Delete a vendor correction
+  app.delete("/api/vendor-corrections/:runId/:bookingId", async (req, res) => {
+    try {
+      const { runId, bookingId } = req.params;
+      const deleted = await storage.deleteVendorCorrection(runId, bookingId);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete vendor correction error:", error);
+      res.status(500).json({ error: "Failed to delete vendor correction" });
     }
   });
 
