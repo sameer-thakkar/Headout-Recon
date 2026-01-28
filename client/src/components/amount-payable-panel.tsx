@@ -85,9 +85,6 @@ export function AmountPayablePanel({
   const [isCancellationsExpanded, setIsCancellationsExpanded] = useState(false);
   const [isAlreadyReconciledExpanded, setIsAlreadyReconciledExpanded] = useState(false);
   const [isPaymentMismatchExpanded, setIsPaymentMismatchExpanded] = useState(false);
-  // Payment method mismatch: final vendor ID per booking and bulk vendor ID
-  const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
-  const [bulkVendorId, setBulkVendorId] = useState<string>("");
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
@@ -2812,44 +2809,14 @@ export function AmountPayablePanel({
                       </Badge>
                     </Button>
                   </CollapsibleTrigger>
+                  {dominantPaymentMethod && (
+                    <span className="text-xs text-muted-foreground">
+                      Expected: <span className="font-medium text-violet-600 dark:text-violet-400">{dominantPaymentMethod}</span>
+                    </span>
+                  )}
                 </div>
 
                 <CollapsibleContent>
-                  {/* Bulk Update Section */}
-                  <div className="flex items-center gap-3 mb-4 p-3 bg-violet-50/50 dark:bg-violet-950/20 rounded-lg border border-violet-200 dark:border-violet-800">
-                    <Label className="text-sm font-medium text-violet-700 dark:text-violet-300 whitespace-nowrap">
-                      Bulk Update Final Vendor ID:
-                    </Label>
-                    <Input
-                      type="text"
-                      placeholder="Enter Vendor ID"
-                      value={bulkVendorId}
-                      onChange={(e) => setBulkVendorId(e.target.value)}
-                      className="w-48 h-8 text-sm"
-                      data-testid="input-bulk-vendor-id"
-                    />
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-8 bg-violet-600"
-                      disabled={!bulkVendorId.trim()}
-                      onClick={() => {
-                        const newMap = new Map(finalVendorIds);
-                        for (const booking of paymentMismatchBookings) {
-                          newMap.set(booking.bookingId, bulkVendorId.trim());
-                        }
-                        setFinalVendorIds(newMap);
-                        toast({
-                          title: "Bulk Update Applied",
-                          description: `Updated ${paymentMismatchBookings.length} bookings with Vendor ID: ${bulkVendorId.trim()}`,
-                        });
-                      }}
-                      data-testid="button-bulk-update-vendor"
-                    >
-                      Bulk Update
-                    </Button>
-                  </div>
-
                   {/* TID-level grouping */}
                   <div className="space-y-2">
                     {Object.entries(paymentMismatchByTid).map(([tid, tidBookings]) => {
@@ -2864,7 +2831,7 @@ export function AmountPayablePanel({
                         >
                           <div className="border border-violet-300 dark:border-violet-700 rounded-lg overflow-hidden bg-violet-50/30 dark:bg-violet-950/20">
                             <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-violet-100/50 dark:bg-violet-900/30 items-center">
-                              <div className="col-span-6 flex items-center gap-2">
+                              <div className="col-span-5 flex items-center gap-2">
                                 <CollapsibleTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-6 w-6">
                                     {isTidExpanded ? (
@@ -2878,54 +2845,39 @@ export function AmountPayablePanel({
                                   TID: {tid}
                                 </span>
                                 <Badge variant="secondary" className="text-xs bg-violet-200 dark:bg-violet-800">
-                                  {tidBookings.length} bookings
+                                  {tidBookings.length}
                                 </Badge>
                               </div>
-                              <div className="col-span-3 text-sm text-muted-foreground">
-                                HO Vendor ID
+                              <div className="col-span-4 text-sm text-muted-foreground text-center">
+                                Payment Method
                               </div>
-                              <div className="col-span-3 text-sm text-muted-foreground">
-                                Final Vendor ID
+                              <div className="col-span-3 text-sm text-muted-foreground text-right">
+                                Net Amount
                               </div>
                             </div>
 
                             <CollapsibleContent>
-                              {tidBookings.map((booking) => {
-                                const finalVendorId = finalVendorIds.get(booking.bookingId) || "";
-
-                                return (
-                                  <div
-                                    key={booking.bookingId}
-                                    className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm border-t border-violet-200 dark:border-violet-800 hover:bg-violet-50/50 dark:hover:bg-violet-950/30"
-                                    data-testid={`payment-mismatch-row-${booking.bookingId}`}
-                                  >
-                                    <div className="col-span-6 pl-8">
-                                      <span className="font-mono text-xs text-muted-foreground">
-                                        {booking.bookingId}
-                                      </span>
-                                    </div>
-                                    <div className="col-span-3">
-                                      <span className="font-mono text-xs">
-                                        {booking.hoBeId || "-"}
-                                      </span>
-                                    </div>
-                                    <div className="col-span-3">
-                                      <Input
-                                        type="text"
-                                        placeholder="Enter Vendor ID"
-                                        value={finalVendorId}
-                                        onChange={(e) => {
-                                          const newMap = new Map(finalVendorIds);
-                                          newMap.set(booking.bookingId, e.target.value);
-                                          setFinalVendorIds(newMap);
-                                        }}
-                                        className="h-7 text-xs font-mono"
-                                        data-testid={`input-final-vendor-${booking.bookingId}`}
-                                      />
-                                    </div>
+                              {tidBookings.map((booking) => (
+                                <div
+                                  key={booking.bookingId}
+                                  className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm border-t border-violet-200 dark:border-violet-800 hover:bg-violet-50/50 dark:hover:bg-violet-950/30"
+                                  data-testid={`payment-mismatch-row-${booking.bookingId}`}
+                                >
+                                  <div className="col-span-5 pl-8">
+                                    <span className="font-mono text-xs text-muted-foreground">
+                                      {booking.bookingId}
+                                    </span>
                                   </div>
-                                );
-                              })}
+                                  <div className="col-span-4 text-center">
+                                    <Badge variant="outline" className="text-xs border-violet-400 text-violet-700 dark:text-violet-300">
+                                      {booking.paymentMethod || "-"}
+                                    </Badge>
+                                  </div>
+                                  <div className="col-span-3 text-right font-mono text-xs">
+                                    {formatCurrency(booking.hoNet)} {currency}
+                                  </div>
+                                </div>
+                              ))}
                             </CollapsibleContent>
                           </div>
                         </Collapsible>
