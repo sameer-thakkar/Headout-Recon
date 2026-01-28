@@ -253,7 +253,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       const bookings = cancellationBookings.filter(b => b.reason === reason);
       // For cancellations, discrepancy is only SP Net (always negative)
       const discrepancyLc = bookings.reduce((sum, b) => sum + (-Math.abs(b.spNetInHo)), 0);
-      const discrepancyUsd = bookings.reduce((sum, b) => sum + (-Math.abs(b.spNetInHo / (b.fxRate || 1))), 0);
+      const discrepancyUsd = bookings.reduce((sum, b) => sum + (-Math.abs(b.spNetInHo)), 0);
       return {
         reason,
         displayName: reason.replace("Cancelled-", ""),

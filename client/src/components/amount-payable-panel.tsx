@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,10 @@ export function AmountPayablePanel({
   // Collapsible state for grouped sections
   const [isCancellationsExpanded, setIsCancellationsExpanded] = useState(false);
   const [isAlreadyReconciledExpanded, setIsAlreadyReconciledExpanded] = useState(false);
+  const [isPaymentMismatchExpanded, setIsPaymentMismatchExpanded] = useState(false);
+  // Payment method mismatch: final vendor ID per booking and bulk vendor ID
+  const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
+  const [bulkVendorId, setBulkVendorId] = useState<string>("");
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
@@ -400,6 +404,28 @@ export function AmountPayablePanel({
     }
     return result;
   }, [secondaryVendorBookings]);
+
+  // Payment Method Mismatch: bookings where HO payment method differs from SP payment method
+  const paymentMismatchBookings = useMemo(() => {
+    return bookings.filter(b => {
+      // Only include if both payment methods are present and they differ
+      if (!b.paymentMethod || !b.spPaymentMethod) return false;
+      return b.paymentMethod.toLowerCase().trim() !== b.spPaymentMethod.toLowerCase().trim();
+    });
+  }, [bookings]);
+
+  // Group Payment Mismatch bookings by TID
+  const paymentMismatchByTid = useMemo(() => {
+    const grouped: Record<string, BookingForPayable[]> = {};
+    for (const booking of paymentMismatchBookings) {
+      const tid = booking.tid || booking.bookingId;
+      if (!grouped[tid]) {
+        grouped[tid] = [];
+      }
+      grouped[tid].push(booking);
+    }
+    return grouped;
+  }, [paymentMismatchBookings]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
     // Reconciled bookings always use SP Net
@@ -2758,6 +2784,152 @@ export function AmountPayablePanel({
                   </Collapsible>
                 );
               })}
+            </div>
+          )}
+
+          {/* Payment Method Mismatch Section */}
+          {paymentMismatchBookings.length > 0 && (
+            <div className="space-y-3 pt-4 mt-4 border-t-2 border-dashed border-violet-500/50">
+              <Collapsible open={isPaymentMismatchExpanded} onOpenChange={setIsPaymentMismatchExpanded}>
+                <div className="flex items-center justify-between mb-3">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" className="flex items-center gap-2 p-0 h-auto">
+                      {isPaymentMismatchExpanded ? (
+                        <ChevronDown className="h-5 w-5 text-violet-600" />
+                      ) : (
+                        <ChevronRight className="h-5 w-5 text-violet-600" />
+                      )}
+                      <CreditCard className="h-5 w-5 text-violet-600" />
+                      <p className="text-base font-semibold text-violet-700 dark:text-violet-400">
+                        Payment Method Mismatch
+                      </p>
+                      <Badge variant="outline" className="border-violet-500 text-violet-700 dark:text-violet-400">
+                        {paymentMismatchBookings.length} bookings
+                      </Badge>
+                    </Button>
+                  </CollapsibleTrigger>
+                </div>
+
+                <CollapsibleContent>
+                  {/* Bulk Update Section */}
+                  <div className="flex items-center gap-3 mb-4 p-3 bg-violet-50/50 dark:bg-violet-950/20 rounded-lg border border-violet-200 dark:border-violet-800">
+                    <Label className="text-sm font-medium text-violet-700 dark:text-violet-300 whitespace-nowrap">
+                      Bulk Update Final Vendor ID:
+                    </Label>
+                    <Input
+                      type="text"
+                      placeholder="Enter Vendor ID"
+                      value={bulkVendorId}
+                      onChange={(e) => setBulkVendorId(e.target.value)}
+                      className="w-48 h-8 text-sm"
+                      data-testid="input-bulk-vendor-id"
+                    />
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-8 bg-violet-600"
+                      disabled={!bulkVendorId.trim()}
+                      onClick={() => {
+                        const newMap = new Map(finalVendorIds);
+                        for (const booking of paymentMismatchBookings) {
+                          newMap.set(booking.bookingId, bulkVendorId.trim());
+                        }
+                        setFinalVendorIds(newMap);
+                        toast({
+                          title: "Bulk Update Applied",
+                          description: `Updated ${paymentMismatchBookings.length} bookings with Vendor ID: ${bulkVendorId.trim()}`,
+                        });
+                      }}
+                      data-testid="button-bulk-update-vendor"
+                    >
+                      Bulk Update
+                    </Button>
+                  </div>
+
+                  {/* TID-level grouping */}
+                  <div className="space-y-2">
+                    {Object.entries(paymentMismatchByTid).map(([tid, tidBookings]) => {
+                      const tidKey = `pm:${tid}`;
+                      const isTidExpanded = expandedTids.has(tidKey);
+
+                      return (
+                        <Collapsible
+                          key={tid}
+                          open={isTidExpanded}
+                          onOpenChange={() => toggleTid(tidKey)}
+                        >
+                          <div className="border border-violet-300 dark:border-violet-700 rounded-lg overflow-hidden bg-violet-50/30 dark:bg-violet-950/20">
+                            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-violet-100/50 dark:bg-violet-900/30 items-center">
+                              <div className="col-span-6 flex items-center gap-2">
+                                <CollapsibleTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                                    {isTidExpanded ? (
+                                      <ChevronDown className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </CollapsibleTrigger>
+                                <span className="font-mono text-sm font-medium text-violet-800 dark:text-violet-300 truncate" title={tid}>
+                                  TID: {tid}
+                                </span>
+                                <Badge variant="secondary" className="text-xs bg-violet-200 dark:bg-violet-800">
+                                  {tidBookings.length} bookings
+                                </Badge>
+                              </div>
+                              <div className="col-span-3 text-sm text-muted-foreground">
+                                HO Vendor ID
+                              </div>
+                              <div className="col-span-3 text-sm text-muted-foreground">
+                                Final Vendor ID
+                              </div>
+                            </div>
+
+                            <CollapsibleContent>
+                              {tidBookings.map((booking) => {
+                                const finalVendorId = finalVendorIds.get(booking.bookingId) || "";
+
+                                return (
+                                  <div
+                                    key={booking.bookingId}
+                                    className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm border-t border-violet-200 dark:border-violet-800 hover:bg-violet-50/50 dark:hover:bg-violet-950/30"
+                                    data-testid={`payment-mismatch-row-${booking.bookingId}`}
+                                  >
+                                    <div className="col-span-6 pl-8">
+                                      <span className="font-mono text-xs text-muted-foreground">
+                                        {booking.bookingId}
+                                      </span>
+                                    </div>
+                                    <div className="col-span-3">
+                                      <span className="font-mono text-xs">
+                                        {booking.hoBeId || "-"}
+                                      </span>
+                                    </div>
+                                    <div className="col-span-3">
+                                      <Input
+                                        type="text"
+                                        placeholder="Enter Vendor ID"
+                                        value={finalVendorId}
+                                        onChange={(e) => {
+                                          const newMap = new Map(finalVendorIds);
+                                          newMap.set(booking.bookingId, e.target.value);
+                                          setFinalVendorIds(newMap);
+                                        }}
+                                        className="h-7 text-xs font-mono"
+                                        data-testid={`input-final-vendor-${booking.bookingId}`}
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           )}
 
