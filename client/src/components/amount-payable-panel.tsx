@@ -2958,15 +2958,15 @@ export function AmountPayablePanel({
           )}
 
           <div className="flex justify-between items-center pt-3 mt-3 border-t">
-            <Button 
-              variant="link" 
-              className="p-0 h-auto text-sm font-medium text-foreground hover:text-primary underline-offset-2 hover:underline"
+            <button 
+              type="button"
+              className="text-sm font-medium text-foreground hover:text-primary underline-offset-2 hover:underline cursor-pointer flex items-center gap-1"
               onClick={() => setShowSummaryModal(true)}
               data-testid="button-show-summary"
             >
               Payable for bookings reconciled
-              <Calculator className="h-3 w-3 ml-1 opacity-60" />
-            </Button>
+              <Calculator className="h-3 w-3 opacity-60" />
+            </button>
             <p className="text-lg font-bold font-mono" data-testid="text-base-amount">
               {formatCurrency(baseAmount)} {currency}
             </p>
