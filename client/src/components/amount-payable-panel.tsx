@@ -478,6 +478,11 @@ export function AmountPayablePanel({
     [secondaryVendorBookings, getFinalNetPrice]
   );
 
+  const cancellationsTotal = useMemo(() => 
+    cancellationBookings.reduce((sum, b) => sum + getFinalNetPrice(b), 0),
+    [cancellationBookings, getFinalNetPrice]
+  );
+
   // Group closed disputes by displayId for display in adjustments section (only SP Error disputes)
   const groupedClosedDisputes = useMemo(() => {
     const groups = new Map<string, {
