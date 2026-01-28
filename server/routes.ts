@@ -680,8 +680,8 @@ export async function registerRoutes(
       // =====================================================
       // SHEET 2: Discrepancy Analysis
       // =====================================================
-      // Part A: Overall Summary (excluding Reconciled and Secondary Vendor-Reconciled)
-      const discrepancySummary = result.overallSummary.filter(r => r.reason !== "Reconciled" && r.reason !== "Secondary Vendor-Reconciled").map(row => ({
+      // Part A: Overall Summary (excluding Reconciled - applies to both primary and secondary vendor)
+      const discrepancySummary = result.overallSummary.filter(r => r.reason !== "Reconciled").map(row => ({
         "Reason": row.reason,
         "Currency": row.currency,
         "Discrepancy (LC)": row.discrepancyLc,
@@ -690,7 +690,7 @@ export async function registerRoutes(
       }));
 
       // Part B: TID-level breakdown for each reason (excluding Reconciled)
-      const discrepancyRows = result.primaryRows.filter(r => r.reason !== "Reconciled" && r.reason !== "Secondary Vendor-Reconciled");
+      const discrepancyRows = [...result.primaryRows, ...result.secondaryVendorRows].filter(r => r.reason !== "Reconciled");
       const allPrimaryRows = result.primaryRows;
       
       // Group by REASON + TID (composite key) to preserve all TIDs per reason
@@ -2028,7 +2028,7 @@ export async function registerRoutes(
       const sheets = await getUncachableGoogleSheetClient();
 
       // Collect DRI sheets dynamically
-      const discrepancyRows = result.primaryRows.filter(r => r.reason !== "Reconciled" && r.reason !== "Secondary Vendor-Reconciled");
+      const discrepancyRows = [...result.primaryRows, ...result.secondaryVendorRows].filter(r => r.reason !== "Reconciled");
       const driReasonRowGroups = new Map<string, typeof discrepancyRows>();
       for (const row of discrepancyRows) {
         const key = `${row.driTeam || "Unknown"}_${row.reason}`;
@@ -2092,7 +2092,8 @@ export async function registerRoutes(
       });
 
       // ===== Sheet 2: Discrepancy Analysis (with TID breakdown) =====
-      const discrepancySummary = result.overallSummary.filter(r => r.reason !== "Reconciled" && r.reason !== "Secondary Vendor-Reconciled");
+      // Combine primary and secondary vendor summaries, excluding Reconciled
+      const discrepancySummary = [...result.overallSummary, ...result.secondaryVendorSummary].filter(r => r.reason !== "Reconciled");
       const allPrimaryRows = result.primaryRows;
 
       // Group by REASON + TID (with full fields matching Excel)
@@ -3094,8 +3095,9 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Results not found" });
       }
 
-      // Filter to discrepancy rows (exclude "Reconciled" and "Secondary Vendor-Reconciled") and optionally by reason
-      let discrepancyRows = result.primaryRows.filter(r => r.reason !== "Reconciled" && r.reason !== "Secondary Vendor-Reconciled");
+      // Filter to discrepancy rows (exclude "Reconciled") and optionally by reason
+      // Include both primary and secondary vendor rows
+      let discrepancyRows = [...result.primaryRows, ...result.secondaryVendorRows].filter(r => r.reason !== "Reconciled");
       if (reason && typeof reason === "string") {
         discrepancyRows = discrepancyRows.filter(r => r.reason === reason);
       }
@@ -3281,8 +3283,9 @@ export async function registerRoutes(
         };
       });
 
-      // Get unique reasons for filtering
-      const reasonsSet = new Set(result.primaryRows.filter(r => r.reason !== "Reconciled" && r.reason !== "Secondary Vendor-Reconciled").map(r => r.reason));
+      // Get unique reasons for filtering (from both primary and secondary vendor rows)
+      const allRows = [...result.primaryRows, ...result.secondaryVendorRows];
+      const reasonsSet = new Set(allRows.filter(r => r.reason !== "Reconciled").map(r => r.reason));
       const reasons = Array.from(reasonsSet);
 
       res.json({

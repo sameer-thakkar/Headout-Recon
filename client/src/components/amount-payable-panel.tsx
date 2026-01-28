@@ -263,12 +263,12 @@ export function AmountPayablePanel({
   }, [runId, disputesLoaded, adjustments, finalNetSelections]);
 
   const reconciledBookings = useMemo(() => 
-    (bookings || []).filter(b => b.reason === "Reconciled" || b.reason === "Secondary Vendor-Reconciled"), 
+    (bookings || []).filter(b => b.reason === "Reconciled"), 
     [bookings]
   );
 
   const discrepancyBookings = useMemo(() => 
-    (bookings || []).filter(b => b.reason !== "Reconciled" && b.reason !== "Secondary Vendor-Reconciled" && !b.reason.startsWith("Already Reconciled")), 
+    (bookings || []).filter(b => b.reason !== "Reconciled" && !b.reason.startsWith("Already Reconciled") && !b.isSecondaryVendor), 
     [bookings]
   );
 
@@ -317,28 +317,26 @@ export function AmountPayablePanel({
     return result;
   }, [discrepancyBookings]);
 
-  // Secondary Vendor bookings - reasons starting with "Secondary Vendor-"
+  // Secondary Vendor bookings - using isSecondaryVendor flag
   const secondaryVendorBookings = useMemo(() => {
-    return bookings.filter(b => b.reason.startsWith("Secondary Vendor-"));
+    return bookings.filter(b => b.isSecondaryVendor);
   }, [bookings]);
 
-  // Group Secondary Vendor bookings by their base reason (without prefix)
+  // Group Secondary Vendor bookings by their reason
   const secondaryVendorByReason = useMemo(() => {
     const grouped: Record<string, BookingForPayable[]> = {};
     for (const booking of secondaryVendorBookings) {
-      // Strip "Secondary Vendor-" prefix for display grouping
-      const baseReason = booking.reason.replace("Secondary Vendor-", "");
-      if (!grouped[baseReason]) {
-        grouped[baseReason] = [];
+      if (!grouped[booking.reason]) {
+        grouped[booking.reason] = [];
       }
-      grouped[baseReason].push(booking);
+      grouped[booking.reason].push(booking);
     }
     return grouped;
   }, [secondaryVendorBookings]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
-    // Reconciled bookings (including Secondary Vendor-Reconciled) always use SP Net
-    if (booking.reason === "Reconciled" || booking.reason === "Secondary Vendor-Reconciled" || booking.reason === "Unmapped") {
+    // Reconciled bookings always use SP Net
+    if (booking.reason === "Reconciled" || booking.reason === "Unmapped") {
       return booking.spNet;
     }
     const selection = localSelections[booking.bookingId] || "sp";
