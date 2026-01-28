@@ -88,6 +88,7 @@ export function AmountPayablePanel({
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
@@ -1736,12 +1737,59 @@ export function AmountPayablePanel({
     
     onApply(pendingApplyData.adjustments, pendingApplyData.selections, pendingApplyData.amount);
     setPendingApplyData(null);
+    setIsConfirmed(true);
   }, [pendingApplyData, runId, openDisputes, onApply, toast]);
 
   const handleCancelApply = useCallback(() => {
     setShowApplyConfirmation(false);
     setPendingApplyData(null);
   }, []);
+
+  const handleExportExcel = useCallback(async () => {
+    if (!runId) {
+      toast({
+        title: "No data to export",
+        description: "Please run a reconciliation first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({
+        title: "Generating export...",
+        description: "Please wait while the export file is being prepared",
+      });
+
+      const response = await fetch(`/api/runs/${runId}/export`);
+      if (!response.ok) {
+        throw new Error("Failed to generate export");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const timestamp = new Date().toISOString().slice(0, 10);
+      a.download = `reconciliation_export_${timestamp}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Export complete",
+        description: "Your reconciliation report has been downloaded",
+      });
+    } catch (error) {
+      console.error("Export error:", error);
+      toast({
+        title: "Export failed",
+        description: "Failed to generate export file",
+        variant: "destructive",
+      });
+    }
+  }, [runId, toast]);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3307,6 +3355,12 @@ export function AmountPayablePanel({
         <Button onClick={handleApply} data-testid="button-apply">
           Apply
         </Button>
+        {isConfirmed && (
+          <Button onClick={handleExportExcel} data-testid="button-export-excel">
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+        )}
       </div>
 
       <Dialog open={!!selectedReasonModal} onOpenChange={(open) => !open && setSelectedReasonModal(null)}>
