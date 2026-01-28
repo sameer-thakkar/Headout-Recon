@@ -69,6 +69,7 @@ export const primaryRowSchema = z.object({
   
   // HO Report fields
   paymentBasis: z.string().optional(),
+  paymentMethod: z.string().optional(),
   
   // Cancellation-related fields
   chargedLoss: z.string().optional(),
