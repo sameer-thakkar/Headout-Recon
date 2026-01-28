@@ -2550,7 +2550,7 @@ export function AmountPayablePanel({
                               )}
                             </Button>
                           </CollapsibleTrigger>
-                          <span className="font-semibold text-sm text-amber-800 dark:text-amber-300">{reason}</span>
+                          <span className="text-sm font-medium text-amber-800 dark:text-amber-300">{reason}</span>
                           <Badge variant="secondary" className="text-xs bg-amber-200 dark:bg-amber-800">
                             {reasonBookings.length}
                           </Badge>
