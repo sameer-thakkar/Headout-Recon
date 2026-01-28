@@ -139,3 +139,17 @@ shared/              # Shared code between client and server
   - Click opens breakdown modal with cards for each cancellation type
   - Click on type card opens regular discrepancy modal with booking details
 - **Modal Hierarchy**: Summary row → Breakdown modal → Discrepancy detail modal
+
+### Payment Method Mismatch Feature
+- **Detection**: Bookings where `paymentMethod` (HO) differs from `spPaymentMethod` (SP) - case-insensitive comparison
+- **Purpose**: Identifies bookings that need vendor ID corrections in the external system
+- **UI Display**:
+  - Violet-styled collapsible section in Amount Payable panel (after Secondary Vendor section)
+  - Shows booking count badge
+  - TID-level grouping with expandable rows
+- **Per-Booking Data**:
+  - Booking ID
+  - HO Vendor ID (hoBeId) - read-only reference
+  - Final Vendor ID - editable input field
+- **Bulk Update**: Single input field + button to apply the same Vendor ID to all payment mismatch bookings
+- **Data Persistence**: Final Vendor IDs are ephemeral (UI-only) - intended as reference for manual corrections in external system
