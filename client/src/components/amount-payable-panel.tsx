@@ -2094,11 +2094,11 @@ export function AmountPayablePanel({
                                 <div className="col-span-2">TID / Booking ID</div>
                                 <div className="col-span-2 text-right">HO Net</div>
                                 <div className="col-span-2 text-right">SP Net</div>
-                                <div className="col-span-1 text-center">Net</div>
+                                <div className="col-span-2 text-center">Net</div>
                                 <div className="col-span-1 text-center">Dispute</div>
                                 <div className="col-span-2 text-right">Reconciled Net</div>
                                 <div className="col-span-3 text-right">Dispute Amt</div>
-                                <div className="col-span-5 text-right">Price Payable</div>
+                                <div className="col-span-4 text-right">Price Payable</div>
                               </div>
 
                               <div className="max-h-80 overflow-y-auto">
@@ -2140,6 +2140,7 @@ export function AmountPayablePanel({
                                             const disputeAmt = disputeAmounts.get(booking.bookingId) || 0;
                                             const isDisputed = activeDisputes.has(booking.bookingId);
                                             const finalNet = pricePayable - disputeAmt;
+                                            const canDispute = isBookingDisputable(booking);
 
                                             return (
                                               <div
@@ -2156,17 +2157,31 @@ export function AmountPayablePanel({
                                                 <div className="col-span-2 text-right font-mono">
                                                   {formatCurrency(booking.spNet)}
                                                 </div>
-                                                <div className="col-span-1 flex justify-center">
+                                                <div className="col-span-2 flex justify-center">
                                                   <Select
                                                     value={netType}
-                                                    onValueChange={(v) =>
+                                                    onValueChange={(v) => {
+                                                      const newValue = v as "ho" | "sp";
                                                       setLocalSelections((prev) => ({
                                                         ...prev,
-                                                        [booking.bookingId]: v as "ho" | "sp",
-                                                      }))
-                                                    }
+                                                        [booking.bookingId]: newValue,
+                                                      }));
+                                                      // Clear dispute when switching to HO
+                                                      if (newValue === "ho") {
+                                                        setActiveDisputes((prev) => {
+                                                          const newSet = new Set(prev);
+                                                          newSet.delete(booking.bookingId);
+                                                          return newSet;
+                                                        });
+                                                        setDisputeAmounts((prev) => {
+                                                          const updated = new Map(prev);
+                                                          updated.delete(booking.bookingId);
+                                                          return updated;
+                                                        });
+                                                      }
+                                                    }}
                                                   >
-                                                    <SelectTrigger className="w-14 h-6 text-xs">
+                                                    <SelectTrigger className="w-16 h-6 text-xs">
                                                       <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -2176,32 +2191,36 @@ export function AmountPayablePanel({
                                                   </Select>
                                                 </div>
                                                 <div className="col-span-1 flex justify-center">
-                                                  <Checkbox
-                                                    checked={isDisputed}
-                                                    onCheckedChange={(checked) => {
-                                                      const newActive = new Set(activeDisputes);
-                                                      if (checked) {
-                                                        newActive.add(booking.bookingId);
-                                                        setDisputeAmounts((prev) => {
-                                                          const updated = new Map(prev);
-                                                          updated.set(
-                                                            booking.bookingId,
-                                                            Math.abs(booking.hoNet - booking.spNet)
-                                                          );
-                                                          return updated;
-                                                        });
-                                                      } else {
-                                                        newActive.delete(booking.bookingId);
-                                                        setDisputeAmounts((prev) => {
-                                                          const updated = new Map(prev);
-                                                          updated.delete(booking.bookingId);
-                                                          return updated;
-                                                        });
-                                                      }
-                                                      setActiveDisputes(newActive);
-                                                    }}
-                                                    data-testid={`checkbox-dispute-${booking.bookingId}`}
-                                                  />
+                                                  {canDispute ? (
+                                                    <Checkbox
+                                                      checked={isDisputed}
+                                                      onCheckedChange={(checked) => {
+                                                        const newActive = new Set(activeDisputes);
+                                                        if (checked) {
+                                                          newActive.add(booking.bookingId);
+                                                          setDisputeAmounts((prev) => {
+                                                            const updated = new Map(prev);
+                                                            updated.set(
+                                                              booking.bookingId,
+                                                              Math.abs(booking.hoNet - booking.spNet)
+                                                            );
+                                                            return updated;
+                                                          });
+                                                        } else {
+                                                          newActive.delete(booking.bookingId);
+                                                          setDisputeAmounts((prev) => {
+                                                            const updated = new Map(prev);
+                                                            updated.delete(booking.bookingId);
+                                                            return updated;
+                                                          });
+                                                        }
+                                                        setActiveDisputes(newActive);
+                                                      }}
+                                                      data-testid={`checkbox-dispute-${booking.bookingId}`}
+                                                    />
+                                                  ) : (
+                                                    <span className="text-xs text-muted-foreground">-</span>
+                                                  )}
                                                 </div>
                                                 <div className="col-span-2 text-right font-mono">
                                                   {formatCurrency(pricePayable)}
@@ -2224,7 +2243,7 @@ export function AmountPayablePanel({
                                                     />
                                                   )}
                                                 </div>
-                                                <div className="col-span-5 text-right font-mono font-semibold">
+                                                <div className="col-span-4 text-right font-mono font-semibold">
                                                   {formatCurrency(finalNet)} {currency}
                                                 </div>
                                               </div>
