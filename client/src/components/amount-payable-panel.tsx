@@ -2916,7 +2916,7 @@ export function AmountPayablePanel({
 
                             {/* Column Headers */}
                             <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/30 text-xs text-muted-foreground font-medium border-t">
-                              <div className="col-span-3">Booking ID</div>
+                              <div className="col-span-3">TID</div>
                               <div className="col-span-3">Payment Method</div>
                               <div className="col-span-3">Vendor ID (HO)</div>
                               <div className="col-span-3">Final Vendor ID</div>
@@ -2931,7 +2931,7 @@ export function AmountPayablePanel({
                                 >
                                   <div className="col-span-3">
                                     <span className="font-mono text-xs">
-                                      {booking.bookingId}
+                                      {tid}
                                     </span>
                                   </div>
                                   <div className="col-span-3">
