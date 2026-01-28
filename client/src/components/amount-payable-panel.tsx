@@ -2451,9 +2451,8 @@ export function AmountPayablePanel({
                   );
                 })}
 
-              <div className="flex justify-between items-center pt-3 mt-3 border-t gap-2">
-                <p className="text-sm font-medium">Discrepancy Total</p>
-                <div className="flex items-center gap-2">
+              {(selectedIssues.size > 0 || activeDisputes.size > 0) && (
+                <div className="flex justify-end items-center pt-3 mt-3 border-t gap-2">
                   {selectedIssues.size > 0 && (
                     <Button
                       size="sm"
@@ -2479,11 +2478,8 @@ export function AmountPayablePanel({
                       {isLoggingDisputes ? "Logging..." : `Log Disputes (${activeDisputes.size})`}
                     </Button>
                   )}
-                  <p className="text-lg font-bold font-mono" data-testid="text-discrepancy-total">
-                    {formatCurrency(discrepancyTotal)} {currency}
-                  </p>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
