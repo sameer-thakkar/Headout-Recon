@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Collapsible,
   CollapsibleContent,
@@ -132,12 +137,44 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     if (!firstRow) return null;
     const currencySet = new Set(primaryRows.map(r => r.hoCurrency));
     const currencies = Array.from(currencySet);
+    
+    // Calculate payment method distribution
+    const paymentMethodCounts: Record<string, number> = {};
+    primaryRows.forEach(row => {
+      const method = row.paymentMethod || "Unknown";
+      paymentMethodCounts[method] = (paymentMethodCounts[method] || 0) + 1;
+    });
+    
+    // Find the dominant payment method (85%+ threshold)
+    const totalBookings = primaryRows.length;
+    let dominantMethod = "";
+    let dominantCount = 0;
+    const anomalies: Array<{ method: string; count: number }> = [];
+    
+    Object.entries(paymentMethodCounts).forEach(([method, count]) => {
+      if (count > dominantCount) {
+        // If there was a previous dominant, it becomes an anomaly
+        if (dominantMethod && dominantCount > 0) {
+          anomalies.push({ method: dominantMethod, count: dominantCount });
+        }
+        dominantMethod = method;
+        dominantCount = count;
+      } else {
+        anomalies.push({ method, count });
+      }
+    });
+    
+    // Check if dominant has 85%+ share
+    const dominantShare = totalBookings > 0 ? dominantCount / totalBookings : 0;
+    const hasAnomalies = anomalies.length > 0 && anomalies.some(a => a.count > 0);
+    
     return {
       beId: firstRow.beId || "",
       billingEntityName: firstRow.billingEntityName || "",
       ticketId: firstRow.ticketId || "",
       paymentBasis: firstRow.paymentBasis || "",
-      paymentMethod: firstRow.paymentMethod || "",
+      paymentMethod: dominantMethod,
+      paymentMethodAnomalies: hasAnomalies ? anomalies.filter(a => a.count > 0) : [],
       currency: currencies.join(", "),
     };
   }, [primaryRows]);
@@ -403,7 +440,25 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Payment Method</p>
-                <p className="font-medium" data-testid="text-sp-payment-method">{spDetails.paymentMethod || "—"}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium" data-testid="text-sp-payment-method">{spDetails.paymentMethod || "—"}</p>
+                  {spDetails.paymentMethodAnomalies && spDetails.paymentMethodAnomalies.length > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AlertTriangle className="h-4 w-4 text-amber-500 cursor-help" data-testid="icon-payment-method-warning" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <div className="text-sm space-y-1">
+                          {spDetails.paymentMethodAnomalies.map((anomaly, idx) => (
+                            <p key={idx}>
+                              {anomaly.count} Booking{anomaly.count > 1 ? 's' : ''} with payment method "{anomaly.method}" found in the reconciliation
+                            </p>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Currency</p>
