@@ -96,9 +96,16 @@ shared/              # Shared code between client and server
 - **SP Invoice Report**: Includes all original columns plus FX conversion data (SP Net in HO Currency, FX Rate Used)
 - **Helper Functions**: `formatIndianNumber()` and `formatDateValue()` in `server/routes.ts` handle formatting
 
+### Reason Priority Order (in assignReason function)
+1. Already Reconciled - check HO reason column
+2. Cancellations - cancelled booking handling
+3. MTB (Multiple Tickets Booked) - large percentage difference
+4. NPD (Net Price Discrepancy) - amounts don't reconcile
+5. Secondary Vendor - BE ID mismatch (only when amounts would reconcile)
+
 ### Already Reconciled Feature
 - **Detection**: Bookings where HO data "reason" column contains "Already Auto Reconciled" or "Already Manually Reconciled" (case-insensitive)
-- **Priority**: HIGHEST priority - checked before Secondary Vendor and all other reason types in `assignReason()`
+- **Priority**: HIGHEST priority - checked first before all other reason types in `assignReason()`
 - **Sub-classification**:
   - "Already Reconciled-Same BE": HO BE ID matches SP BE ID (normalized comparison)
   - "Already Reconciled-Different BE": BE IDs don't match
