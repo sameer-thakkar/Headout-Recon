@@ -78,6 +78,10 @@ export interface BookingForPayable {
   billingEntityName?: string;
   ticketId?: string;
   paymentBasis?: string;
+  // Cross-cutting Secondary Vendor flag
+  isSecondaryVendor?: boolean;
+  hoBeId?: string;
+  spBeId?: string;
 }
 
 export interface FinalNetSelection {

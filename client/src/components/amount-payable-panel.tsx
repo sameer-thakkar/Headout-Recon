@@ -317,6 +317,21 @@ export function AmountPayablePanel({
     return result;
   }, [discrepancyBookings]);
 
+  // Secondary Vendor bookings grouped by primary reason (cross-cutting check)
+  const secondaryVendorBookings = useMemo(() => {
+    return bookings.filter(b => b.isSecondaryVendor === true);
+  }, [bookings]);
+
+  const secondaryVendorByReason = useMemo(() => {
+    const grouped: Record<string, BookingForPayable[]> = {};
+    for (const booking of secondaryVendorBookings) {
+      if (!grouped[booking.reason]) {
+        grouped[booking.reason] = [];
+      }
+      grouped[booking.reason].push(booking);
+    }
+    return grouped;
+  }, [secondaryVendorBookings]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
     if (booking.reason === "Reconciled" || booking.reason === "Unmapped") {
@@ -1923,6 +1938,37 @@ export function AmountPayablePanel({
                     {formatCurrency(discrepancyTotal)} {currency}
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Secondary Vendor Sub-section (cross-cutting info) */}
+          {secondaryVendorBookings.length > 0 && (
+            <div className="space-y-2 pt-3 mt-3 border-t border-dashed border-amber-500/50">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                  Secondary Vendor Cases ({secondaryVendorBookings.length} bookings)
+                </p>
+                <Badge variant="outline" className="text-xs border-amber-500 text-amber-700 dark:text-amber-400">
+                  BE ID Mismatch
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                These bookings have a billing entity mismatch (HO BE ID differs from SP BE ID). They are listed under their primary reason above but flagged here for visibility.
+              </p>
+              <div className="space-y-1">
+                {Object.entries(secondaryVendorByReason).map(([reason, svBookings]) => (
+                  <div key={reason} className="flex items-center justify-between px-2 py-1 bg-amber-50 dark:bg-amber-950/30 rounded text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{reason}</span>
+                      <Badge variant="secondary" className="text-xs">{svBookings.length}</Badge>
+                    </div>
+                    <div className="text-muted-foreground font-mono">
+                      {formatCurrency(svBookings.reduce((sum, b) => sum + Math.abs(b.hoNet - b.spNet), 0))} {currency}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

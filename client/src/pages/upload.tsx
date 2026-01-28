@@ -133,6 +133,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         billingEntityName: row.billingEntityName,
         ticketId: row.ticketId,
         paymentBasis: row.paymentBasis,
+        // Cross-cutting Secondary Vendor flag
+        isSecondaryVendor: row.isSecondaryVendor || false,
+        hoBeId: row.hoBeId,
+        spBeId: row.spBeId,
       }));
   }, [primaryRows, unmappedRows, selectedPayableCurrency]);
 
@@ -259,6 +263,28 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
     return alreadyReconciledData.differentBE.bookings;
   }, [selectedAlreadyReconciledType, alreadyReconciledData]);
+
+  // Secondary Vendor summary (cross-cutting check - bookings with BE ID mismatch)
+  const secondaryVendorSummary = useMemo(() => {
+    const svBookings = primaryRows.filter(r => r.isSecondaryVendor === true);
+    if (svBookings.length === 0) return null;
+    
+    // Group by primary reason
+    const byReason: Record<string, { count: number; discrepancyUsd: number }> = {};
+    for (const booking of svBookings) {
+      if (!byReason[booking.reason]) {
+        byReason[booking.reason] = { count: 0, discrepancyUsd: 0 };
+      }
+      byReason[booking.reason].count += 1;
+      byReason[booking.reason].discrepancyUsd += booking.differenceUsd;
+    }
+    
+    return {
+      totalCount: svBookings.length,
+      totalDiscrepancyUsd: svBookings.reduce((sum, r) => sum + r.differenceUsd, 0),
+      byReason,
+    };
+  }, [primaryRows]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -611,6 +637,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               <CollapsibleContent>
                 <CardContent className="pt-0">
                   {hasResults ? (
+                    <>
                     <Table className="text-sm">
                       <TableHeader>
                         <TableRow className="h-8">
@@ -673,6 +700,38 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         })}
                       </TableBody>
                     </Table>
+                    
+                    {/* Secondary Vendor Sub-section */}
+                    {secondaryVendorSummary && (
+                      <div className="mt-4 pt-3 border-t border-dashed border-amber-500/50">
+                        <div className="flex items-center gap-2 mb-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                          <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                            Secondary Vendor Cases ({secondaryVendorSummary.totalCount} bookings)
+                          </span>
+                          <Badge variant="outline" className="text-xs border-amber-500 text-amber-700 dark:text-amber-400">
+                            BE ID Mismatch
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          These bookings have a billing entity mismatch. They are included in their primary reason above.
+                        </p>
+                        <div className="space-y-1">
+                          {Object.entries(secondaryVendorSummary.byReason).map(([reason, data]) => (
+                            <div key={reason} className="flex items-center justify-between px-2 py-1 bg-amber-50 dark:bg-amber-950/30 rounded text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{reason}</span>
+                                <Badge variant="secondary" className="text-xs">{data.count}</Badge>
+                              </div>
+                              <span className="text-muted-foreground font-mono">
+                                {formatNumber(data.discrepancyUsd)} USD
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                   ) : (
                     <div className="h-24 flex items-center justify-center text-muted-foreground">
                       <div className="text-center">
