@@ -76,6 +76,8 @@ interface HORow {
   // Already Reconciled detection
   hoReason?: string;
   dateOfPayment?: string;
+  // Vendor ID for correction
+  vid?: string;
 }
 
 // Result from reason assignment
@@ -171,6 +173,8 @@ function parseHOData(sheet: SheetData): HORow[] {
       // Already Reconciled detection - capture "reason" column from HO data
       hoReason: getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason") ? String(getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason")) : undefined,
       dateOfPayment: getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date") ? String(getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date")) : undefined,
+      // Vendor ID for correction
+      vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
     };
   });
 }
@@ -797,6 +801,7 @@ function computeReconciliationRows(
       spDateOfPayment: spBundle?.dateOfPayment || undefined,
       spPaymentMethod: spBundle?.paymentMethod,
       hoBeId: ho.beId, // Store HO BE ID for comparison display
+      vid: ho.vid, // Store HO Vendor ID for Vendor ID correction
       // Secondary Vendor flag (cross-cutting check)
       isSecondaryVendor: reasonResult.isSecondaryVendor,
       spBeId: spBundle?.beId, // Store SP BE ID for comparison display

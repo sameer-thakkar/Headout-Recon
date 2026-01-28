@@ -146,6 +146,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         // Payment method fields for mismatch detection
         paymentMethod: row.paymentMethod,
         spPaymentMethod: row.spPaymentMethod,
+        // Vendor ID from HO data
+        vid: row.vid,
       }));
   }, [primaryRows, secondaryVendorRows, unmappedRows, selectedPayableCurrency]);
 

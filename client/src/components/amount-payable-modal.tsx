@@ -85,6 +85,8 @@ export interface BookingForPayable {
   // Payment method fields for mismatch detection
   paymentMethod?: string;
   spPaymentMethod?: string;
+  // Vendor ID from HO data
+  vid?: string;
 }
 
 export interface FinalNetSelection {

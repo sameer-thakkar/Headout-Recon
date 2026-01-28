@@ -82,6 +82,7 @@ export const primaryRowSchema = z.object({
   spDateOfPayment: z.string().optional(), // SP date of payment
   spPaymentMethod: z.string().optional(), // SP payment method for comparison
   hoBeId: z.string().optional(), // HO billing entity ID (for comparison)
+  vid: z.string().optional(), // HO Vendor ID (for Vendor ID correction)
   
   // Secondary Vendor flag (cross-cutting check for all discrepancy types)
   isSecondaryVendor: z.boolean().optional(),
@@ -329,6 +330,7 @@ export const optionalFields = [
   "cityName",
   "spBookingRef",
   "beId",
+  "vid",
   "chargedLoss",
   "errorTeam",
   "errorBucket",
@@ -354,6 +356,7 @@ export const headerAliases: Record<string, string[]> = {
   cityName: ["city_name", "cityname", "city"],
   spBookingRef: ["spBookingRefNumber", "sp_booking_ref", "supplier_ref"],
   beId: ["beId", "be_id", "billing_entity_id", "billingEntityName"],
+  vid: ["vid", "vendor_id", "vendorId", "vendor id", "VID", "Vendor ID"],
   chargedLoss: ["chargedLoss", "charged_loss", "charge_loss"],
   errorTeam: ["errorTeamAttribution", "error_team", "dri_team"],
   errorBucket: ["errorBucket", "error_bucket", "reason_code"],

@@ -2845,7 +2845,7 @@ export function AmountPayablePanel({
                   <div className="grid grid-cols-12 gap-1 px-2 py-1 text-xs text-muted-foreground font-medium bg-muted/30 rounded-t">
                     <div className="col-span-3">TID</div>
                     <div className="col-span-3">Payment Method</div>
-                    <div className="col-span-3">Vendor ID (HO)</div>
+                    <div className="col-span-3">VID (HO)</div>
                     <div className="col-span-3">Final Vendor ID</div>
                   </div>
                   {/* Compact rows */}
@@ -2860,7 +2860,7 @@ export function AmountPayablePanel({
                           {booking.tid || booking.bookingId}
                         </div>
                         <div className="col-span-3 truncate">{booking.paymentMethod || "-"}</div>
-                        <div className="col-span-3 font-mono text-muted-foreground truncate">{booking.hoBeId || "-"}</div>
+                        <div className="col-span-3 font-mono text-muted-foreground truncate">{booking.vid || "-"}</div>
                         <div className="col-span-3">
                           <Input
                             type="text"
