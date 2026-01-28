@@ -2096,9 +2096,9 @@ export function AmountPayablePanel({
                                 <div className="col-span-2 text-right">SP Net</div>
                                 <div className="col-span-1 text-center">Net</div>
                                 <div className="col-span-1 text-center">Dispute</div>
-                                <div className="col-span-2 text-right">Price Payable</div>
+                                <div className="col-span-2 text-right">Reconciled Net</div>
                                 <div className="col-span-3 text-right">Dispute Amt</div>
-                                <div className="col-span-5 text-right">Final Reconciled Net</div>
+                                <div className="col-span-5 text-right">Price Payable</div>
                               </div>
 
                               <div className="max-h-80 overflow-y-auto">
@@ -2338,9 +2338,9 @@ export function AmountPayablePanel({
                             <div className="col-span-2 text-right">SP Net</div>
                             <div className="col-span-1 text-center">Net</div>
                             <div className="col-span-1 text-center">Dispute</div>
-                            <div className="col-span-2 text-right">Price Payable</div>
+                            <div className="col-span-2 text-right">Reconciled Net</div>
                             <div className="col-span-3 text-right">Dispute Amt</div>
-                            <div className="col-span-5 text-right">Final Reconciled Net</div>
+                            <div className="col-span-5 text-right">Price Payable</div>
                           </div>
 
                           <div className="max-h-80 overflow-y-auto">
@@ -2669,9 +2669,9 @@ export function AmountPayablePanel({
                           <div className="col-span-2 text-right">SP Net</div>
                           <div className="col-span-1 text-center">Net</div>
                           <div className="col-span-1 text-center">Dispute</div>
-                          <div className="col-span-2 text-right">Price Payable</div>
+                          <div className="col-span-2 text-right">Reconciled Net</div>
                           <div className="col-span-3 text-right">Dispute Amt</div>
-                          <div className="col-span-5 text-right">Final Reconciled Net</div>
+                          <div className="col-span-5 text-right">Price Payable</div>
                         </div>
 
                         <div className="max-h-80 overflow-y-auto">
