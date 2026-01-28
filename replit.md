@@ -128,3 +128,14 @@ shared/              # Shared code between client and server
   - Remarks field and Add/Less amount adjustment
   - Decisions converted to Adjustment entries and included in Apply payload for export/storage
 - **Export**: Already Reconciled bookings included in Discrepancy Analysis (filter excludes only exact "Reconciled")
+
+### Cancellations Consolidation Feature
+- **Detection**: Bookings with reasons: Cancelled-SP error, Cancelled-Insured Booking, Cancelled-Check for Charge loss, Cancelled-DSS policy
+- **Summary Display**: All cancellation types grouped under single "Cancellations" row in summary table
+- **Discrepancy Calculation**: Uses only SP Net (always negative) - calculated as -Math.abs(spNetInHo)
+- **UI Display**: 
+  - Red-styled row (bg-red-50) with XCircle icon
+  - Shows aggregated count and discrepancy totals
+  - Click opens breakdown modal with cards for each cancellation type
+  - Click on type card opens regular discrepancy modal with booking details
+- **Modal Hierarchy**: Summary row → Breakdown modal → Discrepancy detail modal

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -86,6 +86,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [isAlreadyReconciledModalOpen, setIsAlreadyReconciledModalOpen] = useState(false);
   const [selectedAlreadyReconciledType, setSelectedAlreadyReconciledType] = useState<"same_be" | "different_be" | null>(null);
   const [isAlreadyReconciledDetailModalOpen, setIsAlreadyReconciledDetailModalOpen] = useState(false);
+  // Cancellations modal state
+  const [isCancellationsModalOpen, setIsCancellationsModalOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: runResult } = useQuery<{
@@ -222,42 +224,107 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   }, [primaryRows]);
 
   // Filter out Already Reconciled from main summary and create combined row
+  // Cancellation types to group under "Cancellations"
+  const cancellationReasons = [
+    "Cancelled-SP error",
+    "Cancelled-Insured Booking",
+    "Cancelled-Check for Charge loss",
+    "Cancelled-DSS policy",
+  ];
+
+  // Calculate cancellation breakdown data
+  const cancellationData = useMemo(() => {
+    // Get cancellation rows from primaryRows (individual bookings)
+    const cancellationBookings = primaryRows.filter(r => cancellationReasons.includes(r.reason));
+    
+    if (cancellationBookings.length === 0) {
+      return { hasCancellations: false, breakdown: [], totalCount: 0, totalDiscrepancyLc: 0, totalDiscrepancyUsd: 0, currency: "USD" };
+    }
+    
+    // Get unique currencies
+    const currencies = Array.from(new Set(cancellationBookings.map(b => b.hoCurrency)));
+    const currency = currencies.length > 0 ? currencies[0] : "USD";
+    
+    // Group by cancellation type
+    const breakdown = cancellationReasons.map(reason => {
+      const bookings = cancellationBookings.filter(b => b.reason === reason);
+      // For cancellations, discrepancy is only SP Net (always negative)
+      const discrepancyLc = bookings.reduce((sum, b) => sum + (-Math.abs(b.spNetInHo)), 0);
+      const discrepancyUsd = bookings.reduce((sum, b) => sum + (-Math.abs(b.spNetInHo / (b.fxRate || 1))), 0);
+      return {
+        reason,
+        displayName: reason.replace("Cancelled-", ""),
+        count: bookings.length,
+        discrepancyLc,
+        discrepancyUsd,
+        bookings,
+      };
+    }).filter(item => item.count > 0);
+    
+    // Calculate totals - for cancellations, discrepancy is SP Net only (always negative)
+    const totalDiscrepancyLc = breakdown.reduce((sum, item) => sum + item.discrepancyLc, 0);
+    const totalDiscrepancyUsd = breakdown.reduce((sum, item) => sum + item.discrepancyUsd, 0);
+    const totalCount = breakdown.reduce((sum, item) => sum + item.count, 0);
+    
+    return {
+      hasCancellations: totalCount > 0,
+      breakdown,
+      totalCount,
+      totalDiscrepancyLc,
+      totalDiscrepancyUsd,
+      currency,
+    };
+  }, [primaryRows]);
+
   const processedSummary = useMemo(() => {
-    // Remove individual Already Reconciled rows from summary
+    // Remove individual Already Reconciled rows and Cancellation rows from summary
     const filteredSummary = overallSummary.filter(
-      row => row.reason !== "Already Reconciled-Same BE" && row.reason !== "Already Reconciled-Different BE"
+      row => row.reason !== "Already Reconciled-Same BE" && 
+             row.reason !== "Already Reconciled-Different BE" &&
+             !cancellationReasons.includes(row.reason)
     );
+    
+    // Build result object
+    let result: {
+      rows: typeof filteredSummary;
+      alreadyReconciledRow: { reason: string; currency: string; discrepancyLc: number; discrepancyUsd: number; countBid: number } | null;
+      cancellationsRow: { reason: string; currency: string; discrepancyLc: number; discrepancyUsd: number; countBid: number } | null;
+    } = { rows: filteredSummary, alreadyReconciledRow: null, cancellationsRow: null };
     
     // Add combined "Already Reconciled" row if there are any
     if (alreadyReconciledData.hasAlreadyReconciled) {
-      // Get unique currencies from already reconciled bookings
       const sameBECurrencies = alreadyReconciledData.sameBE.bookings.map(b => b.hoCurrency);
       const diffBECurrencies = alreadyReconciledData.differentBE.bookings.map(b => b.hoCurrency);
       const allCurrencies = Array.from(new Set([...sameBECurrencies, ...diffBECurrencies]));
-      
-      // For the combined row, use the most common currency or first one
       const currency = allCurrencies.length > 0 ? allCurrencies[0] : "USD";
       
-      // Calculate total discrepancy
       const totalDiscrepancyLc = [...alreadyReconciledData.sameBE.bookings, ...alreadyReconciledData.differentBE.bookings]
         .reduce((sum, r) => sum + r.differenceLc, 0);
       const totalDiscrepancyUsd = [...alreadyReconciledData.sameBE.bookings, ...alreadyReconciledData.differentBE.bookings]
         .reduce((sum, r) => sum + r.differenceUsd, 0);
       
-      return {
-        rows: filteredSummary,
-        alreadyReconciledRow: {
-          reason: "Already Reconciled",
-          currency,
-          discrepancyLc: totalDiscrepancyLc,
-          discrepancyUsd: totalDiscrepancyUsd,
-          countBid: alreadyReconciledData.totalCount,
-        },
+      result.alreadyReconciledRow = {
+        reason: "Already Reconciled",
+        currency,
+        discrepancyLc: totalDiscrepancyLc,
+        discrepancyUsd: totalDiscrepancyUsd,
+        countBid: alreadyReconciledData.totalCount,
       };
     }
     
-    return { rows: filteredSummary, alreadyReconciledRow: null };
-  }, [overallSummary, alreadyReconciledData]);
+    // Add combined "Cancellations" row if there are any
+    if (cancellationData.hasCancellations) {
+      result.cancellationsRow = {
+        reason: "Cancellations",
+        currency: cancellationData.currency,
+        discrepancyLc: cancellationData.totalDiscrepancyLc,
+        discrepancyUsd: cancellationData.totalDiscrepancyUsd,
+        countBid: cancellationData.totalCount,
+      };
+    }
+    
+    return result;
+  }, [overallSummary, alreadyReconciledData, cancellationData]);
 
   // Get bookings for selected Already Reconciled type
   const selectedAlreadyReconciledBookings = useMemo(() => {
@@ -666,6 +733,29 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                               {formatNumber(processedSummary.alreadyReconciledRow.discrepancyUsd)}
                             </TableCell>
                             <TableCell className="py-1.5 text-right">{processedSummary.alreadyReconciledRow.countBid}</TableCell>
+                          </TableRow>
+                        )}
+                        {/* Cancellations combined row (if exists) */}
+                        {processedSummary.cancellationsRow && (
+                          <TableRow
+                            className="h-8 cursor-pointer hover-elevate bg-red-50 dark:bg-red-950/30"
+                            onClick={() => setIsCancellationsModalOpen(true)}
+                            data-testid="summary-row-cancellations"
+                          >
+                            <TableCell className="py-1.5">
+                              <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                                <XCircle className="h-3 w-3" />
+                                {processedSummary.cancellationsRow.reason}
+                              </span>
+                            </TableCell>
+                            <TableCell className="py-1.5">{processedSummary.cancellationsRow.currency}</TableCell>
+                            <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">
+                              {formatNumber(processedSummary.cancellationsRow.discrepancyLc)}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">
+                              {formatNumber(processedSummary.cancellationsRow.discrepancyUsd)}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right">{processedSummary.cancellationsRow.countBid}</TableCell>
                           </TableRow>
                         )}
                         {/* Regular summary rows */}
@@ -1110,6 +1200,71 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 )}
               </TableBody>
             </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancellations Modal - Breakdown by Type */}
+      <Dialog open={isCancellationsModalOpen} onOpenChange={setIsCancellationsModalOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-600" />
+              Cancellations Breakdown
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Click on a cancellation type to view detailed bookings.
+            </p>
+            <div className="space-y-2">
+              {cancellationData.breakdown.map((item) => (
+                <Card 
+                  key={item.reason}
+                  className="cursor-pointer hover-elevate border-red-200 dark:border-red-900/50"
+                  onClick={() => {
+                    setIsCancellationsModalOpen(false);
+                    setSelectedReason(item.reason);
+                    setIsModalOpen(true);
+                  }}
+                  data-testid={`cancellation-type-${item.displayName}`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="destructive" className="text-xs">
+                          {item.displayName}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {item.count} booking{item.count !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-mono text-red-600 dark:text-red-400">
+                          {formatNumber(item.discrepancyLc)} LC
+                        </p>
+                        <p className="text-xs font-mono text-muted-foreground">
+                          {formatNumber(item.discrepancyUsd)} USD
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="pt-3 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Total Cancellations</span>
+                <div className="text-right">
+                  <p className="font-mono font-medium text-red-600 dark:text-red-400">
+                    {formatNumber(cancellationData.totalDiscrepancyLc)} LC
+                  </p>
+                  <p className="text-xs font-mono text-muted-foreground">
+                    {formatNumber(cancellationData.totalDiscrepancyUsd)} USD
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
