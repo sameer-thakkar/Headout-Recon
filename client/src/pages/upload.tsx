@@ -264,27 +264,24 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     return alreadyReconciledData.differentBE.bookings;
   }, [selectedAlreadyReconciledType, alreadyReconciledData]);
 
-  // Secondary Vendor summary (cross-cutting check - bookings with BE ID mismatch)
-  const secondaryVendorSummary = useMemo(() => {
-    const svBookings = primaryRows.filter(r => r.isSecondaryVendor === true);
-    if (svBookings.length === 0) return null;
+  // Split summary into Primary Vendor and Secondary Vendor sections
+  // Secondary Vendor reasons start with "Secondary Vendor-"
+  const { primaryVendorSummary, secondaryVendorSummary } = useMemo(() => {
+    // Filter overallSummary rows into two groups
+    const primaryRows = overallSummary.filter(r => !r.reason.startsWith("Secondary Vendor-") && r.reason !== "Reconciled");
+    const secondaryRows = overallSummary.filter(r => r.reason.startsWith("Secondary Vendor-") && r.reason !== "Secondary Vendor-Reconciled");
     
-    // Group by primary reason
-    const byReason: Record<string, { count: number; discrepancyUsd: number }> = {};
-    for (const booking of svBookings) {
-      if (!byReason[booking.reason]) {
-        byReason[booking.reason] = { count: 0, discrepancyUsd: 0 };
-      }
-      byReason[booking.reason].count += 1;
-      byReason[booking.reason].discrepancyUsd += booking.differenceUsd;
-    }
+    // For secondary vendor, strip the prefix for display
+    const secondaryWithCleanReasons = secondaryRows.map(r => ({
+      ...r,
+      displayReason: r.reason.replace("Secondary Vendor-", ""),
+    }));
     
     return {
-      totalCount: svBookings.length,
-      totalDiscrepancyUsd: svBookings.reduce((sum, r) => sum + r.differenceUsd, 0),
-      byReason,
+      primaryVendorSummary: primaryRows,
+      secondaryVendorSummary: secondaryWithCleanReasons,
     };
-  }, [primaryRows]);
+  }, [overallSummary]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -701,34 +698,56 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       </TableBody>
                     </Table>
                     
-                    {/* Secondary Vendor Sub-section */}
-                    {secondaryVendorSummary && (
+                    {/* Secondary Vendor Section */}
+                    {secondaryVendorSummary.length > 0 && (
                       <div className="mt-4 pt-3 border-t border-dashed border-amber-500/50">
                         <div className="flex items-center gap-2 mb-2">
                           <AlertTriangle className="h-4 w-4 text-amber-600" />
                           <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                            Secondary Vendor Cases ({secondaryVendorSummary.totalCount} bookings)
+                            Secondary Vendor (BE ID Mismatch)
                           </span>
                           <Badge variant="outline" className="text-xs border-amber-500 text-amber-700 dark:text-amber-400">
-                            BE ID Mismatch
+                            {secondaryVendorSummary.reduce((sum, r) => sum + r.countBid, 0)} bookings
                           </Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          These bookings have a billing entity mismatch. They are included in their primary reason above.
-                        </p>
-                        <div className="space-y-1">
-                          {Object.entries(secondaryVendorSummary.byReason).map(([reason, data]) => (
-                            <div key={reason} className="flex items-center justify-between px-2 py-1 bg-amber-50 dark:bg-amber-950/30 rounded text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{reason}</span>
-                                <Badge variant="secondary" className="text-xs">{data.count}</Badge>
-                              </div>
-                              <span className="text-muted-foreground font-mono">
-                                {formatNumber(data.discrepancyUsd)} USD
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                        <Table className="text-sm">
+                          <TableHeader>
+                            <TableRow className="h-8">
+                              <TableHead className="py-1.5 text-xs">Reason</TableHead>
+                              <TableHead className="py-1.5 text-xs">Currency</TableHead>
+                              <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
+                              <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
+                              <TableHead className="py-1.5 text-xs text-right">Count</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {secondaryVendorSummary.map((row, index) => {
+                              const isClickable = row.displayReason !== "Reconciled";
+                              return (
+                                <TableRow
+                                  key={`sv-${row.reason}-${row.currency}-${index}`}
+                                  className={`h-8 bg-amber-50/50 dark:bg-amber-950/20 ${isClickable ? "cursor-pointer hover-elevate" : ""}`}
+                                  onClick={() => isClickable && handleReasonClick(row.reason)}
+                                  data-testid={`summary-row-sv-${row.displayReason}-${row.currency}`}
+                                >
+                                  <TableCell className="py-1.5">
+                                    <span className="text-xs text-amber-700 dark:text-amber-400">
+                                      {row.displayReason}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="py-1.5">{row.currency}</TableCell>
+                                  <TableCell className="py-1.5 text-right font-mono">
+                                    {formatNumber(row.discrepancyLc)}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-right font-mono">
+                                    {formatNumber(row.discrepancyUsd)}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
                       </div>
                     )}
                   </>
