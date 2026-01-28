@@ -1,0 +1,39 @@
+Column to be used : reason from HO data
+
+Values to be referred: “Already Auto Reconciled” & “Already Manually Reconciled”
+
+Identification/Classification logic: In the overall Reconciliation Summary, If any booking in the reconciliation has the above values in the reason. The reason for this bookings will be “Already reconciled”. We need to break this into two parts. There will be a collapsible field where we will break this into two parts:
+Same Billing entity: If billing entity id as per Sp Invoice tab and HO data matches then classify the booking under the reason “Same Billing entity”
+Different Billing entity: If billing entity as per SP Invoice tab and HO data does not match then classify the booking under the reason “Different Billing entity”.
+
+Modal Window details: There will be two modal windows in this case. The first one will give the details of the classification where it is under Same billing entity id and different billing entity id. Count of bookings under each classification. Reconciled net price, SP net. The 2nd modal window will show up when clicked on the classification and will show details as follows.
+Same Billing entity: Following things are should be displayed
+TID
+Reconciled Net price
+SP net 
+Payment method mismatch. 
+Date of payment 
+Different Billing entity: Following things/columns should be displayed
+TID
+Reconciled Net price
+SP net
+Date of payment. 
+Payment method
+
+Amount payable window: We need to show a booking level breakup of bookings that have been already reconciled from the logic mentioned above so that a user can decide what to do/how to treat an already reconciled booking id. Below are the two ways we have to handle it based on classification of a) Same Billing entity b) Different Billing entity
+
+Same Billing entity:
+Indicators/Checks that should be highlighted
+Date of Payment
+Amount paid (We need to check if this is the case of partial fulfillment)
+Payment method mismatch
+Action item: Here the user has to decide whether to pay for this booking id or not. We will use a validation method for this bookings. There will be a dropdown for a user to decide whether for the already reconciled booking you will pay or not. The values are as follows: 1. Cancellation 2. Multiple Tickets booked 3. Partial Fulfillment 4.Manual Error 5. Other. Give a remarks column for user to put remarks, a drop down menu to give add/less option and Amount just like other adjustments
+
+
+Different Billing entity
+Indicators/Checks that should be highlighted
+Date of Payment 
+Amount paid 
+Payment method mismatch- Show both the payment methods
+Action item:Here the user has to decide whether to pay for this booking id or not. We will use a validation method for this bookings. There will be a dropdown for a user to decide whether for the already reconciled booking you will pay or not. The values are as follows: 1. Cancellation 2. Multiple Tickets booked 3. Partial Fulfillment 4.Manual Error 5. Other. Give a remarks column for user to put remarks, a drop down menu to give add/less option and Amount just like other adjustments
+
