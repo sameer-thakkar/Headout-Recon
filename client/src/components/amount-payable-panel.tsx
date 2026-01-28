@@ -334,6 +334,22 @@ export function AmountPayablePanel({
     return grouped;
   }, [secondaryVendorBookings]);
 
+  // Group Secondary Vendor bookings by reason AND tid (for expandable UI)
+  const secondaryVendorByReasonAndTid = useMemo(() => {
+    const result: Record<string, Record<string, BookingForPayable[]>> = {};
+    for (const booking of secondaryVendorBookings) {
+      if (!result[booking.reason]) {
+        result[booking.reason] = {};
+      }
+      const tid = booking.tid || booking.bookingId;
+      if (!result[booking.reason][tid]) {
+        result[booking.reason][tid] = [];
+      }
+      result[booking.reason][tid].push(booking);
+    }
+    return result;
+  }, [secondaryVendorBookings]);
+
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
     // Reconciled bookings always use SP Net
     if (booking.reason === "Reconciled" || booking.reason === "Unmapped") {
@@ -355,9 +371,21 @@ export function AmountPayablePanel({
     return reasonBookings.reduce((sum, b) => sum + getFinalNetPrice(b), 0);
   }, [bookingsByReason, getFinalNetPrice]);
 
+  // Get total for a secondary vendor reason
+  const getSecondaryVendorReasonTotal = useCallback((reason: string): number => {
+    const reasonBookings = secondaryVendorByReason[reason] || [];
+    return reasonBookings.reduce((sum, b) => sum + getFinalNetPrice(b), 0);
+  }, [secondaryVendorByReason, getFinalNetPrice]);
+
   const discrepancyTotal = useMemo(() => 
     discrepancyBookings.reduce((sum, b) => sum + getFinalNetPrice(b), 0),
     [discrepancyBookings, getFinalNetPrice]
+  );
+
+  // Secondary Vendor total
+  const secondaryVendorTotal = useMemo(() => 
+    secondaryVendorBookings.reduce((sum, b) => sum + getFinalNetPrice(b), 0),
+    [secondaryVendorBookings, getFinalNetPrice]
   );
 
   // Group closed disputes by displayId for display in adjustments section (only SP Error disputes)
@@ -413,7 +441,7 @@ export function AmountPayablePanel({
     [alreadyReconciledBookings]
   );
 
-  const baseAmount = reconciledTotal + discrepancyTotal + alreadyReconciledTotal;
+  const baseAmount = reconciledTotal + discrepancyTotal + alreadyReconciledTotal + secondaryVendorTotal;
 
   const finalAmount = useMemo(() => {
     const adjustmentsResult = localAdjustments.reduce((total, adj) => {
@@ -498,6 +526,61 @@ export function AmountPayablePanel({
       });
     }
   }, [bookingsByReasonAndTid]);
+
+  // Secondary Vendor bulk selection functions
+  const updateSecondaryVendorReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
+    const reasonBookings = secondaryVendorByReason[reason] || [];
+    setLocalSelections(prev => {
+      const newSelections = { ...prev };
+      for (const b of reasonBookings) {
+        newSelections[b.bookingId] = value;
+      }
+      return newSelections;
+    });
+    if (value === "ho") {
+      setActiveDisputes(prev => {
+        const newSet = new Set(prev);
+        for (const b of reasonBookings) {
+          newSet.delete(b.bookingId);
+        }
+        return newSet;
+      });
+      setDisputeAmounts(prev => {
+        const newMap = new Map(prev);
+        for (const b of reasonBookings) {
+          newMap.delete(b.bookingId);
+        }
+        return newMap;
+      });
+    }
+  }, [secondaryVendorByReason]);
+
+  const updateSecondaryVendorTidSelection = useCallback((reason: string, tid: string, value: "ho" | "sp") => {
+    const tidBookings = secondaryVendorByReasonAndTid[reason]?.[tid] || [];
+    setLocalSelections(prev => {
+      const newSelections = { ...prev };
+      for (const b of tidBookings) {
+        newSelections[b.bookingId] = value;
+      }
+      return newSelections;
+    });
+    if (value === "ho") {
+      setActiveDisputes(prev => {
+        const newSet = new Set(prev);
+        for (const b of tidBookings) {
+          newSet.delete(b.bookingId);
+        }
+        return newSet;
+      });
+      setDisputeAmounts(prev => {
+        const newMap = new Map(prev);
+        for (const b of tidBookings) {
+          newMap.delete(b.bookingId);
+        }
+        return newMap;
+      });
+    }
+  }, [secondaryVendorByReasonAndTid]);
 
   const toggleReason = useCallback((reason: string) => {
     setExpandedReasons(prev => {
@@ -636,6 +719,69 @@ export function AmountPayablePanel({
       });
     }
   }, [bookingsByReasonAndTid, getTidDisputeCount, isBookingDisputable, disputeAmounts, getMaxDisputeAmount]);
+
+  // Secondary Vendor dispute functions
+  const updateSecondaryVendorReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
+    const reasonBookings = secondaryVendorByReason[reason] || [];
+    if (action === "all") {
+      const newDisputes = new Set(activeDisputes);
+      const newAmounts = new Map(disputeAmounts);
+      for (const b of reasonBookings) {
+        if (isBookingDisputable(b)) {
+          newDisputes.add(b.bookingId);
+          if (!newAmounts.has(b.bookingId)) {
+            newAmounts.set(b.bookingId, getMaxDisputeAmount(b));
+          }
+        }
+      }
+      setActiveDisputes(newDisputes);
+      setDisputeAmounts(newAmounts);
+    } else {
+      const newDisputes = new Set(activeDisputes);
+      const newAmounts = new Map(disputeAmounts);
+      for (const b of reasonBookings) {
+        newDisputes.delete(b.bookingId);
+        newAmounts.delete(b.bookingId);
+      }
+      setActiveDisputes(newDisputes);
+      setDisputeAmounts(newAmounts);
+    }
+  }, [secondaryVendorByReason, activeDisputes, disputeAmounts, isBookingDisputable, getMaxDisputeAmount]);
+
+  const toggleSecondaryVendorTidDispute = useCallback((reason: string, tid: string) => {
+    const tidBookings = secondaryVendorByReasonAndTid[reason]?.[tid] || [];
+    const disputableBookings = tidBookings.filter(b => isBookingDisputable(b));
+    const allDisputed = disputableBookings.every(b => activeDisputes.has(b.bookingId));
+    
+    if (allDisputed) {
+      const newDisputes = new Set(activeDisputes);
+      const newAmounts = new Map(disputeAmounts);
+      for (const b of disputableBookings) {
+        newDisputes.delete(b.bookingId);
+        newAmounts.delete(b.bookingId);
+      }
+      setActiveDisputes(newDisputes);
+      setDisputeAmounts(newAmounts);
+    } else {
+      const newDisputes = new Set(activeDisputes);
+      const newAmounts = new Map(disputeAmounts);
+      for (const b of disputableBookings) {
+        newDisputes.add(b.bookingId);
+        if (!newAmounts.has(b.bookingId)) {
+          newAmounts.set(b.bookingId, getMaxDisputeAmount(b));
+        }
+      }
+      setActiveDisputes(newDisputes);
+      setDisputeAmounts(newAmounts);
+    }
+  }, [secondaryVendorByReasonAndTid, activeDisputes, disputeAmounts, isBookingDisputable, getMaxDisputeAmount]);
+
+  const getSecondaryVendorTidDisputeCount = useCallback((reason: string, tid: string) => {
+    const tidBookings = secondaryVendorByReasonAndTid[reason]?.[tid] || [];
+    const disputable = tidBookings.filter(b => isBookingDisputable(b)).length;
+    const disputed = tidBookings.filter(b => activeDisputes.has(b.bookingId)).length;
+    return { disputed, disputable };
+  }, [secondaryVendorByReasonAndTid, activeDisputes, isBookingDisputable]);
 
   const addAdjustment = useCallback(() => {
     setLocalAdjustments((prev) => [
@@ -1944,34 +2090,281 @@ export function AmountPayablePanel({
             </div>
           )}
 
-          {/* Secondary Vendor Sub-section (cross-cutting info) */}
+          {/* Secondary Vendor Section - Full Interactive (BE ID Mismatch) */}
           {secondaryVendorBookings.length > 0 && (
-            <div className="space-y-2 pt-3 mt-3 border-t border-dashed border-amber-500/50">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  Secondary Vendor Cases ({secondaryVendorBookings.length} bookings)
+            <div className="space-y-3 pt-4 mt-4 border-t-2 border-dashed border-amber-500/50">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  <p className="text-base font-semibold text-amber-700 dark:text-amber-400">
+                    Secondary Vendor (BE ID Mismatch)
+                  </p>
+                  <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">
+                    {secondaryVendorBookings.length} bookings
+                  </Badge>
+                </div>
+                <p className="text-lg font-bold font-mono text-amber-700 dark:text-amber-400" data-testid="text-secondary-vendor-total">
+                  {formatCurrency(secondaryVendorTotal)} {currency}
                 </p>
-                <Badge variant="outline" className="text-xs border-amber-500 text-amber-700 dark:text-amber-400">
-                  BE ID Mismatch
-                </Badge>
               </div>
-              <p className="text-xs text-muted-foreground mb-2">
-                These bookings have a billing entity mismatch (HO BE ID differs from SP BE ID). They are listed under their primary reason above but flagged here for visibility.
-              </p>
-              <div className="space-y-1">
-                {Object.entries(secondaryVendorByReason).map(([reason, svBookings]) => (
-                  <div key={reason} className="flex items-center justify-between px-2 py-1 bg-amber-50 dark:bg-amber-950/30 rounded text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{reason}</span>
-                      <Badge variant="secondary" className="text-xs">{svBookings.length}</Badge>
+
+              {Object.entries(secondaryVendorByReasonAndTid).map(([reason, tidGroups]) => {
+                const reasonBookings = secondaryVendorByReason[reason] || [];
+                const reasonTotal = getSecondaryVendorReasonTotal(reason);
+                const svTidKey = (tid: string) => `sv:${reason}:${tid}`;
+
+                return (
+                  <Collapsible
+                    key={`sv-${reason}`}
+                    open={expandedReasons.has(`sv-${reason}`)}
+                    onOpenChange={() => toggleReason(`sv-${reason}`)}
+                  >
+                    <div className="border border-amber-300 dark:border-amber-700 rounded-lg overflow-hidden bg-amber-50/30 dark:bg-amber-950/20">
+                      <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-amber-100/50 dark:bg-amber-900/30 items-center">
+                        <div className="col-span-4 flex items-center gap-2">
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                              {expandedReasons.has(`sv-${reason}`) ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </CollapsibleTrigger>
+                          <span className="font-semibold text-sm text-amber-800 dark:text-amber-300">{reason}</span>
+                          <Badge variant="secondary" className="text-xs bg-amber-200 dark:bg-amber-800">
+                            {reasonBookings.length}
+                          </Badge>
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          {reason !== "Reconciled" && reason !== "Unmapped" && (
+                            <Select
+                              value=""
+                              onValueChange={(v) => updateSecondaryVendorReasonSelection(reason, v as "ho" | "sp")}
+                            >
+                              <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-sv-reason-${reason}`}>
+                                <SelectValue placeholder="Bulk Net" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ho">All HO Net</SelectItem>
+                                <SelectItem value="sp">All SP Net</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                        <div className="col-span-2 flex justify-center gap-1">
+                          {reason !== "Reconciled" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => updateSecondaryVendorReasonDispute(reason, "all")}
+                                data-testid={`button-sv-dispute-all-${reason}`}
+                              >
+                                Dispute All
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs text-muted-foreground"
+                                onClick={() => updateSecondaryVendorReasonDispute(reason, "clear")}
+                                data-testid={`button-sv-clear-${reason}`}
+                              >
+                                Clear
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                        <div className="col-span-4 text-right font-mono text-sm font-semibold text-amber-800 dark:text-amber-300">
+                          {formatCurrency(reasonTotal)} {currency}
+                        </div>
+                      </div>
+
+                      <CollapsibleContent>
+                        <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-amber-50/50 dark:bg-amber-950/30 text-xs font-medium text-muted-foreground border-t border-amber-200 dark:border-amber-800">
+                          <div className="col-span-2">TID / Booking ID</div>
+                          <div className="col-span-2 text-right">HO Net</div>
+                          <div className="col-span-2 text-right">SP Net</div>
+                          <div className="col-span-1 text-center">Net</div>
+                          <div className="col-span-1 text-center">Dispute</div>
+                          <div className="col-span-2 text-right">Price Payable</div>
+                          <div className="col-span-3 text-right">Dispute Amt</div>
+                          <div className="col-span-5 text-right">Final Reconciled Net</div>
+                        </div>
+
+                        <div className="max-h-80 overflow-y-auto">
+                          {Object.entries(tidGroups).map(([tid, tidBookings]) => {
+                            const tidKeyStr = svTidKey(tid);
+                            const isTidExpanded = expandedTids.has(tidKeyStr);
+                            return (
+                              <Collapsible
+                                key={tid}
+                                open={isTidExpanded}
+                                onOpenChange={() => toggleTid(tidKeyStr)}
+                              >
+                                <div className="border-t border-amber-200 dark:border-amber-800">
+                                  <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-amber-50/30 dark:bg-amber-950/10 items-center">
+                                    <div className="col-span-2 flex items-center gap-1">
+                                      <CollapsibleTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
+                                          {isTidExpanded ? (
+                                            <ChevronDown className="h-3 w-3" />
+                                          ) : (
+                                            <ChevronRight className="h-3 w-3" />
+                                          )}
+                                        </Button>
+                                      </CollapsibleTrigger>
+                                      <div className="min-w-0 flex-1">
+                                        <span className="font-medium text-xs truncate block" title={tid}>
+                                          {tid}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="col-span-2 text-right font-mono text-xs">
+                                      {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
+                                    </div>
+                                    <div className="col-span-2 text-right font-mono text-xs">
+                                      {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
+                                    </div>
+                                    <div className="col-span-1 flex justify-center">
+                                      {reason !== "Reconciled" && reason !== "Unmapped" && (
+                                        <Select
+                                          value=""
+                                          onValueChange={(v) => updateSecondaryVendorTidSelection(reason, tid, v as "ho" | "sp")}
+                                        >
+                                          <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-sv-tid-${tid}`}>
+                                            <SelectValue placeholder="All" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="ho">HO</SelectItem>
+                                            <SelectItem value="sp">SP</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      )}
+                                    </div>
+                                    <div className="col-span-1 flex justify-center items-center">
+                                      {(() => {
+                                        if (reason === "Reconciled") return <span className="text-xs text-muted-foreground">-</span>;
+                                        const { disputed, disputable } = getSecondaryVendorTidDisputeCount(reason, tid);
+                                        if (disputable === 0) return <span className="text-xs text-muted-foreground">-</span>;
+                                        return (
+                                          <Checkbox
+                                            checked={disputed === disputable}
+                                            onCheckedChange={() => toggleSecondaryVendorTidDispute(reason, tid)}
+                                            className="h-4 w-4"
+                                            data-testid={`checkbox-sv-dispute-tid-${tid}`}
+                                          />
+                                        );
+                                      })()}
+                                    </div>
+                                    <div className="col-span-2 text-right font-mono text-xs">
+                                      {formatCurrency(tidBookings.reduce((s, b) => {
+                                        if (reason === "Reconciled") return s + b.spNet;
+                                        const sel = localSelections[b.bookingId] || "sp";
+                                        return s + (sel === "ho" ? b.hoNet : b.spNet);
+                                      }, 0))}
+                                    </div>
+                                    <div className="col-span-3 text-right font-mono text-xs">
+                                      {formatCurrency(tidBookings.reduce((s, b) => {
+                                        if (!activeDisputes.has(b.bookingId)) return s;
+                                        return s + (disputeAmounts.get(b.bookingId) || 0);
+                                      }, 0))}
+                                    </div>
+                                    <div className="col-span-5 text-right font-mono text-xs font-semibold">
+                                      {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
+                                    </div>
+                                  </div>
+
+                                  <CollapsibleContent>
+                                    {tidBookings.map((booking) => {
+                                      const selection = localSelections[booking.bookingId] || "sp";
+                                      const isDisputed = activeDisputes.has(booking.bookingId);
+                                      const disputeAmt = disputeAmounts.get(booking.bookingId) || 0;
+                                      const pricePayable = reason === "Reconciled" ? booking.spNet : (selection === "ho" ? booking.hoNet : booking.spNet);
+                                      const finalNet = getFinalNetPrice(booking);
+                                      const canDispute = reason !== "Reconciled" && isBookingDisputable(booking);
+
+                                      return (
+                                        <div
+                                          key={booking.bookingId}
+                                          className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-amber-50/20 dark:bg-amber-950/5 items-center border-t border-amber-100 dark:border-amber-900"
+                                        >
+                                          <div className="col-span-2 pl-6">
+                                            <span className="text-xs font-mono">{booking.bookingId}</span>
+                                          </div>
+                                          <div className="col-span-2 text-right font-mono text-xs">
+                                            {formatCurrency(booking.hoNet)}
+                                          </div>
+                                          <div className="col-span-2 text-right font-mono text-xs">
+                                            {formatCurrency(booking.spNet)}
+                                          </div>
+                                          <div className="col-span-1 flex justify-center">
+                                            {reason === "Reconciled" ? (
+                                              <span className="text-xs text-muted-foreground">SP</span>
+                                            ) : (
+                                              <Select
+                                                value={selection}
+                                                onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
+                                              >
+                                                <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-sv-booking-${booking.bookingId}`}>
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  <SelectItem value="ho">HO</SelectItem>
+                                                  <SelectItem value="sp">SP</SelectItem>
+                                                </SelectContent>
+                                              </Select>
+                                            )}
+                                          </div>
+                                          <div className="col-span-1 flex justify-center">
+                                            {canDispute ? (
+                                              <Checkbox
+                                                checked={isDisputed}
+                                                onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
+                                                className="h-4 w-4"
+                                                data-testid={`checkbox-sv-dispute-${booking.bookingId}`}
+                                              />
+                                            ) : (
+                                              <span className="text-xs text-muted-foreground">-</span>
+                                            )}
+                                          </div>
+                                          <div className="col-span-2 text-right font-mono text-xs">
+                                            {formatCurrency(pricePayable)}
+                                          </div>
+                                          <div className="col-span-3 text-right">
+                                            {isDisputed ? (
+                                              <Input
+                                                type="number"
+                                                value={disputeAmt}
+                                                onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
+                                                className="h-6 w-20 text-xs font-mono text-right ml-auto"
+                                                data-testid={`input-sv-dispute-${booking.bookingId}`}
+                                              />
+                                            ) : (
+                                              <span className="text-xs text-muted-foreground">-</span>
+                                            )}
+                                          </div>
+                                          <div className="col-span-5 text-right font-mono text-xs font-semibold">
+                                            {formatCurrency(finalNet)} {currency}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </CollapsibleContent>
+                                </div>
+                              </Collapsible>
+                            );
+                          })}
+                        </div>
+                      </CollapsibleContent>
                     </div>
-                    <div className="text-muted-foreground font-mono">
-                      {formatCurrency(svBookings.reduce((sum, b) => sum + Math.abs(b.hoNet - b.spNet), 0))} {currency}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  </Collapsible>
+                );
+              })}
             </div>
           )}
 
