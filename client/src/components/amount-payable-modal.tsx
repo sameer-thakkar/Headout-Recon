@@ -82,6 +82,9 @@ export interface BookingForPayable {
   isSecondaryVendor?: boolean;
   hoBeId?: string;
   spBeId?: string;
+  // Payment method fields for mismatch detection
+  paymentMethod?: string;
+  spPaymentMethod?: string;
 }
 
 export interface FinalNetSelection {

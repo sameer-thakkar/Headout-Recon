@@ -143,6 +143,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         isSecondaryVendor: row.isSecondaryVendor || false,
         hoBeId: row.hoBeId,
         spBeId: row.spBeId,
+        // Payment method fields for mismatch detection
+        paymentMethod: row.paymentMethod,
+        spPaymentMethod: row.spPaymentMethod,
       }));
   }, [primaryRows, secondaryVendorRows, unmappedRows, selectedPayableCurrency]);
 
