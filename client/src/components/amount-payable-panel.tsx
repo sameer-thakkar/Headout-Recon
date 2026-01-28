@@ -2212,7 +2212,7 @@ export function AmountPayablePanel({
                             </CollapsibleTrigger>
                             <Button
                               variant="ghost"
-                              className="p-0 h-auto font-semibold text-sm hover:text-primary hover:bg-transparent"
+                              className="p-0 h-auto text-sm font-medium"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedReasonModal(reason);
