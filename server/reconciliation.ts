@@ -85,6 +85,8 @@ interface ReasonResult {
   comment: string;
   // Already Reconciled sub-classification
   alreadyReconciledType?: "same_be" | "different_be";
+  // Cross-cutting Secondary Vendor flag (BE ID mismatch)
+  isSecondaryVendor: boolean;
 }
 
 // SP Row from parsed sheet
@@ -441,13 +443,17 @@ function buildSPLookup(
 
 /**
  * STEP G: Reason logic for Primary rows
- * Updated to return reason, chargedLoss, and comment for cancellation handling
- * Priority order (highest to lowest):
+ * Updated to return reason, chargedLoss, comment, and isSecondaryVendor flag
+ * 
+ * Primary reason priority (highest to lowest):
  * 1) Already Reconciled - check HO reason column
  * 2) Cancellations - cancelled booking handling
  * 3) MTB (Multiple Tickets Booked) - large percentage difference
  * 4) NPD (Net Price Discrepancy) - amounts don't reconcile
- * 5) Secondary Vendor - BE ID mismatch (only when amounts reconcile)
+ * 5) Reconciled - amounts within tolerance
+ * 
+ * Cross-cutting check (applies to ALL bookings independently):
+ * - isSecondaryVendor: true if HO BE ID != SP BE ID (BE mismatch)
  */
 function assignReason(
   bookingStatus: string,
@@ -465,6 +471,17 @@ function assignReason(
   // Normalize chargedLoss to check if it's already TRUE
   const isChargedLossTrue = chargedLossOriginal?.toUpperCase() === "TRUE";
   
+  // Cross-cutting Secondary Vendor check (applies to ALL bookings)
+  // Check BE ID mismatch independently of primary reason
+  let isSecondaryVendor = false;
+  if (hoBeId && spBeId && hoBeId.trim() !== "" && spBeId.trim() !== "") {
+    const normalizedHoBeId = hoBeId.trim().toLowerCase();
+    const normalizedSpBeId = spBeId.trim().toLowerCase();
+    if (normalizedHoBeId !== normalizedSpBeId) {
+      isSecondaryVendor = true;
+    }
+  }
+  
   // 1) Already Reconciled - check HO reason column
   // Values: "Already Auto Reconciled" or "Already Manually Reconciled"
   if (hoReason) {
@@ -480,7 +497,8 @@ function assignReason(
           reason: "Already Reconciled-Same BE",
           chargedLoss: chargedLossOriginal || "FALSE",
           comment: hoReason,
-          alreadyReconciledType: "same_be"
+          alreadyReconciledType: "same_be",
+          isSecondaryVendor
         };
       } else {
         // Different BE or one is missing
@@ -488,7 +506,8 @@ function assignReason(
           reason: "Already Reconciled-Different BE",
           chargedLoss: chargedLossOriginal || "FALSE",
           comment: hoReason,
-          alreadyReconciledType: "different_be"
+          alreadyReconciledType: "different_be",
+          isSecondaryVendor
         };
       }
     }
@@ -503,14 +522,16 @@ function assignReason(
         return {
           reason: "Reconciled",
           chargedLoss: chargedLossOriginal || "FALSE",
-          comment: "Cancelled-OK"
+          comment: "Cancelled-OK",
+          isSecondaryVendor
         };
       } else {
         // SP Net > 0 → "Cancelled-SP error", chargedLoss = TRUE
         return {
           reason: "Cancelled-SP error",
           chargedLoss: "TRUE",
-          comment: "Cancelled-SP error"
+          comment: "Cancelled-SP error",
+          isSecondaryVendor
         };
       }
     }
@@ -522,7 +543,8 @@ function assignReason(
         return {
           reason: "Reconciled",
           chargedLoss: chargedLossOriginal || "FALSE",
-          comment: "Cancelled-OK"
+          comment: "Cancelled-OK",
+          isSecondaryVendor
         };
       } else {
         // SP Net > 0 - check Cancellation Insurance
@@ -531,7 +553,8 @@ function assignReason(
           return {
             reason: "Cancelled-Insured Booking",
             chargedLoss: "TRUE",
-            comment: "Cancelled-Insured Booking"
+            comment: "Cancelled-Insured Booking",
+            isSecondaryVendor
           };
         } else {
           // Cancellation Insurance = "No" - check chargedLoss
@@ -540,14 +563,16 @@ function assignReason(
             return {
               reason: "Cancelled-DSS policy",
               chargedLoss: "TRUE",
-              comment: "Cancelled-DSS policy"
+              comment: "Cancelled-DSS policy",
+              isSecondaryVendor
             };
           } else {
             // chargedLoss = FALSE → "Cancelled-Check for Charge loss"
             return {
               reason: "Cancelled-Check for Charge loss",
               chargedLoss: "FALSE",
-              comment: "Cancelled-Check for Charge loss"
+              comment: "Cancelled-Check for Charge loss",
+              isSecondaryVendor
             };
           }
         }
@@ -558,7 +583,8 @@ function assignReason(
     return {
       reason: "Reconciled",
       chargedLoss: chargedLossOriginal || "FALSE",
-      comment: "Cancelled-OK"
+      comment: "Cancelled-OK",
+      isSecondaryVendor
     };
   }
   
@@ -569,7 +595,8 @@ function assignReason(
       return {
         reason: "Multiple Tickets Booked",
         chargedLoss: chargedLossOriginal || "FALSE",
-        comment: ""
+        comment: "",
+        isSecondaryVendor
       };
     }
     
@@ -580,34 +607,22 @@ function assignReason(
       : (Math.abs(differencePct) < 0.03);
     
     if (isReconciled) {
-      // 5) Secondary Vendor - lowest priority, only when amounts would reconcile but BE IDs mismatch
-      if (hoBeId && spBeId && hoBeId.trim() !== "" && spBeId.trim() !== "") {
-        const normalizedHoBeId = hoBeId.trim().toLowerCase();
-        const normalizedSpBeId = spBeId.trim().toLowerCase();
-        if (normalizedHoBeId !== normalizedSpBeId) {
-          return {
-            reason: "Secondary Vendor",
-            chargedLoss: chargedLossOriginal || "FALSE",
-            comment: `BE mismatch: HO=${hoBeId}, SP=${spBeId}`
-          };
-        }
-      }
-      
-      // No BE mismatch - it's truly Reconciled
       return {
         reason: "Reconciled",
         chargedLoss: chargedLossOriginal || "FALSE",
-        comment: ""
+        comment: "",
+        isSecondaryVendor
       };
     }
   }
   
-  // 4) NPD - Net Price Discrepancy (amounts don't reconcile)
+  // 5) NPD - Net Price Discrepancy (amounts don't reconcile)
   // This is the fallback for non-matching amounts
   return {
     reason: "Net Price Discrepancy",
     chargedLoss: chargedLossOriginal || "FALSE",
-    comment: ""
+    comment: "",
+    isSecondaryVendor
   };
 }
 
@@ -724,8 +739,9 @@ function computeReconciliationRows(
     const hoRate = usdToCcy[ho.currency] || 1;
     const differenceUsd = differenceLc / hoRate;
     
-    // STEP G: Assign reason (now returns ReasonResult with chargedLoss and comment)
-    // Priority: Already Reconciled (highest) → Secondary Vendor → Cancelled → MTB/NPD/Reconciled
+    // STEP G: Assign reason (now returns ReasonResult with chargedLoss, comment, and isSecondaryVendor flag)
+    // Primary reason priority: Already Reconciled → Cancelled → MTB → NPD → Reconciled
+    // Cross-cutting: isSecondaryVendor checked independently for all bookings
     const reasonResult = assignReason(
       ho.bookingStatus,
       ho.cancellable,
@@ -781,6 +797,9 @@ function computeReconciliationRows(
       spDateOfPayment: spBundle?.dateOfPayment || undefined,
       spPaymentMethod: spBundle?.paymentMethod,
       hoBeId: ho.beId, // Store HO BE ID for comparison display
+      // Secondary Vendor flag (cross-cutting check)
+      isSecondaryVendor: reasonResult.isSecondaryVendor,
+      spBeId: spBundle?.beId, // Store SP BE ID for comparison display
     });
   });
   

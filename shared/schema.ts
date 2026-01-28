@@ -82,6 +82,10 @@ export const primaryRowSchema = z.object({
   spDateOfPayment: z.string().optional(), // SP date of payment
   spPaymentMethod: z.string().optional(), // SP payment method for comparison
   hoBeId: z.string().optional(), // HO billing entity ID (for comparison)
+  
+  // Secondary Vendor flag (cross-cutting check for all discrepancy types)
+  isSecondaryVendor: z.boolean().optional(),
+  spBeId: z.string().optional(), // SP billing entity ID (for comparison)
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
