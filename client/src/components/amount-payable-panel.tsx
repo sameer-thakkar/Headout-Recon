@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,9 @@ export function AmountPayablePanel({
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
+  // Collapsible state for grouped sections
+  const [isCancellationsExpanded, setIsCancellationsExpanded] = useState(false);
+  const [isAlreadyReconciledExpanded, setIsAlreadyReconciledExpanded] = useState(false);
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
@@ -267,8 +270,28 @@ export function AmountPayablePanel({
     [bookings]
   );
 
+  // Cancellation reasons to group together
+  const cancellationReasons = [
+    "Cancelled-SP error",
+    "Cancelled-Insured Booking",
+    "Cancelled-Check for Charge loss",
+    "Cancelled-DSS policy",
+  ];
+
+  // Regular discrepancy bookings (excludes cancellations)
   const discrepancyBookings = useMemo(() => 
-    (bookings || []).filter(b => b.reason !== "Reconciled" && !b.reason.startsWith("Already Reconciled") && !b.isSecondaryVendor), 
+    (bookings || []).filter(b => 
+      b.reason !== "Reconciled" && 
+      !b.reason.startsWith("Already Reconciled") && 
+      !b.isSecondaryVendor &&
+      !cancellationReasons.includes(b.reason)
+    ), 
+    [bookings]
+  );
+
+  // Cancellation bookings grouped separately
+  const cancellationBookings = useMemo(() => 
+    (bookings || []).filter(b => cancellationReasons.includes(b.reason) && !b.isSecondaryVendor), 
     [bookings]
   );
 
@@ -316,6 +339,34 @@ export function AmountPayablePanel({
     }
     return result;
   }, [discrepancyBookings]);
+
+  // Group cancellation bookings by reason
+  const cancellationsByReason = useMemo(() => {
+    const grouped: Record<string, BookingForPayable[]> = {};
+    for (const booking of cancellationBookings) {
+      if (!grouped[booking.reason]) {
+        grouped[booking.reason] = [];
+      }
+      grouped[booking.reason].push(booking);
+    }
+    return grouped;
+  }, [cancellationBookings]);
+
+  // Group cancellation bookings by reason AND tid
+  const cancellationsByReasonAndTid = useMemo(() => {
+    const result: Record<string, Record<string, BookingForPayable[]>> = {};
+    for (const booking of cancellationBookings) {
+      if (!result[booking.reason]) {
+        result[booking.reason] = {};
+      }
+      const tid = booking.tid || booking.bookingId;
+      if (!result[booking.reason][tid]) {
+        result[booking.reason][tid] = [];
+      }
+      result[booking.reason][tid].push(booking);
+    }
+    return result;
+  }, [cancellationBookings]);
 
   // Secondary Vendor bookings - using isSecondaryVendor flag
   const secondaryVendorBookings = useMemo(() => {
@@ -675,6 +726,61 @@ export function AmountPayablePanel({
       });
     }
   }, [bookingsByReason, isBookingDisputable, disputeAmounts, getMaxDisputeAmount]);
+
+  // Cancellation-specific bulk handlers
+  const updateCancellationReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
+    const reasonBookings = cancellationsByReason[reason] || [];
+    setLocalSelections(prev => {
+      const newSelections = { ...prev };
+      for (const b of reasonBookings) {
+        newSelections[b.bookingId] = value;
+      }
+      return newSelections;
+    });
+    if (value === "ho") {
+      setActiveDisputes(prev => {
+        const newSet = new Set(prev);
+        for (const b of reasonBookings) {
+          newSet.delete(b.bookingId);
+        }
+        return newSet;
+      });
+      setDisputeAmounts(prev => {
+        const newMap = new Map(prev);
+        for (const b of reasonBookings) {
+          newMap.delete(b.bookingId);
+        }
+        return newMap;
+      });
+    }
+  }, [cancellationsByReason]);
+
+  const updateCancellationReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
+    const reasonBookings = cancellationsByReason[reason] || [];
+    if (action === "all") {
+      setActiveDisputes(prev => {
+        const newSet = new Set(prev);
+        for (const b of reasonBookings) {
+          if (isBookingDisputable(b)) {
+            newSet.add(b.bookingId);
+            if (!disputeAmounts.has(b.bookingId)) {
+              const maxAmt = getMaxDisputeAmount(b);
+              setDisputeAmounts(prevMap => new Map(prevMap).set(b.bookingId, maxAmt));
+            }
+          }
+        }
+        return newSet;
+      });
+    } else {
+      setActiveDisputes(prev => {
+        const newSet = new Set(prev);
+        for (const b of reasonBookings) {
+          newSet.delete(b.bookingId);
+        }
+        return newSet;
+      });
+    }
+  }, [cancellationsByReason, isBookingDisputable, disputeAmounts, getMaxDisputeAmount]);
 
   const getTidDisputeCount = useCallback((reason: string, tid: string) => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
@@ -1622,23 +1728,39 @@ export function AmountPayablePanel({
             </div>
           </div>
 
-          {/* Already Reconciled Bookings Section */}
+          {/* Already Reconciled Bookings Section - Collapsible */}
           {alreadyReconciledBookings.length > 0 && (
-            <div className="border rounded-lg overflow-hidden border-amber-300 dark:border-amber-700">
-              <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 items-center">
-                <div className="col-span-6 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Already Reconciled</span>
-                  <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
-                    {alreadyReconciledBookings.length}
-                  </Badge>
-                </div>
-                <div className="col-span-6 text-right">
-                  <span className="text-xs text-muted-foreground">Decide payment for each booking</span>
-                </div>
-              </div>
-              <div className="max-h-96 overflow-y-auto">
-                <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+            <Collapsible 
+              open={isAlreadyReconciledExpanded}
+              onOpenChange={setIsAlreadyReconciledExpanded}
+            >
+              <div className="border rounded-lg overflow-hidden border-amber-300 dark:border-amber-700">
+                <CollapsibleTrigger asChild>
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 items-center cursor-pointer hover-elevate">
+                    <div className="col-span-6 flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                        {isAlreadyReconciledExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-amber-600" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-amber-600" />
+                        )}
+                      </Button>
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Already Reconciled</span>
+                      <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                        {alreadyReconciledBookings.length}
+                      </Badge>
+                    </div>
+                    <div className="col-span-6 text-right">
+                      <span className="text-xs text-muted-foreground">
+                        {isAlreadyReconciledExpanded ? "Decide payment for each booking" : "Click to expand"}
+                      </span>
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="max-h-96 overflow-y-auto">
+                    <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
                   <div className="col-span-1">TID</div>
                   <div className="col-span-1">Booking ID</div>
                   <div className="col-span-1 text-right">HO Net</div>
@@ -1758,8 +1880,283 @@ export function AmountPayablePanel({
                     </div>
                   );
                 })}
+                  </div>
+                </CollapsibleContent>
               </div>
-            </div>
+            </Collapsible>
+          )}
+
+          {/* Cancellations Section - Collapsible */}
+          {cancellationBookings.length > 0 && (
+            <Collapsible 
+              open={isCancellationsExpanded}
+              onOpenChange={setIsCancellationsExpanded}
+            >
+              <div className="border rounded-lg overflow-hidden border-red-300 dark:border-red-700">
+                <CollapsibleTrigger asChild>
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-red-50 dark:bg-red-950/30 items-center cursor-pointer hover-elevate">
+                    <div className="col-span-6 flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                        {isCancellationsExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-red-600" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-red-600" />
+                        )}
+                      </Button>
+                      <XCircle className="h-4 w-4 text-red-600" />
+                      <span className="text-sm font-medium text-red-700 dark:text-red-400">Cancellations</span>
+                      <Badge variant="secondary" className="text-xs bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
+                        {cancellationBookings.length}
+                      </Badge>
+                    </div>
+                    <div className="col-span-6 text-right">
+                      <span className="text-xs text-muted-foreground">
+                        {isCancellationsExpanded ? "View cancellation types" : "Click to expand"}
+                      </span>
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-2 p-3 border-t">
+                    {Object.entries(cancellationsByReasonAndTid).map(([reason, tidGroups]) => {
+                      const reasonBookings = cancellationsByReason[reason] || [];
+                      const reasonTotal = reasonBookings.reduce((sum, b) => {
+                        const netType = localSelections[b.bookingId] || "sp";
+                        const pricePayable = netType === "ho" ? b.hoNet : b.spNet;
+                        const disputeAmt = disputeAmounts.get(b.bookingId) || 0;
+                        return sum + pricePayable - disputeAmt;
+                      }, 0);
+                      const displayName = reason.replace("Cancelled-", "");
+
+                      return (
+                        <Collapsible
+                          key={reason}
+                          open={expandedReasons.has(reason)}
+                          onOpenChange={() => toggleReason(reason)}
+                        >
+                          <div className="border rounded-lg overflow-hidden border-red-200 dark:border-red-800/50">
+                            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-red-50/50 dark:bg-red-950/20 items-center">
+                              <div className="col-span-4 flex items-center gap-2">
+                                <CollapsibleTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                                    {expandedReasons.has(reason) ? (
+                                      <ChevronDown className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </CollapsibleTrigger>
+                                <Button
+                                  variant="ghost"
+                                  className="p-0 h-auto font-semibold text-sm hover:text-primary hover:bg-transparent text-red-700 dark:text-red-400"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedReasonModal(reason);
+                                  }}
+                                  data-testid={`button-view-reason-${reason}`}
+                                >
+                                  {displayName}
+                                  <Eye className="h-3 w-3 ml-1 opacity-50" />
+                                </Button>
+                                <Badge variant="secondary" className="text-xs">
+                                  {reasonBookings.length}
+                                </Badge>
+                              </div>
+                              <div className="col-span-2 flex justify-center">
+                                <Select
+                                  value=""
+                                  onValueChange={(v) => updateCancellationReasonSelection(reason, v as "ho" | "sp")}
+                                >
+                                  <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-cancellation-reason-${reason}`}>
+                                    <SelectValue placeholder="Bulk Net" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="ho">All HO Net</SelectItem>
+                                    <SelectItem value="sp">All SP Net</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="col-span-2 flex justify-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => updateCancellationReasonDispute(reason, "all")}
+                                  data-testid={`button-dispute-all-cancellation-${reason}`}
+                                >
+                                  Dispute All
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-xs text-muted-foreground"
+                                  onClick={() => updateCancellationReasonDispute(reason, "clear")}
+                                  data-testid={`button-clear-cancellation-${reason}`}
+                                >
+                                  Clear
+                                </Button>
+                              </div>
+                              <div className="col-span-4 text-right font-mono text-sm font-semibold text-red-700 dark:text-red-400">
+                                {formatCurrency(reasonTotal)} {currency}
+                              </div>
+                            </div>
+
+                            <CollapsibleContent>
+                              <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                                <div className="col-span-2">TID / Booking ID</div>
+                                <div className="col-span-2 text-right">HO Net</div>
+                                <div className="col-span-2 text-right">SP Net</div>
+                                <div className="col-span-1 text-center">Net</div>
+                                <div className="col-span-1 text-center">Dispute</div>
+                                <div className="col-span-2 text-right">Price Payable</div>
+                                <div className="col-span-3 text-right">Dispute Amt</div>
+                                <div className="col-span-5 text-right">Final Reconciled Net</div>
+                              </div>
+
+                              <div className="max-h-80 overflow-y-auto">
+                                {Object.entries(tidGroups).map(([tid, tidBookings]) => {
+                                  const tidKeyStr = `${reason}:${tid}`;
+                                  const isTidExpanded = expandedTids.has(tidKeyStr);
+
+                                  return (
+                                    <div key={tid} className="border-t">
+                                      <Collapsible
+                                        open={isTidExpanded}
+                                        onOpenChange={() => toggleTid(tidKeyStr)}
+                                      >
+                                        <div className="grid grid-cols-18 gap-1 px-3 py-2 items-center hover:bg-muted/20">
+                                          <div className="col-span-2 flex items-center gap-1">
+                                            <CollapsibleTrigger asChild>
+                                              <Button variant="ghost" size="icon" className="h-5 w-5">
+                                                {isTidExpanded ? (
+                                                  <ChevronDown className="h-3 w-3" />
+                                                ) : (
+                                                  <ChevronRight className="h-3 w-3" />
+                                                )}
+                                              </Button>
+                                            </CollapsibleTrigger>
+                                            <span className="font-mono text-xs truncate" title={tid}>
+                                              {tid}
+                                            </span>
+                                            <Badge variant="outline" className="text-xs ml-1">
+                                              {tidBookings.length}
+                                            </Badge>
+                                          </div>
+                                          <div className="col-span-16" />
+                                        </div>
+
+                                        <CollapsibleContent>
+                                          {tidBookings.map((booking) => {
+                                            const netType = localSelections[booking.bookingId] || "sp";
+                                            const pricePayable = netType === "ho" ? booking.hoNet : booking.spNet;
+                                            const disputeAmt = disputeAmounts.get(booking.bookingId) || 0;
+                                            const isDisputed = activeDisputes.has(booking.bookingId);
+                                            const finalNet = pricePayable - disputeAmt;
+
+                                            return (
+                                              <div
+                                                key={booking.bookingId}
+                                                className="grid grid-cols-18 gap-1 px-3 py-1.5 items-center text-xs border-t bg-muted/10"
+                                                data-testid={`booking-row-${booking.bookingId}`}
+                                              >
+                                                <div className="col-span-2 pl-6 font-mono truncate" title={booking.bookingId}>
+                                                  {booking.bookingId}
+                                                </div>
+                                                <div className="col-span-2 text-right font-mono">
+                                                  {formatCurrency(booking.hoNet)}
+                                                </div>
+                                                <div className="col-span-2 text-right font-mono">
+                                                  {formatCurrency(booking.spNet)}
+                                                </div>
+                                                <div className="col-span-1 flex justify-center">
+                                                  <Select
+                                                    value={netType}
+                                                    onValueChange={(v) =>
+                                                      setLocalSelections((prev) => ({
+                                                        ...prev,
+                                                        [booking.bookingId]: v as "ho" | "sp",
+                                                      }))
+                                                    }
+                                                  >
+                                                    <SelectTrigger className="w-14 h-6 text-xs">
+                                                      <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                      <SelectItem value="ho">HO</SelectItem>
+                                                      <SelectItem value="sp">SP</SelectItem>
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+                                                <div className="col-span-1 flex justify-center">
+                                                  <Checkbox
+                                                    checked={isDisputed}
+                                                    onCheckedChange={(checked) => {
+                                                      const newActive = new Set(activeDisputes);
+                                                      if (checked) {
+                                                        newActive.add(booking.bookingId);
+                                                        setDisputeAmounts((prev) => {
+                                                          const updated = new Map(prev);
+                                                          updated.set(
+                                                            booking.bookingId,
+                                                            Math.abs(booking.hoNet - booking.spNet)
+                                                          );
+                                                          return updated;
+                                                        });
+                                                      } else {
+                                                        newActive.delete(booking.bookingId);
+                                                        setDisputeAmounts((prev) => {
+                                                          const updated = new Map(prev);
+                                                          updated.delete(booking.bookingId);
+                                                          return updated;
+                                                        });
+                                                      }
+                                                      setActiveDisputes(newActive);
+                                                    }}
+                                                    data-testid={`checkbox-dispute-${booking.bookingId}`}
+                                                  />
+                                                </div>
+                                                <div className="col-span-2 text-right font-mono">
+                                                  {formatCurrency(pricePayable)}
+                                                </div>
+                                                <div className="col-span-3 text-right">
+                                                  {isDisputed && (
+                                                    <Input
+                                                      type="number"
+                                                      className="w-full h-6 text-xs text-right font-mono"
+                                                      value={disputeAmt || ""}
+                                                      onChange={(e) => {
+                                                        const val = parseFloat(e.target.value) || 0;
+                                                        setDisputeAmounts((prev) => {
+                                                          const updated = new Map(prev);
+                                                          updated.set(booking.bookingId, val);
+                                                          return updated;
+                                                        });
+                                                      }}
+                                                      data-testid={`input-dispute-${booking.bookingId}`}
+                                                    />
+                                                  )}
+                                                </div>
+                                                <div className="col-span-5 text-right font-mono font-semibold">
+                                                  {formatCurrency(finalNet)} {currency}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </CollapsibleContent>
+                                      </Collapsible>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           )}
 
           {discrepancyBookings.length > 0 && (
