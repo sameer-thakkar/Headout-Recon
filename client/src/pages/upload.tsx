@@ -271,9 +271,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   // Split summary into Primary Vendor and Secondary Vendor sections
   // Uses separate arrays from API (no prefix needed)
   const { primaryVendorSummary, secondaryVendorSummary } = useMemo(() => {
-    // Filter out Reconciled from both sections for display
+    // Primary Vendor: Filter out Reconciled (only show discrepancies)
     const primaryFiltered = overallSummary.filter(r => r.reason !== "Reconciled");
-    const secondaryFiltered = secondaryVendorSummaryFromApi.filter(r => r.reason !== "Reconciled");
+    // Secondary Vendor: Show ALL reason types including Reconciled (full BE ID mismatch picture)
+    const secondaryFiltered = secondaryVendorSummaryFromApi;
     
     return {
       primaryVendorSummary: primaryFiltered,
