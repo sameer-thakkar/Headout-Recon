@@ -421,7 +421,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         <div className="p-4 space-y-4">
 
           {spDetails && hasResults && (
-            <div className="grid grid-cols-5 gap-4 text-sm border-b pb-4" data-testid="sp-details-section">
+            <div className="grid grid-cols-6 gap-4 text-sm border-b pb-4" data-testid="sp-details-section">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Billing Entity ID</p>
                 <p className="font-mono font-medium" data-testid="text-sp-be-id">{spDetails.beId || "—"}</p>
