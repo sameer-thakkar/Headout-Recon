@@ -11,6 +11,17 @@ import { runReconciliation } from "./reconciliation";
 import { getUncachableGoogleSheetClient } from "./google-sheets";
 
 /**
+ * Sanitize a sheet name for Excel compatibility.
+ * Excel sheet names cannot contain: : \ / ? * [ ]
+ * Also truncates to 31 characters (Excel limit)
+ */
+function sanitizeSheetName(name: string): string {
+  return name
+    .replace(/[:\\/?\*\[\]]/g, "_")
+    .substring(0, 31);
+}
+
+/**
  * Format a number in Indian notation (1,00,000.00)
  * Uses lakhs/crores grouping: X,XX,XX,XXX.XX
  */
@@ -1968,9 +1979,10 @@ export async function registerRoutes(
         // Remove gridlines
         driSheet["!sheetViews"] = [{ showGridLines: false }];
         
-        // Create sheet name (Excel limits to 31 chars)
+        // Create sheet name (Excel limits to 31 chars, sanitize illegal characters)
         const shortReason = reason === "Multiple Tickets Booked" ? "MTB" : reason === "Net Price Discrepancy" ? "NPD" : reason.substring(0, 10);
-        const sheetName = `${driTeam.substring(0, 20)}_${shortReason}`.substring(0, 31);
+        const rawSheetName = `${driTeam.substring(0, 20)}_${shortReason}`;
+        const sheetName = sanitizeSheetName(rawSheetName);
         
         XLSX.utils.book_append_sheet(workbook, driSheet, sheetName);
       }
