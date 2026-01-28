@@ -103,15 +103,16 @@ shared/              # Shared code between client and server
 4. NPD (Net Price Discrepancy) - amounts don't reconcile
 5. Reconciled - amounts match
 
-### Secondary Vendor (Cross-Cutting Flag)
-- **Type**: Boolean flag (`isSecondaryVendor`) set independently of primary reason
+### Secondary Vendor (Segregated Section)
 - **Detection**: HO BE ID ≠ SP BE ID (normalized comparison)
-- **Logic**: Checked for ALL bookings regardless of their primary reason; a booking can be "MTB + Secondary Vendor" or "Cancellation + Secondary Vendor"
+- **Reason Prefix**: When BE IDs don't match, reason is prefixed with "Secondary Vendor-" (e.g., "Secondary Vendor-NPD", "Secondary Vendor-MTB")
+- **Complete Separation**: Secondary Vendor bookings are shown in their own dedicated section, not mixed with Primary Vendor bookings
+- **Own Reason Breakdown**: Secondary Vendor section has its own reasons: Secondary Vendor-Reconciled, Secondary Vendor-NPD, Secondary Vendor-MTB, Secondary Vendor-Cancelled-*, etc.
 - **UI Display**: 
-  - Amber-styled sub-section after main reconciliation summary table
-  - Groups Secondary Vendor bookings by their primary reason with count and discrepancy totals
-  - Also shown in Amount Payable panel with same grouping
-- **No Overlap Rule**: Bookings appear once in summary table under their primary reason; Secondary Vendor section is informational cross-reference
+  - Amber-styled section below Primary Vendor summary table
+  - Shows reason breakdown with discrepancy totals (reason prefix stripped for display)
+  - Separate table in Amount Payable panel
+- **Exports**: Secondary Vendor-Reconciled excluded from discrepancy reports (same as Reconciled)
 
 ### Already Reconciled Feature
 - **Detection**: Bookings where HO data "reason" column contains "Already Auto Reconciled" or "Already Manually Reconciled" (case-insensitive)
