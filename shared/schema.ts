@@ -130,10 +130,12 @@ export type OverallSummaryRow = z.infer<typeof overallSummaryRowSchema>;
 // Run result structure
 export const runResultSchema = z.object({
   fx: fxDataSchema,
-  overallSummary: z.array(overallSummaryRowSchema),
-  primaryRows: z.array(primaryRowSchema),       // Primary only for main tables
+  overallSummary: z.array(overallSummaryRowSchema),           // Primary vendor summary (BE ID match)
+  secondaryVendorSummary: z.array(overallSummaryRowSchema),   // Secondary vendor summary (BE ID mismatch)
+  primaryRows: z.array(primaryRowSchema),       // Primary vendor rows (BE ID match)
+  secondaryVendorRows: z.array(primaryRowSchema), // Secondary vendor rows (BE ID mismatch)
   unmappedRows: z.array(primaryRowSchema),      // Unmapped bookings (in SP but not in HO)
-  allRows: z.array(primaryRowSchema),           // All rows including Secondary (for DRI/drafts)
+  allRows: z.array(primaryRowSchema),           // All rows for DRI/drafts
   spFxDebugRows: z.array(spFxDebugRowSchema),
 });
 export type RunResult = z.infer<typeof runResultSchema>;

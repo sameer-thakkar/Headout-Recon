@@ -809,18 +809,19 @@ function computeReconciliationRows(
 /**
  * STEP H: Build overall summary (Primary only + Unmapped)
  */
-function buildOverallSummary(
-  primaryRows: PrimaryRow[],
-  unmappedSP: SPRow[],
+/**
+ * Build summary from a set of rows (groups by reason + currency)
+ */
+function buildSummaryFromRows(
+  rows: PrimaryRow[],
+  unmappedSP: SPRow[] | null,
   usdToCcy: Record<string, number>
 ): OverallSummaryRow[] {
-  // All rows passed in are already Primary only (no filtering needed)
-  
-  // Group Primary rows by (reason, hoCurrency)
+  // Group rows by (reason, hoCurrency)
   const summaryMap = new Map<string, OverallSummaryRow>();
   const bidsByKey = new Map<string, Set<string>>();
   
-  for (const row of primaryRows) {
+  for (const row of rows) {
     const key = `${row.reason}|${row.hoCurrency}`;
     
     if (!summaryMap.has(key)) {
@@ -848,44 +849,67 @@ function buildOverallSummary(
     summary.countBid = bids.size;
   });
   
-  // Add Unmapped groups by spCurrency
-  const unmappedBySpCurrency = new Map<string, { discrepancyLc: number; discrepancyUsd: number; bids: Set<string> }>();
-  
-  for (const sp of unmappedSP) {
-    if (!unmappedBySpCurrency.has(sp.billingCurrency)) {
-      unmappedBySpCurrency.set(sp.billingCurrency, {
-        discrepancyLc: 0,
-        discrepancyUsd: 0,
-        bids: new Set(),
-      });
+  // Add Unmapped groups by spCurrency (only for primary summary)
+  if (unmappedSP && unmappedSP.length > 0) {
+    const unmappedBySpCurrency = new Map<string, { discrepancyLc: number; discrepancyUsd: number; bids: Set<string> }>();
+    
+    for (const sp of unmappedSP) {
+      if (!unmappedBySpCurrency.has(sp.billingCurrency)) {
+        unmappedBySpCurrency.set(sp.billingCurrency, {
+          discrepancyLc: 0,
+          discrepancyUsd: 0,
+          bids: new Set(),
+        });
+      }
+      
+      const group = unmappedBySpCurrency.get(sp.billingCurrency)!;
+      // HO base is 0, so discrepancy = 0 - spNetOriginal
+      const discrepancyLc = 0 - sp.netPrice;
+      const spRate = usdToCcy[sp.billingCurrency] || 1;
+      const discrepancyUsd = discrepancyLc / spRate;
+      
+      group.discrepancyLc += discrepancyLc;
+      group.discrepancyUsd += discrepancyUsd;
+      group.bids.add(sp.bookingId);
     }
     
-    const group = unmappedBySpCurrency.get(sp.billingCurrency)!;
-    // HO base is 0, so discrepancy = 0 - spNetOriginal
-    const discrepancyLc = 0 - sp.netPrice;
-    const spRate = usdToCcy[sp.billingCurrency] || 1;
-    const discrepancyUsd = discrepancyLc / spRate;
-    
-    group.discrepancyLc += discrepancyLc;
-    group.discrepancyUsd += discrepancyUsd;
-    group.bids.add(sp.bookingId);
-  }
-  
-  Array.from(unmappedBySpCurrency.entries()).forEach(([currency, group]) => {
-    summaryMap.set(`Unmapped|${currency}`, {
-      reason: "Unmapped",
-      currency,
-      discrepancyLc: group.discrepancyLc,
-      discrepancyUsd: group.discrepancyUsd,
-      countBid: group.bids.size,
+    Array.from(unmappedBySpCurrency.entries()).forEach(([currency, group]) => {
+      summaryMap.set(`Unmapped|${currency}`, {
+        reason: "Unmapped",
+        currency,
+        discrepancyLc: group.discrepancyLc,
+        discrepancyUsd: group.discrepancyUsd,
+        countBid: group.bids.size,
+      });
     });
-  });
+  }
   
   // Convert to array and sort by discrepancyUsd ascending
   const summaryRows = Array.from(summaryMap.values());
   summaryRows.sort((a, b) => a.discrepancyUsd - b.discrepancyUsd);
   
   return summaryRows;
+}
+
+/**
+ * Build overall summaries split by Primary vs Secondary Vendor
+ */
+function buildOverallSummaries(
+  allRows: PrimaryRow[],
+  unmappedSP: SPRow[],
+  usdToCcy: Record<string, number>
+): { primarySummary: OverallSummaryRow[]; secondaryVendorSummary: OverallSummaryRow[] } {
+  // Split rows by isSecondaryVendor flag
+  const primaryVendorRows = allRows.filter(r => !r.isSecondaryVendor);
+  const secondaryVendorRows = allRows.filter(r => r.isSecondaryVendor);
+  
+  // Build summary for Primary Vendor (includes Unmapped)
+  const primarySummary = buildSummaryFromRows(primaryVendorRows, unmappedSP, usdToCcy);
+  
+  // Build summary for Secondary Vendor (no Unmapped - those don't have BE ID to compare)
+  const secondaryVendorSummary = buildSummaryFromRows(secondaryVendorRows, null, usdToCcy);
+  
+  return { primarySummary, secondaryVendorSummary };
 }
 
 /**
@@ -924,15 +948,19 @@ export async function runReconciliation(
     primaryHoCurrencyByBookingId
   );
   
-  // STEP E-G: Compute reconciliation rows (Primary only, Secondary excluded)
-  const primaryRows = computeReconciliationRows(
+  // STEP E-G: Compute reconciliation rows (all rows with isSecondaryVendor flag)
+  const allReconciliationRows = computeReconciliationRows(
     primaryHoRowByBookingId,
     spByBookingId,
     usdToCcy
   );
   
   // Sort by differenceUsd ascending
-  primaryRows.sort((a, b) => a.differenceUsd - b.differenceUsd);
+  allReconciliationRows.sort((a, b) => a.differenceUsd - b.differenceUsd);
+  
+  // Split rows by Secondary Vendor flag
+  const primaryRows = allReconciliationRows.filter(r => !r.isSecondaryVendor);
+  const secondaryVendorRows = allReconciliationRows.filter(r => r.isSecondaryVendor);
   
   // Convert unmapped SP rows to PrimaryRow format for Amount Payable Calculator
   const unmappedRows: PrimaryRow[] = unmappedSP.map(sp => {
@@ -967,15 +995,21 @@ export async function runReconciliation(
     };
   });
   
-  // Build overall summary (Primary only + Unmapped)
-  const overallSummary = buildOverallSummary(primaryRows, unmappedSP, usdToCcy);
+  // Build overall summaries split by Primary vs Secondary Vendor
+  const { primarySummary, secondaryVendorSummary } = buildOverallSummaries(
+    allReconciliationRows,
+    unmappedSP,
+    usdToCcy
+  );
   
   return {
     fx,
-    overallSummary,
+    overallSummary: primarySummary,
+    secondaryVendorSummary,
     primaryRows,
-    unmappedRows, // New: unmapped bookings for Amount Payable Calculator
-    allRows: primaryRows, // allRows now same as primaryRows (no Secondary)
+    secondaryVendorRows,
+    unmappedRows,
+    allRows: allReconciliationRows, // All rows for DRI/drafts
     spFxDebugRows: augmentedSP,
   };
 }
