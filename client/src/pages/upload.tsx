@@ -90,7 +90,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const { data: runResult } = useQuery<{
     overallSummary: OverallSummaryRow[];
+    secondaryVendorSummary: OverallSummaryRow[];
     primaryRows: PrimaryRow[];
+    secondaryVendorRows: PrimaryRow[];
     unmappedRows: PrimaryRow[];
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
@@ -103,7 +105,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   });
 
   const overallSummary = runResult?.overallSummary || [];
+  const secondaryVendorSummaryFromApi = runResult?.secondaryVendorSummary || [];
   const primaryRows = runResult?.primaryRows || [];
+  const secondaryVendorRows = runResult?.secondaryVendorRows || [];
   const unmappedRows = runResult?.unmappedRows || [];
 
   const filteredDiscrepancyRows = useMemo(() => {
@@ -265,23 +269,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   }, [selectedAlreadyReconciledType, alreadyReconciledData]);
 
   // Split summary into Primary Vendor and Secondary Vendor sections
-  // Secondary Vendor reasons start with "Secondary Vendor-"
+  // Uses separate arrays from API (no prefix needed)
   const { primaryVendorSummary, secondaryVendorSummary } = useMemo(() => {
-    // Filter overallSummary rows into two groups
-    const primaryRows = overallSummary.filter(r => !r.reason.startsWith("Secondary Vendor-") && r.reason !== "Reconciled");
-    const secondaryRows = overallSummary.filter(r => r.reason.startsWith("Secondary Vendor-") && r.reason !== "Secondary Vendor-Reconciled");
-    
-    // For secondary vendor, strip the prefix for display
-    const secondaryWithCleanReasons = secondaryRows.map(r => ({
-      ...r,
-      displayReason: r.reason.replace("Secondary Vendor-", ""),
-    }));
+    // Filter out Reconciled from both sections for display
+    const primaryFiltered = overallSummary.filter(r => r.reason !== "Reconciled");
+    const secondaryFiltered = secondaryVendorSummaryFromApi.filter(r => r.reason !== "Reconciled");
     
     return {
-      primaryVendorSummary: primaryRows,
-      secondaryVendorSummary: secondaryWithCleanReasons,
+      primaryVendorSummary: primaryFiltered,
+      secondaryVendorSummary: secondaryFiltered,
     };
-  }, [overallSummary]);
+  }, [overallSummary, secondaryVendorSummaryFromApi]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -722,17 +720,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                           </TableHeader>
                           <TableBody>
                             {secondaryVendorSummary.map((row, index) => {
-                              const isClickable = row.displayReason !== "Reconciled";
+                              const isClickable = row.reason !== "Reconciled";
                               return (
                                 <TableRow
                                   key={`sv-${row.reason}-${row.currency}-${index}`}
                                   className={`h-8 bg-amber-50/50 dark:bg-amber-950/20 ${isClickable ? "cursor-pointer hover-elevate" : ""}`}
                                   onClick={() => isClickable && handleReasonClick(row.reason)}
-                                  data-testid={`summary-row-sv-${row.displayReason}-${row.currency}`}
+                                  data-testid={`summary-row-sv-${row.reason}-${row.currency}`}
                                 >
                                   <TableCell className="py-1.5">
                                     <span className="text-xs text-amber-700 dark:text-amber-400">
-                                      {row.displayReason}
+                                      {row.reason}
                                     </span>
                                   </TableCell>
                                   <TableCell className="py-1.5">{row.currency}</TableCell>
