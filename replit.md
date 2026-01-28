@@ -101,7 +101,17 @@ shared/              # Shared code between client and server
 2. Cancellations - cancelled booking handling
 3. MTB (Multiple Tickets Booked) - large percentage difference
 4. NPD (Net Price Discrepancy) - amounts don't reconcile
-5. Secondary Vendor - BE ID mismatch (only when amounts would reconcile)
+5. Reconciled - amounts match
+
+### Secondary Vendor (Cross-Cutting Flag)
+- **Type**: Boolean flag (`isSecondaryVendor`) set independently of primary reason
+- **Detection**: HO BE ID ≠ SP BE ID (normalized comparison)
+- **Logic**: Checked for ALL bookings regardless of their primary reason; a booking can be "MTB + Secondary Vendor" or "Cancellation + Secondary Vendor"
+- **UI Display**: 
+  - Amber-styled sub-section after main reconciliation summary table
+  - Groups Secondary Vendor bookings by their primary reason with count and discrepancy totals
+  - Also shown in Amount Payable panel with same grouping
+- **No Overlap Rule**: Bookings appear once in summary table under their primary reason; Secondary Vendor section is informational cross-reference
 
 ### Already Reconciled Feature
 - **Detection**: Bookings where HO data "reason" column contains "Already Auto Reconciled" or "Already Manually Reconciled" (case-insensitive)
