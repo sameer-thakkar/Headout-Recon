@@ -73,6 +73,9 @@ interface HORow {
   billingEntityName?: string;
   paymentBasis?: string;
   paymentMethod?: string;
+  // Already Reconciled detection
+  hoReason?: string;
+  dateOfPayment?: string;
 }
 
 // Result from reason assignment
@@ -80,6 +83,8 @@ interface ReasonResult {
   reason: string;
   chargedLoss: string;
   comment: string;
+  // Already Reconciled sub-classification
+  alreadyReconciledType?: "same_be" | "different_be";
 }
 
 // SP Row from parsed sheet
@@ -90,6 +95,8 @@ interface SPRow {
   fulfilmentDate?: string | null;
   beId?: string;
   ticketId?: string;
+  dateOfPayment?: string | null;
+  paymentMethod?: string;
 }
 
 /**
@@ -159,6 +166,9 @@ function parseHOData(sheet: SheetData): HORow[] {
       billingEntityName: getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName") ? String(getRowValue(row, "billingEntityName", "Billing Entity Name", "billing_entity_name", "BE Name", "beName")) : undefined,
       paymentBasis: getRowValue(row, "paymentBasis", "Payment Basis", "payment_basis", "PaymentBasis") ? String(getRowValue(row, "paymentBasis", "Payment Basis", "payment_basis", "PaymentBasis")) : undefined,
       paymentMethod: getRowValue(row, "paymentMethod", "Payment Method", "payment_method", "PaymentMethod") ? String(getRowValue(row, "paymentMethod", "Payment Method", "payment_method", "PaymentMethod")) : undefined,
+      // Already Reconciled detection - capture "reason" column from HO data
+      hoReason: getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason") ? String(getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason")) : undefined,
+      dateOfPayment: getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date") ? String(getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date")) : undefined,
     };
   });
 }
@@ -183,6 +193,9 @@ function parseSPData(sheet: SheetData): SPRow[] {
     const beId = getRowValue(row, "beId", "BE ID", "be_id", "billingEntityId", "Billing Entity ID", "billing_entity_id");
     const ticketId = getRowValue(row, "ticketId", "Ticket ID", "ticket_id", "Ticket Id", "ticketid");
     
+    const dateOfPayment = getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date");
+    const paymentMethod = getRowValue(row, "paymentMethod", "Payment Method", "payment_method", "PaymentMethod");
+    
     return {
       bookingId: String(bookingId || ""),
       netPrice: Number(netPrice) || 0,
@@ -190,6 +203,8 @@ function parseSPData(sheet: SheetData): SPRow[] {
       fulfilmentDate: fulfilmentDate ? String(fulfilmentDate) : null,
       beId: beId ? String(beId) : undefined,
       ticketId: ticketId ? String(ticketId) : undefined,
+      dateOfPayment: dateOfPayment ? String(dateOfPayment) : null,
+      paymentMethod: paymentMethod ? String(paymentMethod) : undefined,
     };
   });
 }
@@ -371,6 +386,8 @@ interface SPBundle {
   fxRateUsed: number;
   beId?: string;
   ticketId?: string;
+  dateOfPayment?: string | null;
+  paymentMethod?: string;
 }
 
 function buildSPLookup(
@@ -414,6 +431,8 @@ function buildSPLookup(
       fxRateUsed: best.aug.fxRateUsed!,
       beId: best.sp.beId,
       ticketId: best.sp.ticketId,
+      dateOfPayment: best.sp.dateOfPayment,
+      paymentMethod: best.sp.paymentMethod,
     });
   });
   
@@ -423,6 +442,11 @@ function buildSPLookup(
 /**
  * STEP G: Reason logic for Primary rows
  * Updated to return reason, chargedLoss, and comment for cancellation handling
+ * Priority order:
+ * 0) Already Reconciled (HIGHEST) - check HO reason column
+ * 1) Secondary Vendor - BE ID mismatch
+ * 2) Cancelled cases
+ * 3) MTB/NPD/Reconciled
  */
 function assignReason(
   bookingStatus: string,
@@ -434,12 +458,42 @@ function assignReason(
   sameCurrency: boolean,
   spNetInHo: number,
   hoBeId: string | undefined,
-  spBeId: string | undefined
+  spBeId: string | undefined,
+  hoReason: string | undefined
 ): ReasonResult {
   // Normalize chargedLoss to check if it's already TRUE
   const isChargedLossTrue = chargedLossOriginal?.toUpperCase() === "TRUE";
   
-  // 0) HIGHEST PRIORITY: Secondary Vendor - BE ID mismatch between HO and SP
+  // 0) HIGHEST PRIORITY: Already Reconciled - check HO reason column
+  // Values: "Already Auto Reconciled" or "Already Manually Reconciled"
+  if (hoReason) {
+    const normalizedHoReason = hoReason.trim().toLowerCase();
+    if (normalizedHoReason === "already auto reconciled" || normalizedHoReason === "already manually reconciled") {
+      // Sub-classify based on BE ID match
+      const hoBeNorm = (hoBeId || "").trim().toLowerCase();
+      const spBeNorm = (spBeId || "").trim().toLowerCase();
+      
+      // Check if BE IDs match (both must exist for comparison)
+      if (hoBeNorm && spBeNorm && hoBeNorm === spBeNorm) {
+        return {
+          reason: "Already Reconciled-Same BE",
+          chargedLoss: chargedLossOriginal || "FALSE",
+          comment: hoReason,
+          alreadyReconciledType: "same_be"
+        };
+      } else {
+        // Different BE or one is missing
+        return {
+          reason: "Already Reconciled-Different BE",
+          chargedLoss: chargedLossOriginal || "FALSE",
+          comment: hoReason,
+          alreadyReconciledType: "different_be"
+        };
+      }
+    }
+  }
+  
+  // 1) Secondary Vendor - BE ID mismatch between HO and SP
   // Only check if both beIds exist and they don't match
   if (hoBeId && spBeId && hoBeId.trim() !== "" && spBeId.trim() !== "") {
     const normalizedHoBeId = hoBeId.trim().toLowerCase();
@@ -596,6 +650,11 @@ function getDriTeam(
     return "Supply";
   }
   
+  // Already Reconciled - needs Finance/Biz Ops review to determine payment decision
+  if (reason === "Already Reconciled-Same BE" || reason === "Already Reconciled-Different BE") {
+    return "Finance";
+  }
+  
   // Cancelled-Insured Booking and Cancelled-DSS policy - no action needed, informational only
   if (reason === "Cancelled-Insured Booking" || reason === "Cancelled-DSS policy") {
     return "N/A";
@@ -669,7 +728,7 @@ function computeReconciliationRows(
     const differenceUsd = differenceLc / hoRate;
     
     // STEP G: Assign reason (now returns ReasonResult with chargedLoss and comment)
-    // Note: Secondary Vendor check compares HO beId with SP beId (highest priority)
+    // Priority: Already Reconciled (highest) → Secondary Vendor → Cancelled → MTB/NPD/Reconciled
     const reasonResult = assignReason(
       ho.bookingStatus,
       ho.cancellable,
@@ -680,7 +739,8 @@ function computeReconciliationRows(
       sameCurrency,
       spNetInHo,
       ho.beId,
-      spBundle?.beId
+      spBundle?.beId,
+      ho.hoReason
     );
     
     // Compute DRI team based on reason and fulfillment method
@@ -717,6 +777,13 @@ function computeReconciliationRows(
       paymentMethod: ho.paymentMethod,
       chargedLoss: reasonResult.chargedLoss,
       comment: reasonResult.comment,
+      // Already Reconciled fields
+      alreadyReconciledType: reasonResult.alreadyReconciledType,
+      hoReason: ho.hoReason,
+      dateOfPayment: ho.dateOfPayment,
+      spDateOfPayment: spBundle?.dateOfPayment || undefined,
+      spPaymentMethod: spBundle?.paymentMethod,
+      hoBeId: ho.beId, // Store HO BE ID for comparison display
     });
   });
   

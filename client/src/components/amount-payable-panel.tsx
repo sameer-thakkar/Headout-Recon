@@ -268,9 +268,23 @@ export function AmountPayablePanel({
   );
 
   const discrepancyBookings = useMemo(() => 
-    (bookings || []).filter(b => b.reason !== "Reconciled"), 
+    (bookings || []).filter(b => b.reason !== "Reconciled" && !b.reason.startsWith("Already Reconciled")), 
     [bookings]
   );
+
+  // Already Reconciled bookings with decision state
+  const alreadyReconciledBookings = useMemo(() => 
+    (bookings || []).filter(b => b.reason.startsWith("Already Reconciled")), 
+    [bookings]
+  );
+
+  // Already Reconciled decision state: { bookingId: { decision, remarks, adjustmentType, adjustmentAmount } }
+  const [alreadyReconciledDecisions, setAlreadyReconciledDecisions] = useState<Map<string, {
+    decision: string;
+    remarks: string;
+    adjustmentType: "add" | "less";
+    adjustmentAmount: number;
+  }>>(new Map());
 
   const reconciledTotal = useMemo(() => 
     reconciledBookings.reduce((sum, b) => sum + b.spNet, 0), 
@@ -361,7 +375,28 @@ export function AmountPayablePanel({
     return Array.from(groups.values());
   }, [closedDisputes, disputeIdMapping]);
 
-  const baseAmount = reconciledTotal + discrepancyTotal;
+  // Calculate Already Reconciled adjustments from decisions
+  const alreadyReconciledAdjustment = useMemo(() => {
+    let total = 0;
+    alreadyReconciledDecisions.forEach((decision) => {
+      if (decision.adjustmentAmount > 0) {
+        if (decision.adjustmentType === "add") {
+          total += decision.adjustmentAmount;
+        } else {
+          total -= decision.adjustmentAmount;
+        }
+      }
+    });
+    return total;
+  }, [alreadyReconciledDecisions]);
+
+  // Already Reconciled bookings base total (use SP Net by default)
+  const alreadyReconciledTotal = useMemo(() => 
+    alreadyReconciledBookings.reduce((sum, b) => sum + b.spNet, 0), 
+    [alreadyReconciledBookings]
+  );
+
+  const baseAmount = reconciledTotal + discrepancyTotal + alreadyReconciledTotal;
 
   const finalAmount = useMemo(() => {
     const adjustmentsResult = localAdjustments.reduce((total, adj) => {
@@ -372,10 +407,10 @@ export function AmountPayablePanel({
       }
     }, baseAmount);
     
-    // Deduct SP Error closed dispute adjustments
-    const result = adjustmentsResult - spErrorClosedAdjustments;
+    // Deduct SP Error closed dispute adjustments and apply Already Reconciled adjustments
+    const result = adjustmentsResult - spErrorClosedAdjustments + alreadyReconciledAdjustment;
     return Math.round(result * 100) / 100;
-  }, [baseAmount, localAdjustments, spErrorClosedAdjustments]);
+  }, [baseAmount, localAdjustments, spErrorClosedAdjustments, alreadyReconciledAdjustment]);
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
@@ -1299,14 +1334,33 @@ export function AmountPayablePanel({
       }
     }
     
+    // Convert Already Reconciled decisions into adjustment entries
+    const alreadyReconciledAdjustmentEntries: Adjustment[] = [];
+    alreadyReconciledDecisions.forEach((decision, bookingId) => {
+      if (decision.adjustmentAmount > 0 && decision.decision) {
+        const decisionLabel = decision.decision.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        alreadyReconciledAdjustmentEntries.push({
+          id: `ar-${bookingId}`,
+          nature: `Already Reconciled - ${decisionLabel}`,
+          reference: `${bookingId}${decision.remarks ? ` - ${decision.remarks}` : ""}`,
+          type: decision.adjustmentType,
+          amount: decision.adjustmentAmount,
+          isPreset: true,
+        });
+      }
+    });
+    
+    // Combine regular adjustments with Already Reconciled adjustments
+    const allAdjustments = [...localAdjustments, ...alreadyReconciledAdjustmentEntries];
+    
     // Store pending data and show confirmation dialog
     setPendingApplyData({
-      adjustments: localAdjustments,
+      adjustments: allAdjustments,
       selections: localSelections,
       amount: finalAmount,
     });
     setShowApplyConfirmation(true);
-  }, [localAdjustments, localSelections, finalAmount]);
+  }, [localAdjustments, localSelections, finalAmount, alreadyReconciledDecisions]);
 
   const handleConfirmApply = useCallback(async () => {
     if (!pendingApplyData) return;
@@ -1404,6 +1458,146 @@ export function AmountPayablePanel({
               </div>
             </div>
           </div>
+
+          {/* Already Reconciled Bookings Section */}
+          {alreadyReconciledBookings.length > 0 && (
+            <div className="border rounded-lg overflow-hidden border-amber-300 dark:border-amber-700">
+              <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 items-center">
+                <div className="col-span-6 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Already Reconciled</span>
+                  <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                    {alreadyReconciledBookings.length}
+                  </Badge>
+                </div>
+                <div className="col-span-6 text-right">
+                  <span className="text-xs text-muted-foreground">Decide payment for each booking</span>
+                </div>
+              </div>
+              <div className="max-h-96 overflow-y-auto">
+                <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                  <div className="col-span-1">TID</div>
+                  <div className="col-span-1">Booking ID</div>
+                  <div className="col-span-1 text-right">HO Net</div>
+                  <div className="col-span-1 text-right">SP Net</div>
+                  <div className="col-span-2">Type</div>
+                  <div className="col-span-2">Decision</div>
+                  <div className="col-span-2">Remarks</div>
+                  <div className="col-span-1">Add/Less</div>
+                  <div className="col-span-1 text-right">Amount</div>
+                </div>
+                {alreadyReconciledBookings.map((booking) => {
+                  const decision = alreadyReconciledDecisions.get(booking.bookingId);
+                  return (
+                    <div 
+                      key={booking.bookingId} 
+                      className="grid grid-cols-12 gap-1 px-3 py-2 border-t items-center text-xs"
+                      data-testid={`already-reconciled-row-${booking.bookingId}`}
+                    >
+                      <div className="col-span-1 font-mono truncate" title={booking.tid}>{booking.tid || "-"}</div>
+                      <div className="col-span-1 font-mono truncate" title={booking.bookingId}>{booking.bookingId}</div>
+                      <div className="col-span-1 text-right font-mono">{formatCurrency(booking.hoNet)}</div>
+                      <div className="col-span-1 text-right font-mono">{formatCurrency(booking.spNet)}</div>
+                      <div className="col-span-2">
+                        <Badge 
+                          variant="secondary" 
+                          className={`text-xs ${booking.reason.includes("Same") ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"}`}
+                        >
+                          {booking.reason.includes("Same") ? "Same BE" : "Diff BE"}
+                        </Badge>
+                      </div>
+                      <div className="col-span-2">
+                        <Select
+                          value={decision?.decision || ""}
+                          onValueChange={(v) => {
+                            const newDecisions = new Map(alreadyReconciledDecisions);
+                            newDecisions.set(booking.bookingId, {
+                              decision: v,
+                              remarks: decision?.remarks || "",
+                              adjustmentType: decision?.adjustmentType || "less",
+                              adjustmentAmount: decision?.adjustmentAmount || 0,
+                            });
+                            setAlreadyReconciledDecisions(newDecisions);
+                          }}
+                        >
+                          <SelectTrigger className="text-xs" data-testid={`select-decision-${booking.bookingId}`}>
+                            <SelectValue placeholder="Select..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cancellation">Cancellation</SelectItem>
+                            <SelectItem value="multiple_tickets">Multiple Tickets</SelectItem>
+                            <SelectItem value="partial_fulfillment">Partial Fulfillment</SelectItem>
+                            <SelectItem value="manual_error">Manual Error</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2">
+                        <Input
+                          className="text-xs"
+                          placeholder="Remarks..."
+                          value={decision?.remarks || ""}
+                          onChange={(e) => {
+                            const newDecisions = new Map(alreadyReconciledDecisions);
+                            newDecisions.set(booking.bookingId, {
+                              decision: decision?.decision || "",
+                              remarks: e.target.value,
+                              adjustmentType: decision?.adjustmentType || "less",
+                              adjustmentAmount: decision?.adjustmentAmount || 0,
+                            });
+                            setAlreadyReconciledDecisions(newDecisions);
+                          }}
+                          data-testid={`input-remarks-${booking.bookingId}`}
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <Select
+                          value={decision?.adjustmentType || "less"}
+                          onValueChange={(v) => {
+                            const newDecisions = new Map(alreadyReconciledDecisions);
+                            newDecisions.set(booking.bookingId, {
+                              decision: decision?.decision || "",
+                              remarks: decision?.remarks || "",
+                              adjustmentType: v as "add" | "less",
+                              adjustmentAmount: decision?.adjustmentAmount || 0,
+                            });
+                            setAlreadyReconciledDecisions(newDecisions);
+                          }}
+                        >
+                          <SelectTrigger className="text-xs" data-testid={`select-addless-${booking.bookingId}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="add">Add</SelectItem>
+                            <SelectItem value="less">Less</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-1">
+                        <Input
+                          type="number"
+                          className="text-xs text-right font-mono"
+                          placeholder="0.00"
+                          value={decision?.adjustmentAmount || ""}
+                          onChange={(e) => {
+                            const newDecisions = new Map(alreadyReconciledDecisions);
+                            newDecisions.set(booking.bookingId, {
+                              decision: decision?.decision || "",
+                              remarks: decision?.remarks || "",
+                              adjustmentType: decision?.adjustmentType || "less",
+                              adjustmentAmount: parseFloat(e.target.value) || 0,
+                            });
+                            setAlreadyReconciledDecisions(newDecisions);
+                          }}
+                          data-testid={`input-amount-${booking.bookingId}`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {discrepancyBookings.length > 0 && (
             <div className="space-y-3">
@@ -1729,6 +1923,26 @@ export function AmountPayablePanel({
                     {formatCurrency(discrepancyTotal)} {currency}
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Already Reconciled Summary */}
+          {alreadyReconciledBookings.length > 0 && (
+            <div className="flex justify-between items-center pt-3 mt-3 border-t">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <p className="text-sm font-medium">Already Reconciled ({alreadyReconciledBookings.length} bookings)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <p className="text-lg font-bold font-mono" data-testid="text-already-reconciled-total">
+                  {formatCurrency(alreadyReconciledTotal)} {currency}
+                </p>
+                {alreadyReconciledAdjustment !== 0 && (
+                  <span className="text-sm font-mono text-amber-600">
+                    ({alreadyReconciledAdjustment > 0 ? "+" : ""}{formatCurrency(alreadyReconciledAdjustment)})
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -2118,6 +2332,11 @@ export function AmountPayablePanel({
               {spErrorClosedAdjustments > 0 && (
                 <span className="text-green-600 dark:text-green-400">
                   {" - "}SP Error Deductions ({formatCurrency(spErrorClosedAdjustments)})
+                </span>
+              )}
+              {alreadyReconciledAdjustment !== 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {alreadyReconciledAdjustment > 0 ? " + " : " - "}Already Reconciled Adj ({formatCurrency(Math.abs(alreadyReconciledAdjustment))})
                 </span>
               )}
             </p>

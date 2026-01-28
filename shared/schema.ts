@@ -74,6 +74,14 @@ export const primaryRowSchema = z.object({
   // Cancellation-related fields
   chargedLoss: z.string().optional(),
   comment: z.string().optional(),
+  
+  // Already Reconciled fields
+  alreadyReconciledType: z.enum(["same_be", "different_be"]).optional(),
+  hoReason: z.string().optional(), // Original HO reason column value
+  dateOfPayment: z.string().optional(), // Date of payment for already reconciled bookings
+  spDateOfPayment: z.string().optional(), // SP date of payment
+  spPaymentMethod: z.string().optional(), // SP payment method for comparison
+  hoBeId: z.string().optional(), // HO billing entity ID (for comparison)
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
@@ -351,9 +359,11 @@ export const headerAliases: Record<string, string[]> = {
 };
 
 // Reason codes for new pipeline
-// Order reflects priority - Secondary Vendor is highest priority issue
+// Order reflects priority - Already Reconciled is highest priority, then Secondary Vendor
 export const reasonCodes = [
   "Reconciled",
+  "Already Reconciled-Same BE",
+  "Already Reconciled-Different BE",
   "Secondary Vendor",
   "Net Price Discrepancy",
   "Multiple Tickets Booked",
@@ -367,6 +377,10 @@ export const reasonCodes = [
   "Cancelled-DSS policy",
   "Cancelled-Check for Charge loss",
 ] as const;
+
+// Already Reconciled sub-classification type
+export const alreadyReconciledTypeSchema = z.enum(["same_be", "different_be"]);
+export type AlreadyReconciledType = z.infer<typeof alreadyReconciledTypeSchema>;
 
 // Cancellation comment codes (for comment column in exports)
 export const cancellationComments = [

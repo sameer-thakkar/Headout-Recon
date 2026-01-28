@@ -82,6 +82,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(true);
   const [isComputeOpen, setIsComputeOpen] = useState(false);
+  // Already Reconciled modal states
+  const [isAlreadyReconciledModalOpen, setIsAlreadyReconciledModalOpen] = useState(false);
+  const [selectedAlreadyReconciledType, setSelectedAlreadyReconciledType] = useState<"same_be" | "different_be" | null>(null);
+  const [isAlreadyReconciledDetailModalOpen, setIsAlreadyReconciledDetailModalOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: runResult } = useQuery<{
@@ -178,6 +182,83 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       currency: currencies.join(", "),
     };
   }, [primaryRows]);
+
+  // Already Reconciled computed data
+  const alreadyReconciledData = useMemo(() => {
+    // Filter bookings with Already Reconciled reasons
+    const sameBEBookings = primaryRows.filter(r => r.reason === "Already Reconciled-Same BE");
+    const differentBEBookings = primaryRows.filter(r => r.reason === "Already Reconciled-Different BE");
+    
+    // Calculate summaries for each classification
+    const sameBESummary = {
+      count: sameBEBookings.length,
+      reconciledNet: sameBEBookings.reduce((sum, r) => sum + r.hoNet, 0),
+      spNet: sameBEBookings.reduce((sum, r) => sum + r.spNetInHo, 0),
+    };
+    
+    const differentBESummary = {
+      count: differentBEBookings.length,
+      reconciledNet: differentBEBookings.reduce((sum, r) => sum + r.hoNet, 0),
+      spNet: differentBEBookings.reduce((sum, r) => sum + r.spNetInHo, 0),
+    };
+    
+    const totalCount = sameBESummary.count + differentBESummary.count;
+    const hasAlreadyReconciled = totalCount > 0;
+    
+    return {
+      hasAlreadyReconciled,
+      totalCount,
+      sameBE: { ...sameBESummary, bookings: sameBEBookings },
+      differentBE: { ...differentBESummary, bookings: differentBEBookings },
+    };
+  }, [primaryRows]);
+
+  // Filter out Already Reconciled from main summary and create combined row
+  const processedSummary = useMemo(() => {
+    // Remove individual Already Reconciled rows from summary
+    const filteredSummary = overallSummary.filter(
+      row => row.reason !== "Already Reconciled-Same BE" && row.reason !== "Already Reconciled-Different BE"
+    );
+    
+    // Add combined "Already Reconciled" row if there are any
+    if (alreadyReconciledData.hasAlreadyReconciled) {
+      // Get unique currencies from already reconciled bookings
+      const sameBECurrencies = alreadyReconciledData.sameBE.bookings.map(b => b.hoCurrency);
+      const diffBECurrencies = alreadyReconciledData.differentBE.bookings.map(b => b.hoCurrency);
+      const allCurrencies = Array.from(new Set([...sameBECurrencies, ...diffBECurrencies]));
+      
+      // For the combined row, use the most common currency or first one
+      const currency = allCurrencies.length > 0 ? allCurrencies[0] : "USD";
+      
+      // Calculate total discrepancy
+      const totalDiscrepancyLc = [...alreadyReconciledData.sameBE.bookings, ...alreadyReconciledData.differentBE.bookings]
+        .reduce((sum, r) => sum + r.differenceLc, 0);
+      const totalDiscrepancyUsd = [...alreadyReconciledData.sameBE.bookings, ...alreadyReconciledData.differentBE.bookings]
+        .reduce((sum, r) => sum + r.differenceUsd, 0);
+      
+      return {
+        rows: filteredSummary,
+        alreadyReconciledRow: {
+          reason: "Already Reconciled",
+          currency,
+          discrepancyLc: totalDiscrepancyLc,
+          discrepancyUsd: totalDiscrepancyUsd,
+          countBid: alreadyReconciledData.totalCount,
+        },
+      };
+    }
+    
+    return { rows: filteredSummary, alreadyReconciledRow: null };
+  }, [overallSummary, alreadyReconciledData]);
+
+  // Get bookings for selected Already Reconciled type
+  const selectedAlreadyReconciledBookings = useMemo(() => {
+    if (!selectedAlreadyReconciledType) return [];
+    if (selectedAlreadyReconciledType === "same_be") {
+      return alreadyReconciledData.sameBE.bookings;
+    }
+    return alreadyReconciledData.differentBE.bookings;
+  }, [selectedAlreadyReconciledType, alreadyReconciledData]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -541,7 +622,31 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {overallSummary.map((row, index) => {
+                        {/* Already Reconciled combined row (if exists) */}
+                        {processedSummary.alreadyReconciledRow && (
+                          <TableRow
+                            className="h-8 cursor-pointer hover-elevate bg-amber-50 dark:bg-amber-950/30"
+                            onClick={() => setIsAlreadyReconciledModalOpen(true)}
+                            data-testid="summary-row-already-reconciled"
+                          >
+                            <TableCell className="py-1.5">
+                              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                {processedSummary.alreadyReconciledRow.reason}
+                              </span>
+                            </TableCell>
+                            <TableCell className="py-1.5">{processedSummary.alreadyReconciledRow.currency}</TableCell>
+                            <TableCell className="py-1.5 text-right font-mono">
+                              {formatNumber(processedSummary.alreadyReconciledRow.discrepancyLc)}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right font-mono">
+                              {formatNumber(processedSummary.alreadyReconciledRow.discrepancyUsd)}
+                            </TableCell>
+                            <TableCell className="py-1.5 text-right">{processedSummary.alreadyReconciledRow.countBid}</TableCell>
+                          </TableRow>
+                        )}
+                        {/* Regular summary rows */}
+                        {processedSummary.rows.map((row, index) => {
                           const isClickable = row.reason !== "Reconciled";
                           return (
                             <TableRow
@@ -739,6 +844,190 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       className="text-center py-8 text-muted-foreground"
                     >
                       No discrepancy data available for this reason
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Already Reconciled - First Level Modal (Classification Breakdown) */}
+      <Dialog open={isAlreadyReconciledModalOpen} onOpenChange={setIsAlreadyReconciledModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Already Reconciled Bookings
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              These bookings have been previously reconciled. Click on a classification to view details.
+            </p>
+            
+            {/* Same Billing Entity */}
+            {alreadyReconciledData.sameBE.count > 0 && (
+              <Card
+                className="cursor-pointer hover-elevate border-green-200 dark:border-green-800"
+                onClick={() => {
+                  setSelectedAlreadyReconciledType("same_be");
+                  setIsAlreadyReconciledDetailModalOpen(true);
+                }}
+                data-testid="already-reconciled-same-be-card"
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                      Same Billing Entity
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Bookings</p>
+                      <p className="font-mono font-medium">{alreadyReconciledData.sameBE.count}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Reconciled Net</p>
+                      <p className="font-mono font-medium">{formatNumber(alreadyReconciledData.sameBE.reconciledNet)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">SP Net</p>
+                      <p className="font-mono font-medium">{formatNumber(alreadyReconciledData.sameBE.spNet)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Different Billing Entity */}
+            {alreadyReconciledData.differentBE.count > 0 && (
+              <Card
+                className="cursor-pointer hover-elevate border-orange-200 dark:border-orange-800"
+                onClick={() => {
+                  setSelectedAlreadyReconciledType("different_be");
+                  setIsAlreadyReconciledDetailModalOpen(true);
+                }}
+                data-testid="already-reconciled-different-be-card"
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">
+                      Different Billing Entity
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Bookings</p>
+                      <p className="font-mono font-medium">{alreadyReconciledData.differentBE.count}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Reconciled Net</p>
+                      <p className="font-mono font-medium">{formatNumber(alreadyReconciledData.differentBE.reconciledNet)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">SP Net</p>
+                      <p className="font-mono font-medium">{formatNumber(alreadyReconciledData.differentBE.spNet)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Already Reconciled - Second Level Modal (Booking Details) */}
+      <Dialog open={isAlreadyReconciledDetailModalOpen} onOpenChange={(open) => {
+        setIsAlreadyReconciledDetailModalOpen(open);
+        if (!open) setSelectedAlreadyReconciledType(null);
+      }}>
+        <DialogContent className="max-w-[95vw] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedAlreadyReconciledType === "same_be" ? (
+                <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                  Same Billing Entity
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">
+                  Different Billing Entity
+                </Badge>
+              )}
+              Booking Details
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            <Table className="min-w-max">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>TID</TableHead>
+                  <TableHead>Booking ID</TableHead>
+                  <TableHead className="text-right">Reconciled Net</TableHead>
+                  <TableHead className="text-right">SP Net</TableHead>
+                  {selectedAlreadyReconciledType === "same_be" && (
+                    <TableHead>Payment Method Mismatch</TableHead>
+                  )}
+                  {selectedAlreadyReconciledType === "different_be" && (
+                    <TableHead>Payment Method</TableHead>
+                  )}
+                  <TableHead>Date of Payment</TableHead>
+                  {selectedAlreadyReconciledType === "different_be" && (
+                    <>
+                      <TableHead>HO BE ID</TableHead>
+                      <TableHead>SP BE ID</TableHead>
+                    </>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedAlreadyReconciledBookings.map((booking, index) => {
+                  // Check for payment method mismatch
+                  const hoPaymentMethod = booking.paymentMethod || "";
+                  const spPaymentMethod = booking.spPaymentMethod || "";
+                  const paymentMethodMismatch = hoPaymentMethod && spPaymentMethod && hoPaymentMethod !== spPaymentMethod;
+                  
+                  return (
+                    <TableRow key={`${booking.bookingId}-${index}`} data-testid={`already-reconciled-row-${booking.bookingId}`}>
+                      <TableCell className="font-mono">{booking.tid || "-"}</TableCell>
+                      <TableCell className="font-mono">{booking.bookingId}</TableCell>
+                      <TableCell className="text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
+                      <TableCell className="text-right font-mono">{formatNumber(booking.spNetInHo)}</TableCell>
+                      {selectedAlreadyReconciledType === "same_be" && (
+                        <TableCell>
+                          {paymentMethodMismatch ? (
+                            <Badge variant="destructive" className="text-xs">
+                              {hoPaymentMethod} vs {spPaymentMethod}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                      )}
+                      {selectedAlreadyReconciledType === "different_be" && (
+                        <TableCell>{hoPaymentMethod || spPaymentMethod || "-"}</TableCell>
+                      )}
+                      <TableCell>
+                        {formatDateDDMMYYYY(booking.dateOfPayment || booking.spDateOfPayment) || "-"}
+                      </TableCell>
+                      {selectedAlreadyReconciledType === "different_be" && (
+                        <>
+                          <TableCell className="font-mono">{booking.hoBeId || "-"}</TableCell>
+                          <TableCell className="font-mono">{booking.beId || "-"}</TableCell>
+                        </>
+                      )}
+                    </TableRow>
+                  );
+                })}
+                {selectedAlreadyReconciledBookings.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={selectedAlreadyReconciledType === "different_be" ? 8 : 6} className="text-center py-8 text-muted-foreground">
+                      No bookings found
                     </TableCell>
                   </TableRow>
                 )}
