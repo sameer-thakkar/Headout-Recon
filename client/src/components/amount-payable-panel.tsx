@@ -85,10 +85,9 @@ export function AmountPayablePanel({
   const [isCancellationsExpanded, setIsCancellationsExpanded] = useState(false);
   const [isAlreadyReconciledExpanded, setIsAlreadyReconciledExpanded] = useState(false);
   const [isPaymentMismatchExpanded, setIsPaymentMismatchExpanded] = useState(false);
-  // Payment method mismatch: final vendor ID per booking and bulk vendor IDs
+  // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
-  const [tidBulkVendorIds, setTidBulkVendorIds] = useState<Map<string, string>>(new Map());
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
@@ -419,18 +418,26 @@ export function AmountPayablePanel({
     });
   }, [bookings, dominantPaymentMethod]);
 
-  // Group Payment Mismatch bookings by TID
-  const paymentMismatchByTid = useMemo(() => {
-    const grouped: Record<string, BookingForPayable[]> = {};
-    for (const booking of paymentMismatchBookings) {
-      const tid = booking.tid || booking.bookingId;
-      if (!grouped[tid]) {
-        grouped[tid] = [];
+  // Combined list: Payment Mismatch + Secondary Vendor bookings (for Vendor ID correction section)
+  const vendorCorrectionBookings = useMemo(() => {
+    const seen = new Set<string>();
+    const combined: BookingForPayable[] = [];
+    // Add payment mismatch bookings
+    for (const b of paymentMismatchBookings) {
+      if (!seen.has(b.bookingId)) {
+        seen.add(b.bookingId);
+        combined.push(b);
       }
-      grouped[tid].push(booking);
     }
-    return grouped;
-  }, [paymentMismatchBookings]);
+    // Add secondary vendor bookings
+    for (const b of secondaryVendorBookings) {
+      if (!seen.has(b.bookingId)) {
+        seen.add(b.bookingId);
+        combined.push(b);
+      }
+    }
+    return combined;
+  }, [paymentMismatchBookings, secondaryVendorBookings]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
     // Reconciled bookings always use SP Net
@@ -2792,179 +2799,84 @@ export function AmountPayablePanel({
             </div>
           )}
 
-          {/* Payment Method Mismatch Section */}
-          {paymentMismatchBookings.length > 0 && (
-            <div className="space-y-3 pt-4 mt-4 border-t-2 border-dashed">
+          {/* Vendor ID Correction Section - Minimalist */}
+          {vendorCorrectionBookings.length > 0 && (
+            <div className="pt-3 mt-3 border-t">
               <Collapsible open={isPaymentMismatchExpanded} onOpenChange={setIsPaymentMismatchExpanded}>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 mb-2">
                   <CollapsibleTrigger asChild>
-                    <Button variant="ghost" className="flex items-center gap-2 p-0 h-auto">
-                      {isPaymentMismatchExpanded ? (
-                        <ChevronDown className="h-5 w-5" />
-                      ) : (
-                        <ChevronRight className="h-5 w-5" />
-                      )}
-                      <CreditCard className="h-5 w-5" />
-                      <p className="text-sm font-medium">
-                        Payment Method Mismatch
-                      </p>
-                      <Badge variant="outline">
-                        {paymentMismatchBookings.length} bookings
-                      </Badge>
+                    <Button variant="ghost" size="sm" className="h-6 px-1">
+                      {isPaymentMismatchExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </Button>
                   </CollapsibleTrigger>
-                </div>
-
-                <CollapsibleContent>
-                  {/* Complete Bulk Update */}
-                  <div className="flex items-center gap-2 mb-4 p-3 border rounded-lg bg-muted/30">
-                    <span className="text-sm font-medium whitespace-nowrap">Bulk Update All:</span>
+                  <span className="text-sm font-medium">Vendor ID Correction</span>
+                  <Badge variant="secondary" className="text-xs">{vendorCorrectionBookings.length}</Badge>
+                  {/* Inline bulk update */}
+                  <div className="flex-1 flex items-center gap-1 justify-end">
                     <Input
                       type="text"
-                      placeholder="Enter Final Vendor ID"
+                      placeholder="Bulk Vendor ID"
                       value={bulkVendorId}
                       onChange={(e) => setBulkVendorId(e.target.value)}
-                      className="flex-1 h-8 text-sm"
+                      className="w-32 h-6 text-xs"
                       data-testid="input-bulk-vendor-id"
                     />
                     <Button
                       size="sm"
                       variant="outline"
+                      className="h-6 text-xs px-2"
                       onClick={() => {
                         if (bulkVendorId.trim()) {
                           const newMap = new Map(finalVendorIds);
-                          paymentMismatchBookings.forEach((booking) => {
-                            newMap.set(booking.bookingId, bulkVendorId.trim());
-                          });
+                          vendorCorrectionBookings.forEach((b) => newMap.set(b.bookingId, bulkVendorId.trim()));
                           setFinalVendorIds(newMap);
                         }
                       }}
                       disabled={!bulkVendorId.trim()}
                       data-testid="button-apply-bulk-vendor-id"
                     >
-                      Apply to All
+                      Apply All
                     </Button>
                   </div>
+                </div>
 
-                  {/* TID-level grouping */}
-                  <div className="space-y-2">
-                    {Object.entries(paymentMismatchByTid).map(([tid, tidBookings]) => {
-                      const tidKey = `pm:${tid}`;
-                      const isTidExpanded = expandedTids.has(tidKey);
-                      const tidBulkValue = tidBulkVendorIds.get(tid) || "";
-
-                      return (
-                        <Collapsible
-                          key={tid}
-                          open={isTidExpanded}
-                          onOpenChange={() => toggleTid(tidKey)}
-                        >
-                          <div className="border rounded-lg overflow-hidden">
-                            {/* TID Header */}
-                            <div className="flex items-center gap-2 px-3 py-2 bg-muted/50">
-                              <CollapsibleTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6">
-                                  {isTidExpanded ? (
-                                    <ChevronDown className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </CollapsibleTrigger>
-                              <span className="font-mono text-sm font-medium truncate" title={tid}>
-                                TID: {tid}
-                              </span>
-                              <Badge variant="secondary" className="text-xs">
-                                {tidBookings.length}
-                              </Badge>
-                              {/* TID-level bulk update */}
-                              <div className="flex-1 flex items-center gap-2 justify-end">
-                                <Input
-                                  type="text"
-                                  placeholder="TID Bulk Vendor ID"
-                                  value={tidBulkValue}
-                                  onChange={(e) => {
-                                    const newTidBulk = new Map(tidBulkVendorIds);
-                                    newTidBulk.set(tid, e.target.value);
-                                    setTidBulkVendorIds(newTidBulk);
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="w-40 h-7 text-xs"
-                                  data-testid={`input-tid-bulk-vendor-${tid}`}
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (tidBulkValue.trim()) {
-                                      const newMap = new Map(finalVendorIds);
-                                      tidBookings.forEach((booking) => {
-                                        newMap.set(booking.bookingId, tidBulkValue.trim());
-                                      });
-                                      setFinalVendorIds(newMap);
-                                    }
-                                  }}
-                                  disabled={!tidBulkValue.trim()}
-                                  data-testid={`button-apply-tid-bulk-${tid}`}
-                                >
-                                  Apply
-                                </Button>
-                              </div>
-                            </div>
-
-                            {/* Column Headers */}
-                            <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/30 text-xs text-muted-foreground font-medium border-t">
-                              <div className="col-span-3">TID</div>
-                              <div className="col-span-3">Payment Method</div>
-                              <div className="col-span-3">Vendor ID (HO)</div>
-                              <div className="col-span-3">Final Vendor ID</div>
-                            </div>
-
-                            <CollapsibleContent>
-                              {tidBookings.map((booking) => (
-                                <div
-                                  key={booking.bookingId}
-                                  className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm border-t"
-                                  data-testid={`payment-mismatch-row-${booking.bookingId}`}
-                                >
-                                  <div className="col-span-3">
-                                    <span className="font-mono text-xs">
-                                      {tid}
-                                    </span>
-                                  </div>
-                                  <div className="col-span-3">
-                                    <span className="text-xs">
-                                      {booking.paymentMethod || "-"}
-                                    </span>
-                                  </div>
-                                  <div className="col-span-3">
-                                    <span className="font-mono text-xs text-muted-foreground">
-                                      {booking.hoBeId || "-"}
-                                    </span>
-                                  </div>
-                                  <div className="col-span-3">
-                                    <Input
-                                      type="text"
-                                      placeholder="Final Vendor ID"
-                                      value={finalVendorIds.get(booking.bookingId) || ""}
-                                      onChange={(e) => {
-                                        const newMap = new Map(finalVendorIds);
-                                        newMap.set(booking.bookingId, e.target.value);
-                                        setFinalVendorIds(newMap);
-                                      }}
-                                      className="h-7 text-xs"
-                                      data-testid={`input-final-vendor-${booking.bookingId}`}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                            </CollapsibleContent>
-                          </div>
-                        </Collapsible>
-                      );
-                    })}
+                <CollapsibleContent>
+                  {/* Compact table header */}
+                  <div className="grid grid-cols-12 gap-1 px-2 py-1 text-xs text-muted-foreground font-medium bg-muted/30 rounded-t">
+                    <div className="col-span-3">TID</div>
+                    <div className="col-span-3">Payment Method</div>
+                    <div className="col-span-3">Vendor ID (HO)</div>
+                    <div className="col-span-3">Final Vendor ID</div>
+                  </div>
+                  {/* Compact rows */}
+                  <div className="border rounded-b max-h-48 overflow-y-auto">
+                    {vendorCorrectionBookings.map((booking) => (
+                      <div
+                        key={booking.bookingId}
+                        className="grid grid-cols-12 gap-1 px-2 py-1 items-center text-xs border-b last:border-b-0"
+                        data-testid={`vendor-correction-row-${booking.bookingId}`}
+                      >
+                        <div className="col-span-3 font-mono truncate" title={booking.tid || booking.bookingId}>
+                          {booking.tid || booking.bookingId}
+                        </div>
+                        <div className="col-span-3 truncate">{booking.paymentMethod || "-"}</div>
+                        <div className="col-span-3 font-mono text-muted-foreground truncate">{booking.hoBeId || "-"}</div>
+                        <div className="col-span-3">
+                          <Input
+                            type="text"
+                            placeholder="Final ID"
+                            value={finalVendorIds.get(booking.bookingId) || ""}
+                            onChange={(e) => {
+                              const newMap = new Map(finalVendorIds);
+                              newMap.set(booking.bookingId, e.target.value);
+                              setFinalVendorIds(newMap);
+                            }}
+                            className="h-5 text-xs px-1"
+                            data-testid={`input-final-vendor-${booking.bookingId}`}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
