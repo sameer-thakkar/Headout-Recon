@@ -122,8 +122,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const bookingsForPayableModal = useMemo((): BookingForPayable[] => {
     if (!selectedPayableCurrency) return [];
-    // Combine primary and unmapped rows
-    const allRows = [...primaryRows, ...unmappedRows];
+    // Combine primary, secondary vendor, and unmapped rows
+    const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
     return allRows
       .filter(row => row.hoCurrency === selectedPayableCurrency)
       .map(row => ({
@@ -142,7 +142,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         hoBeId: row.hoBeId,
         spBeId: row.spBeId,
       }));
-  }, [primaryRows, unmappedRows, selectedPayableCurrency]);
+  }, [primaryRows, secondaryVendorRows, unmappedRows, selectedPayableCurrency]);
 
   const spDetails = useMemo(() => {
     const firstRow = primaryRows[0];
