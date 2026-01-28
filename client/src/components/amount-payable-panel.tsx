@@ -1804,6 +1804,44 @@ export function AmountPayablePanel({
     <div className="h-full flex flex-col bg-background">
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
+          <div className="p-4 bg-muted/30 rounded-lg border border-border/50 mb-4">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-primary" />
+              Calculation Summary (Base Amount)
+            </h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Reconciled ({reconciledBookings.length}):</span>
+                <span className="font-mono text-xs">{formatCurrency(reconciledTotal)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Discrepancy ({discrepancyBookings.length}):</span>
+                <span className="font-mono text-xs">{formatCurrency(discrepancyTotal)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Cancellations ({cancellationBookings.length}):</span>
+                <span className="font-mono text-xs text-red-600">({formatCurrency(Math.abs(cancellationsTotal))})</span>
+              </div>
+              {secondaryVendorBookings.length > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Secondary Vendor ({secondaryVendorBookings.length}):</span>
+                  <span className="font-mono text-xs">{formatCurrency(secondaryVendorTotal)}</span>
+                </div>
+              )}
+              {alreadyReconciledBookings.length > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Already Reconciled ({alreadyReconciledBookings.length}):</span>
+                  <span className="font-mono text-xs">{formatCurrency(alreadyReconciledTotal)}</span>
+                </div>
+              )}
+              <Separator className="my-2" />
+              <div className="flex justify-between items-center font-bold">
+                <span>Base Amount:</span>
+                <span className="font-mono text-xs">{formatCurrency(baseAmount)}</span>
+              </div>
+            </div>
+          </div>
+
           <div className="border rounded-lg overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 items-center">
               <div className="col-span-6 flex items-center gap-2">
