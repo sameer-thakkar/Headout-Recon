@@ -61,6 +61,7 @@ interface AmountPayablePanelProps {
   allRows?: PrimaryRow[];
   onCurrencyChange?: (currency: string) => void;
   availableCurrencies?: string[];
+  dominantPaymentMethod?: string;
 }
 
 export function AmountPayablePanel({
@@ -74,6 +75,7 @@ export function AmountPayablePanel({
   allRows = [],
   onCurrencyChange,
   availableCurrencies = [],
+  dominantPaymentMethod = "",
 }: AmountPayablePanelProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
@@ -405,14 +407,16 @@ export function AmountPayablePanel({
     return result;
   }, [secondaryVendorBookings]);
 
-  // Payment Method Mismatch: bookings where HO payment method differs from SP payment method
+  // Payment Method Mismatch: bookings where payment method differs from dominant payment method
   const paymentMismatchBookings = useMemo(() => {
+    if (!dominantPaymentMethod) return [];
+    const normalizedDominant = dominantPaymentMethod.toLowerCase().trim();
     return bookings.filter(b => {
-      // Only include if both payment methods are present and they differ
-      if (!b.paymentMethod || !b.spPaymentMethod) return false;
-      return b.paymentMethod.toLowerCase().trim() !== b.spPaymentMethod.toLowerCase().trim();
+      // Only include if payment method is present and differs from dominant
+      if (!b.paymentMethod) return false;
+      return b.paymentMethod.toLowerCase().trim() !== normalizedDominant;
     });
-  }, [bookings]);
+  }, [bookings, dominantPaymentMethod]);
 
   // Group Payment Mismatch bookings by TID
   const paymentMismatchByTid = useMemo(() => {

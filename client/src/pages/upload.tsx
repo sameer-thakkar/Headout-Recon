@@ -898,6 +898,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                   allRows={primaryRows}
                   onCurrencyChange={setSelectedPayableCurrency}
                   availableCurrencies={spDetails?.currency.split(", ") || []}
+                  dominantPaymentMethod={spDetails?.paymentMethod || ""}
                 />
               </CardContent>
             )}
