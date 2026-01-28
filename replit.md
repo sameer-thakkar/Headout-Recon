@@ -95,3 +95,18 @@ shared/              # Shared code between client and server
 - **Auto Column Width**: Applied to Discrepancy Analysis tab for optimal viewing
 - **SP Invoice Report**: Includes all original columns plus FX conversion data (SP Net in HO Currency, FX Rate Used)
 - **Helper Functions**: `formatIndianNumber()` and `formatDateValue()` in `server/routes.ts` handle formatting
+
+### Already Reconciled Feature
+- **Detection**: Bookings where HO data "reason" column contains "Already Auto Reconciled" or "Already Manually Reconciled" (case-insensitive)
+- **Priority**: HIGHEST priority - checked before Secondary Vendor and all other reason types in `assignReason()`
+- **Sub-classification**:
+  - "Already Reconciled-Same BE": HO BE ID matches SP BE ID (normalized comparison)
+  - "Already Reconciled-Different BE": BE IDs don't match
+- **DRI Team Assignment**: Finance team
+- **UI Display**: Collapsible summary row in results → Modal with classification breakdown → Second modal with booking details
+- **Amount Payable Integration**: 
+  - Dedicated section for Already Reconciled bookings
+  - Per-booking decisions: Cancellation, Multiple Tickets, Partial Fulfillment, Manual Error, Other
+  - Remarks field and Add/Less amount adjustment
+  - Decisions converted to Adjustment entries and included in Apply payload for export/storage
+- **Export**: Already Reconciled bookings included in Discrepancy Analysis (filter excludes only exact "Reconciled")
