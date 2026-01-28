@@ -472,7 +472,7 @@ function assignReason(
   const isChargedLossTrue = chargedLossOriginal?.toUpperCase() === "TRUE";
   
   // Secondary Vendor check: HO BE ID ≠ SP BE ID
-  // When true, booking goes to Secondary Vendor section with its own reasons
+  // When true, booking is grouped under Secondary Vendor section (same reasons, just different section)
   let isSecondaryVendor = false;
   if (hoBeId && spBeId && hoBeId.trim() !== "" && spBeId.trim() !== "") {
     const normalizedHoBeId = hoBeId.trim().toLowerCase();
@@ -481,11 +481,6 @@ function assignReason(
       isSecondaryVendor = true;
     }
   }
-  
-  // Helper to prefix reason with "Secondary Vendor-" when applicable
-  const prefixReason = (baseReason: string): string => {
-    return isSecondaryVendor ? `Secondary Vendor-${baseReason}` : baseReason;
-  };
   
   // 1) Already Reconciled - check HO reason column
   // Values: "Already Auto Reconciled" or "Already Manually Reconciled"
@@ -499,7 +494,7 @@ function assignReason(
       // Check if BE IDs match (both must exist for comparison)
       if (hoBeNorm && spBeNorm && hoBeNorm === spBeNorm) {
         return {
-          reason: prefixReason("Already Reconciled-Same BE"),
+          reason: "Already Reconciled-Same BE",
           chargedLoss: chargedLossOriginal || "FALSE",
           comment: hoReason,
           alreadyReconciledType: "same_be",
@@ -508,7 +503,7 @@ function assignReason(
       } else {
         // Different BE or one is missing
         return {
-          reason: prefixReason("Already Reconciled-Different BE"),
+          reason: "Already Reconciled-Different BE",
           chargedLoss: chargedLossOriginal || "FALSE",
           comment: hoReason,
           alreadyReconciledType: "different_be",
@@ -525,7 +520,7 @@ function assignReason(
       if (spNetInHo === 0) {
         // SP Net = 0 → Reconciled, Comment = "Cancelled-OK"
         return {
-          reason: prefixReason("Reconciled"),
+          reason: "Reconciled",
           chargedLoss: chargedLossOriginal || "FALSE",
           comment: "Cancelled-OK",
           isSecondaryVendor
@@ -533,7 +528,7 @@ function assignReason(
       } else {
         // SP Net > 0 → "Cancelled-SP error", chargedLoss = TRUE
         return {
-          reason: prefixReason("Cancelled-SP error"),
+          reason: "Cancelled-SP error",
           chargedLoss: "TRUE",
           comment: "Cancelled-SP error",
           isSecondaryVendor
@@ -546,7 +541,7 @@ function assignReason(
       if (spNetInHo === 0) {
         // SP Net = 0 → Reconciled, Comment = "Cancelled-OK"
         return {
-          reason: prefixReason("Reconciled"),
+          reason: "Reconciled",
           chargedLoss: chargedLossOriginal || "FALSE",
           comment: "Cancelled-OK",
           isSecondaryVendor
@@ -556,7 +551,7 @@ function assignReason(
         if (cancellationInsurance?.toLowerCase() === "yes") {
           // Cancellation Insurance = "Yes" → Cancelled-Insured Booking, chargedLoss = TRUE
           return {
-            reason: prefixReason("Cancelled-Insured Booking"),
+            reason: "Cancelled-Insured Booking",
             chargedLoss: "TRUE",
             comment: "Cancelled-Insured Booking",
             isSecondaryVendor
@@ -566,7 +561,7 @@ function assignReason(
           if (isChargedLossTrue) {
             // chargedLoss = TRUE → "Cancelled-DSS policy"
             return {
-              reason: prefixReason("Cancelled-DSS policy"),
+              reason: "Cancelled-DSS policy",
               chargedLoss: "TRUE",
               comment: "Cancelled-DSS policy",
               isSecondaryVendor
@@ -574,7 +569,7 @@ function assignReason(
           } else {
             // chargedLoss = FALSE → "Cancelled-Check for Charge loss"
             return {
-              reason: prefixReason("Cancelled-Check for Charge loss"),
+              reason: "Cancelled-Check for Charge loss",
               chargedLoss: "FALSE",
               comment: "Cancelled-Check for Charge loss",
               isSecondaryVendor
@@ -586,7 +581,7 @@ function assignReason(
     
     // Default for cancelled (if Cancellable field is missing/other)
     return {
-      reason: prefixReason("Reconciled"),
+      reason: "Reconciled",
       chargedLoss: chargedLossOriginal || "FALSE",
       comment: "Cancelled-OK",
       isSecondaryVendor
@@ -598,7 +593,7 @@ function assignReason(
     // MTB rule: HO Net < SP Net (differencePct is negative) AND abs(differencePct) >= 95%
     if (differencePct <= -0.95) {
       return {
-        reason: prefixReason("Multiple Tickets Booked"),
+        reason: "Multiple Tickets Booked",
         chargedLoss: chargedLossOriginal || "FALSE",
         comment: "",
         isSecondaryVendor
@@ -613,7 +608,7 @@ function assignReason(
     
     if (isReconciled) {
       return {
-        reason: prefixReason("Reconciled"),
+        reason: "Reconciled",
         chargedLoss: chargedLossOriginal || "FALSE",
         comment: "",
         isSecondaryVendor
@@ -624,7 +619,7 @@ function assignReason(
   // 5) NPD - Net Price Discrepancy (amounts don't reconcile)
   // This is the fallback for non-matching amounts
   return {
-    reason: prefixReason("Net Price Discrepancy"),
+    reason: "Net Price Discrepancy",
     chargedLoss: chargedLossOriginal || "FALSE",
     comment: "",
     isSecondaryVendor
