@@ -1936,8 +1936,8 @@ export function AmountPayablePanel({
                 <CollapsibleContent>
                   <div className="max-h-[500px] overflow-y-auto">
                     {/* Header Row */}
-                    <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_80px_120px_80px_80px_90px] gap-1 px-2 py-1.5 bg-muted/30 text-[10px] font-medium text-muted-foreground border-t sticky top-0 z-10">
-                      <div>Payment Method</div>
+                    <div className="grid grid-cols-[80px_70px_50px_70px_70px_80px_120px_80px_80px_90px] gap-2 px-2 py-1.5 bg-muted/30 text-[10px] font-medium text-muted-foreground border-t sticky top-0 z-10">
+                      <div>Pay Method</div>
                       <div className="text-right">Recon Net</div>
                       <div>BE ID</div>
                       <div className="text-right">HO Net</div>
@@ -1962,7 +1962,7 @@ export function AmountPayablePanel({
                       return (
                         <div 
                           key={booking.bookingId} 
-                          className={`grid grid-cols-[1fr_1fr_1fr_1fr_1fr_80px_120px_80px_80px_90px] gap-1 px-2 py-1.5 border-t items-center text-xs ${isDontPay ? "opacity-50 bg-muted/20" : ""}`}
+                          className={`grid grid-cols-[80px_70px_50px_70px_70px_80px_120px_80px_80px_90px] gap-2 px-2 py-1.5 border-t items-center text-xs ${isDontPay ? "opacity-50 bg-muted/20" : ""}`}
                           data-testid={`already-reconciled-row-${booking.bookingId}`}
                         >
                           {/* Payment Method */}
