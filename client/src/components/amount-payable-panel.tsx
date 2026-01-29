@@ -2028,14 +2028,14 @@ export function AmountPayablePanel({
                                 <SelectValue placeholder="-" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">-</SelectItem>
+                                <SelectItem value="none">-</SelectItem>
                                 <SelectItem value="Cancellations">Cancellations</SelectItem>
                                 <SelectItem value="Multiple tickets booked">Multiple tickets</SelectItem>
                                 <SelectItem value="Manual Error">Manual Error</SelectItem>
                                 <SelectItem value="Partial Fulfillment">Partial Fulfillment</SelectItem>
                               </SelectContent>
                             </Select>
-                            {(isCustomReason || decision?.reason === "") && (
+                            {(isCustomReason || decision?.reason === "none") && (
                               <Input
                                 className="h-6 text-[10px] px-1 w-16"
                                 placeholder="Other..."
