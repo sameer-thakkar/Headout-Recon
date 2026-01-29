@@ -1759,7 +1759,7 @@ export function AmountPayablePanel({
       amount: finalAmount,
     });
     setShowApplyConfirmation(true);
-  }, [localAdjustments, localSelections, finalAmount, alreadyReconciledDecisions]);
+  }, [localAdjustments, localSelections, finalAmount, alreadyReconciledDecisions, alreadyReconciledBookings]);
 
   const handleConfirmApply = useCallback(async () => {
     if (!pendingApplyData) return;
