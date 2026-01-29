@@ -367,12 +367,12 @@ export function AmountPayablePanel({
     [bookings]
   );
 
-  // Already Reconciled decision state: { bookingId: { decision, remarks, adjustmentType, adjustmentAmount } }
+  // Already Reconciled decision state: { bookingId: { decision, reason, customReason, finalAmount, dispute } }
   const [alreadyReconciledDecisions, setAlreadyReconciledDecisions] = useState<Map<string, {
-    decision: string;
-    remarks: string;
-    adjustmentType: "add" | "less";
-    adjustmentAmount: number;
+    decision: "pay" | "dont_pay";
+    reason: string; // "Cancellations" | "Multiple tickets booked" | "Manual Error" | "Partial Fulfillment" | ""
+    customReason: string; // Free text for "other" reasons
+    finalAmount: number; // Editable, defaults to SP Net
   }>>(new Map());
 
   const reconciledTotal = useMemo(() => 
@@ -574,26 +574,36 @@ export function AmountPayablePanel({
     return Array.from(groups.values());
   }, [closedDisputes, disputeIdMapping]);
 
-  // Calculate Already Reconciled adjustments from decisions
-  const alreadyReconciledAdjustment = useMemo(() => {
-    let total = 0;
-    alreadyReconciledDecisions.forEach((decision) => {
-      if (decision.adjustmentAmount > 0) {
-        if (decision.adjustmentType === "add") {
-          total += decision.adjustmentAmount;
-        } else {
-          total -= decision.adjustmentAmount;
+  // Calculate Already Reconciled total from decisions (only "pay" decisions count)
+  // and also calculate adjustment (difference from base SP Net)
+  const { alreadyReconciledTotal, alreadyReconciledAdjustment } = useMemo(() => {
+    let totalFromDecisions = 0;
+    let baseTotal = 0;
+    
+    alreadyReconciledBookings.forEach((booking) => {
+      const decision = alreadyReconciledDecisions.get(booking.bookingId);
+      baseTotal += booking.spNet;
+      
+      if (decision) {
+        if (decision.decision === "pay") {
+          // Use the user-specified finalAmount (defaults to SP Net)
+          totalFromDecisions += decision.finalAmount;
         }
+        // "dont_pay" means we don't add anything to total
+      } else {
+        // No decision yet - default to including SP Net (pay by default)
+        totalFromDecisions += booking.spNet;
       }
     });
-    return total;
-  }, [alreadyReconciledDecisions]);
-
-  // Already Reconciled bookings base total (use SP Net by default)
-  const alreadyReconciledTotal = useMemo(() => 
-    alreadyReconciledBookings.reduce((sum, b) => sum + b.spNet, 0), 
-    [alreadyReconciledBookings]
-  );
+    
+    // Adjustment is the difference from what would be paid vs base SP Net total
+    const adjustment = totalFromDecisions - baseTotal;
+    
+    return { 
+      alreadyReconciledTotal: totalFromDecisions, 
+      alreadyReconciledAdjustment: adjustment 
+    };
+  }, [alreadyReconciledBookings, alreadyReconciledDecisions]);
 
   const baseAmount = reconciledTotal + discrepancyTotal + alreadyReconciledTotal + secondaryVendorTotal + Math.abs(cancellationsTotal);
 
@@ -1707,18 +1717,35 @@ export function AmountPayablePanel({
     }
     
     // Convert Already Reconciled decisions into adjustment entries
+    // For "dont_pay" decisions, we deduct the full SP Net
+    // For "pay" with modified finalAmount, we record the difference
     const alreadyReconciledAdjustmentEntries: Adjustment[] = [];
-    alreadyReconciledDecisions.forEach((decision, bookingId) => {
-      if (decision.adjustmentAmount > 0 && decision.decision) {
-        const decisionLabel = decision.decision.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-        alreadyReconciledAdjustmentEntries.push({
-          id: `ar-${bookingId}`,
-          nature: `Already Reconciled - ${decisionLabel}`,
-          reference: `${bookingId}${decision.remarks ? ` - ${decision.remarks}` : ""}`,
-          type: decision.adjustmentType,
-          amount: decision.adjustmentAmount,
-          isPreset: true,
-        });
+    alreadyReconciledBookings.forEach((booking) => {
+      const decision = alreadyReconciledDecisions.get(booking.bookingId);
+      if (decision) {
+        const reasonLabel = decision.reason || decision.customReason || "No reason";
+        if (decision.decision === "dont_pay") {
+          // Deduct the full SP Net amount
+          alreadyReconciledAdjustmentEntries.push({
+            id: `ar-${booking.bookingId}`,
+            nature: `Already Reconciled - Don't Pay`,
+            reference: `${booking.bookingId} - ${reasonLabel}`,
+            type: "less",
+            amount: Math.abs(booking.spNet),
+            isPreset: true,
+          });
+        } else if (decision.decision === "pay" && decision.finalAmount !== booking.spNet) {
+          // Record the difference from SP Net
+          const diff = decision.finalAmount - booking.spNet;
+          alreadyReconciledAdjustmentEntries.push({
+            id: `ar-${booking.bookingId}`,
+            nature: `Already Reconciled - Adjusted`,
+            reference: `${booking.bookingId} - ${reasonLabel}`,
+            type: diff >= 0 ? "add" : "less",
+            amount: Math.abs(diff),
+            isPreset: true,
+          });
+        }
       }
     });
     
@@ -1907,127 +1934,219 @@ export function AmountPayablePanel({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <div className="max-h-96 overflow-y-auto">
-                    <div className="grid grid-cols-12 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
-                  <div className="col-span-1">TID</div>
-                  <div className="col-span-1">Booking ID</div>
-                  <div className="col-span-1 text-right">HO Net</div>
-                  <div className="col-span-1 text-right">SP Net</div>
-                  <div className="col-span-2">Type</div>
-                  <div className="col-span-2">Decision</div>
-                  <div className="col-span-2">Remarks</div>
-                  <div className="col-span-1">Add/Less</div>
-                  <div className="col-span-1 text-right">Amount</div>
-                </div>
-                {alreadyReconciledBookings.map((booking) => {
-                  const decision = alreadyReconciledDecisions.get(booking.bookingId);
-                  return (
-                    <div 
-                      key={booking.bookingId} 
-                      className="grid grid-cols-12 gap-1 px-3 py-2 border-t items-center text-xs"
-                      data-testid={`already-reconciled-row-${booking.bookingId}`}
-                    >
-                      <div className="col-span-1 font-mono truncate" title={booking.tid}>{booking.tid || "-"}</div>
-                      <div className="col-span-1 font-mono truncate" title={booking.bookingId}>{booking.bookingId}</div>
-                      <div className="col-span-1 text-right font-mono">{formatCurrency(booking.hoNet)}</div>
-                      <div className="col-span-1 text-right font-mono">{formatCurrency(booking.spNet)}</div>
-                      <div className="col-span-2">
-                        <Badge 
-                          variant="secondary" 
-                          className="text-xs"
-                        >
-                          {booking.reason.includes("Same") ? "Same BE" : "Diff BE"}
-                        </Badge>
-                      </div>
-                      <div className="col-span-2">
-                        <Select
-                          value={decision?.decision || ""}
-                          onValueChange={(v) => {
-                            const newDecisions = new Map(alreadyReconciledDecisions);
-                            newDecisions.set(booking.bookingId, {
-                              decision: v,
-                              remarks: decision?.remarks || "",
-                              adjustmentType: decision?.adjustmentType || "less",
-                              adjustmentAmount: decision?.adjustmentAmount || 0,
-                            });
-                            setAlreadyReconciledDecisions(newDecisions);
-                          }}
-                        >
-                          <SelectTrigger className="text-xs" data-testid={`select-decision-${booking.bookingId}`}>
-                            <SelectValue placeholder="Select..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="cancellation">Cancellation</SelectItem>
-                            <SelectItem value="multiple_tickets">Multiple Tickets</SelectItem>
-                            <SelectItem value="partial_fulfillment">Partial Fulfillment</SelectItem>
-                            <SelectItem value="manual_error">Manual Error</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-2">
-                        <Input
-                          className="text-xs"
-                          placeholder="Remarks..."
-                          value={decision?.remarks || ""}
-                          onChange={(e) => {
-                            const newDecisions = new Map(alreadyReconciledDecisions);
-                            newDecisions.set(booking.bookingId, {
-                              decision: decision?.decision || "",
-                              remarks: e.target.value,
-                              adjustmentType: decision?.adjustmentType || "less",
-                              adjustmentAmount: decision?.adjustmentAmount || 0,
-                            });
-                            setAlreadyReconciledDecisions(newDecisions);
-                          }}
-                          data-testid={`input-remarks-${booking.bookingId}`}
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <Select
-                          value={decision?.adjustmentType || "less"}
-                          onValueChange={(v) => {
-                            const newDecisions = new Map(alreadyReconciledDecisions);
-                            newDecisions.set(booking.bookingId, {
-                              decision: decision?.decision || "",
-                              remarks: decision?.remarks || "",
-                              adjustmentType: v as "add" | "less",
-                              adjustmentAmount: decision?.adjustmentAmount || 0,
-                            });
-                            setAlreadyReconciledDecisions(newDecisions);
-                          }}
-                        >
-                          <SelectTrigger className="text-xs" data-testid={`select-addless-${booking.bookingId}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="add">Add</SelectItem>
-                            <SelectItem value="less">Less</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="col-span-1">
-                        <Input
-                          type="number"
-                          className="text-xs text-right font-mono"
-                          placeholder="0.00"
-                          value={decision?.adjustmentAmount || ""}
-                          onChange={(e) => {
-                            const newDecisions = new Map(alreadyReconciledDecisions);
-                            newDecisions.set(booking.bookingId, {
-                              decision: decision?.decision || "",
-                              remarks: decision?.remarks || "",
-                              adjustmentType: decision?.adjustmentType || "less",
-                              adjustmentAmount: parseFloat(e.target.value) || 0,
-                            });
-                            setAlreadyReconciledDecisions(newDecisions);
-                          }}
-                          data-testid={`input-amount-${booking.bookingId}`}
-                        />
-                      </div>
+                  <div className="max-h-[500px] overflow-y-auto">
+                    {/* Header Row */}
+                    <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_80px_120px_80px_80px_90px] gap-1 px-2 py-1.5 bg-muted/30 text-[10px] font-medium text-muted-foreground border-t sticky top-0 z-10">
+                      <div>Payment Method</div>
+                      <div className="text-right">Recon Net</div>
+                      <div>BE ID</div>
+                      <div className="text-right">HO Net</div>
+                      <div className="text-right">SP Net</div>
+                      <div>Decision</div>
+                      <div>Reason</div>
+                      <div>Dispute</div>
+                      <div className="text-right">Final Amt</div>
+                      <div className="text-right">Type</div>
                     </div>
-                  );
-                })}
+                    {/* Booking Rows */}
+                    {alreadyReconciledBookings.map((booking) => {
+                      const decision = alreadyReconciledDecisions.get(booking.bookingId);
+                      const isPay = decision?.decision === "pay";
+                      const isDontPay = decision?.decision === "dont_pay";
+                      const isDisputeActive = activeDisputes.has(booking.bookingId);
+                      const disputeAmount = disputeAmounts.get(booking.bookingId) || 0;
+                      const currentFinalAmount = decision?.finalAmount ?? booking.spNet;
+                      const reasonOptions = ["", "Cancellations", "Multiple tickets booked", "Manual Error", "Partial Fulfillment"];
+                      const isCustomReason = decision?.reason && !reasonOptions.includes(decision.reason);
+                      
+                      return (
+                        <div 
+                          key={booking.bookingId} 
+                          className={`grid grid-cols-[1fr_1fr_1fr_1fr_1fr_80px_120px_80px_80px_90px] gap-1 px-2 py-1.5 border-t items-center text-xs ${isDontPay ? "opacity-50 bg-muted/20" : ""}`}
+                          data-testid={`already-reconciled-row-${booking.bookingId}`}
+                        >
+                          {/* Payment Method */}
+                          <div className="truncate" title={booking.paymentMethod || "-"}>
+                            {booking.paymentMethod || "-"}
+                          </div>
+                          {/* Reconciled Net Price */}
+                          <div className="text-right font-mono">
+                            {formatCurrency(booking.spNet)}
+                          </div>
+                          {/* BE ID */}
+                          <div className="font-mono truncate" title={booking.hoBeId || "-"}>
+                            {booking.hoBeId || "-"}
+                          </div>
+                          {/* HO Net */}
+                          <div className="text-right font-mono">
+                            {formatCurrency(booking.hoNet)}
+                          </div>
+                          {/* SP Net */}
+                          <div className="text-right font-mono">
+                            {formatCurrency(booking.spNet)}
+                          </div>
+                          {/* Decision Dropdown */}
+                          <div>
+                            <Select
+                              value={decision?.decision || "pay"}
+                              onValueChange={(v: "pay" | "dont_pay") => {
+                                const newDecisions = new Map(alreadyReconciledDecisions);
+                                newDecisions.set(booking.bookingId, {
+                                  decision: v,
+                                  reason: decision?.reason || "",
+                                  customReason: decision?.customReason || "",
+                                  finalAmount: decision?.finalAmount ?? booking.spNet,
+                                });
+                                setAlreadyReconciledDecisions(newDecisions);
+                              }}
+                            >
+                              <SelectTrigger className="h-6 text-[10px] px-1" data-testid={`select-decision-${booking.bookingId}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pay">Pay</SelectItem>
+                                <SelectItem value="dont_pay">Don't Pay</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {/* Reason Dropdown + Custom Text */}
+                          <div className="flex gap-0.5">
+                            <Select
+                              value={isCustomReason ? "" : (decision?.reason || "")}
+                              onValueChange={(v) => {
+                                const newDecisions = new Map(alreadyReconciledDecisions);
+                                newDecisions.set(booking.bookingId, {
+                                  decision: decision?.decision || "pay",
+                                  reason: v,
+                                  customReason: "",
+                                  finalAmount: decision?.finalAmount ?? booking.spNet,
+                                });
+                                setAlreadyReconciledDecisions(newDecisions);
+                              }}
+                            >
+                              <SelectTrigger className="h-6 text-[10px] px-1 flex-1" data-testid={`select-reason-${booking.bookingId}`}>
+                                <SelectValue placeholder="-" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">-</SelectItem>
+                                <SelectItem value="Cancellations">Cancellations</SelectItem>
+                                <SelectItem value="Multiple tickets booked">Multiple tickets</SelectItem>
+                                <SelectItem value="Manual Error">Manual Error</SelectItem>
+                                <SelectItem value="Partial Fulfillment">Partial Fulfillment</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {(isCustomReason || decision?.reason === "") && (
+                              <Input
+                                className="h-6 text-[10px] px-1 w-16"
+                                placeholder="Other..."
+                                value={isCustomReason ? decision?.reason : ""}
+                                onChange={(e) => {
+                                  const newDecisions = new Map(alreadyReconciledDecisions);
+                                  newDecisions.set(booking.bookingId, {
+                                    decision: decision?.decision || "pay",
+                                    reason: e.target.value,
+                                    customReason: e.target.value,
+                                    finalAmount: decision?.finalAmount ?? booking.spNet,
+                                  });
+                                  setAlreadyReconciledDecisions(newDecisions);
+                                }}
+                                data-testid={`input-custom-reason-${booking.bookingId}`}
+                              />
+                            )}
+                          </div>
+                          {/* Dispute Button */}
+                          <div>
+                            {isDisputeActive ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  className="h-6 text-[10px] px-1 w-14 text-right font-mono"
+                                  value={disputeAmount || ""}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setDisputeAmounts(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(booking.bookingId, val);
+                                      return newMap;
+                                    });
+                                  }}
+                                  data-testid={`input-dispute-amount-${booking.bookingId}`}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5"
+                                  onClick={() => {
+                                    setActiveDisputes(prev => {
+                                      const newSet = new Set(prev);
+                                      newSet.delete(booking.bookingId);
+                                      return newSet;
+                                    });
+                                    setDisputeAmounts(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.delete(booking.bookingId);
+                                      return newMap;
+                                    });
+                                  }}
+                                  data-testid={`button-cancel-dispute-${booking.bookingId}`}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2"
+                                onClick={() => {
+                                  setActiveDisputes(prev => new Set(prev).add(booking.bookingId));
+                                  setDisputeAmounts(prev => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(booking.bookingId, Math.abs(booking.spNet - booking.hoNet));
+                                    return newMap;
+                                  });
+                                }}
+                                data-testid={`button-dispute-${booking.bookingId}`}
+                              >
+                                Dispute
+                              </Button>
+                            )}
+                          </div>
+                          {/* Final Amount (only visible when Pay) */}
+                          <div>
+                            {isPay || !decision ? (
+                              <Input
+                                type="number"
+                                className="h-6 text-[10px] px-1 text-right font-mono"
+                                value={currentFinalAmount}
+                                onChange={(e) => {
+                                  const newDecisions = new Map(alreadyReconciledDecisions);
+                                  newDecisions.set(booking.bookingId, {
+                                    decision: decision?.decision || "pay",
+                                    reason: decision?.reason || "",
+                                    customReason: decision?.customReason || "",
+                                    finalAmount: parseFloat(e.target.value) || 0,
+                                  });
+                                  setAlreadyReconciledDecisions(newDecisions);
+                                }}
+                                data-testid={`input-final-amount-${booking.bookingId}`}
+                              />
+                            ) : (
+                              <span className="text-muted-foreground text-[10px]">-</span>
+                            )}
+                          </div>
+                          {/* Type Badge */}
+                          <div className="text-right">
+                            <Badge 
+                              variant="secondary" 
+                              className="text-[9px]"
+                            >
+                              {booking.reason.includes("Same") ? "Same BE" : "Diff BE"}
+                            </Badge>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CollapsibleContent>
               </div>
