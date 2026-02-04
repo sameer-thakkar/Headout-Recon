@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Save, Edit2, Loader2 } from "lucide-react";
+import { useMemo } from "react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -12,10 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import type { PrimaryRow, VendorBalance } from "@shared/schema";
 
 interface PurchaseReconciliationPanelProps {
@@ -40,65 +37,13 @@ export function PurchaseReconciliationPanel({
   beId,
   onClose,
 }: PurchaseReconciliationPanelProps) {
-  const { toast } = useToast();
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValues, setEditValues] = useState({
-    openingBalance: 0,
-    reloads: 0,
-    closingBalance: 0,
-  });
-
   const { data: balanceData, isLoading: isLoadingBalance } = useQuery<{ balance: VendorBalance | null }>({
     queryKey: ['/api/vendor-balances', beId],
     enabled: !!beId,
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async (values: { openingBalance: number; reloads: number; closingBalance: number }) => {
-      return apiRequest('POST', '/api/vendor-balances', {
-        beId,
-        openingBalance: values.openingBalance,
-        reloads: values.reloads,
-        closingBalance: values.closingBalance,
-        currency,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/vendor-balances', beId] });
-      setIsEditing(false);
-      toast({
-        title: "Balances saved",
-        description: "Vendor balances have been updated successfully.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to save vendor balances.",
-        variant: "destructive",
-      });
-    },
-  });
-
   const balance = balanceData?.balance;
   const hasBalance = !!balance;
-
-  const handleEdit = () => {
-    setEditValues({
-      openingBalance: balance?.openingBalance ?? 0,
-      reloads: balance?.reloads ?? 0,
-      closingBalance: balance?.closingBalance ?? 0,
-    });
-    setIsEditing(true);
-  };
-
-  const handleSave = () => {
-    saveMutation.mutate(editValues);
-  };
-
-  const handleCancel = () => {
-    setIsEditing(false);
-  };
 
   const calculations = useMemo(() => {
     const openingBalance = balance?.openingBalance ?? 0;
@@ -151,20 +96,18 @@ export function PurchaseReconciliationPanel({
     {
       id: 1,
       label: "Opening Balance",
-      value: isEditing ? editValues.openingBalance : calculations.openingBalance,
+      value: calculations.openingBalance,
       description: hasBalance ? "From database" : "Not configured",
       icon: Wallet,
-      isEditable: true,
-      editKey: "openingBalance" as const,
+      isFromDb: true,
     },
     {
       id: 2,
       label: "Reloads",
-      value: isEditing ? editValues.reloads : calculations.reloads,
+      value: calculations.reloads,
       description: hasBalance ? "From database" : "Not configured",
       icon: Plus,
-      isEditable: true,
-      editKey: "reloads" as const,
+      isFromDb: true,
     },
     {
       id: 3,
@@ -172,16 +115,14 @@ export function PurchaseReconciliationPanel({
       value: calculations.refunds,
       description: "SP Invoice negative values",
       icon: Minus,
-      isEditable: false,
     },
     {
       id: 4,
       label: "Closing Balance",
-      value: isEditing ? editValues.closingBalance : calculations.closingBalance,
+      value: calculations.closingBalance,
       description: hasBalance ? "From database" : "Not configured",
       icon: Wallet,
-      isEditable: true,
-      editKey: "closingBalance" as const,
+      isFromDb: true,
     },
     {
       id: 5,
@@ -255,7 +196,7 @@ export function PurchaseReconciliationPanel({
         <div className="flex items-center gap-2 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
           <Wallet className="h-5 w-5 text-amber-600" />
           <span className="text-amber-800 dark:text-amber-200">
-            No Billing Entity ID available. Cannot load or save balance data.
+            No Billing Entity ID available. Cannot load balance data.
           </span>
         </div>
         <div className="flex justify-end">
@@ -298,53 +239,20 @@ export function PurchaseReconciliationPanel({
         </div>
       </div>
 
+      {!hasBalance && (
+        <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <span className="text-sm text-amber-800 dark:text-amber-200">
+            No balances configured for this BE ID. Upload balances from the home page to enable accurate calculations.
+          </span>
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <span>{billingEntityName || "Supplier"}</span>
-              {!hasBalance && !isEditing && (
-                <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                  No balances configured
-                </Badge>
-              )}
-            </CardTitle>
-            {!isEditing ? (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleEdit}
-                data-testid="button-edit-balances"
-              >
-                <Edit2 className="h-3 w-3 mr-1" />
-                {hasBalance ? "Edit Balances" : "Set Balances"}
-              </Button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleCancel}
-                  data-testid="button-cancel-edit"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={handleSave}
-                  disabled={saveMutation.isPending}
-                  data-testid="button-save-balances"
-                >
-                  {saveMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  ) : (
-                    <Save className="h-3 w-3 mr-1" />
-                  )}
-                  Save
-                </Button>
-              </div>
-            )}
-          </div>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <span>{billingEntityName || "Supplier"}</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Table className="text-sm">
@@ -377,7 +285,7 @@ export function PurchaseReconciliationPanel({
                         <span className={`${item.isHighlight ? "font-semibold" : ""}`}>
                           {item.label}
                         </span>
-                        {item.isEditable && !hasBalance && !isEditing && (
+                        {item.isFromDb && !hasBalance && (
                           <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
                             Not set
                           </Badge>
@@ -385,20 +293,7 @@ export function PurchaseReconciliationPanel({
                       </div>
                     </TableCell>
                     <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
-                      {isEditing && item.isEditable && item.editKey ? (
-                        <Input
-                          type="number"
-                          value={editValues[item.editKey]}
-                          onChange={(e) => setEditValues(prev => ({
-                            ...prev,
-                            [item.editKey!]: parseFloat(e.target.value) || 0
-                          }))}
-                          className="w-32 text-right font-mono ml-auto"
-                          data-testid={`input-${item.editKey}`}
-                        />
-                      ) : (
-                        formatNumber(item.value)
-                      )}
+                      {formatNumber(item.value)}
                     </TableCell>
                     <TableCell className="py-2 text-xs text-muted-foreground">
                       {item.description}

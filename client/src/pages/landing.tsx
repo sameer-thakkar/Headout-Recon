@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { ReconciliationSession } from "@shared/schema";
+import { VendorBalancesSection } from "@/components/vendor-balances-section";
 
 interface LandingPageProps {
   lastFxRefresh: string | null;
@@ -130,6 +131,8 @@ export function LandingPage({ lastFxRefresh, onStartDemo, onLoadSession }: Landi
           </div>
         </div>
       </section>
+
+      <VendorBalancesSection />
 
       <section className="py-16 px-8 bg-muted/30">
         <div className="max-w-4xl mx-auto">
