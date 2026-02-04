@@ -131,19 +131,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
     enabled: !!currentRunId,
-    staleTime: 30000,
+    staleTime: 0, // Always refetch fresh data
+    gcTime: 0, // Don't cache old results
     refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    refetchOnMount: "always",
     retry: 3,
     retryDelay: 1000,
   });
-
-  // Force refetch when currentRunId changes to ensure fresh data is loaded
-  useEffect(() => {
-    if (currentRunId) {
-      refetchResults();
-    }
-  }, [currentRunId, refetchResults]);
 
   const { data: discrepancyData, isLoading: isDiscrepancyLoading } = useQuery<{ analysisRows: DiscrepancyAnalysisRow[] }>({
     queryKey: ["/api/runs", currentRunId, "discrepancy-analysis", selectedReason],
