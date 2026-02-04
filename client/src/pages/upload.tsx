@@ -29,6 +29,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
 import { AmountPayablePanel } from "@/components/amount-payable-panel";
+import { PurchaseReconciliationPanel } from "@/components/purchase-reconciliation-panel";
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 
 interface UploadPageProps {
@@ -873,7 +874,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-sm font-medium">
-                  Amount Payable to {spDetails?.billingEntityName || "Supplier"}
+                  {spDetails?.paymentMethod?.toUpperCase() === "FLOATING_DEPOSIT" 
+                    ? `Purchase Reconciliation - ${spDetails?.billingEntityName || "Supplier"}`
+                    : `Amount Payable to ${spDetails?.billingEntityName || "Supplier"}`
+                  }
                 </span>
                 {hasResults && (
                   <Button
@@ -900,19 +904,28 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             </CardHeader>
             {isComputeOpen && hasResults && (
               <CardContent className="pt-0">
-                <AmountPayablePanel
-                  bookings={bookingsForPayableModal}
-                  currency={selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""}
-                  adjustments={adjustmentsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || []}
-                  finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || {}}
-                  onApply={handlePayableModalApply}
-                  onClose={() => setIsComputeOpen(false)}
-                  runId={currentRunId}
-                  allRows={primaryRows}
-                  onCurrencyChange={setSelectedPayableCurrency}
-                  availableCurrencies={spDetails?.currency.split(", ") || []}
-                  dominantPaymentMethod={spDetails?.paymentMethod || ""}
-                />
+                {spDetails?.paymentMethod?.toUpperCase() === "FLOATING_DEPOSIT" ? (
+                  <PurchaseReconciliationPanel
+                    primaryRows={primaryRows}
+                    currency={selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""}
+                    billingEntityName={spDetails?.billingEntityName || ""}
+                    onClose={() => setIsComputeOpen(false)}
+                  />
+                ) : (
+                  <AmountPayablePanel
+                    bookings={bookingsForPayableModal}
+                    currency={selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""}
+                    adjustments={adjustmentsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || []}
+                    finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || {}}
+                    onApply={handlePayableModalApply}
+                    onClose={() => setIsComputeOpen(false)}
+                    runId={currentRunId}
+                    allRows={primaryRows}
+                    onCurrencyChange={setSelectedPayableCurrency}
+                    availableCurrencies={spDetails?.currency.split(", ") || []}
+                    dominantPaymentMethod={spDetails?.paymentMethod || ""}
+                  />
+                )}
               </CardContent>
             )}
           </Card>
