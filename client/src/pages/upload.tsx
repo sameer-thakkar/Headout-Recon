@@ -874,7 +874,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-sm font-medium">
-                  {spDetails?.paymentMethod?.toUpperCase() === "FLOATING_DEPOSIT" 
+                  {spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT" 
                     ? `Purchase Reconciliation - ${spDetails?.billingEntityName || "Supplier"}`
                     : `Amount Payable to ${spDetails?.billingEntityName || "Supplier"}`
                   }
@@ -904,7 +904,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             </CardHeader>
             {isComputeOpen && hasResults && (
               <CardContent className="pt-0">
-                {spDetails?.paymentMethod?.toUpperCase() === "FLOATING_DEPOSIT" ? (
+                {spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT" ? (
                   <PurchaseReconciliationPanel
                     primaryRows={primaryRows}
                     currency={selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""}

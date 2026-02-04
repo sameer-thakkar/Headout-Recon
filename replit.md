@@ -154,8 +154,8 @@ shared/              # Shared code between client and server
 - **Bulk Update**: Single input field + button to apply the same Vendor ID to all payment mismatch bookings
 - **Data Persistence**: Final Vendor IDs are ephemeral (UI-only) - intended as reference for manual corrections in external system
 
-### Purchase Reconciliation (FLOATING_DEPOSIT)
-- **Trigger**: When dominant payment method = "FLOATING_DEPOSIT" (case-insensitive)
+### Purchase Reconciliation (PORTAL_DEPOSIT)
+- **Trigger**: When dominant payment method = "PORTAL_DEPOSIT" (case-insensitive)
 - **Replaces**: Amount Payable panel is replaced with Purchase Reconciliation panel
 - **11 Line Items**:
   1. Opening Balance - Fetched from backend (BE ID level) - *placeholder: 10000*
