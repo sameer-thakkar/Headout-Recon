@@ -4132,6 +4132,70 @@ export async function registerRoutes(
     }
   });
 
+  // ========== Vendor Balances Endpoints (Purchase Reconciliation) ==========
+
+  // Get all vendor balances
+  app.get("/api/vendor-balances", async (req, res) => {
+    try {
+      const balances = await storage.getVendorBalances();
+      res.json({ balances });
+    } catch (error) {
+      console.error("Get vendor balances error:", error);
+      res.status(500).json({ error: "Failed to fetch vendor balances" });
+    }
+  });
+
+  // Get vendor balance by BE ID
+  app.get("/api/vendor-balances/:beId", async (req, res) => {
+    try {
+      const { beId } = req.params;
+      const balance = await storage.getVendorBalance(beId);
+      if (!balance) {
+        return res.json({ balance: null });
+      }
+      res.json({ balance });
+    } catch (error) {
+      console.error("Get vendor balance error:", error);
+      res.status(500).json({ error: "Failed to fetch vendor balance" });
+    }
+  });
+
+  // Create or update vendor balance
+  app.post("/api/vendor-balances", async (req, res) => {
+    try {
+      const { beId, openingBalance, reloads, closingBalance, currency } = req.body;
+      
+      if (!beId || openingBalance === undefined || reloads === undefined || closingBalance === undefined || !currency) {
+        return res.status(400).json({ error: "Missing required fields: beId, openingBalance, reloads, closingBalance, currency" });
+      }
+
+      const balance = await storage.upsertVendorBalance({
+        beId,
+        openingBalance: Number(openingBalance),
+        reloads: Number(reloads),
+        closingBalance: Number(closingBalance),
+        currency,
+      });
+      
+      res.json({ balance });
+    } catch (error) {
+      console.error("Upsert vendor balance error:", error);
+      res.status(500).json({ error: "Failed to save vendor balance" });
+    }
+  });
+
+  // Delete vendor balance
+  app.delete("/api/vendor-balances/:beId", async (req, res) => {
+    try {
+      const { beId } = req.params;
+      const deleted = await storage.deleteVendorBalance(beId);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete vendor balance error:", error);
+      res.status(500).json({ error: "Failed to delete vendor balance" });
+    }
+  });
+
   // ========== Session Management Endpoints ==========
 
   // Get all sessions

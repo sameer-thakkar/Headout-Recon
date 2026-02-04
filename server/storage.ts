@@ -13,6 +13,8 @@ import type {
   DisputeRecord,
   IssueRecord,
   VendorCorrection,
+  VendorBalance,
+  InsertVendorBalance,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -61,6 +63,12 @@ export interface IStorage {
   getVendorCorrection(runId: string, bookingId: string): Promise<VendorCorrection | undefined>;
   deleteVendorCorrection(runId: string, bookingId: string): Promise<boolean>;
   bulkSetVendorCorrections(runId: string, corrections: { bookingId: string; finalVendorId: string }[]): Promise<VendorCorrection[]>;
+
+  // Vendor Balances (for Purchase Reconciliation)
+  getVendorBalance(beId: string): Promise<VendorBalance | undefined>;
+  getVendorBalances(): Promise<VendorBalance[]>;
+  upsertVendorBalance(balance: InsertVendorBalance): Promise<VendorBalance>;
+  deleteVendorBalance(beId: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -74,6 +82,7 @@ export class MemStorage implements IStorage {
   private issues: Map<string, IssueRecord> = new Map();
   private issueCounter: number = 0;
   private vendorCorrections: Map<string, VendorCorrection> = new Map(); // key: runId:bookingId
+  private vendorBalances: Map<string, VendorBalance> = new Map(); // key: beId
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -328,6 +337,33 @@ export class MemStorage implements IStorage {
     }
     return results;
   }
+
+  // Vendor Balances
+  async getVendorBalance(beId: string): Promise<VendorBalance | undefined> {
+    return this.vendorBalances.get(beId);
+  }
+
+  async getVendorBalances(): Promise<VendorBalance[]> {
+    return Array.from(this.vendorBalances.values());
+  }
+
+  async upsertVendorBalance(balance: InsertVendorBalance): Promise<VendorBalance> {
+    const existing = this.vendorBalances.get(balance.beId);
+    const now = new Date().toISOString();
+    
+    const vendorBalance: VendorBalance = {
+      ...balance,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    
+    this.vendorBalances.set(balance.beId, vendorBalance);
+    return vendorBalance;
+  }
+
+  async deleteVendorBalance(beId: string): Promise<boolean> {
+    return this.vendorBalances.delete(beId);
+  }
 }
 
 // Database-backed storage implementation
@@ -338,6 +374,7 @@ import {
   disputes as disputesTable,
   issues as issuesTable,
   vendorCorrections as vendorCorrectionsTable,
+  vendorBalances as vendorBalancesTable,
   counters,
   type ReconciliationSession,
 } from "@shared/schema";
@@ -917,6 +954,75 @@ export class DatabaseStorage implements ISessionStorage {
       results.push(correction);
     }
     return results;
+  }
+
+  // Vendor Balances
+  async getVendorBalance(beId: string): Promise<VendorBalance | undefined> {
+    const [result] = await db.select().from(vendorBalancesTable).where(eq(vendorBalancesTable.beId, beId));
+    if (!result) return undefined;
+    
+    return {
+      beId: result.beId,
+      openingBalance: result.openingBalance,
+      reloads: result.reloads,
+      closingBalance: result.closingBalance,
+      currency: result.currency,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+    };
+  }
+
+  async getVendorBalances(): Promise<VendorBalance[]> {
+    const results = await db.select().from(vendorBalancesTable);
+    return results.map(result => ({
+      beId: result.beId,
+      openingBalance: result.openingBalance,
+      reloads: result.reloads,
+      closingBalance: result.closingBalance,
+      currency: result.currency,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+    }));
+  }
+
+  async upsertVendorBalance(balance: InsertVendorBalance): Promise<VendorBalance> {
+    const now = new Date();
+    const [result] = await db.insert(vendorBalancesTable)
+      .values({
+        beId: balance.beId,
+        openingBalance: balance.openingBalance,
+        reloads: balance.reloads,
+        closingBalance: balance.closingBalance,
+        currency: balance.currency,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: vendorBalancesTable.beId,
+        set: {
+          openingBalance: balance.openingBalance,
+          reloads: balance.reloads,
+          closingBalance: balance.closingBalance,
+          currency: balance.currency,
+          updatedAt: now,
+        },
+      })
+      .returning();
+
+    return {
+      beId: result.beId,
+      openingBalance: result.openingBalance,
+      reloads: result.reloads,
+      closingBalance: result.closingBalance,
+      currency: result.currency,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+    };
+  }
+
+  async deleteVendorBalance(beId: string): Promise<boolean> {
+    const result = await db.delete(vendorBalancesTable).where(eq(vendorBalancesTable.beId, beId)).returning();
+    return result.length > 0;
   }
 }
 

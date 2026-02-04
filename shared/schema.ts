@@ -323,6 +323,21 @@ export const vendorCorrectionSchema = z.object({
 });
 export type VendorCorrection = z.infer<typeof vendorCorrectionSchema>;
 
+// Vendor Balance - for Purchase Reconciliation (PORTAL_DEPOSIT payment method)
+export const vendorBalanceSchema = z.object({
+  beId: z.string(), // Billing Entity ID - primary identifier
+  openingBalance: z.number(),
+  reloads: z.number(),
+  closingBalance: z.number(),
+  currency: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type VendorBalance = z.infer<typeof vendorBalanceSchema>;
+
+export const insertVendorBalanceSchema = vendorBalanceSchema.omit({ createdAt: true, updatedAt: true });
+export type InsertVendorBalance = z.infer<typeof insertVendorBalanceSchema>;
+
 // Required field names for column mapping (not used with new pipeline)
 export const requiredFields = [
   "bid",
@@ -550,3 +565,16 @@ export const counters = pgTable("counters", {
   id: varchar("id").primaryKey(), // counter name like "dispute" or "issue"
   value: integer("value").notNull().default(0),
 });
+
+// Vendor Balances for Purchase Reconciliation (PORTAL_DEPOSIT)
+export const vendorBalances = pgTable("vendor_balances", {
+  beId: varchar("be_id").primaryKey(), // Billing Entity ID is the primary key
+  openingBalance: real("opening_balance").notNull().default(0),
+  reloads: real("reloads").notNull().default(0),
+  closingBalance: real("closing_balance").notNull().default(0),
+  currency: varchar("currency").notNull().default("INR"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type DbVendorBalance = typeof vendorBalances.$inferSelect;
