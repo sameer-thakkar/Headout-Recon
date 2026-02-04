@@ -83,13 +83,38 @@ export function VendorBalancesSection() {
         return;
       }
 
-      const headers = Object.keys(jsonData[0]).map(h => h.toLowerCase().trim());
+      const originalHeaders = Object.keys(jsonData[0]);
       
-      const beIdCol = headers.find(h => h.includes("be") && h.includes("id")) || headers.find(h => h === "beid" || h === "be_id" || h === "billing entity id");
-      const openingCol = headers.find(h => h.includes("opening")) || headers.find(h => h === "opening balance" || h === "opening_balance");
-      const reloadsCol = headers.find(h => h.includes("reload"));
-      const closingCol = headers.find(h => h.includes("closing")) || headers.find(h => h === "closing balance" || h === "closing_balance");
-      const currencyCol = headers.find(h => h.includes("currency") || h === "ccy");
+      const findColumn = (patterns: string[], exactMatches: string[]): string | undefined => {
+        for (const header of originalHeaders) {
+          const normalized = header.toLowerCase().trim();
+          for (const exact of exactMatches) {
+            if (normalized === exact) return header;
+          }
+        }
+        for (const header of originalHeaders) {
+          const normalized = header.toLowerCase().trim();
+          for (const pattern of patterns) {
+            if (normalized.includes(pattern)) return header;
+          }
+        }
+        return undefined;
+      };
+
+      const findBeIdColumn = (): string | undefined => {
+        for (const header of originalHeaders) {
+          const normalized = header.toLowerCase().trim();
+          if (normalized.includes("be") && normalized.includes("id")) return header;
+          if (normalized === "beid" || normalized === "be_id" || normalized === "billing entity id") return header;
+        }
+        return undefined;
+      };
+
+      const beIdCol = findBeIdColumn();
+      const openingCol = findColumn(["opening"], ["opening balance", "opening_balance", "openingbalance"]);
+      const reloadsCol = findColumn(["reload"], ["reloads"]);
+      const closingCol = findColumn(["closing"], ["closing balance", "closing_balance", "closingbalance"]);
+      const currencyCol = findColumn(["currency"], ["ccy", "curr"]);
 
       if (!beIdCol) {
         setParseError("Could not find BE ID column. Expected column names: 'BE ID', 'beId', 'Billing Entity ID'");
@@ -97,24 +122,27 @@ export function VendorBalancesSection() {
         return;
       }
 
-      const originalHeaders = Object.keys(jsonData[0]);
-      const getOriginalHeader = (normalizedHeader: string | undefined) => {
-        if (!normalizedHeader) return undefined;
-        return originalHeaders.find(h => h.toLowerCase().trim() === normalizedHeader);
-      };
+      const missingCols: string[] = [];
+      if (!openingCol) missingCols.push("Opening Balance");
+      if (!reloadsCol) missingCols.push("Reloads");
+      if (!closingCol) missingCols.push("Closing Balance");
+      
+      if (missingCols.length > 0) {
+        setParseError(`Missing required columns: ${missingCols.join(", ")}. Please ensure your file has columns for Opening Balance, Reloads, and Closing Balance.`);
+        setParsedBalances([]);
+        return;
+      }
 
-      const parsed: ParsedBalance[] = jsonData.map((row, idx) => {
-        const beIdHeader = getOriginalHeader(beIdCol);
-        const openingHeader = getOriginalHeader(openingCol);
-        const reloadsHeader = getOriginalHeader(reloadsCol);
-        const closingHeader = getOriginalHeader(closingCol);
-        const currencyHeader = getOriginalHeader(currencyCol);
-
-        const beId = beIdHeader ? String(row[beIdHeader] || "").trim() : "";
-        const openingBalance = openingHeader ? parseFloat(String(row[openingHeader] || "0")) : 0;
-        const reloads = reloadsHeader ? parseFloat(String(row[reloadsHeader] || "0")) : 0;
-        const closingBalance = closingHeader ? parseFloat(String(row[closingHeader] || "0")) : 0;
-        const currency = currencyHeader ? String(row[currencyHeader] || "INR").trim().toUpperCase() : "INR";
+      const parsed: ParsedBalance[] = jsonData.map((row) => {
+        const beId = String(row[beIdCol] || "").trim();
+        const openingRaw = row[openingCol!];
+        const reloadsRaw = row[reloadsCol!];
+        const closingRaw = row[closingCol!];
+        
+        const openingBalance = openingRaw !== undefined && openingRaw !== "" ? parseFloat(String(openingRaw)) : NaN;
+        const reloads = reloadsRaw !== undefined && reloadsRaw !== "" ? parseFloat(String(reloadsRaw)) : NaN;
+        const closingBalance = closingRaw !== undefined && closingRaw !== "" ? parseFloat(String(closingRaw)) : NaN;
+        const currency = currencyCol ? String(row[currencyCol] || "INR").trim().toUpperCase() : "INR";
 
         let isValid = true;
         let error = "";
@@ -122,12 +150,26 @@ export function VendorBalancesSection() {
         if (!beId) {
           isValid = false;
           error = "Missing BE ID";
-        } else if (isNaN(openingBalance) || isNaN(reloads) || isNaN(closingBalance)) {
+        } else if (isNaN(openingBalance)) {
           isValid = false;
-          error = "Invalid number values";
+          error = "Invalid/missing Opening Balance";
+        } else if (isNaN(reloads)) {
+          isValid = false;
+          error = "Invalid/missing Reloads";
+        } else if (isNaN(closingBalance)) {
+          isValid = false;
+          error = "Invalid/missing Closing Balance";
         }
 
-        return { beId, openingBalance, reloads, closingBalance, currency, isValid, error };
+        return { 
+          beId, 
+          openingBalance: isNaN(openingBalance) ? 0 : openingBalance, 
+          reloads: isNaN(reloads) ? 0 : reloads, 
+          closingBalance: isNaN(closingBalance) ? 0 : closingBalance, 
+          currency, 
+          isValid, 
+          error 
+        };
       });
 
       setParsedBalances(parsed);
