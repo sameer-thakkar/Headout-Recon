@@ -124,8 +124,11 @@ function AppContent() {
   const hasMapping = mappings.length > 0 && mappings.filter(m => m.isRequired && m.isMatched).length === mappings.filter(m => m.isRequired).length;
   const hasResults = results.length > 0;
 
-  // File upload handler - uploads file and auto-runs reconciliation
-  const handleFilesUploaded = useCallback(async (files: File[]): Promise<UploadedFile[]> => {
+  // File upload handler - uploads file and auto-runs reconciliation with progress tracking
+  const handleFilesUploaded = useCallback(async (
+    files: File[], 
+    onProgress?: (progress: number, stage: string) => void
+  ): Promise<UploadedFile[]> => {
     if (files.length === 0) {
       throw new Error("No files provided");
     }
@@ -136,25 +139,65 @@ function AppContent() {
     try {
       setStatus("processing");
       
-      // Step 1: Upload file
-      const uploadResponse = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const uploadData = await uploadResponse.json();
+      // Step 1: Upload file with progress tracking using XMLHttpRequest
+      onProgress?.(5, "Uploading file...");
       
-      if (!uploadResponse.ok || uploadData.error) {
-        throw new Error(uploadData.error || "Upload failed");
-      }
+      const uploadData = await new Promise<{ uploadId: string; file: UploadedFile }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            const uploadPercent = Math.round((event.loaded / event.total) * 40);
+            onProgress?.(5 + uploadPercent, "Uploading file...");
+          }
+        });
+        
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (data.error) {
+                reject(new Error(data.error));
+              } else {
+                resolve(data);
+              }
+            } catch {
+              reject(new Error("Invalid server response"));
+            }
+          } else {
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              reject(new Error(errorData.error || "Upload failed"));
+            } catch {
+              reject(new Error("Upload failed"));
+            }
+          }
+        });
+        
+        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+        
+        xhr.open("POST", "/api/upload");
+        xhr.send(formData);
+      });
+      
+      onProgress?.(50, "Processing file...");
       
       const uploadedFile: UploadedFile = uploadData.file;
       setUploadedFiles([uploadedFile]);
       
-      // Step 2: Automatically run reconciliation
+      // Step 2: Run reconciliation
+      onProgress?.(55, "Running reconciliation...");
+      
       const runResponse = await apiRequest("POST", "/api/runs/from-upload", {
         uploadId: uploadData.uploadId,
       });
+      
+      onProgress?.(85, "Analyzing results...");
+      
       const runData = await runResponse.json();
+      
+      onProgress?.(95, "Finalizing...");
       
       // Step 3: Store run and navigate to results
       const newRun: RunRecord = {
@@ -170,7 +213,8 @@ function AppContent() {
       setCurrentRunId(newRun.id);
       setLastFxRefresh(runData.fx?.refreshedAt || new Date().toISOString());
       setStatus("done");
-      // Stay on current page - summary will show inline
+      
+      onProgress?.(100, "Complete!");
 
       return [uploadedFile];
     } catch (error) {

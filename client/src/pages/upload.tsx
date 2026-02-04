@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,7 +33,7 @@ import { PurchaseReconciliationPanel } from "@/components/purchase-reconciliatio
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 
 interface UploadPageProps {
-  onFilesUploaded: (files: File[]) => Promise<UploadedFile[]>;
+  onFilesUploaded: (files: File[], onProgress: (progress: number, stage: string) => void) => Promise<UploadedFile[]>;
   onLoadDemo: () => void;
   uploadedFiles: UploadedFile[];
   currentRunId: string | null;
@@ -102,6 +102,8 @@ function consolidateSummaryByReason(rows: OverallSummaryRow[]): OverallSummaryRo
 export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportGSheet }: UploadPageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState("");
   const [files, setFiles] = useState<UploadedFile[]>(uploadedFiles);
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -449,9 +451,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   const uploadFiles = async (newFiles: File[]) => {
     setIsUploading(true);
+    setUploadProgress(0);
+    setUploadStage("Starting...");
     try {
-      const uploaded = await onFilesUploaded(newFiles);
+      const handleProgress = (progress: number, stage: string) => {
+        setUploadProgress(progress);
+        setUploadStage(stage);
+      };
+      const uploaded = await onFilesUploaded(newFiles, handleProgress);
       setFiles((prev) => [...prev, ...uploaded]);
+      setUploadProgress(100);
+      setUploadStage("Complete!");
       toast({
         title: "Files uploaded",
         description: `Successfully uploaded ${uploaded.length} file(s)`,
@@ -464,7 +474,11 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         variant: "destructive",
       });
     } finally {
-      setIsUploading(false);
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setUploadStage("");
+      }, 1000);
     }
   };
 
@@ -628,8 +642,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             disabled={isUploading}
             data-testid="dropzone"
           >
-            <Upload className="h-4 w-4 mr-1.5" />
-            {isUploading ? "Uploading..." : "Upload"}
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                {uploadProgress}%
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-1.5" />
+                Upload
+              </>
+            )}
           </Button>
           <Button
             variant="ghost"
@@ -647,6 +670,24 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
           </Button>
         </div>
       </div>
+
+      {isUploading && (
+        <div className="px-4 py-3 border-b bg-muted/30" data-testid="upload-progress-bar">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm font-medium">{uploadStage}</span>
+            </div>
+            <span className="text-sm font-mono text-muted-foreground">{uploadProgress}%</span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+            <div 
+              className="bg-primary h-full rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
