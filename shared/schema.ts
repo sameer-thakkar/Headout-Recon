@@ -421,11 +421,12 @@ export const driTeams = [
   "Selenium",
 ] as const;
 
-// Placeholder for users table (keeping existing structure)
+// Database tables for persistent storage
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
+// Users table (keeping existing structure)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -439,3 +440,113 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Reconciliation sessions - main storage for each reconciliation workflow
+export const reconciliationSessions = pgTable("reconciliation_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // User-friendly session name
+  status: text("status").notNull().default("idle"), // idle, processing, done, error
+  progressStep: text("progress_step"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  error: text("error"),
+  // File info
+  hoFileName: text("ho_file_name"),
+  spFileName: text("sp_file_name"),
+  hoFileSize: integer("ho_file_size"),
+  spFileSize: integer("sp_file_size"),
+  // Parsed data (stored as JSON)
+  hoData: jsonb("ho_data"), // SheetData
+  spData: jsonb("sp_data"), // SheetData
+  // Run result (stored as JSON for simplicity)
+  runResult: jsonb("run_result"), // RunResult - full reconciliation results
+});
+
+export const insertReconciliationSessionSchema = createInsertSchema(reconciliationSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertReconciliationSession = z.infer<typeof insertReconciliationSessionSchema>;
+export type ReconciliationSession = typeof reconciliationSessions.$inferSelect;
+
+// Disputes table - persistent dispute tracking
+export const disputes = pgTable("disputes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  disputeId: text("dispute_id").notNull().unique(), // Human-readable ID like DID-#1
+  sessionId: varchar("session_id").notNull(), // Reference to reconciliation session
+  bookingId: text("booking_id").notNull(),
+  billingEntityId: text("billing_entity_id").notNull(),
+  billingEntityName: text("billing_entity_name").notNull(),
+  ticketId: text("ticket_id"),
+  tid: text("tid"),
+  currency: text("currency").notNull(),
+  disputeAmount: real("dispute_amount").notNull(),
+  maxDisputeAmount: real("max_dispute_amount").notNull(),
+  reconciledNet: real("reconciled_net"),
+  status: text("status").notNull().default("pending"), // pending, submitted, resolved, rejected
+  closureStatus: text("closure_status").notNull().default("open"), // open, closed
+  closureType: text("closure_type"), // adjustment, manual_writeoff, accept_ho_error, sp_error
+  closureNote: text("closure_note"),
+  closedAt: timestamp("closed_at"),
+  closedByAdjustmentAmount: real("closed_by_adjustment_amount"),
+  adjustedInTicketId: text("adjusted_in_ticket_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertDisputeSchema = createInsertSchema(disputes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDispute = z.infer<typeof insertDisputeSchema>;
+export type Dispute = typeof disputes.$inferSelect;
+
+// Issues table - persistent issue tracking
+export const issues = pgTable("issues", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  issueId: text("issue_id").notNull().unique(), // Human-readable ID like IID-#1
+  sessionId: varchar("session_id").notNull(), // Reference to reconciliation session
+  billingEntityId: text("billing_entity_id").notNull(),
+  billingEntityName: text("billing_entity_name").notNull(),
+  currency: text("currency").notNull(),
+  discrepancyLocal: real("discrepancy_local").notNull(),
+  discrepancyUsd: real("discrepancy_usd").notNull(),
+  reason: text("reason").notNull(),
+  driTeam: text("dri_team").notNull(),
+  bookingIds: jsonb("booking_ids"), // Array of booking IDs
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertIssueSchema = createInsertSchema(issues).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertIssue = z.infer<typeof insertIssueSchema>;
+export type Issue = typeof issues.$inferSelect;
+
+// Vendor corrections table - persistent vendor ID corrections
+export const vendorCorrections = pgTable("vendor_corrections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(), // Reference to reconciliation session
+  bookingId: text("booking_id").notNull(),
+  finalVendorId: text("final_vendor_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const insertVendorCorrectionSchema = createInsertSchema(vendorCorrections).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVendorCorrection = z.infer<typeof insertVendorCorrectionSchema>;
+export type DbVendorCorrection = typeof vendorCorrections.$inferSelect;
+
+// Dispute counter for generating sequential IDs
+export const counters = pgTable("counters", {
+  id: varchar("id").primaryKey(), // counter name like "dispute" or "issue"
+  value: integer("value").notNull().default(0),
+});
