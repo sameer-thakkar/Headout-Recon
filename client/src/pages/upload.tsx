@@ -921,6 +921,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     primaryRows={primaryRows}
                     currency={selectedPayableCurrency || actualCurrencies[0] || ""}
                     billingEntityName={spDetails?.billingEntityName || ""}
+                    beId={spDetails?.beId || ""}
                     onClose={() => setIsComputeOpen(false)}
                   />
                 ) : (

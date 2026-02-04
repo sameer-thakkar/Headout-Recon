@@ -158,10 +158,10 @@ shared/              # Shared code between client and server
 - **Trigger**: When dominant payment method = "PORTAL_DEPOSIT" (case-insensitive)
 - **Replaces**: Amount Payable panel is replaced with Purchase Reconciliation panel
 - **12 Line Items**:
-  1. Opening Balance - Fetched from backend (BE ID level) - *placeholder: 10000*
-  2. Reloads - Fetched from backend (BE ID level) - *placeholder: 10000*
+  1. Opening Balance - Fetched from database (BE ID level)
+  2. Reloads - Fetched from database (BE ID level)
   3. Refunds - Sum of SP Invoice negative values
-  4. Closing Balance - Fetched from backend (BE ID level) - *placeholder: 10000*
+  4. Closing Balance - Fetched from database (BE ID level)
   5. Computed Purchase = 1 + 2 + 3 - 4
   6. Actual Purchase = Total from SP Invoice data
   7. Timing Difference in Closing Balance = 5 - 6
@@ -173,4 +173,10 @@ shared/              # Shared code between client and server
 - **Component**: `client/src/components/purchase-reconciliation-panel.tsx`
 - **UI**: Table with line item numbers, labels, calculated amounts, and notes
 - **Validation**: Line 12 serves as cross-check - if balanced, shows green; if unbalanced, shows red
-- **Status**: Placeholder values (10000) for items 1, 2, 4 until backend integration
+- **Database**: `vendor_balances` table stores Opening Balance, Reloads, Closing Balance per BE ID
+- **API Endpoints**:
+  - `GET /api/vendor-balances` - List all vendor balances
+  - `GET /api/vendor-balances/:beId` - Get balance for specific BE ID
+  - `POST /api/vendor-balances` - Create/update balance (upsert by BE ID)
+  - `DELETE /api/vendor-balances/:beId` - Delete balance
+- **Edit Mode**: Users can click "Edit Balances" to modify values inline, then save to database

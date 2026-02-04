@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Save, Edit2, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -12,12 +12,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import type { PrimaryRow } from "@shared/schema";
+import { Input } from "@/components/ui/input";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { PrimaryRow, VendorBalance } from "@shared/schema";
 
 interface PurchaseReconciliationPanelProps {
   primaryRows: PrimaryRow[];
   currency: string;
   billingEntityName: string;
+  beId: string;
   onClose: () => void;
 }
 
@@ -32,12 +37,73 @@ export function PurchaseReconciliationPanel({
   primaryRows,
   currency,
   billingEntityName,
+  beId,
   onClose,
 }: PurchaseReconciliationPanelProps) {
+  const { toast } = useToast();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValues, setEditValues] = useState({
+    openingBalance: 0,
+    reloads: 0,
+    closingBalance: 0,
+  });
+
+  const { data: balanceData, isLoading: isLoadingBalance } = useQuery<{ balance: VendorBalance | null }>({
+    queryKey: ['/api/vendor-balances', beId],
+    enabled: !!beId,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (values: { openingBalance: number; reloads: number; closingBalance: number }) => {
+      return apiRequest('POST', '/api/vendor-balances', {
+        beId,
+        openingBalance: values.openingBalance,
+        reloads: values.reloads,
+        closingBalance: values.closingBalance,
+        currency,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/vendor-balances', beId] });
+      setIsEditing(false);
+      toast({
+        title: "Balances saved",
+        description: "Vendor balances have been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save vendor balances.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const balance = balanceData?.balance;
+  const hasBalance = !!balance;
+
+  const handleEdit = () => {
+    setEditValues({
+      openingBalance: balance?.openingBalance ?? 0,
+      reloads: balance?.reloads ?? 0,
+      closingBalance: balance?.closingBalance ?? 0,
+    });
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    saveMutation.mutate(editValues);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+  };
+
   const calculations = useMemo(() => {
-    const openingBalance = 10000;
-    const reloads = 10000;
-    const closingBalance = 10000;
+    const openingBalance = balance?.openingBalance ?? 0;
+    const reloads = balance?.reloads ?? 0;
+    const closingBalance = balance?.closingBalance ?? 0;
     
     const refunds = primaryRows
       .filter(row => row.spNetInHo < 0)
@@ -79,24 +145,26 @@ export function PurchaseReconciliationPanel({
       inHONotInSP,
       netDifference,
     };
-  }, [primaryRows]);
+  }, [primaryRows, balance]);
 
   const lineItems = [
     {
       id: 1,
       label: "Opening Balance",
-      value: calculations.openingBalance,
-      description: "Fetched from backend (BE ID level)",
+      value: isEditing ? editValues.openingBalance : calculations.openingBalance,
+      description: hasBalance ? "From database" : "Not configured",
       icon: Wallet,
-      isPlaceholder: true,
+      isEditable: true,
+      editKey: "openingBalance" as const,
     },
     {
       id: 2,
       label: "Reloads",
-      value: calculations.reloads,
-      description: "Fetched from backend (BE ID level)",
+      value: isEditing ? editValues.reloads : calculations.reloads,
+      description: hasBalance ? "From database" : "Not configured",
       icon: Plus,
-      isPlaceholder: true,
+      isEditable: true,
+      editKey: "reloads" as const,
     },
     {
       id: 3,
@@ -104,15 +172,16 @@ export function PurchaseReconciliationPanel({
       value: calculations.refunds,
       description: "SP Invoice negative values",
       icon: Minus,
-      isPlaceholder: false,
+      isEditable: false,
     },
     {
       id: 4,
       label: "Closing Balance",
-      value: calculations.closingBalance,
-      description: "Fetched from backend (BE ID level)",
+      value: isEditing ? editValues.closingBalance : calculations.closingBalance,
+      description: hasBalance ? "From database" : "Not configured",
       icon: Wallet,
-      isPlaceholder: true,
+      isEditable: true,
+      editKey: "closingBalance" as const,
     },
     {
       id: 5,
@@ -180,6 +249,33 @@ export function PurchaseReconciliationPanel({
     },
   ];
 
+  if (!beId) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
+          <Wallet className="h-5 w-5 text-amber-600" />
+          <span className="text-amber-800 dark:text-amber-200">
+            No Billing Entity ID available. Cannot load or save balance data.
+          </span>
+        </div>
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={onClose} data-testid="button-close-purchase-reco">
+            Close
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoadingBalance) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">Loading balances...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -190,16 +286,65 @@ export function PurchaseReconciliationPanel({
             {currency}
           </Badge>
         </div>
-        <Badge variant="secondary" className="text-xs">
-          PORTAL_DEPOSIT
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            PORTAL_DEPOSIT
+          </Badge>
+          {beId && (
+            <Badge variant="outline" className="text-xs font-mono">
+              BE: {beId}
+            </Badge>
+          )}
+        </div>
       </div>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <span>{billingEntityName || "Supplier"}</span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <span>{billingEntityName || "Supplier"}</span>
+              {!hasBalance && !isEditing && (
+                <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                  No balances configured
+                </Badge>
+              )}
+            </CardTitle>
+            {!isEditing ? (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleEdit}
+                data-testid="button-edit-balances"
+              >
+                <Edit2 className="h-3 w-3 mr-1" />
+                {hasBalance ? "Edit Balances" : "Set Balances"}
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleCancel}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleSave}
+                  disabled={saveMutation.isPending}
+                  data-testid="button-save-balances"
+                >
+                  {saveMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <Save className="h-3 w-3 mr-1" />
+                  )}
+                  Save
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <Table className="text-sm">
@@ -232,15 +377,28 @@ export function PurchaseReconciliationPanel({
                         <span className={`${item.isHighlight ? "font-semibold" : ""}`}>
                           {item.label}
                         </span>
-                        {item.isPlaceholder && (
+                        {item.isEditable && !hasBalance && !isEditing && (
                           <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                            Placeholder
+                            Not set
                           </Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
-                      {formatNumber(item.value)}
+                      {isEditing && item.isEditable && item.editKey ? (
+                        <Input
+                          type="number"
+                          value={editValues[item.editKey]}
+                          onChange={(e) => setEditValues(prev => ({
+                            ...prev,
+                            [item.editKey!]: parseFloat(e.target.value) || 0
+                          }))}
+                          className="w-32 text-right font-mono ml-auto"
+                          data-testid={`input-${item.editKey}`}
+                        />
+                      ) : (
+                        formatNumber(item.value)
+                      )}
                     </TableCell>
                     <TableCell className="py-2 text-xs text-muted-foreground">
                       {item.description}
