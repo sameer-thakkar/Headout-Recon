@@ -349,7 +349,7 @@ export async function registerRoutes(
 
   /**
    * POST /api/runs/from-upload
-   * Create a new run from an uploaded file and start reconciliation
+   * Start reconciliation using the existing upload session (no new session created)
    */
   app.post("/api/runs/from-upload", async (req, res) => {
     try {
@@ -359,7 +359,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Missing uploadId" });
       }
 
-      // Get upload record
+      // Get upload record - in DatabaseStorage, uploadId IS the session ID
       const upload = await storage.getUpload(uploadId);
       if (!upload) {
         return res.status(404).json({ error: "Upload not found" });
@@ -369,34 +369,34 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Upload missing required data sheets" });
       }
 
-      // Create run record
-      const run = await storage.createRun({
-        uploadId,
+      // Use the same session ID as the upload - no new session needed
+      // Update the existing session to "processing" status using updateRun (works on sessions in DatabaseStorage)
+      await storage.updateRun(uploadId, {
         status: "processing",
         progressStep: "Fetching FX rates",
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        error: null,
       });
 
-      // Start reconciliation in background
+      // Start reconciliation in background using the SAME session ID
+      const runId = uploadId;
       (async () => {
         try {
-          await storage.updateRun(run.id, { progressStep: "Processing HO Data" });
-          await storage.updateRun(run.id, { progressStep: "Processing SP Data" });
-          await storage.updateRun(run.id, { progressStep: "Computing reconciliation" });
+          await storage.updateRun(runId, { progressStep: "Processing HO Data" });
+          await storage.updateRun(runId, { progressStep: "Processing SP Data" });
+          await storage.updateRun(runId, { progressStep: "Computing reconciliation" });
 
           const result = await runReconciliation(upload.hoData!, upload.spData!);
 
-          await storage.setRunResult(run.id, result);
-          await storage.updateRun(run.id, {
+          // Save results and update status
+          await storage.setRunResult(runId, result);
+          await storage.updateRun(runId, {
             status: "done",
             progressStep: "Complete",
             completedAt: new Date().toISOString(),
           });
+          console.log(`Reconciliation completed for session ${runId}`);
         } catch (error) {
           console.error("Reconciliation error:", error);
-          await storage.updateRun(run.id, {
+          await storage.updateRun(runId, {
             status: "error",
             progressStep: "Failed",
             error: error instanceof Error ? error.message : "Unknown error",
@@ -404,7 +404,8 @@ export async function registerRoutes(
         }
       })();
 
-      res.json({ runId: run.id });
+      // Return the same session ID as the runId
+      res.json({ runId });
     } catch (error) {
       console.error("Run creation error:", error);
       res.status(500).json({ error: "Failed to create run" });
@@ -540,34 +541,30 @@ export async function registerRoutes(
         ],
       };
 
-      // Create a single session for the demo
-      const session = await storage.createSession("Demo Reconciliation - " + new Date().toLocaleString());
-      
-      // Store HO/SP data in the session
-      await storage.saveSessionData(session.id, {
-        hoData,
-        spData,
-        hoFileName: "demo_reconciliation.xlsx",
-        spFileName: "SP_Invoice_Demo.xlsx",
-      });
+      // Create an upload record which creates a session in DatabaseStorage
+      const fileInfo: UploadedFile = {
+        id: randomUUID(),
+        name: "Demo Reconciliation - " + new Date().toLocaleString(),
+        size: 2048,
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        sheetNames: ["HO Data", "SP Invoice Report"],
+      };
+      const uploadRecord = await storage.createUpload(fileInfo, hoData, spData);
 
       // Run reconciliation
       const result = await runReconciliation(hoData, spData);
 
-      // Store results and update status
-      await storage.saveSessionData(session.id, {
-        runResult: result,
-        status: "done",
-      });
-      await storage.updateSession(session.id, {
+      // Store results and update status using the same session/upload ID
+      await storage.setRunResult(uploadRecord.id, result);
+      await storage.updateRun(uploadRecord.id, {
         status: "done",
         progressStep: "Complete",
-        completedAt: new Date(),
+        completedAt: new Date().toISOString(),
       });
 
       res.json({
-        runId: session.id,
-        uploadId: session.id,
+        runId: uploadRecord.id,
+        uploadId: uploadRecord.id,
         ...result,
       });
     } catch (error) {
