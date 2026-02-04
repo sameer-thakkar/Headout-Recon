@@ -131,8 +131,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
     enabled: !!currentRunId,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     retry: 3,
     retryDelay: 1000,
   });
