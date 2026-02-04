@@ -370,42 +370,41 @@ export async function registerRoutes(
       }
 
       // Use the same session ID as the upload - no new session needed
-      // Update the existing session to "processing" status using updateRun (works on sessions in DatabaseStorage)
-      await storage.updateRun(uploadId, {
+      const runId = uploadId;
+      
+      // Update the existing session to "processing" status
+      await storage.updateRun(runId, {
         status: "processing",
         progressStep: "Fetching FX rates",
       });
 
-      // Start reconciliation in background using the SAME session ID
-      const runId = uploadId;
-      (async () => {
-        try {
-          await storage.updateRun(runId, { progressStep: "Processing HO Data" });
-          await storage.updateRun(runId, { progressStep: "Processing SP Data" });
-          await storage.updateRun(runId, { progressStep: "Computing reconciliation" });
+      try {
+        await storage.updateRun(runId, { progressStep: "Processing HO Data" });
+        await storage.updateRun(runId, { progressStep: "Processing SP Data" });
+        await storage.updateRun(runId, { progressStep: "Computing reconciliation" });
 
-          const result = await runReconciliation(upload.hoData!, upload.spData!);
+        const result = await runReconciliation(upload.hoData!, upload.spData!);
 
-          // Save results and update status
-          await storage.setRunResult(runId, result);
-          await storage.updateRun(runId, {
-            status: "done",
-            progressStep: "Complete",
-            completedAt: new Date().toISOString(),
-          });
-          console.log(`Reconciliation completed for session ${runId}`);
-        } catch (error) {
-          console.error("Reconciliation error:", error);
-          await storage.updateRun(runId, {
-            status: "error",
-            progressStep: "Failed",
-            error: error instanceof Error ? error.message : "Unknown error",
-          });
-        }
-      })();
+        // Save results and update status
+        await storage.setRunResult(runId, result);
+        await storage.updateRun(runId, {
+          status: "done",
+          progressStep: "Complete",
+          completedAt: new Date().toISOString(),
+        });
+        console.log(`Reconciliation completed for session ${runId}`);
 
-      // Return the same session ID as the runId
-      res.json({ runId });
+        // Return the runId and FX data after reconciliation is complete
+        res.json({ runId, fx: result.fx });
+      } catch (error) {
+        console.error("Reconciliation error:", error);
+        await storage.updateRun(runId, {
+          status: "error",
+          progressStep: "Failed",
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        res.status(500).json({ error: "Reconciliation failed", details: error instanceof Error ? error.message : "Unknown error" });
+      }
     } catch (error) {
       console.error("Run creation error:", error);
       res.status(500).json({ error: "Failed to create run" });
