@@ -212,6 +212,11 @@ function AppContent() {
       setRuns((prev) => [newRun, ...prev]);
       setCurrentRunId(newRun.id);
       setLastFxRefresh(runData.fx?.refreshedAt || new Date().toISOString());
+      
+      // Invalidate cache to ensure fresh results are fetched
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", newRun.id, "results"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", newRun.id, "discrepancy-analysis"] });
+      
       setStatus("done");
       
       onProgress?.(100, "Complete!");
