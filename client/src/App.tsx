@@ -31,6 +31,8 @@ import type {
   FxRate,
   ProgressStep,
   RunStatus,
+  ReconciliationSession,
+  RunResult,
 } from "@shared/schema";
 import { requiredFields, optionalFields, headerAliases } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
@@ -144,6 +146,42 @@ function AppContent() {
       console.error("Demo load error:", error);
       setStatus("error");
     }
+  }, []);
+
+  // Load session handler - loads a saved session from the database
+  const handleLoadSession = useCallback((session: ReconciliationSession) => {
+    // Set the current run ID to the session ID
+    setCurrentRunId(session.id);
+    
+    // Set status based on session status
+    setStatus(session.status as RunStatus);
+    
+    // If session has run result, it means it was completed - we can load the results
+    if (session.runResult) {
+      const result = session.runResult as RunResult;
+      setLastFxRefresh(result.fx?.refreshedAt || null);
+    }
+    
+    // Update runs list with this session as a run
+    const sessionRun: RunRecord = {
+      id: session.id,
+      uploadId: session.id,
+      status: session.status as RunStatus,
+      progressStep: session.progressStep || null,
+      createdAt: typeof session.createdAt === 'string' ? session.createdAt : session.createdAt.toISOString(),
+      completedAt: session.completedAt 
+        ? (typeof session.completedAt === 'string' ? session.completedAt : session.completedAt.toISOString()) 
+        : null,
+      error: session.error,
+    };
+    setRuns((prev) => {
+      // Replace if exists, otherwise add
+      const exists = prev.find(r => r.id === session.id);
+      if (exists) {
+        return prev.map(r => r.id === session.id ? sessionRun : r);
+      }
+      return [sessionRun, ...prev];
+    });
   }, []);
 
   // Save mappings handler
@@ -309,9 +347,9 @@ function AppContent() {
             <Switch>
               <Route path="/">
                 <LandingPage
-                  runs={runs}
                   lastFxRefresh={lastFxRefresh}
                   onStartDemo={handleLoadDemo}
+                  onLoadSession={handleLoadSession}
                 />
               </Route>
               <Route path="/upload">

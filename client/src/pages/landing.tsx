@@ -1,14 +1,16 @@
 import { useLocation } from "wouter";
-import { Upload, Cog, Download, Clock, ArrowRight, Play } from "lucide-react";
+import { Upload, Cog, Download, Clock, ArrowRight, Play, Database, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { RunRecord } from "@shared/schema";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { ReconciliationSession } from "@shared/schema";
 
 interface LandingPageProps {
-  runs: RunRecord[];
   lastFxRefresh: string | null;
   onStartDemo: () => void;
+  onLoadSession?: (session: ReconciliationSession) => void;
 }
 
 const steps = [
@@ -32,8 +34,39 @@ const steps = [
   },
 ];
 
-export function LandingPage({ runs, lastFxRefresh, onStartDemo }: LandingPageProps) {
+export function LandingPage({ lastFxRefresh, onStartDemo, onLoadSession }: LandingPageProps) {
   const [, setLocation] = useLocation();
+
+  // Fetch saved sessions
+  const { data: sessionsData, isLoading: isLoadingSessions } = useQuery<{ sessions: ReconciliationSession[] }>({
+    queryKey: ["/api/sessions"],
+  });
+
+  const sessions = sessionsData?.sessions || [];
+
+  // Delete session mutation
+  const deleteSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      await apiRequest("DELETE", `/api/sessions/${sessionId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+    },
+  });
+
+  const handleLoadSession = (session: ReconciliationSession) => {
+    if (onLoadSession) {
+      onLoadSession(session);
+    }
+    setLocation("/discrepancy-analysis");
+  };
+
+  const handleDeleteSession = (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this session?")) {
+      deleteSessionMutation.mutate(sessionId);
+    }
+  };
 
   return (
     <div className="min-h-full">
@@ -103,53 +136,61 @@ export function LandingPage({ runs, lastFxRefresh, onStartDemo }: LandingPagePro
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Recent Runs
+                <Database className="h-5 w-5" />
+                Saved Sessions
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {runs.length === 0 ? (
+              {isLoadingSessions ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Loading sessions...</p>
+                </div>
+              ) : sessions.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                    <Clock className="h-8 w-8 text-muted-foreground" />
+                    <Database className="h-8 w-8 text-muted-foreground" />
                   </div>
-                  <p className="text-muted-foreground mb-2">No runs yet</p>
+                  <p className="text-muted-foreground mb-2">No saved sessions</p>
                   <p className="text-sm text-muted-foreground">
-                    Start a reconciliation to see your run history here
+                    Your reconciliation sessions will be saved here automatically
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {runs.slice(0, 5).map((run) => (
+                  {sessions.slice(0, 10).map((session) => (
                     <div
-                      key={run.id}
+                      key={session.id}
                       className="flex items-center justify-between p-4 rounded-lg bg-background border hover-elevate cursor-pointer"
-                      onClick={() => setLocation("/discrepancy-analysis")}
-                      data-testid={`run-card-${run.id}`}
+                      onClick={() => handleLoadSession(session)}
+                      data-testid={`session-card-${session.id}`}
                     >
                       <div>
-                        <p className="font-medium">{run.name}</p>
+                        <p className="font-medium">{session.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {new Date(run.createdAt).toLocaleDateString()} · {run.totalBookings} bookings
+                          {new Date(session.createdAt).toLocaleDateString()} · 
+                          {session.hoFileName && ` ${session.hoFileName}`}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
                         <Badge
                           variant={
-                            run.status === "done"
+                            session.status === "done"
                               ? "outline"
-                              : run.status === "error"
+                              : session.status === "error"
                               ? "destructive"
                               : "secondary"
                           }
                         >
-                          {run.status}
+                          {session.status}
                         </Badge>
-                        {run.totalDiscrepancyUsd != null && (
-                          <span className="font-mono text-sm">
-                            ${run.totalDiscrepancyUsd.toLocaleString()}
-                          </span>
-                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => handleDeleteSession(e, session.id)}
+                          data-testid={`button-delete-session-${session.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
                       </div>
                     </div>
                   ))}
