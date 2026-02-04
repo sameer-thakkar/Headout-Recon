@@ -171,7 +171,7 @@ shared/              # Shared code between client and server
   11. In HO data not in SP = Sum where HO Net > SP Net
   12. Net Difference = 9 + 10 - 11 (validation row, should equal 0)
 - **Component**: `client/src/components/purchase-reconciliation-panel.tsx`
-- **UI**: Table with line item numbers, labels, calculated amounts, and notes
+- **UI**: Read-only table with line item numbers, labels, calculated amounts, and notes
 - **Validation**: Line 12 serves as cross-check - if balanced, shows green; if unbalanced, shows red
 - **Database**: `vendor_balances` table stores Opening Balance, Reloads, Closing Balance per BE ID
 - **API Endpoints**:
@@ -179,4 +179,12 @@ shared/              # Shared code between client and server
   - `GET /api/vendor-balances/:beId` - Get balance for specific BE ID
   - `POST /api/vendor-balances` - Create/update balance (upsert by BE ID)
   - `DELETE /api/vendor-balances/:beId` - Delete balance
-- **Edit Mode**: Users can click "Edit Balances" to modify values inline, then save to database
+
+### Vendor Balance Upload (Home Page)
+- **Location**: Home/landing page section below "How It Works"
+- **Component**: `client/src/components/vendor-balances-section.tsx`
+- **File Upload**: Accepts Excel/CSV with columns: BE ID, Opening Balance, Reloads, Closing Balance, Currency
+- **Preview Table**: Shows parsed data with validation status before saving
+- **Bulk Save**: Saves all valid balances to database at once
+- **Saved Balances Table**: Shows all stored balances with delete capability
+- **Purpose**: Upload balances upfront so reconciliation uses read-only data (prevents manipulation)
