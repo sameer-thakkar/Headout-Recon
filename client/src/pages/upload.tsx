@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -156,6 +156,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       }));
   }, [primaryRows, secondaryVendorRows, unmappedRows, selectedPayableCurrency]);
 
+  // Derive actual currencies from reconciled data
+  const actualCurrencies = useMemo(() => {
+    const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
+    const currencySet = new Set(allRows.map(r => r.hoCurrency).filter(Boolean));
+    return Array.from(currencySet);
+  }, [primaryRows, secondaryVendorRows, unmappedRows]);
+
   const spDetails = useMemo(() => {
     const firstRow = primaryRows[0];
     if (!firstRow) return null;
@@ -202,6 +209,16 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       currency: currencies.join(", "),
     };
   }, [primaryRows]);
+
+  // Reset currency selection when run changes or currencies change
+  useEffect(() => {
+    if (actualCurrencies.length > 0) {
+      // Auto-select the first available currency from actual data
+      setSelectedPayableCurrency(actualCurrencies[0]);
+    } else {
+      setSelectedPayableCurrency(null);
+    }
+  }, [currentRunId, actualCurrencies.length > 0 ? actualCurrencies.join(",") : ""]);
 
   // Already Reconciled computed data
   const alreadyReconciledData = useMemo(() => {
@@ -883,12 +900,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      if (!isComputeOpen && !selectedPayableCurrency && spDetails?.currency) {
-                        setSelectedPayableCurrency(spDetails.currency.split(", ")[0]);
-                      }
-                      setIsComputeOpen(!isComputeOpen);
-                    }}
+                    onClick={() => setIsComputeOpen(!isComputeOpen)}
                     data-testid="button-compute"
                   >
                     <Calculator className="h-4 w-4 mr-1" />
@@ -907,22 +919,22 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 {spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT" ? (
                   <PurchaseReconciliationPanel
                     primaryRows={primaryRows}
-                    currency={selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""}
+                    currency={selectedPayableCurrency || actualCurrencies[0] || ""}
                     billingEntityName={spDetails?.billingEntityName || ""}
                     onClose={() => setIsComputeOpen(false)}
                   />
                 ) : (
                   <AmountPayablePanel
                     bookings={bookingsForPayableModal}
-                    currency={selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""}
-                    adjustments={adjustmentsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || []}
-                    finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency || spDetails?.currency.split(", ")[0] || ""] || {}}
+                    currency={selectedPayableCurrency || actualCurrencies[0] || ""}
+                    adjustments={adjustmentsPerCurrency[selectedPayableCurrency || actualCurrencies[0] || ""] || []}
+                    finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency || actualCurrencies[0] || ""] || {}}
                     onApply={handlePayableModalApply}
                     onClose={() => setIsComputeOpen(false)}
                     runId={currentRunId}
                     allRows={primaryRows}
                     onCurrencyChange={setSelectedPayableCurrency}
-                    availableCurrencies={spDetails?.currency.split(", ") || []}
+                    availableCurrencies={actualCurrencies}
                     dominantPaymentMethod={spDetails?.paymentMethod || ""}
                   />
                 )}
