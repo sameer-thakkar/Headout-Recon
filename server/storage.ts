@@ -330,4 +330,597 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database-backed storage implementation
+import { db } from "./db";
+import { eq, desc, and, sql } from "drizzle-orm";
+import {
+  reconciliationSessions,
+  disputes as disputesTable,
+  issues as issuesTable,
+  vendorCorrections as vendorCorrectionsTable,
+  counters,
+  type ReconciliationSession,
+} from "@shared/schema";
+
+// Extended interface for session-based persistent storage
+export interface ISessionStorage extends IStorage {
+  // Session management
+  createSession(name: string): Promise<ReconciliationSession>;
+  getSession(id: string): Promise<ReconciliationSession | undefined>;
+  getSessions(): Promise<ReconciliationSession[]>;
+  updateSession(id: string, updates: Partial<ReconciliationSession>): Promise<ReconciliationSession | undefined>;
+  deleteSession(id: string): Promise<boolean>;
+  
+  // Save full session data (files, results)
+  saveSessionData(sessionId: string, data: {
+    hoData?: SheetData | null;
+    spData?: SheetData | null;
+    hoFileName?: string;
+    spFileName?: string;
+    runResult?: RunResult;
+    status?: string;
+  }): Promise<ReconciliationSession | undefined>;
+}
+
+export class DatabaseStorage implements ISessionStorage {
+  private tempFileData: Map<string, { headers: string[]; rawData: Record<string, unknown>[] }> = new Map();
+  private fxRates: FxRate[] = [];
+  
+  // Helper to get next counter value
+  private async getNextCounter(name: string): Promise<number> {
+    const result = await db
+      .insert(counters)
+      .values({ id: name, value: 1 })
+      .onConflictDoUpdate({
+        target: counters.id,
+        set: { value: sql`${counters.value} + 1` },
+      })
+      .returning();
+    
+    if (result.length > 0) {
+      return result[0].value;
+    }
+    
+    const counter = await db.select().from(counters).where(eq(counters.id, name));
+    return counter[0]?.value || 1;
+  }
+
+  // Session management
+  async createSession(name: string): Promise<ReconciliationSession> {
+    const result = await db
+      .insert(reconciliationSessions)
+      .values({ name, status: "idle" })
+      .returning();
+    return result[0];
+  }
+
+  async getSession(id: string): Promise<ReconciliationSession | undefined> {
+    const result = await db
+      .select()
+      .from(reconciliationSessions)
+      .where(eq(reconciliationSessions.id, id));
+    return result[0];
+  }
+
+  async getSessions(): Promise<ReconciliationSession[]> {
+    return db
+      .select()
+      .from(reconciliationSessions)
+      .orderBy(desc(reconciliationSessions.createdAt));
+  }
+
+  async updateSession(id: string, updates: Partial<ReconciliationSession>): Promise<ReconciliationSession | undefined> {
+    const result = await db
+      .update(reconciliationSessions)
+      .set(updates)
+      .where(eq(reconciliationSessions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async deleteSession(id: string): Promise<boolean> {
+    const result = await db
+      .delete(reconciliationSessions)
+      .where(eq(reconciliationSessions.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async saveSessionData(sessionId: string, data: {
+    hoData?: SheetData | null;
+    spData?: SheetData | null;
+    hoFileName?: string;
+    spFileName?: string;
+    runResult?: RunResult;
+    status?: string;
+  }): Promise<ReconciliationSession | undefined> {
+    const updates: Partial<ReconciliationSession> = {};
+    if (data.hoData !== undefined) updates.hoData = data.hoData;
+    if (data.spData !== undefined) updates.spData = data.spData;
+    if (data.hoFileName !== undefined) updates.hoFileName = data.hoFileName;
+    if (data.spFileName !== undefined) updates.spFileName = data.spFileName;
+    if (data.runResult !== undefined) updates.runResult = data.runResult;
+    if (data.status !== undefined) updates.status = data.status;
+    
+    const result = await db
+      .update(reconciliationSessions)
+      .set(updates)
+      .where(eq(reconciliationSessions.id, sessionId))
+      .returning();
+    return result[0];
+  }
+
+  // Upload methods - store data in session
+  async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
+    const session = await this.createSession(file.name || "Unnamed Session");
+    
+    await this.saveSessionData(session.id, {
+      hoData,
+      spData,
+      hoFileName: file.name,
+    });
+    
+    return {
+      id: session.id,
+      file,
+      hoData,
+      spData,
+      createdAt: session.createdAt.toISOString(),
+    };
+  }
+
+  async getUpload(id: string): Promise<UploadRecord | undefined> {
+    const session = await this.getSession(id);
+    if (!session) return undefined;
+    
+    return {
+      id: session.id,
+      file: {
+        id: session.id,
+        name: session.hoFileName || "",
+        size: session.hoFileSize || 0,
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+      hoData: session.hoData as SheetData | null,
+      spData: session.spData as SheetData | null,
+      createdAt: session.createdAt.toISOString(),
+    };
+  }
+
+  // Run methods - mapped to sessions
+  async getRuns(): Promise<RunRecord[]> {
+    const sessions = await this.getSessions();
+    return sessions.map(s => ({
+      id: s.id,
+      uploadId: s.id,
+      status: s.status as "idle" | "processing" | "done" | "error",
+      progressStep: s.progressStep,
+      createdAt: s.createdAt.toISOString(),
+      completedAt: s.completedAt?.toISOString() || null,
+      error: s.error,
+    }));
+  }
+
+  async getRun(id: string): Promise<RunRecord | undefined> {
+    const session = await this.getSession(id);
+    if (!session) return undefined;
+    
+    return {
+      id: session.id,
+      uploadId: session.id,
+      status: session.status as "idle" | "processing" | "done" | "error",
+      progressStep: session.progressStep,
+      createdAt: session.createdAt.toISOString(),
+      completedAt: session.completedAt?.toISOString() || null,
+      error: session.error,
+    };
+  }
+
+  async createRun(run: Omit<RunRecord, "id">): Promise<RunRecord> {
+    const session = await this.createSession("Run " + new Date().toLocaleString());
+    await this.updateSession(session.id, {
+      status: run.status,
+      progressStep: run.progressStep,
+    });
+    
+    return {
+      id: session.id,
+      ...run,
+    };
+  }
+
+  async updateRun(id: string, updates: Partial<RunRecord>): Promise<RunRecord | undefined> {
+    const sessionUpdates: Partial<ReconciliationSession> = {};
+    if (updates.status) sessionUpdates.status = updates.status;
+    if (updates.progressStep !== undefined) sessionUpdates.progressStep = updates.progressStep;
+    if (updates.error !== undefined) sessionUpdates.error = updates.error;
+    if (updates.completedAt !== undefined) sessionUpdates.completedAt = updates.completedAt ? new Date(updates.completedAt) : null;
+    
+    const session = await this.updateSession(id, sessionUpdates);
+    if (!session) return undefined;
+    
+    return {
+      id: session.id,
+      uploadId: session.id,
+      status: session.status as "idle" | "processing" | "done" | "error",
+      progressStep: session.progressStep,
+      createdAt: session.createdAt.toISOString(),
+      completedAt: session.completedAt?.toISOString() || null,
+      error: session.error,
+    };
+  }
+
+  // Run results - stored in session
+  async setRunResult(runId: string, result: RunResult): Promise<void> {
+    await this.saveSessionData(runId, { runResult: result, status: "done" });
+  }
+
+  async getRunResult(runId: string): Promise<RunResult | undefined> {
+    const session = await this.getSession(runId);
+    return session?.runResult as RunResult | undefined;
+  }
+
+  // FX Rates (kept in memory, no persistence needed)
+  async setFxRates(rates: FxRate[]): Promise<void> {
+    this.fxRates = rates;
+  }
+
+  async getFxRates(): Promise<FxRate[]> {
+    return this.fxRates;
+  }
+
+  // Temp file data (kept in memory)
+  async setTempFileData(id: string, headers: string[], rawData: Record<string, unknown>[]): Promise<void> {
+    this.tempFileData.set(id, { headers, rawData });
+  }
+
+  async getTempFileData(id: string): Promise<{ headers: string[]; rawData: Record<string, unknown>[] } | undefined> {
+    return this.tempFileData.get(id);
+  }
+
+  // Dispute methods
+  async createDispute(dispute: Omit<DisputeRecord, "disputeId" | "createdAt">): Promise<DisputeRecord> {
+    const counter = await this.getNextCounter("dispute");
+    const disputeId = `DID-#${counter}`;
+    
+    const result = await db
+      .insert(disputesTable)
+      .values({
+        disputeId,
+        sessionId: dispute.runId,
+        bookingId: dispute.bookingId,
+        billingEntityId: dispute.billingEntityId,
+        billingEntityName: dispute.billingEntityName,
+        ticketId: dispute.ticketId,
+        tid: dispute.tid,
+        currency: dispute.currency,
+        disputeAmount: dispute.disputeAmount,
+        maxDisputeAmount: dispute.maxDisputeAmount,
+        reconciledNet: dispute.reconciledNet,
+        status: dispute.status,
+        closureStatus: dispute.closureStatus || "open",
+      })
+      .returning();
+    
+    return this.dbDisputeToRecord(result[0]);
+  }
+
+  private dbDisputeToRecord(d: typeof disputesTable.$inferSelect): DisputeRecord {
+    return {
+      disputeId: d.disputeId,
+      runId: d.sessionId,
+      bookingId: d.bookingId,
+      billingEntityId: d.billingEntityId,
+      billingEntityName: d.billingEntityName,
+      ticketId: d.ticketId || undefined,
+      tid: d.tid || undefined,
+      currency: d.currency,
+      disputeAmount: d.disputeAmount,
+      maxDisputeAmount: d.maxDisputeAmount,
+      reconciledNet: d.reconciledNet || undefined,
+      status: d.status as "pending" | "submitted" | "resolved" | "rejected",
+      createdAt: d.createdAt.toISOString(),
+      updatedAt: d.updatedAt?.toISOString(),
+      closureStatus: d.closureStatus as "open" | "closed",
+      closureType: d.closureType as "adjustment" | "manual_writeoff" | "accept_ho_error" | "sp_error" | undefined,
+      closureNote: d.closureNote || undefined,
+      closedAt: d.closedAt?.toISOString(),
+      closedByAdjustmentAmount: d.closedByAdjustmentAmount || undefined,
+      adjustedInTicketId: d.adjustedInTicketId || undefined,
+    };
+  }
+
+  async getDisputes(runId: string): Promise<DisputeRecord[]> {
+    const results = await db
+      .select()
+      .from(disputesTable)
+      .where(eq(disputesTable.sessionId, runId))
+      .orderBy(desc(disputesTable.createdAt));
+    
+    return results.map(d => this.dbDisputeToRecord(d));
+  }
+
+  async getOpenDisputes(runId: string): Promise<DisputeRecord[]> {
+    const results = await db
+      .select()
+      .from(disputesTable)
+      .where(and(eq(disputesTable.sessionId, runId), eq(disputesTable.closureStatus, "open")))
+      .orderBy(desc(disputesTable.createdAt));
+    
+    return results.map(d => this.dbDisputeToRecord(d));
+  }
+
+  async getDisputeById(disputeId: string): Promise<DisputeRecord | undefined> {
+    const results = await db
+      .select()
+      .from(disputesTable)
+      .where(eq(disputesTable.disputeId, disputeId));
+    
+    return results[0] ? this.dbDisputeToRecord(results[0]) : undefined;
+  }
+
+  async updateDispute(disputeId: string, updates: Partial<DisputeRecord>): Promise<DisputeRecord | undefined> {
+    const dbUpdates: Partial<typeof disputesTable.$inferInsert> = {};
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.closureStatus) dbUpdates.closureStatus = updates.closureStatus;
+    if (updates.closureType) dbUpdates.closureType = updates.closureType;
+    if (updates.closureNote !== undefined) dbUpdates.closureNote = updates.closureNote;
+    if (updates.closedAt) dbUpdates.closedAt = new Date(updates.closedAt);
+    if (updates.closedByAdjustmentAmount !== undefined) dbUpdates.closedByAdjustmentAmount = updates.closedByAdjustmentAmount;
+    if (updates.adjustedInTicketId !== undefined) dbUpdates.adjustedInTicketId = updates.adjustedInTicketId;
+    dbUpdates.updatedAt = new Date();
+    
+    const results = await db
+      .update(disputesTable)
+      .set(dbUpdates)
+      .where(eq(disputesTable.disputeId, disputeId))
+      .returning();
+    
+    return results[0] ? this.dbDisputeToRecord(results[0]) : undefined;
+  }
+
+  async deleteDispute(disputeId: string): Promise<boolean> {
+    const result = await db
+      .delete(disputesTable)
+      .where(eq(disputesTable.disputeId, disputeId))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getDisputeByBooking(runId: string, bookingId: string): Promise<DisputeRecord | undefined> {
+    const results = await db
+      .select()
+      .from(disputesTable)
+      .where(and(eq(disputesTable.sessionId, runId), eq(disputesTable.bookingId, bookingId)));
+    
+    return results[0] ? this.dbDisputeToRecord(results[0]) : undefined;
+  }
+
+  async closeDisputes(disputeIds: string[], adjustmentAmount: number): Promise<DisputeRecord[]> {
+    const closedDisputes: DisputeRecord[] = [];
+    const now = new Date();
+    
+    for (const disputeId of disputeIds) {
+      const result = await db
+        .update(disputesTable)
+        .set({
+          closureStatus: "closed",
+          closureType: "sp_error",
+          closedAt: now,
+          closedByAdjustmentAmount: adjustmentAmount,
+          updatedAt: now,
+        })
+        .where(and(eq(disputesTable.disputeId, disputeId), eq(disputesTable.closureStatus, "open")))
+        .returning();
+      
+      if (result[0]) {
+        closedDisputes.push(this.dbDisputeToRecord(result[0]));
+      }
+    }
+    
+    return closedDisputes;
+  }
+
+  async manualCloseDisputes(disputeIds: string[], note?: string): Promise<DisputeRecord[]> {
+    const closedDisputes: DisputeRecord[] = [];
+    const now = new Date();
+    
+    for (const disputeId of disputeIds) {
+      const result = await db
+        .update(disputesTable)
+        .set({
+          closureStatus: "closed",
+          closureType: "manual_writeoff",
+          closureNote: note,
+          closedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(disputesTable.disputeId, disputeId), eq(disputesTable.closureStatus, "open")))
+        .returning();
+      
+      if (result[0]) {
+        closedDisputes.push(this.dbDisputeToRecord(result[0]));
+      }
+    }
+    
+    return closedDisputes;
+  }
+
+  // Issue methods
+  async createIssue(issue: Omit<IssueRecord, "issueId" | "createdDate">): Promise<IssueRecord> {
+    const counter = await this.getNextCounter("issue");
+    const issueId = `IID-#${counter}`;
+    
+    const result = await db
+      .insert(issuesTable)
+      .values({
+        issueId,
+        sessionId: issue.runId,
+        billingEntityId: issue.billingEntityId,
+        billingEntityName: issue.billingEntityName,
+        currency: issue.currency,
+        discrepancyLocal: issue.discrepancyLocal,
+        discrepancyUsd: issue.discrepancyUsd,
+        reason: issue.reason,
+        driTeam: issue.driTeam,
+        bookingIds: issue.bookingIds,
+      })
+      .returning();
+    
+    return {
+      issueId: result[0].issueId,
+      runId: result[0].sessionId,
+      createdDate: result[0].createdAt.toISOString(),
+      billingEntityId: result[0].billingEntityId,
+      billingEntityName: result[0].billingEntityName,
+      currency: result[0].currency,
+      discrepancyLocal: result[0].discrepancyLocal,
+      discrepancyUsd: result[0].discrepancyUsd,
+      reason: result[0].reason,
+      driTeam: result[0].driTeam,
+      bookingIds: result[0].bookingIds as string[] | undefined,
+    };
+  }
+
+  async getIssues(runId: string): Promise<IssueRecord[]> {
+    const results = await db
+      .select()
+      .from(issuesTable)
+      .where(eq(issuesTable.sessionId, runId))
+      .orderBy(desc(issuesTable.createdAt));
+    
+    return results.map(i => ({
+      issueId: i.issueId,
+      runId: i.sessionId,
+      createdDate: i.createdAt.toISOString(),
+      billingEntityId: i.billingEntityId,
+      billingEntityName: i.billingEntityName,
+      currency: i.currency,
+      discrepancyLocal: i.discrepancyLocal,
+      discrepancyUsd: i.discrepancyUsd,
+      reason: i.reason,
+      driTeam: i.driTeam,
+      bookingIds: i.bookingIds as string[] | undefined,
+    }));
+  }
+
+  async getIssueById(issueId: string): Promise<IssueRecord | undefined> {
+    const results = await db
+      .select()
+      .from(issuesTable)
+      .where(eq(issuesTable.issueId, issueId));
+    
+    if (!results[0]) return undefined;
+    
+    const i = results[0];
+    return {
+      issueId: i.issueId,
+      runId: i.sessionId,
+      createdDate: i.createdAt.toISOString(),
+      billingEntityId: i.billingEntityId,
+      billingEntityName: i.billingEntityName,
+      currency: i.currency,
+      discrepancyLocal: i.discrepancyLocal,
+      discrepancyUsd: i.discrepancyUsd,
+      reason: i.reason,
+      driTeam: i.driTeam,
+      bookingIds: i.bookingIds as string[] | undefined,
+    };
+  }
+
+  async deleteIssue(issueId: string): Promise<boolean> {
+    const result = await db
+      .delete(issuesTable)
+      .where(eq(issuesTable.issueId, issueId))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Vendor Correction methods
+  async setVendorCorrection(runId: string, bookingId: string, finalVendorId: string): Promise<VendorCorrection> {
+    const existing = await this.getVendorCorrection(runId, bookingId);
+    
+    if (existing) {
+      const result = await db
+        .update(vendorCorrectionsTable)
+        .set({ finalVendorId, updatedAt: new Date() })
+        .where(and(eq(vendorCorrectionsTable.sessionId, runId), eq(vendorCorrectionsTable.bookingId, bookingId)))
+        .returning();
+      
+      return {
+        runId: result[0].sessionId,
+        bookingId: result[0].bookingId,
+        finalVendorId: result[0].finalVendorId,
+        createdAt: result[0].createdAt.toISOString(),
+        updatedAt: result[0].updatedAt?.toISOString(),
+      };
+    }
+    
+    const result = await db
+      .insert(vendorCorrectionsTable)
+      .values({ sessionId: runId, bookingId, finalVendorId })
+      .returning();
+    
+    return {
+      runId: result[0].sessionId,
+      bookingId: result[0].bookingId,
+      finalVendorId: result[0].finalVendorId,
+      createdAt: result[0].createdAt.toISOString(),
+      updatedAt: result[0].updatedAt?.toISOString(),
+    };
+  }
+
+  async getVendorCorrections(runId: string): Promise<VendorCorrection[]> {
+    const results = await db
+      .select()
+      .from(vendorCorrectionsTable)
+      .where(eq(vendorCorrectionsTable.sessionId, runId));
+    
+    return results.map(vc => ({
+      runId: vc.sessionId,
+      bookingId: vc.bookingId,
+      finalVendorId: vc.finalVendorId,
+      createdAt: vc.createdAt.toISOString(),
+      updatedAt: vc.updatedAt?.toISOString(),
+    }));
+  }
+
+  async getVendorCorrection(runId: string, bookingId: string): Promise<VendorCorrection | undefined> {
+    const results = await db
+      .select()
+      .from(vendorCorrectionsTable)
+      .where(and(eq(vendorCorrectionsTable.sessionId, runId), eq(vendorCorrectionsTable.bookingId, bookingId)));
+    
+    if (!results[0]) return undefined;
+    
+    return {
+      runId: results[0].sessionId,
+      bookingId: results[0].bookingId,
+      finalVendorId: results[0].finalVendorId,
+      createdAt: results[0].createdAt.toISOString(),
+      updatedAt: results[0].updatedAt?.toISOString(),
+    };
+  }
+
+  async deleteVendorCorrection(runId: string, bookingId: string): Promise<boolean> {
+    const result = await db
+      .delete(vendorCorrectionsTable)
+      .where(and(eq(vendorCorrectionsTable.sessionId, runId), eq(vendorCorrectionsTable.bookingId, bookingId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async bulkSetVendorCorrections(runId: string, corrections: { bookingId: string; finalVendorId: string }[]): Promise<VendorCorrection[]> {
+    const results: VendorCorrection[] = [];
+    for (const { bookingId, finalVendorId } of corrections) {
+      const correction = await this.setVendorCorrection(runId, bookingId, finalVendorId);
+      results.push(correction);
+    }
+    return results;
+  }
+}
+
+// Use DatabaseStorage for persistent data or MemStorage for development
+const USE_DATABASE = true;
+export const storage: IStorage = USE_DATABASE ? new DatabaseStorage() : new MemStorage();
+export const sessionStorage: ISessionStorage = new DatabaseStorage();

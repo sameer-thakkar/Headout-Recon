@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage, sessionStorage } from "./storage";
 import { randomUUID } from "crypto";
 import multer from "multer";
 import XLSX from "xlsx-js-style";
@@ -4139,6 +4139,99 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Delete vendor correction error:", error);
       res.status(500).json({ error: "Failed to delete vendor correction" });
+    }
+  });
+
+  // ========== Session Management Endpoints ==========
+
+  // Get all sessions
+  app.get("/api/sessions", async (req, res) => {
+    try {
+      const sessions = await sessionStorage.getSessions();
+      res.json({ sessions });
+    } catch (error) {
+      console.error("Get sessions error:", error);
+      res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  });
+
+  // Get a specific session
+  app.get("/api/sessions/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const session = await sessionStorage.getSession(id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      res.json({ session });
+    } catch (error) {
+      console.error("Get session error:", error);
+      res.status(500).json({ error: "Failed to fetch session" });
+    }
+  });
+
+  // Create a new session
+  app.post("/api/sessions", async (req, res) => {
+    try {
+      const { name } = req.body;
+      const session = await sessionStorage.createSession(name || "New Session");
+      res.json({ session });
+    } catch (error) {
+      console.error("Create session error:", error);
+      res.status(500).json({ error: "Failed to create session" });
+    }
+  });
+
+  // Update session data (files, results)
+  app.put("/api/sessions/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const data = req.body;
+      const session = await sessionStorage.saveSessionData(id, data);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      res.json({ session });
+    } catch (error) {
+      console.error("Update session error:", error);
+      res.status(500).json({ error: "Failed to update session" });
+    }
+  });
+
+  // Delete a session
+  app.delete("/api/sessions/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await sessionStorage.deleteSession(id);
+      if (deleted) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: "Session not found" });
+      }
+    } catch (error) {
+      console.error("Delete session error:", error);
+      res.status(500).json({ error: "Failed to delete session" });
+    }
+  });
+
+  // Rename a session
+  app.patch("/api/sessions/:id/rename", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      
+      const session = await sessionStorage.updateSession(id, { name });
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      res.json({ session });
+    } catch (error) {
+      console.error("Rename session error:", error);
+      res.status(500).json({ error: "Failed to rename session" });
     }
   });
 
