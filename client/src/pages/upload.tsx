@@ -38,6 +38,13 @@ interface UploadPageProps {
   uploadedFiles: UploadedFile[];
   currentRunId: string | null;
   onExportGSheet: () => Promise<{ spreadsheetUrl?: string }>;
+  initialRunResult?: {
+    overallSummary: OverallSummaryRow[];
+    secondaryVendorSummary: OverallSummaryRow[];
+    primaryRows: PrimaryRow[];
+    secondaryVendorRows: PrimaryRow[];
+    unmappedRows: PrimaryRow[];
+  } | null;
 }
 
 function formatDateDDMMYYYY(value: unknown): string | null {
@@ -99,7 +106,7 @@ function consolidateSummaryByReason(rows: OverallSummaryRow[]): OverallSummaryRo
   }));
 }
 
-export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportGSheet }: UploadPageProps) {
+export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportGSheet, initialRunResult }: UploadPageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -122,7 +129,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [isCancellationsModalOpen, setIsCancellationsModalOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: runResult, refetch: refetchResults, isLoading: isResultsLoading, isError: isResultsError, error: resultsError } = useQuery<{
+  // Only use React Query if initialRunResult is not provided (e.g., loading a saved session)
+  const { data: queryRunResult, isLoading: isQueryLoading, isError: isResultsError, error: resultsError } = useQuery<{
     overallSummary: OverallSummaryRow[];
     secondaryVendorSummary: OverallSummaryRow[];
     primaryRows: PrimaryRow[];
@@ -130,7 +138,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     unmappedRows: PrimaryRow[];
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
-    enabled: !!currentRunId,
+    enabled: !!currentRunId && !initialRunResult, // Only query if no initial result provided
     staleTime: 0, // Always refetch fresh data
     gcTime: 0, // Don't cache old results
     refetchOnWindowFocus: false,
@@ -144,6 +152,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     enabled: !!currentRunId && !!selectedReason && isModalOpen,
   });
 
+  // Use initialRunResult if available, otherwise fall back to query result
+  const runResult = initialRunResult || queryRunResult;
+  const isResultsLoading = !initialRunResult && isQueryLoading;
+  
   const overallSummary = runResult?.overallSummary || [];
   const secondaryVendorSummaryFromApi = runResult?.secondaryVendorSummary || [];
   const primaryRows = runResult?.primaryRows || [];
@@ -996,6 +1008,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 {spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT" ? (
                   <PurchaseReconciliationPanel
                     primaryRows={primaryRows}
+                    secondaryVendorRows={secondaryVendorRows}
+                    unmappedRows={unmappedRows}
                     currency={selectedPayableCurrency || actualCurrencies[0] || ""}
                     billingEntityName={spDetails?.billingEntityName || ""}
                     beId={spDetails?.beId || ""}

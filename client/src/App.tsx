@@ -55,6 +55,15 @@ function AppContent() {
   const [lastFxRefresh, setLastFxRefresh] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastExportTimestamp, setLastExportTimestamp] = useState<string | null>(null);
+  
+  // Store current run result to pass directly to upload page (avoids React Query issues)
+  const [currentRunResult, setCurrentRunResult] = useState<{
+    overallSummary: any[];
+    secondaryVendorSummary: any[];
+    primaryRows: any[];
+    secondaryVendorRows: any[];
+    unmappedRows: any[];
+  } | null>(null);
 
   // Persist currentRunId to localStorage whenever it changes
   useEffect(() => {
@@ -213,9 +222,14 @@ function AppContent() {
       setCurrentRunId(newRun.id);
       setLastFxRefresh(runData.fx?.refreshedAt || new Date().toISOString());
       
-      // Invalidate cache to ensure fresh results are fetched
-      queryClient.invalidateQueries({ queryKey: ["/api/runs", newRun.id, "results"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/runs", newRun.id, "discrepancy-analysis"] });
+      // Store results directly in state - this avoids React Query issues
+      setCurrentRunResult({
+        overallSummary: runData.overallSummary || [],
+        secondaryVendorSummary: runData.secondaryVendorSummary || [],
+        primaryRows: runData.primaryRows || [],
+        secondaryVendorRows: runData.secondaryVendorRows || [],
+        unmappedRows: runData.unmappedRows || [],
+      });
       
       setStatus("done");
       
@@ -260,6 +274,9 @@ function AppContent() {
 
   // Load session handler - loads a saved session from the database
   const handleLoadSession = useCallback((session: ReconciliationSession) => {
+    // Clear current results - will be fetched via React Query for loaded sessions
+    setCurrentRunResult(null);
+    
     // Invalidate cached queries for this session to ensure fresh data
     queryClient.invalidateQueries({ queryKey: ["/api/runs", session.id, "results"] });
     queryClient.invalidateQueries({ queryKey: ["/api/runs", session.id, "discrepancy-analysis"] });
@@ -473,6 +490,7 @@ function AppContent() {
                   uploadedFiles={uploadedFiles}
                   currentRunId={currentRunId}
                   onExportGSheet={handleExportGSheet}
+                  initialRunResult={currentRunResult}
                 />
               </Route>
               <Route path="/mapping">

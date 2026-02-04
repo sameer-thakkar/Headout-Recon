@@ -394,8 +394,16 @@ export async function registerRoutes(
         });
         console.log(`Reconciliation completed for session ${runId}`);
 
-        // Return the runId and FX data after reconciliation is complete
-        res.json({ runId, fx: result.fx });
+        // Return the runId, FX data, and full results after reconciliation is complete
+        res.json({ 
+          runId, 
+          fx: result.fx,
+          overallSummary: result.overallSummary,
+          secondaryVendorSummary: result.secondaryVendorSummary,
+          primaryRows: result.primaryRows,
+          secondaryVendorRows: result.secondaryVendorRows,
+          unmappedRows: result.unmappedRows
+        });
       } catch (error) {
         console.error("Reconciliation error:", error);
         await storage.updateRun(runId, {

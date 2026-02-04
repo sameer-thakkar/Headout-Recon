@@ -17,10 +17,13 @@ import type { PrimaryRow, VendorBalance } from "@shared/schema";
 
 interface PurchaseReconciliationPanelProps {
   primaryRows: PrimaryRow[];
+  secondaryVendorRows?: PrimaryRow[]; // Include secondary vendor for complete SP Invoice total
+  unmappedRows?: PrimaryRow[]; // SP Invoice rows with no HO match
   currency: string;
   billingEntityName: string;
   beId: string;
   onClose: () => void;
+  fxRateToUsd?: number; // FX rate to convert from local currency to USD
 }
 
 function formatNumber(value: number): string {
@@ -32,11 +35,16 @@ function formatNumber(value: number): string {
 
 export function PurchaseReconciliationPanel({
   primaryRows,
+  secondaryVendorRows = [],
+  unmappedRows = [],
   currency,
   billingEntityName,
   beId,
   onClose,
+  fxRateToUsd,
 }: PurchaseReconciliationPanelProps) {
+  // Combine all rows for complete SP Invoice calculations (primary + secondary + unmapped)
+  const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows, ...unmappedRows], [primaryRows, secondaryVendorRows, unmappedRows]);
   const { data: balanceData, isLoading: isLoadingBalance } = useQuery<{ balance: VendorBalance | null }>({
     queryKey: ['/api/vendor-balances', beId],
     enabled: !!beId,
@@ -44,33 +52,51 @@ export function PurchaseReconciliationPanel({
 
   const balance = balanceData?.balance;
   const hasBalance = !!balance;
+  
+  // Calculate FX rate to USD from primary rows if not provided
+  const effectiveFxRate = useMemo(() => {
+    if (fxRateToUsd) return fxRateToUsd;
+    // Try to derive from the first row with valid fxRateUsed
+    const rowWithFx = primaryRows.find(r => r.fxRateUsed && r.fxRateUsed !== 1);
+    if (rowWithFx && rowWithFx.fxRateUsed) {
+      return rowWithFx.fxRateUsed;
+    }
+    // If currency is USD or no FX rate found, use 1
+    if (currency === "USD") return 1;
+    return null; // No FX rate available
+  }, [fxRateToUsd, primaryRows, currency]);
 
   const calculations = useMemo(() => {
     const openingBalance = balance?.openingBalance ?? 0;
     const reloads = balance?.reloads ?? 0;
     const closingBalance = balance?.closingBalance ?? 0;
     
-    const refunds = primaryRows
+    // Refunds: All negative SP values from entire SP Invoice (primary + secondary)
+    const refunds = allRows
       .filter(row => row.spNetInHo < 0)
       .reduce((sum, row) => sum + row.spNetInHo, 0);
     
     const computedPurchase = openingBalance + reloads + refunds - closingBalance;
     
-    const actualPurchase = primaryRows.reduce((sum, row) => sum + row.spNetInHo, 0);
+    // Actual Purchase: Total from entire SP Invoice data (primary + secondary)
+    const actualPurchase = allRows.reduce((sum, row) => sum + row.spNetInHo, 0);
     
     const timingDifference = computedPurchase - actualPurchase;
     
+    // Purchases as per HO: Only primary vendor fulfillments (HO Net)
     const purchasesAsPerHO = primaryRows
       .filter(row => !row.isSecondaryVendor)
       .reduce((sum, row) => sum + row.hoNet, 0);
     
     const difference = purchasesAsPerHO - actualPurchase;
     
-    const inSPNotInHO = primaryRows
+    // In SP not in HO: From all rows where SP Net > HO Net
+    const inSPNotInHO = allRows
       .filter(row => row.spNetInHo > row.hoNet)
       .reduce((sum, row) => sum + (row.spNetInHo - row.hoNet), 0);
     
-    const inHONotInSP = primaryRows
+    // In HO not in SP: From all rows where HO Net > SP Net
+    const inHONotInSP = allRows
       .filter(row => row.hoNet > row.spNetInHo)
       .reduce((sum, row) => sum + (row.hoNet - row.spNetInHo), 0);
 
@@ -90,7 +116,7 @@ export function PurchaseReconciliationPanel({
       inHONotInSP,
       netDifference,
     };
-  }, [primaryRows, balance]);
+  }, [allRows, primaryRows, balance]);
 
   const lineItems = [
     {
@@ -261,6 +287,7 @@ export function PurchaseReconciliationPanel({
                 <TableHead className="py-1.5 text-xs w-8">#</TableHead>
                 <TableHead className="py-1.5 text-xs">Line Item</TableHead>
                 <TableHead className="py-1.5 text-xs text-right">Amount ({currency})</TableHead>
+                <TableHead className="py-1.5 text-xs text-right">Amount (USD)</TableHead>
                 <TableHead className="py-1.5 text-xs">Notes</TableHead>
               </TableRow>
             </TableHeader>
@@ -269,6 +296,9 @@ export function PurchaseReconciliationPanel({
                 const IconComponent = item.icon;
                 const isNegative = item.value < 0;
                 const isPositive = item.value > 0;
+                const usdValue = effectiveFxRate ? item.value * effectiveFxRate : null;
+                const isUsdNegative = usdValue !== null && usdValue < 0;
+                const isUsdPositive = usdValue !== null && usdValue > 0;
                 
                 return (
                   <TableRow 
@@ -295,6 +325,9 @@ export function PurchaseReconciliationPanel({
                     <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
                       {formatNumber(item.value)}
                     </TableCell>
+                    <TableCell className={`py-2 text-right font-mono ${isUsdNegative ? "text-red-600 dark:text-red-400" : isUsdPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
+                      {usdValue !== null ? formatNumber(usdValue) : "-"}
+                    </TableCell>
                     <TableCell className="py-2 text-xs text-muted-foreground">
                       {item.description}
                     </TableCell>
@@ -312,12 +345,22 @@ export function PurchaseReconciliationPanel({
               <Badge variant={calculations.netDifference === 0 ? "default" : "destructive"}>
                 {calculations.netDifference === 0 ? "Balanced" : "Unbalanced"}
               </Badge>
+              {effectiveFxRate && effectiveFxRate !== 1 && (
+                <Badge variant="outline" className="text-xs">
+                  FX Rate: {effectiveFxRate.toFixed(6)}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <span className="text-xs text-muted-foreground">Net Difference (Line 12)</span>
                 <p className={`font-mono font-semibold ${calculations.netDifference !== 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
                   {formatNumber(calculations.netDifference)} {currency}
+                  {effectiveFxRate && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({formatNumber(calculations.netDifference * effectiveFxRate)} USD)
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
