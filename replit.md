@@ -157,7 +157,7 @@ shared/              # Shared code between client and server
 ### Purchase Reconciliation (PORTAL_DEPOSIT)
 - **Trigger**: When dominant payment method = "PORTAL_DEPOSIT" (case-insensitive)
 - **Replaces**: Amount Payable panel is replaced with Purchase Reconciliation panel
-- **11 Line Items**:
+- **12 Line Items**:
   1. Opening Balance - Fetched from backend (BE ID level) - *placeholder: 10000*
   2. Reloads - Fetched from backend (BE ID level) - *placeholder: 10000*
   3. Refunds - Sum of SP Invoice negative values
@@ -169,6 +169,8 @@ shared/              # Shared code between client and server
   9. Difference = 8 - 6 (highlighted)
   10. In SP data not in HO = Sum where SP Net > HO Net
   11. In HO data not in SP = Sum where HO Net > SP Net
+  12. Net Difference = 9 + 10 - 11 (validation row, should equal 0)
 - **Component**: `client/src/components/purchase-reconciliation-panel.tsx`
 - **UI**: Table with line item numbers, labels, calculated amounts, and notes
+- **Validation**: Line 12 serves as cross-check - if balanced, shows green; if unbalanced, shows red
 - **Status**: Placeholder values (10000) for items 1, 2, 4 until backend integration

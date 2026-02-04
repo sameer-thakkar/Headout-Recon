@@ -63,6 +63,8 @@ export function PurchaseReconciliationPanel({
       .filter(row => row.hoNet > row.spNetInHo)
       .reduce((sum, row) => sum + (row.hoNet - row.spNetInHo), 0);
 
+    const netDifference = difference + inSPNotInHO - inHONotInSP;
+
     return {
       openingBalance,
       reloads,
@@ -75,6 +77,7 @@ export function PurchaseReconciliationPanel({
       difference,
       inSPNotInHO,
       inHONotInSP,
+      netDifference,
     };
   }, [primaryRows]);
 
@@ -166,6 +169,15 @@ export function PurchaseReconciliationPanel({
       icon: TrendingUp,
       isReco: true,
     },
+    {
+      id: 12,
+      label: "Net Difference",
+      value: calculations.netDifference,
+      description: "= 9 + 10 - 11 (should be 0)",
+      icon: Calculator,
+      isFormula: true,
+      isValidation: true,
+    },
   ];
 
   return (
@@ -179,7 +191,7 @@ export function PurchaseReconciliationPanel({
           </Badge>
         </div>
         <Badge variant="secondary" className="text-xs">
-          FLOATING_DEPOSIT
+          PORTAL_DEPOSIT
         </Badge>
       </div>
 
@@ -208,7 +220,7 @@ export function PurchaseReconciliationPanel({
                 return (
                   <TableRow 
                     key={item.id} 
-                    className={`h-10 ${item.isHighlight ? "bg-primary/5" : ""} ${item.isReco ? "bg-muted/50" : ""}`}
+                    className={`h-10 ${item.isHighlight ? "bg-primary/5" : ""} ${item.isReco ? "bg-muted/50" : ""} ${item.isValidation ? (item.value === 0 ? "bg-green-50 dark:bg-green-950/30 border-t-2 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-t-2 border-red-200 dark:border-red-800") : ""}`}
                     data-testid={`purchase-reco-row-${item.id}`}
                   >
                     <TableCell className="py-2 font-mono text-xs text-muted-foreground">
@@ -244,15 +256,15 @@ export function PurchaseReconciliationPanel({
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground">Reconciliation Summary:</span>
-              <Badge variant={calculations.difference === 0 ? "default" : "destructive"}>
-                {calculations.difference === 0 ? "Balanced" : "Unbalanced"}
+              <Badge variant={calculations.netDifference === 0 ? "default" : "destructive"}>
+                {calculations.netDifference === 0 ? "Balanced" : "Unbalanced"}
               </Badge>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <span className="text-xs text-muted-foreground">Net Difference</span>
-                <p className={`font-mono font-semibold ${calculations.difference !== 0 ? "text-red-600 dark:text-red-400" : ""}`}>
-                  {formatNumber(calculations.difference)} {currency}
+                <span className="text-xs text-muted-foreground">Net Difference (Line 12)</span>
+                <p className={`font-mono font-semibold ${calculations.netDifference !== 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                  {formatNumber(calculations.netDifference)} {currency}
                 </p>
               </div>
             </div>
