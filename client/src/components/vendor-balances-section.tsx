@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, Trash2, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, X } from "lucide-react";
+import { Upload, Trash2, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -204,6 +204,19 @@ export function VendorBalancesSection() {
     return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      { "BE ID": "VENDOR-001", "Opening Balance": 50000, "Reloads": 25000, "Closing Balance": 35000, "Currency": "INR" },
+      { "BE ID": "VENDOR-002", "Opening Balance": 100000, "Reloads": 0, "Closing Balance": 75000, "Currency": "INR" },
+    ];
+    
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendor Balances");
+    
+    XLSX.writeFile(workbook, "vendor_balances_template.xlsx");
+  };
+
   const validCount = parsedBalances.filter(b => b.isValid).length;
   const invalidCount = parsedBalances.filter(b => !b.isValid).length;
 
@@ -219,7 +232,7 @@ export function VendorBalancesSection() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-4">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -229,6 +242,14 @@ export function VendorBalancesSection() {
                   id="balance-file-upload"
                   data-testid="input-balance-file"
                 />
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadTemplate}
+                  data-testid="button-download-template"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Template
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
@@ -242,7 +263,7 @@ export function VendorBalancesSection() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Upload an Excel/CSV file with columns: BE ID, Opening Balance, Reloads, Closing Balance, Currency
+                Download the template, fill in your vendor balances, then upload the file
               </p>
             </div>
 
