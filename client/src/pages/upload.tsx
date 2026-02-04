@@ -70,6 +70,35 @@ function formatNumber(value: number): string {
   }).format(value);
 }
 
+function consolidateSummaryByReason(rows: OverallSummaryRow[]): OverallSummaryRow[] {
+  const grouped = new Map<string, { currencies: Set<string>; discrepancyLc: number; discrepancyUsd: number; countBid: number }>();
+  
+  for (const row of rows) {
+    const existing = grouped.get(row.reason);
+    if (existing) {
+      existing.currencies.add(row.currency);
+      existing.discrepancyLc += row.discrepancyLc;
+      existing.discrepancyUsd += row.discrepancyUsd;
+      existing.countBid += row.countBid;
+    } else {
+      grouped.set(row.reason, {
+        currencies: new Set([row.currency]),
+        discrepancyLc: row.discrepancyLc,
+        discrepancyUsd: row.discrepancyUsd,
+        countBid: row.countBid,
+      });
+    }
+  }
+  
+  return Array.from(grouped.entries()).map(([reason, data]) => ({
+    reason,
+    currency: data.currencies.size > 1 ? "Multiple currencies" : Array.from(data.currencies)[0],
+    discrepancyLc: data.discrepancyLc,
+    discrepancyUsd: data.discrepancyUsd,
+    countBid: data.countBid,
+  }));
+}
+
 export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportGSheet }: UploadPageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -268,9 +297,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       return { hasCancellations: false, breakdown: [], totalCount: 0, totalDiscrepancyLc: 0, totalDiscrepancyUsd: 0, currency: "USD" };
     }
     
-    // Get unique currencies
-    const currencies = Array.from(new Set(cancellationBookings.map(b => b.hoCurrency)));
-    const currency = currencies.length > 0 ? currencies[0] : "USD";
+    // Get unique currencies - show "Multiple currencies" if more than one
+    const currencies = Array.from(new Set(cancellationBookings.map(b => b.hoCurrency).filter(Boolean)));
+    const currency = currencies.length > 1 ? "Multiple currencies" : (currencies[0] || "USD");
     
     // Group by cancellation type
     const breakdown = cancellationReasons.map(reason => {
@@ -311,19 +340,22 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
              !cancellationReasons.includes(row.reason)
     );
     
+    // Consolidate rows by reason (combine multiple currencies)
+    const consolidatedRows = consolidateSummaryByReason(filteredSummary);
+    
     // Build result object
     let result: {
-      rows: typeof filteredSummary;
+      rows: OverallSummaryRow[];
       alreadyReconciledRow: { reason: string; currency: string; discrepancyLc: number; discrepancyUsd: number; countBid: number } | null;
       cancellationsRow: { reason: string; currency: string; discrepancyLc: number; discrepancyUsd: number; countBid: number } | null;
-    } = { rows: filteredSummary, alreadyReconciledRow: null, cancellationsRow: null };
+    } = { rows: consolidatedRows, alreadyReconciledRow: null, cancellationsRow: null };
     
     // Add combined "Already Reconciled" row if there are any
     if (alreadyReconciledData.hasAlreadyReconciled) {
       const sameBECurrencies = alreadyReconciledData.sameBE.bookings.map(b => b.hoCurrency);
       const diffBECurrencies = alreadyReconciledData.differentBE.bookings.map(b => b.hoCurrency);
-      const allCurrencies = Array.from(new Set([...sameBECurrencies, ...diffBECurrencies]));
-      const currency = allCurrencies.length > 0 ? allCurrencies[0] : "USD";
+      const allCurrencies = Array.from(new Set([...sameBECurrencies, ...diffBECurrencies].filter(Boolean)));
+      const currency = allCurrencies.length > 1 ? "Multiple currencies" : (allCurrencies[0] || "USD");
       
       const totalDiscrepancyLc = [...alreadyReconciledData.sameBE.bookings, ...alreadyReconciledData.differentBE.bookings]
         .reduce((sum, r) => sum + r.differenceLc, 0);
@@ -364,15 +396,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
   // Split summary into Primary Vendor and Secondary Vendor sections
   // Uses separate arrays from API (no prefix needed)
+  // Consolidate both by reason to handle multiple currencies
   const { primaryVendorSummary, secondaryVendorSummary } = useMemo(() => {
-    // Primary Vendor: Filter out Reconciled (only show discrepancies)
+    // Primary Vendor: Filter out Reconciled (only show discrepancies), then consolidate
     const primaryFiltered = overallSummary.filter(r => r.reason !== "Reconciled");
-    // Secondary Vendor: Show ALL reason types including Reconciled (full BE ID mismatch picture)
-    const secondaryFiltered = secondaryVendorSummaryFromApi;
+    const primaryConsolidated = consolidateSummaryByReason(primaryFiltered);
+    // Secondary Vendor: Show ALL reason types including Reconciled (full BE ID mismatch picture), then consolidate
+    const secondaryConsolidated = consolidateSummaryByReason(secondaryVendorSummaryFromApi);
     
     return {
-      primaryVendorSummary: primaryFiltered,
-      secondaryVendorSummary: secondaryFiltered,
+      primaryVendorSummary: primaryConsolidated,
+      secondaryVendorSummary: secondaryConsolidated,
     };
   }, [overallSummary, secondaryVendorSummaryFromApi]);
 
