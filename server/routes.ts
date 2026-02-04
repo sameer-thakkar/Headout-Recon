@@ -540,41 +540,34 @@ export async function registerRoutes(
         ],
       };
 
-      // Create upload record
-      const fileInfo: UploadedFile = {
-        id: randomUUID(),
-        name: "demo_reconciliation.xlsx",
-        size: 2048,
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        sheetNames: ["HO Data", "SP Invoice Report"],
-      };
-
-      const uploadRecord = await storage.createUpload(fileInfo, hoData, spData);
-
-      // Create run
-      const run = await storage.createRun({
-        uploadId: uploadRecord.id,
-        status: "processing",
-        progressStep: "Computing reconciliation",
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        error: null,
+      // Create a single session for the demo
+      const session = await storage.createSession("Demo Reconciliation - " + new Date().toLocaleString());
+      
+      // Store HO/SP data in the session
+      await storage.saveSessionData(session.id, {
+        hoData,
+        spData,
+        hoFileName: "demo_reconciliation.xlsx",
+        spFileName: "SP_Invoice_Demo.xlsx",
       });
 
       // Run reconciliation
       const result = await runReconciliation(hoData, spData);
 
-      // Store results
-      await storage.setRunResult(run.id, result);
-      await storage.updateRun(run.id, {
+      // Store results and update status
+      await storage.saveSessionData(session.id, {
+        runResult: result,
+        status: "done",
+      });
+      await storage.updateSession(session.id, {
         status: "done",
         progressStep: "Complete",
-        completedAt: new Date().toISOString(),
+        completedAt: new Date(),
       });
 
       res.json({
-        runId: run.id,
-        uploadId: uploadRecord.id,
+        runId: session.id,
+        uploadId: session.id,
         ...result,
       });
     } catch (error) {
