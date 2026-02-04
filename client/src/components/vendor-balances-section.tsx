@@ -206,8 +206,8 @@ export function VendorBalancesSection() {
 
   const handleDownloadTemplate = () => {
     const templateData = [
-      { "BE ID": "VENDOR-001", "Opening Balance": 50000, "Reloads": 25000, "Closing Balance": 35000, "Currency": "INR" },
-      { "BE ID": "VENDOR-002", "Opening Balance": 100000, "Reloads": 0, "Closing Balance": 75000, "Currency": "INR" },
+      { "BE ID": "VENDOR-001", "BE ID Name": "Vendor Company ABC", "Opening Balance": 50000, "Reloads": 25000, "Closing Balance": 35000, "Currency": "INR" },
+      { "BE ID": "VENDOR-002", "BE ID Name": "Vendor Company XYZ", "Opening Balance": 100000, "Reloads": 0, "Closing Balance": 75000, "Currency": "INR" },
     ];
     
     const worksheet = XLSX.utils.json_to_sheet(templateData);
