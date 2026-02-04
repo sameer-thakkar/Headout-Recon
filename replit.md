@@ -153,3 +153,22 @@ shared/              # Shared code between client and server
   - Final Vendor ID - editable input field
 - **Bulk Update**: Single input field + button to apply the same Vendor ID to all payment mismatch bookings
 - **Data Persistence**: Final Vendor IDs are ephemeral (UI-only) - intended as reference for manual corrections in external system
+
+### Purchase Reconciliation (FLOATING_DEPOSIT)
+- **Trigger**: When dominant payment method = "FLOATING_DEPOSIT" (case-insensitive)
+- **Replaces**: Amount Payable panel is replaced with Purchase Reconciliation panel
+- **11 Line Items**:
+  1. Opening Balance - Fetched from backend (BE ID level) - *placeholder: 10000*
+  2. Reloads - Fetched from backend (BE ID level) - *placeholder: 10000*
+  3. Refunds - Sum of SP Invoice negative values
+  4. Closing Balance - Fetched from backend (BE ID level) - *placeholder: 10000*
+  5. Computed Purchase = 1 + 2 + 3 - 4
+  6. Actual Purchase = Total from SP Invoice data
+  7. Timing Difference in Closing Balance = 5 - 6
+  8. Purchases as per HO = Total of primary fulfillments (HO Net)
+  9. Difference = 8 - 6 (highlighted)
+  10. In SP data not in HO = Sum where SP Net > HO Net
+  11. In HO data not in SP = Sum where HO Net > SP Net
+- **Component**: `client/src/components/purchase-reconciliation-panel.tsx`
+- **UI**: Table with line item numbers, labels, calculated amounts, and notes
+- **Status**: Placeholder values (10000) for items 1, 2, 4 until backend integration
