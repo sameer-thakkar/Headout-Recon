@@ -227,7 +227,7 @@ export function VendorBalancesSection() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
-              Vendor Balances
+              Vendor Balances & Reloads
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
