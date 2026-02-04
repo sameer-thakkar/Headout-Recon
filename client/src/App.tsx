@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -37,15 +37,75 @@ import type {
 import { requiredFields, optionalFields, headerAliases } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 
+const CURRENT_RUN_ID_KEY = "headout-recon-current-run-id";
+
 function AppContent() {
   
-  // Global state
+  // Global state - initialize currentRunId from localStorage
   const [runs, setRuns] = useState<RunRecord[]>([]);
-  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(CURRENT_RUN_ID_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [status, setStatus] = useState<RunStatus>("idle");
   const [lastFxRefresh, setLastFxRefresh] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastExportTimestamp, setLastExportTimestamp] = useState<string | null>(null);
+
+  // Persist currentRunId to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      if (currentRunId) {
+        localStorage.setItem(CURRENT_RUN_ID_KEY, currentRunId);
+      } else {
+        localStorage.removeItem(CURRENT_RUN_ID_KEY);
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [currentRunId]);
+
+  // Load saved sessions on mount to populate runs dropdown
+  useEffect(() => {
+    async function loadSavedSessions() {
+      try {
+        const response = await fetch("/api/sessions");
+        const data = await response.json();
+        if (data.sessions && Array.isArray(data.sessions)) {
+          const sessionRuns: RunRecord[] = data.sessions.map((session: ReconciliationSession) => ({
+            id: session.id,
+            uploadId: session.id,
+            status: session.status as RunStatus,
+            progressStep: session.progressStep || null,
+            createdAt: typeof session.createdAt === 'string' ? session.createdAt : session.createdAt.toISOString(),
+            completedAt: session.completedAt 
+              ? (typeof session.completedAt === 'string' ? session.completedAt : session.completedAt.toISOString()) 
+              : null,
+            error: session.error,
+          }));
+          setRuns(sessionRuns);
+          
+          // If we have a currentRunId from localStorage, set status based on the session
+          if (currentRunId) {
+            const currentSession = data.sessions.find((s: ReconciliationSession) => s.id === currentRunId);
+            if (currentSession) {
+              setStatus(currentSession.status as RunStatus);
+              if (currentSession.runResult) {
+                const result = currentSession.runResult as RunResult;
+                setLastFxRefresh(result.fx?.refreshedAt || null);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load saved sessions:", error);
+      }
+    }
+    loadSavedSessions();
+  }, []);
 
   // Run-specific state
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
