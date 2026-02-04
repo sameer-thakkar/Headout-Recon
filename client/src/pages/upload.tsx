@@ -90,7 +90,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [isCancellationsModalOpen, setIsCancellationsModalOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: runResult } = useQuery<{
+  const { data: runResult, refetch: refetchResults, isLoading: isResultsLoading, isError: isResultsError, error: resultsError } = useQuery<{
     overallSummary: OverallSummaryRow[];
     secondaryVendorSummary: OverallSummaryRow[];
     primaryRows: PrimaryRow[];
@@ -99,6 +99,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
     enabled: !!currentRunId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 3,
+    retryDelay: 1000,
   });
 
   const { data: discrepancyData, isLoading: isDiscrepancyLoading } = useQuery<{ analysisRows: DiscrepancyAnalysisRow[] }>({
@@ -845,6 +849,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       </div>
                     )}
                   </>
+                  ) : isResultsLoading && currentRunId ? (
+                    <div className="h-24 flex items-center justify-center text-muted-foreground">
+                      <div className="text-center">
+                        <div className="h-8 w-8 mx-auto mb-2 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+                        <p className="text-sm">Loading results...</p>
+                      </div>
+                    </div>
                   ) : (
                     <div className="h-24 flex items-center justify-center text-muted-foreground">
                       <div className="text-center">

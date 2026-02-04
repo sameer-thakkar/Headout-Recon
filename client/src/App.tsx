@@ -150,6 +150,10 @@ function AppContent() {
 
   // Load session handler - loads a saved session from the database
   const handleLoadSession = useCallback((session: ReconciliationSession) => {
+    // Invalidate cached queries for this session to ensure fresh data
+    queryClient.invalidateQueries({ queryKey: ["/api/runs", session.id, "results"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/runs", session.id, "discrepancy-analysis"] });
+    
     // Set the current run ID to the session ID
     setCurrentRunId(session.id);
     
