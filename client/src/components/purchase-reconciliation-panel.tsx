@@ -43,8 +43,10 @@ export function PurchaseReconciliationPanel({
   onClose,
   fxRateToUsd,
 }: PurchaseReconciliationPanelProps) {
-  // State for expanded rows
+  // State for expanded rows (line items 10 and 11)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  // State for expanded reason groups within rows 10 and 11
+  const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   
   const toggleRowExpand = (rowId: number) => {
     setExpandedRows(prev => {
@@ -53,6 +55,18 @@ export function PurchaseReconciliationPanel({
         next.delete(rowId);
       } else {
         next.add(rowId);
+      }
+      return next;
+    });
+  };
+  
+  const toggleReasonExpand = (key: string) => {
+    setExpandedReasons(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
       }
       return next;
     });
@@ -421,56 +435,71 @@ export function PurchaseReconciliationPanel({
                     {hasBreakup && isExpanded && (
                       <TableRow className="bg-muted/30">
                         <TableCell colSpan={5} className="py-3 px-8">
-                          <div className="space-y-3">
-                            {breakupData.map((reasonGroup, groupIdx) => (
-                              <div key={`${item.id}-reason-${groupIdx}`} className="rounded-md border bg-background">
-                                <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium text-sm">{reasonGroup.reason}</span>
-                                    <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
-                                  </div>
-                                  <div className="flex items-center gap-3 text-xs">
-                                    <span className="text-muted-foreground">Total:</span>
-                                    <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
-                                      {formatNumber(reasonGroup.totalDifference)} {currency}
-                                    </span>
-                                    {effectiveFxRate && (
-                                      <span className="font-mono text-muted-foreground">
-                                        ({formatNumber(reasonGroup.totalDifference * effectiveFxRate)} USD)
+                          <div className="space-y-2">
+                            {breakupData.map((reasonGroup, groupIdx) => {
+                              const reasonKey = `${item.id}-${reasonGroup.reason}`;
+                              const isReasonExpanded = expandedReasons.has(reasonKey);
+                              return (
+                                <div key={`${item.id}-reason-${groupIdx}`} className="rounded-md border bg-background overflow-hidden">
+                                  <div 
+                                    className="flex items-center justify-between px-3 py-2 bg-muted/50 cursor-pointer hover-elevate"
+                                    onClick={() => toggleReasonExpand(reasonKey)}
+                                    data-testid={`reason-header-${item.id}-${groupIdx}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {isReasonExpanded ? (
+                                        <ChevronDown className="h-4 w-4 text-primary" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                      )}
+                                      <span className="font-medium text-sm">{reasonGroup.reason}</span>
+                                      <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-xs">
+                                      <span className="text-muted-foreground">Total:</span>
+                                      <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
+                                        {formatNumber(reasonGroup.totalDifference)} {currency}
                                       </span>
-                                    )}
+                                      {effectiveFxRate && (
+                                        <span className="font-mono text-muted-foreground">
+                                          ({formatNumber(reasonGroup.totalDifference * effectiveFxRate)} USD)
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
+                                  {isReasonExpanded && (
+                                    <Table className="text-xs">
+                                      <TableHeader>
+                                        <TableRow className="h-7">
+                                          <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                          <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                          <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                          <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
+                                          {effectiveFxRate && <TableHead className="py-1 text-xs text-right">Difference (USD)</TableHead>}
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {reasonGroup.bookings.map((booking, bookingIdx) => (
+                                          <TableRow key={`${item.id}-booking-${groupIdx}-${bookingIdx}`} className="h-7">
+                                            <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
+                                            <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
+                                            <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
+                                            <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                              {formatNumber(booking.difference)}
+                                            </TableCell>
+                                            {effectiveFxRate && (
+                                              <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                                {formatNumber(booking.difference * effectiveFxRate)}
+                                              </TableCell>
+                                            )}
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  )}
                                 </div>
-                                <Table className="text-xs">
-                                  <TableHeader>
-                                    <TableRow className="h-7">
-                                      <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                                      <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                                      <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                                      <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
-                                      {effectiveFxRate && <TableHead className="py-1 text-xs text-right">Difference (USD)</TableHead>}
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {reasonGroup.bookings.map((booking, bookingIdx) => (
-                                      <TableRow key={`${item.id}-booking-${groupIdx}-${bookingIdx}`} className="h-7">
-                                        <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
-                                        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
-                                        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
-                                        <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                          {formatNumber(booking.difference)}
-                                        </TableCell>
-                                        {effectiveFxRate && (
-                                          <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                            {formatNumber(booking.difference * effectiveFxRate)}
-                                          </TableCell>
-                                        )}
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            ))}
+                              );
+                            })}
                             <div className="flex items-center justify-end gap-3 pt-2 border-t text-sm">
                               <span className="text-muted-foreground">Grand Total ({breakupData.reduce((sum, g) => sum + g.count, 0)} items):</span>
                               <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
