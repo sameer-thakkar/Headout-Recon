@@ -167,12 +167,23 @@ shared/              # Shared code between client and server
   7. Timing Difference in Closing Balance = 5 - 6
   8. Purchases as per HO = Total of primary fulfillments (HO Net)
   9. Difference = 8 - 6 (highlighted)
-  10. In SP data not in HO = Sum where SP Net > HO Net
-  11. In HO data not in SP = Sum where HO Net > SP Net
+  10. In SP data not in HO = Sum where SP Net > HO Net (collapsible reason groups)
+  11. In HO data not in SP = Sum where HO Net > SP Net (collapsible reason groups)
   12. Net Difference = 9 + 10 - 11 (validation row, should equal 0)
 - **Component**: `client/src/components/purchase-reconciliation-panel.tsx`
-- **UI**: Read-only table with line item numbers, labels, calculated amounts, and notes
+- **UI**: Read-only table with line item numbers, calculated amounts, and notes
 - **Validation**: Line 12 serves as cross-check - if balanced, shows green; if unbalanced, shows red
+- **Collapsible Reason Groups (Rows 10 & 11)**:
+  - Reason sub-headers in rows 10 and 11 are collapsible with chevron indicators
+  - Click reason header to expand/collapse booking details
+  - State tracked via `expandedReasons` Set using format `${rowId}-${reasonName}`
+- **Dispute & Issue Tracking**:
+  - Actions column in booking detail tables with "Dispute" and "Issue" buttons
+  - Raise Dispute modal: Opens with booking details, allows setting dispute amount
+  - Flag Issue modal: Creates issue entry for the booking
+  - Active disputes shown with "Remove" option instead of "Dispute" button
+  - State resets automatically when runId changes
+  - API integrations: POST /api/disputes, POST /api/issues, DELETE /api/disputes/:bookingId
 - **Database**: `vendor_balances` table stores Opening Balance, Reloads, Closing Balance per BE ID
 - **API Endpoints**:
   - `GET /api/vendor-balances` - List all vendor balances
