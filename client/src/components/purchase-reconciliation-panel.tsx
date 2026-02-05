@@ -88,6 +88,20 @@ export function PurchaseReconciliationPanel({
   const [issueBooking, setIssueBooking] = useState<BookingForDispute | null>(null);
   const [isSavingIssue, setIsSavingIssue] = useState(false);
   
+  // Calculate FX rate to USD from primary rows if not provided
+  // (Defined early because callbacks depend on it)
+  const effectiveFxRate = useMemo(() => {
+    if (fxRateToUsd) return fxRateToUsd;
+    // Try to derive from the first row with valid fxRateUsed
+    const rowWithFx = primaryRows.find(r => r.fxRateUsed && r.fxRateUsed !== 1);
+    if (rowWithFx && rowWithFx.fxRateUsed) {
+      return rowWithFx.fxRateUsed;
+    }
+    // If currency is USD or no FX rate found, use 1
+    if (currency === "USD") return 1;
+    return null; // No FX rate available
+  }, [fxRateToUsd, primaryRows, currency]);
+  
   // Load existing disputes when runId changes
   useEffect(() => {
     if (runId) {
@@ -330,19 +344,6 @@ export function PurchaseReconciliationPanel({
 
   const balance = balanceData?.balance;
   const hasBalance = !!balance;
-  
-  // Calculate FX rate to USD from primary rows if not provided
-  const effectiveFxRate = useMemo(() => {
-    if (fxRateToUsd) return fxRateToUsd;
-    // Try to derive from the first row with valid fxRateUsed
-    const rowWithFx = primaryRows.find(r => r.fxRateUsed && r.fxRateUsed !== 1);
-    if (rowWithFx && rowWithFx.fxRateUsed) {
-      return rowWithFx.fxRateUsed;
-    }
-    // If currency is USD or no FX rate found, use 1
-    if (currency === "USD") return 1;
-    return null; // No FX rate available
-  }, [fxRateToUsd, primaryRows, currency]);
 
   const calculations = useMemo(() => {
     const openingBalance = balance?.openingBalance ?? 0;
