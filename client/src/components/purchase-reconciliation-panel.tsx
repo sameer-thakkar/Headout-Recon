@@ -117,27 +117,61 @@ export function PurchaseReconciliationPanel({
 
     const netDifference = difference + inSPNotInHO - inHONotInSP;
     
-    // Breakup data for row 10: In SP not in HO
-    const row10Breakup = allRows
+    // Breakup data for row 10: In SP not in HO (grouped by reason)
+    const row10ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string }[]>();
+    allRows
       .filter(row => row.spNetInHo > row.hoNet)
-      .map(row => ({
-        bookingId: row.bookingId,
-        spNet: row.spNetInHo,
-        hoNet: row.hoNet,
-        difference: row.spNetInHo - row.hoNet,
-      }))
-      .sort((a, b) => b.difference - a.difference);
+      .forEach(row => {
+        const reason = row.reason || "Unknown";
+        if (!row10ByReason.has(reason)) {
+          row10ByReason.set(reason, []);
+        }
+        row10ByReason.get(reason)!.push({
+          bookingId: row.bookingId,
+          spNet: row.spNetInHo,
+          hoNet: row.hoNet,
+          difference: row.spNetInHo - row.hoNet,
+          reason,
+        });
+      });
     
-    // Breakup data for row 11: In HO not in SP
-    const row11Breakup = allRows
-      .filter(row => row.hoNet > row.spNetInHo)
-      .map(row => ({
-        bookingId: row.bookingId,
-        spNet: row.spNetInHo,
-        hoNet: row.hoNet,
-        difference: row.hoNet - row.spNetInHo,
+    // Convert to array and sort by total discrepancy
+    const row10Breakup = Array.from(row10ByReason.entries())
+      .map(([reason, bookings]) => ({
+        reason,
+        bookings: bookings.sort((a, b) => b.difference - a.difference),
+        totalDifference: bookings.reduce((sum, b) => sum + b.difference, 0),
+        count: bookings.length,
       }))
-      .sort((a, b) => b.difference - a.difference);
+      .sort((a, b) => b.totalDifference - a.totalDifference);
+    
+    // Breakup data for row 11: In HO not in SP (grouped by reason)
+    const row11ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string }[]>();
+    allRows
+      .filter(row => row.hoNet > row.spNetInHo)
+      .forEach(row => {
+        const reason = row.reason || "Unknown";
+        if (!row11ByReason.has(reason)) {
+          row11ByReason.set(reason, []);
+        }
+        row11ByReason.get(reason)!.push({
+          bookingId: row.bookingId,
+          spNet: row.spNetInHo,
+          hoNet: row.hoNet,
+          difference: row.hoNet - row.spNetInHo,
+          reason,
+        });
+      });
+    
+    // Convert to array and sort by total discrepancy
+    const row11Breakup = Array.from(row11ByReason.entries())
+      .map(([reason, bookings]) => ({
+        reason,
+        bookings: bookings.sort((a, b) => b.difference - a.difference),
+        totalDifference: bookings.reduce((sum, b) => sum + b.difference, 0),
+        count: bookings.length,
+      }))
+      .sort((a, b) => b.totalDifference - a.totalDifference);
 
     return {
       openingBalance,
@@ -387,52 +421,67 @@ export function PurchaseReconciliationPanel({
                     {hasBreakup && isExpanded && (
                       <TableRow className="bg-muted/30">
                         <TableCell colSpan={5} className="py-3 px-8">
-                          <div className="rounded-md border bg-background">
-                            <Table className="text-xs">
-                              <TableHeader>
-                                <TableRow className="h-7">
-                                  <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                                  <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                                  <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                                  <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
-                                  {effectiveFxRate && <TableHead className="py-1 text-xs text-right">Difference (USD)</TableHead>}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {breakupData.map((row, idx) => (
-                                  <TableRow key={`${item.id}-breakup-${idx}`} className="h-7">
-                                    <TableCell className="py-1 font-mono">{row.bookingId}</TableCell>
-                                    <TableCell className="py-1 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
-                                    <TableCell className="py-1 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
-                                    <TableCell className={`py-1 text-right font-mono ${row.difference > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
-                                      {formatNumber(row.difference)}
-                                    </TableCell>
+                          <div className="space-y-3">
+                            {breakupData.map((reasonGroup, groupIdx) => (
+                              <div key={`${item.id}-reason-${groupIdx}`} className="rounded-md border bg-background">
+                                <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-sm">{reasonGroup.reason}</span>
+                                    <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs">
+                                    <span className="text-muted-foreground">Total:</span>
+                                    <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
+                                      {formatNumber(reasonGroup.totalDifference)} {currency}
+                                    </span>
                                     {effectiveFxRate && (
-                                      <TableCell className={`py-1 text-right font-mono ${row.difference > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
-                                        {formatNumber(row.difference * effectiveFxRate)}
-                                      </TableCell>
+                                      <span className="font-mono text-muted-foreground">
+                                        ({formatNumber(reasonGroup.totalDifference * effectiveFxRate)} USD)
+                                      </span>
                                     )}
-                                  </TableRow>
-                                ))}
-                                <TableRow className="h-8 bg-muted/50 font-semibold">
-                                  <TableCell className="py-1">Total ({breakupData.length} items)</TableCell>
-                                  <TableCell className="py-1 text-right font-mono">
-                                    {formatNumber(breakupData.reduce((sum, r) => sum + r.spNet, 0))}
-                                  </TableCell>
-                                  <TableCell className="py-1 text-right font-mono">
-                                    {formatNumber(breakupData.reduce((sum, r) => sum + r.hoNet, 0))}
-                                  </TableCell>
-                                  <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                    {formatNumber(breakupData.reduce((sum, r) => sum + r.difference, 0))}
-                                  </TableCell>
-                                  {effectiveFxRate && (
-                                    <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                      {formatNumber(breakupData.reduce((sum, r) => sum + r.difference, 0) * effectiveFxRate)}
-                                    </TableCell>
-                                  )}
-                                </TableRow>
-                              </TableBody>
-                            </Table>
+                                  </div>
+                                </div>
+                                <Table className="text-xs">
+                                  <TableHeader>
+                                    <TableRow className="h-7">
+                                      <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                      <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                      <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                      <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
+                                      {effectiveFxRate && <TableHead className="py-1 text-xs text-right">Difference (USD)</TableHead>}
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {reasonGroup.bookings.map((booking, bookingIdx) => (
+                                      <TableRow key={`${item.id}-booking-${groupIdx}-${bookingIdx}`} className="h-7">
+                                        <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                          {formatNumber(booking.difference)}
+                                        </TableCell>
+                                        {effectiveFxRate && (
+                                          <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                            {formatNumber(booking.difference * effectiveFxRate)}
+                                          </TableCell>
+                                        )}
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            ))}
+                            <div className="flex items-center justify-end gap-3 pt-2 border-t text-sm">
+                              <span className="text-muted-foreground">Grand Total ({breakupData.reduce((sum, g) => sum + g.count, 0)} items):</span>
+                              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                                {formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0))} {currency}
+                              </span>
+                              {effectiveFxRate && (
+                                <span className="font-mono text-muted-foreground">
+                                  ({formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0) * effectiveFxRate)} USD)
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                       </TableRow>
