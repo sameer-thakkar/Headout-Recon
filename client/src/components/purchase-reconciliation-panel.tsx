@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle } from "lucide-react";
+import { useMemo, useState, Fragment } from "react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,21 @@ export function PurchaseReconciliationPanel({
   onClose,
   fxRateToUsd,
 }: PurchaseReconciliationPanelProps) {
+  // State for expanded rows
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  
+  const toggleRowExpand = (rowId: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(rowId)) {
+        next.delete(rowId);
+      } else {
+        next.add(rowId);
+      }
+      return next;
+    });
+  };
+  
   // Combine all rows for complete SP Invoice calculations (primary + secondary + unmapped)
   const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows, ...unmappedRows], [primaryRows, secondaryVendorRows, unmappedRows]);
   const { data: balanceData, isLoading: isLoadingBalance } = useQuery<{ balance: VendorBalance | null }>({
@@ -101,6 +116,28 @@ export function PurchaseReconciliationPanel({
       .reduce((sum, row) => sum + (row.hoNet - row.spNetInHo), 0);
 
     const netDifference = difference + inSPNotInHO - inHONotInSP;
+    
+    // Breakup data for row 10: In SP not in HO
+    const row10Breakup = allRows
+      .filter(row => row.spNetInHo > row.hoNet)
+      .map(row => ({
+        bookingId: row.bookingId,
+        spNet: row.spNetInHo,
+        hoNet: row.hoNet,
+        difference: row.spNetInHo - row.hoNet,
+      }))
+      .sort((a, b) => b.difference - a.difference);
+    
+    // Breakup data for row 11: In HO not in SP
+    const row11Breakup = allRows
+      .filter(row => row.hoNet > row.spNetInHo)
+      .map(row => ({
+        bookingId: row.bookingId,
+        spNet: row.spNetInHo,
+        hoNet: row.hoNet,
+        difference: row.hoNet - row.spNetInHo,
+      }))
+      .sort((a, b) => b.difference - a.difference);
 
     return {
       openingBalance,
@@ -115,6 +152,8 @@ export function PurchaseReconciliationPanel({
       inSPNotInHO,
       inHONotInSP,
       netDifference,
+      row10Breakup,
+      row11Breakup,
     };
   }, [allRows, primaryRows, balance]);
 
@@ -299,39 +338,106 @@ export function PurchaseReconciliationPanel({
                 const usdValue = effectiveFxRate ? item.value * effectiveFxRate : null;
                 const isUsdNegative = usdValue !== null && usdValue < 0;
                 const isUsdPositive = usdValue !== null && usdValue > 0;
+                const breakupData = item.id === 10 ? calculations.row10Breakup : item.id === 11 ? calculations.row11Breakup : [];
+                const hasBreakup = (item.id === 10 || item.id === 11) && breakupData.length > 0;
+                const isExpanded = expandedRows.has(item.id);
                 
                 return (
-                  <TableRow 
-                    key={item.id} 
-                    className={`h-10 ${item.isHighlight ? "bg-primary/5" : ""} ${item.isReco ? "bg-muted/50" : ""} ${item.isValidation ? (item.value === 0 ? "bg-green-50 dark:bg-green-950/30 border-t-2 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-t-2 border-red-200 dark:border-red-800") : ""}`}
-                    data-testid={`purchase-reco-row-${item.id}`}
-                  >
-                    <TableCell className="py-2 font-mono text-xs text-muted-foreground">
-                      {item.id}
-                    </TableCell>
-                    <TableCell className="py-2">
-                      <div className="flex items-center gap-2">
-                        <IconComponent className={`h-4 w-4 ${item.isFormula ? "text-blue-500" : "text-muted-foreground"}`} />
-                        <span className={`${item.isHighlight ? "font-semibold" : ""}`}>
-                          {item.label}
-                        </span>
-                        {item.isFromDb && !hasBalance && (
-                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                            Not set
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
-                      {formatNumber(item.value)}
-                    </TableCell>
-                    <TableCell className={`py-2 text-right font-mono ${isUsdNegative ? "text-red-600 dark:text-red-400" : isUsdPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
-                      {usdValue !== null ? formatNumber(usdValue) : "-"}
-                    </TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">
-                      {item.description}
-                    </TableCell>
-                  </TableRow>
+                  <Fragment key={item.id}>
+                    <TableRow 
+                      className={`h-10 ${item.isHighlight ? "bg-primary/5" : ""} ${item.isReco ? "bg-muted/50" : ""} ${item.isValidation ? (item.value === 0 ? "bg-green-50 dark:bg-green-950/30 border-t-2 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-t-2 border-red-200 dark:border-red-800") : ""} ${hasBreakup ? "cursor-pointer hover-elevate" : ""}`}
+                      data-testid={`purchase-reco-row-${item.id}`}
+                      onClick={hasBreakup ? () => toggleRowExpand(item.id) : undefined}
+                    >
+                      <TableCell className="py-2 font-mono text-xs text-muted-foreground">
+                        {item.id}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <div className="flex items-center gap-2">
+                          {hasBreakup && (
+                            isExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          <IconComponent className={`h-4 w-4 ${item.isFormula ? "text-blue-500" : "text-muted-foreground"}`} />
+                          <span className={`${item.isHighlight ? "font-semibold" : ""}`}>
+                            {item.label}
+                          </span>
+                          {item.isFromDb && !hasBalance && (
+                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                              Not set
+                            </Badge>
+                          )}
+                          {hasBreakup && (
+                            <Badge variant="secondary" className="text-xs">
+                              {breakupData.length} items
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
+                        {formatNumber(item.value)}
+                      </TableCell>
+                      <TableCell className={`py-2 text-right font-mono ${isUsdNegative ? "text-red-600 dark:text-red-400" : isUsdPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
+                        {usdValue !== null ? formatNumber(usdValue) : "-"}
+                      </TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">
+                        {item.description}
+                        {hasBreakup && <span className="ml-1 text-primary">(click to expand)</span>}
+                      </TableCell>
+                    </TableRow>
+                    {hasBreakup && isExpanded && (
+                      <TableRow className="bg-muted/30">
+                        <TableCell colSpan={5} className="py-3 px-8">
+                          <div className="rounded-md border bg-background">
+                            <Table className="text-xs">
+                              <TableHeader>
+                                <TableRow className="h-7">
+                                  <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                  <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                  <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                  <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
+                                  {effectiveFxRate && <TableHead className="py-1 text-xs text-right">Difference (USD)</TableHead>}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {breakupData.map((row, idx) => (
+                                  <TableRow key={`${item.id}-breakup-${idx}`} className="h-7">
+                                    <TableCell className="py-1 font-mono">{row.bookingId}</TableCell>
+                                    <TableCell className="py-1 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
+                                    <TableCell className="py-1 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
+                                    <TableCell className={`py-1 text-right font-mono ${row.difference > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                                      {formatNumber(row.difference)}
+                                    </TableCell>
+                                    {effectiveFxRate && (
+                                      <TableCell className={`py-1 text-right font-mono ${row.difference > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                                        {formatNumber(row.difference * effectiveFxRate)}
+                                      </TableCell>
+                                    )}
+                                  </TableRow>
+                                ))}
+                                <TableRow className="h-8 bg-muted/50 font-semibold">
+                                  <TableCell className="py-1">Total ({breakupData.length} items)</TableCell>
+                                  <TableCell className="py-1 text-right font-mono">
+                                    {formatNumber(breakupData.reduce((sum, r) => sum + r.spNet, 0))}
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right font-mono">
+                                    {formatNumber(breakupData.reduce((sum, r) => sum + r.hoNet, 0))}
+                                  </TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                    {formatNumber(breakupData.reduce((sum, r) => sum + r.difference, 0))}
+                                  </TableCell>
+                                  {effectiveFxRate && (
+                                    <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                      {formatNumber(breakupData.reduce((sum, r) => sum + r.difference, 0) * effectiveFxRate)}
+                                    </TableCell>
+                                  )}
+                                </TableRow>
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 );
               })}
             </TableBody>
