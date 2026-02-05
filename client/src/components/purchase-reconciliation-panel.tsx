@@ -1,5 +1,5 @@
-import { useMemo, useState, Fragment } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { useMemo, useState, Fragment, useCallback, useEffect } from "react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,28 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { PrimaryRow, VendorBalance } from "@shared/schema";
+
+interface BookingForDispute {
+  bookingId: string;
+  spNet: number;
+  hoNet: number;
+  difference: number;
+  reason: string;
+}
 
 interface PurchaseReconciliationPanelProps {
   primaryRows: PrimaryRow[];
@@ -24,6 +44,7 @@ interface PurchaseReconciliationPanelProps {
   beId: string;
   onClose: () => void;
   fxRateToUsd?: number; // FX rate to convert from local currency to USD
+  runId?: string | null; // Run ID for saving disputes and issues
 }
 
 function formatNumber(value: number): string {
@@ -42,11 +63,65 @@ export function PurchaseReconciliationPanel({
   beId,
   onClose,
   fxRateToUsd,
+  runId,
 }: PurchaseReconciliationPanelProps) {
+  const { toast } = useToast();
+  
   // State for expanded rows (line items 10 and 11)
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   // State for expanded reason groups within rows 10 and 11
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
+  
+  // Dispute tracking state
+  const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
+  const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
+  const [disputesLoaded, setDisputesLoaded] = useState(false);
+  
+  // Modal for raising dispute
+  const [disputeModalOpen, setDisputeModalOpen] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<BookingForDispute | null>(null);
+  const [disputeAmountInput, setDisputeAmountInput] = useState("");
+  const [isSavingDispute, setIsSavingDispute] = useState(false);
+  
+  // Modal for flagging issue
+  const [issueModalOpen, setIssueModalOpen] = useState(false);
+  const [issueBooking, setIssueBooking] = useState<BookingForDispute | null>(null);
+  const [isSavingIssue, setIsSavingIssue] = useState(false);
+  
+  // Load existing disputes when runId changes
+  useEffect(() => {
+    if (runId) {
+      // Reset state when runId changes
+      setActiveDisputes(new Set());
+      setDisputeAmounts(new Map());
+      
+      fetch(`/api/disputes/${runId}`)
+        .then(res => res.json())
+        .then(data => {
+          const disputes = data.disputes || [];
+          const newActiveDisputes = new Set<string>();
+          const newDisputeAmounts = new Map<string, number>();
+          for (const d of disputes) {
+            if (d.closureStatus === "open") {
+              newActiveDisputes.add(d.bookingId);
+              newDisputeAmounts.set(d.bookingId, d.disputeAmount);
+            }
+          }
+          setActiveDisputes(newActiveDisputes);
+          setDisputeAmounts(newDisputeAmounts);
+          setDisputesLoaded(true);
+        })
+        .catch(err => {
+          console.error("Failed to load existing disputes:", err);
+          setDisputesLoaded(true);
+        });
+    } else {
+      // No runId, clear state
+      setActiveDisputes(new Set());
+      setDisputeAmounts(new Map());
+      setDisputesLoaded(false);
+    }
+  }, [runId]); // Only depend on runId, reload when it changes
   
   const toggleRowExpand = (rowId: number) => {
     setExpandedRows(prev => {
@@ -71,6 +146,180 @@ export function PurchaseReconciliationPanel({
       return next;
     });
   };
+  
+  // Handler to open dispute modal for a booking
+  const openDisputeModal = useCallback((booking: BookingForDispute) => {
+    setSelectedBooking(booking);
+    // Pre-fill with discrepancy amount (absolute value)
+    setDisputeAmountInput(Math.abs(booking.difference).toFixed(2));
+    setDisputeModalOpen(true);
+  }, []);
+  
+  // Handler to save a dispute
+  const handleSaveDispute = useCallback(async () => {
+    if (!runId || !selectedBooking) return;
+    
+    const amount = parseFloat(disputeAmountInput);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid dispute amount greater than zero.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsSavingDispute(true);
+    try {
+      // Find the row in primary/secondary/unmapped to get ticket ID
+      const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
+      const bookingRow = allRows.find(r => r.bookingId === selectedBooking.bookingId);
+      
+      await apiRequest("POST", `/api/disputes/${runId}`, {
+        bookingId: selectedBooking.bookingId,
+        billingEntityId: beId,
+        billingEntityName: billingEntityName,
+        ticketId: bookingRow?.ticketId || "",
+        tid: bookingRow?.tid || "",
+        currency: currency,
+        disputeAmount: amount,
+        maxDisputeAmount: Math.abs(selectedBooking.difference),
+        reconciledNet: Math.abs(selectedBooking.hoNet),
+        status: "pending",
+        closureStatus: "open",
+      });
+      
+      // Update local state
+      setActiveDisputes(prev => {
+        const next = new Set(prev);
+        next.add(selectedBooking.bookingId);
+        return next;
+      });
+      setDisputeAmounts(prev => {
+        const next = new Map(prev);
+        next.set(selectedBooking.bookingId, amount);
+        return next;
+      });
+      
+      toast({
+        title: "Dispute Raised",
+        description: `Dispute for ${amount.toFixed(2)} ${currency} raised for booking ${selectedBooking.bookingId}.`,
+      });
+      
+      // Invalidate disputes query
+      queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      
+      setDisputeModalOpen(false);
+      setSelectedBooking(null);
+      setDisputeAmountInput("");
+    } catch (error) {
+      console.error("Failed to save dispute:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save dispute. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingDispute(false);
+    }
+  }, [runId, selectedBooking, disputeAmountInput, beId, billingEntityName, currency, primaryRows, secondaryVendorRows, unmappedRows, toast]);
+  
+  // Handler to open issue modal
+  const openIssueModal = useCallback((booking: BookingForDispute) => {
+    setIssueBooking(booking);
+    setIssueModalOpen(true);
+  }, []);
+  
+  // Handler to flag issue
+  const handleFlagIssue = useCallback(async () => {
+    if (!runId || !issueBooking) return;
+    
+    setIsSavingIssue(true);
+    try {
+      // Find the row in primary/secondary/unmapped to get TID and ticketId
+      const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
+      const bookingRow = allRows.find(r => r.bookingId === issueBooking.bookingId);
+      
+      // Determine DRI team based on reason
+      let driTeam = "Finance";
+      if (issueBooking.reason.includes("Cancelled")) {
+        driTeam = "Operations";
+      } else if (issueBooking.reason.includes("NPD") || issueBooking.reason.includes("MTB")) {
+        driTeam = "Supplier Management";
+      }
+      
+      const fxRate = effectiveFxRate || 1;
+      
+      await apiRequest("POST", `/api/issues`, {
+        runId,
+        createdDate: new Date().toISOString(),
+        billingEntityId: beId,
+        billingEntityName: billingEntityName,
+        currency: currency,
+        discrepancyLocal: issueBooking.difference,
+        discrepancyUsd: issueBooking.difference * fxRate,
+        reason: issueBooking.reason,
+        driTeam: driTeam,
+        bookingIds: [issueBooking.bookingId],
+        ticketId: bookingRow?.ticketId || "",
+        tid: bookingRow?.tid || "",
+      });
+      
+      toast({
+        title: "Issue Flagged",
+        description: `Issue created for booking ${issueBooking.bookingId}. Check Issue Tracker for details.`,
+      });
+      
+      // Invalidate issues query
+      queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+      
+      setIssueModalOpen(false);
+      setIssueBooking(null);
+    } catch (error) {
+      console.error("Failed to flag issue:", error);
+      toast({
+        title: "Error",
+        description: "Failed to flag issue. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingIssue(false);
+    }
+  }, [runId, issueBooking, beId, billingEntityName, currency, effectiveFxRate, primaryRows, secondaryVendorRows, unmappedRows, toast]);
+  
+  // Remove dispute handler
+  const handleRemoveDispute = useCallback(async (bookingId: string) => {
+    if (!runId) return;
+    
+    try {
+      await apiRequest("DELETE", `/api/disputes/${runId}/${bookingId}`);
+      
+      setActiveDisputes(prev => {
+        const next = new Set(prev);
+        next.delete(bookingId);
+        return next;
+      });
+      setDisputeAmounts(prev => {
+        const next = new Map(prev);
+        next.delete(bookingId);
+        return next;
+      });
+      
+      toast({
+        title: "Dispute Removed",
+        description: `Dispute for booking ${bookingId} has been removed.`,
+      });
+      
+      queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    } catch (error) {
+      console.error("Failed to remove dispute:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove dispute. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [runId, toast]);
   
   // Combine all rows for complete SP Invoice calculations (primary + secondary + unmapped)
   const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows, ...unmappedRows], [primaryRows, secondaryVendorRows, unmappedRows]);
@@ -476,24 +725,89 @@ export function PurchaseReconciliationPanel({
                                           <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
                                           <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
                                           {effectiveFxRate && <TableHead className="py-1 text-xs text-right">Difference (USD)</TableHead>}
+                                          {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
-                                        {reasonGroup.bookings.map((booking, bookingIdx) => (
-                                          <TableRow key={`${item.id}-booking-${groupIdx}-${bookingIdx}`} className="h-7">
-                                            <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
-                                            <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
-                                            <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
-                                            <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                              {formatNumber(booking.difference)}
-                                            </TableCell>
-                                            {effectiveFxRate && (
-                                              <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                                {formatNumber(booking.difference * effectiveFxRate)}
+                                        {reasonGroup.bookings.map((booking, bookingIdx) => {
+                                          const hasDispute = activeDisputes.has(booking.bookingId);
+                                          const disputeAmount = disputeAmounts.get(booking.bookingId);
+                                          return (
+                                            <TableRow key={`${item.id}-booking-${groupIdx}-${bookingIdx}`} className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
+                                              <TableCell className="py-1 font-mono">
+                                                <div className="flex items-center gap-1">
+                                                  {booking.bookingId}
+                                                  {hasDispute && (
+                                                    <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">
+                                                      Dispute: {disputeAmount?.toFixed(2)}
+                                                    </Badge>
+                                                  )}
+                                                </div>
                                               </TableCell>
-                                            )}
-                                          </TableRow>
-                                        ))}
+                                              <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
+                                              <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
+                                              <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                                {formatNumber(booking.difference)}
+                                              </TableCell>
+                                              {effectiveFxRate && (
+                                                <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                                  {formatNumber(booking.difference * effectiveFxRate)}
+                                                </TableCell>
+                                              )}
+                                              {runId && (
+                                                <TableCell className="py-1">
+                                                  <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                    {hasDispute ? (
+                                                      <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-xs text-red-600"
+                                                        onClick={() => handleRemoveDispute(booking.bookingId)}
+                                                        data-testid={`button-remove-dispute-${booking.bookingId}`}
+                                                      >
+                                                        <X className="h-3 w-3 mr-1" />
+                                                        Remove
+                                                      </Button>
+                                                    ) : (
+                                                      <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-xs text-amber-600"
+                                                        onClick={() => openDisputeModal({
+                                                          bookingId: booking.bookingId,
+                                                          spNet: booking.spNet,
+                                                          hoNet: booking.hoNet,
+                                                          difference: booking.difference,
+                                                          reason: reasonGroup.reason,
+                                                        })}
+                                                        data-testid={`button-raise-dispute-${booking.bookingId}`}
+                                                      >
+                                                        <FileWarning className="h-3 w-3 mr-1" />
+                                                        Dispute
+                                                      </Button>
+                                                    )}
+                                                    <Button
+                                                      size="sm"
+                                                      variant="ghost"
+                                                      className="text-xs text-blue-600"
+                                                      onClick={() => openIssueModal({
+                                                        bookingId: booking.bookingId,
+                                                        spNet: booking.spNet,
+                                                        hoNet: booking.hoNet,
+                                                        difference: booking.difference,
+                                                        reason: reasonGroup.reason,
+                                                      })}
+                                                      data-testid={`button-flag-issue-${booking.bookingId}`}
+                                                    >
+                                                      <AlertTriangle className="h-3 w-3 mr-1" />
+                                                      Issue
+                                                    </Button>
+                                                  </div>
+                                                </TableCell>
+                                              )}
+                                            </TableRow>
+                                          );
+                                        })}
                                       </TableBody>
                                     </Table>
                                   )}
@@ -557,6 +871,167 @@ export function PurchaseReconciliationPanel({
           Close
         </Button>
       </div>
+      
+      {/* Raise Dispute Modal */}
+      <Dialog open={disputeModalOpen} onOpenChange={setDisputeModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileWarning className="h-5 w-5 text-amber-600" />
+              Raise Dispute
+            </DialogTitle>
+            <DialogDescription>
+              Create a dispute for this booking that will appear in the Dispute Tracker.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBooking && (
+            <div className="space-y-4">
+              <div className="rounded-md border p-3 bg-muted/50 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Booking ID:</span>
+                  <span className="font-mono font-medium">{selectedBooking.bookingId}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Reason:</span>
+                  <Badge variant="outline" className="text-xs">{selectedBooking.reason}</Badge>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">SP Net:</span>
+                  <span className="font-mono">{formatNumber(selectedBooking.spNet)} {currency}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">HO Net:</span>
+                  <span className="font-mono">{formatNumber(selectedBooking.hoNet)} {currency}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Difference:</span>
+                  <span className="font-mono text-amber-600 font-semibold">{formatNumber(selectedBooking.difference)} {currency}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Dispute Amount ({currency})</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={disputeAmountInput}
+                  onChange={(e) => setDisputeAmountInput(e.target.value)}
+                  placeholder="Enter dispute amount"
+                  data-testid="input-dispute-amount"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Max dispute: {formatNumber(Math.abs(selectedBooking.difference))} {currency}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDisputeModalOpen(false);
+                setSelectedBooking(null);
+                setDisputeAmountInput("");
+              }}
+              data-testid="button-cancel-dispute"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveDispute}
+              disabled={isSavingDispute}
+              data-testid="button-submit-dispute"
+            >
+              {isSavingDispute ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Raise Dispute
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Flag Issue Modal */}
+      <Dialog open={issueModalOpen} onOpenChange={setIssueModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-blue-600" />
+              Flag Issue
+            </DialogTitle>
+            <DialogDescription>
+              Create an issue for this booking that will appear in the Issue Tracker.
+            </DialogDescription>
+          </DialogHeader>
+          {issueBooking && (
+            <div className="space-y-4">
+              <div className="rounded-md border p-3 bg-muted/50 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Booking ID:</span>
+                  <span className="font-mono font-medium">{issueBooking.bookingId}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Reason:</span>
+                  <Badge variant="outline" className="text-xs">{issueBooking.reason}</Badge>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Discrepancy ({currency}):</span>
+                  <span className="font-mono text-amber-600 font-semibold">{formatNumber(issueBooking.difference)}</span>
+                </div>
+                {effectiveFxRate && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Discrepancy (USD):</span>
+                    <span className="font-mono text-muted-foreground">{formatNumber(issueBooking.difference * effectiveFxRate)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Billing Entity:</span>
+                  <span className="font-medium">{billingEntityName}</span>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                This issue will be assigned to the appropriate DRI team based on the reason classification.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIssueModalOpen(false);
+                setIssueBooking(null);
+              }}
+              data-testid="button-cancel-issue"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleFlagIssue}
+              disabled={isSavingIssue}
+              data-testid="button-submit-issue"
+            >
+              {isSavingIssue ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Flag Issue
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

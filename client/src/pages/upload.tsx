@@ -1014,6 +1014,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     billingEntityName={spDetails?.billingEntityName || ""}
                     beId={spDetails?.beId || ""}
                     onClose={() => setIsComputeOpen(false)}
+                    runId={currentRunId}
                   />
                 ) : (
                   <AmountPayablePanel
