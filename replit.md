@@ -171,7 +171,8 @@ shared/              # Shared code between client and server
   11. In HO data not in SP = Sum where HO Net > SP Net (collapsible reason groups)
   12. Net Difference = 9 + 10 - 11 (validation row, should equal 0)
 - **Component**: `client/src/components/purchase-reconciliation-panel.tsx`
-- **UI**: Read-only table with line item numbers, calculated amounts, and notes
+- **UI**: Read-only table with line item numbers, calculated amounts in LC and USD, and notes
+- **USD Column**: All 12 line items display USD equivalent using FX rate from `fx.usdToCcy`. Rate computed as `1 / usdToCcy[currency]`. Sub-headers of rows 10 & 11 show only LC values, not USD.
 - **Validation**: Line 12 serves as cross-check - if balanced, shows green; if unbalanced, shows red
 - **Collapsible Reason Groups (Rows 10 & 11)**:
   - Reason sub-headers in rows 10 and 11 are collapsible with chevron indicators
