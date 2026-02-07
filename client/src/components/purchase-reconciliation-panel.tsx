@@ -895,8 +895,9 @@ export function PurchaseReconciliationPanel({
                                                       <Button
                                                         size="sm"
                                                         variant="ghost"
-                                                        className="text-[10px] text-amber-600"
-                                                        onClick={() => handleTidBulkDispute(tidBookings, reasonGroup.reason)}
+                                                        className="text-[10px] text-amber-600 opacity-50 cursor-not-allowed"
+                                                        disabled
+                                                        title="Dispute functionality coming soon"
                                                         data-testid={`button-tid-bulk-dispute-${tid}`}
                                                       >
                                                         <FileWarning className="h-3 w-3 mr-0.5" />
@@ -970,35 +971,17 @@ export function PurchaseReconciliationPanel({
                                                           {runId && (
                                                             <TableCell className="py-1">
                                                               <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                                {hasDispute ? (
-                                                                  <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="text-xs text-red-600"
-                                                                    onClick={() => handleRemoveDispute(booking.bookingId)}
-                                                                    data-testid={`button-remove-dispute-${booking.bookingId}`}
-                                                                  >
-                                                                    <X className="h-3 w-3 mr-1" />
-                                                                    Remove
-                                                                  </Button>
-                                                                ) : (
-                                                                  <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="text-xs text-amber-600"
-                                                                    onClick={() => openDisputeModal({
-                                                                      bookingId: booking.bookingId,
-                                                                      spNet: booking.spNet,
-                                                                      hoNet: booking.hoNet,
-                                                                      difference: booking.difference,
-                                                                      reason: reasonGroup.reason,
-                                                                    })}
-                                                                    data-testid={`button-raise-dispute-${booking.bookingId}`}
-                                                                  >
-                                                                    <FileWarning className="h-3 w-3 mr-1" />
-                                                                    Dispute
-                                                                  </Button>
-                                                                )}
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="ghost"
+                                                                  className="text-xs text-amber-600 opacity-50 cursor-not-allowed"
+                                                                  disabled
+                                                                  title="Dispute functionality coming soon"
+                                                                  data-testid={`button-raise-dispute-${booking.bookingId}`}
+                                                                >
+                                                                  <FileWarning className="h-3 w-3 mr-1" />
+                                                                  Dispute
+                                                                </Button>
                                                                 <Button
                                                                   size="sm"
                                                                   variant="ghost"
