@@ -63,6 +63,7 @@ function AppContent() {
     primaryRows: any[];
     secondaryVendorRows: any[];
     unmappedRows: any[];
+    fx?: { usdToCcy: Record<string, number>; refreshedAt: string };
   } | null>(null);
 
   // Persist currentRunId to localStorage whenever it changes
@@ -229,6 +230,7 @@ function AppContent() {
         primaryRows: runData.primaryRows || [],
         secondaryVendorRows: runData.secondaryVendorRows || [],
         unmappedRows: runData.unmappedRows || [],
+        fx: runData.fx || undefined,
       });
       
       setStatus("done");
