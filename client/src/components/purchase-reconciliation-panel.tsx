@@ -88,19 +88,11 @@ export function PurchaseReconciliationPanel({
   const [issueBooking, setIssueBooking] = useState<BookingForDispute | null>(null);
   const [isSavingIssue, setIsSavingIssue] = useState(false);
   
-  // Calculate FX rate to USD from primary rows if not provided
-  // (Defined early because callbacks depend on it)
   const effectiveFxRate = useMemo(() => {
     if (fxRateToUsd) return fxRateToUsd;
-    // Try to derive from the first row with valid fxRateUsed
-    const rowWithFx = primaryRows.find(r => r.fxRateUsed && r.fxRateUsed !== 1);
-    if (rowWithFx && rowWithFx.fxRateUsed) {
-      return rowWithFx.fxRateUsed;
-    }
-    // If currency is USD or no FX rate found, use 1
     if (currency === "USD") return 1;
-    return null; // No FX rate available
-  }, [fxRateToUsd, primaryRows, currency]);
+    return null;
+  }, [fxRateToUsd, currency]);
   
   // Load existing disputes when runId changes
   useEffect(() => {
@@ -710,11 +702,6 @@ export function PurchaseReconciliationPanel({
                                       <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
                                         {formatNumber(reasonGroup.totalDifference)} {currency}
                                       </span>
-                                      {effectiveFxRate && (
-                                        <span className="font-mono text-muted-foreground">
-                                          ({formatNumber(reasonGroup.totalDifference * effectiveFxRate)} USD)
-                                        </span>
-                                      )}
                                     </div>
                                   </div>
                                   {isReasonExpanded && (
@@ -725,7 +712,6 @@ export function PurchaseReconciliationPanel({
                                           <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
                                           <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
                                           <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
-                                          {effectiveFxRate && <TableHead className="py-1 text-xs text-right">Difference (USD)</TableHead>}
                                           {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
                                         </TableRow>
                                       </TableHeader>
@@ -750,11 +736,6 @@ export function PurchaseReconciliationPanel({
                                               <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
                                                 {formatNumber(booking.difference)}
                                               </TableCell>
-                                              {effectiveFxRate && (
-                                                <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                                  {formatNumber(booking.difference * effectiveFxRate)}
-                                                </TableCell>
-                                              )}
                                               {runId && (
                                                 <TableCell className="py-1">
                                                   <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>

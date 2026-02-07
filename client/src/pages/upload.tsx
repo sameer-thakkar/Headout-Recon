@@ -30,7 +30,7 @@ import * as XLSX from "xlsx";
 import { Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
 import { AmountPayablePanel } from "@/components/amount-payable-panel";
 import { PurchaseReconciliationPanel } from "@/components/purchase-reconciliation-panel";
-import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
+import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow, FxData } from "@shared/schema";
 
 interface UploadPageProps {
   onFilesUploaded: (files: File[], onProgress: (progress: number, stage: string) => void) => Promise<UploadedFile[]>;
@@ -44,6 +44,7 @@ interface UploadPageProps {
     primaryRows: PrimaryRow[];
     secondaryVendorRows: PrimaryRow[];
     unmappedRows: PrimaryRow[];
+    fx?: FxData;
   } | null;
 }
 
@@ -136,6 +137,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     primaryRows: PrimaryRow[];
     secondaryVendorRows: PrimaryRow[];
     unmappedRows: PrimaryRow[];
+    fx?: FxData;
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
     enabled: !!currentRunId && !initialRunResult, // Only query if no initial result provided
@@ -161,6 +163,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const primaryRows = runResult?.primaryRows || [];
   const secondaryVendorRows = runResult?.secondaryVendorRows || [];
   const unmappedRows = runResult?.unmappedRows || [];
+  const fxData = runResult?.fx || null;
 
   const filteredDiscrepancyRows = useMemo(() => {
     if (!discrepancyData?.analysisRows || !selectedReason) return [];
@@ -1014,6 +1017,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     billingEntityName={spDetails?.billingEntityName || ""}
                     beId={spDetails?.beId || ""}
                     onClose={() => setIsComputeOpen(false)}
+                    fxRateToUsd={fxData?.usdToCcy ? (1 / (fxData.usdToCcy[selectedPayableCurrency || actualCurrencies[0] || "USD"] || 1)) : undefined}
                     runId={currentRunId}
                   />
                 ) : (
