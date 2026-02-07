@@ -92,6 +92,9 @@ export function PurchaseReconciliationPanel({
   const [issueBooking, setIssueBooking] = useState<BookingForDispute | null>(null);
   const [isSavingIssue, setIsSavingIssue] = useState(false);
   
+  // Track bookings that have had issues logged (to suppress warning)
+  const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
+  
   const effectiveFxRate = useMemo(() => {
     if (fxRateToUsd) return fxRateToUsd;
     if (currency === "USD") return 1;
@@ -101,9 +104,9 @@ export function PurchaseReconciliationPanel({
   // Load existing disputes when runId changes
   useEffect(() => {
     if (runId) {
-      // Reset state when runId changes
       setActiveDisputes(new Set());
       setDisputeAmounts(new Map());
+      setLoggedIssues(new Set());
       
       fetch(`/api/disputes/${runId}`)
         .then(res => res.json())
@@ -126,9 +129,9 @@ export function PurchaseReconciliationPanel({
           setDisputesLoaded(true);
         });
     } else {
-      // No runId, clear state
       setActiveDisputes(new Set());
       setDisputeAmounts(new Map());
+      setLoggedIssues(new Set());
       setDisputesLoaded(false);
     }
   }, [runId]); // Only depend on runId, reload when it changes
@@ -249,6 +252,7 @@ export function PurchaseReconciliationPanel({
         ticketId: tidBookings[0]?.ticketId || "",
         tid: tid,
       });
+      setLoggedIssues(prev => { const next = new Set(prev); tidBookings.forEach(b => next.add(b.bookingId)); return next; });
       toast({ title: "Issue Flagged", description: `Issue created for TID ${tid} with ${tidBookings.length} bookings.` });
       queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
     } catch (err) {
@@ -375,12 +379,13 @@ export function PurchaseReconciliationPanel({
         tid: bookingRow?.tid || "",
       });
       
+      setLoggedIssues(prev => { const next = new Set(prev); next.add(issueBooking.bookingId); return next; });
+      
       toast({
         title: "Issue Flagged",
         description: `Issue created for booking ${issueBooking.bookingId}. Check Issue Tracker for details.`,
       });
       
-      // Invalidate issues query
       queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
       
       setIssueModalOpen(false);
@@ -832,7 +837,7 @@ export function PurchaseReconciliationPanel({
                                         const tidTotal = tidBookings.reduce((s, b) => s + b.difference, 0);
                                         const undisputedWarnings = tidBookings.filter(b => {
                                           const fnp = getFinalNetPrice(b.bookingId, b.spNet);
-                                          return Math.abs(fnp - b.spNet) > 0.01;
+                                          return Math.abs(fnp - b.spNet) > 0.01 && !loggedIssues.has(b.bookingId);
                                         });
                                         return (
                                           <div key={tidKey} className="rounded-md border bg-background overflow-hidden">
@@ -927,7 +932,7 @@ export function PurchaseReconciliationPanel({
                                                       const disputeAmount = disputeAmounts.get(booking.bookingId);
                                                       const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                                                       const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
-                                                      const needsDisputeWarning = fnpDiffersFromSp;
+                                                      const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
                                                       return (
                                                         <TableRow key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`} className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
                                                           <TableCell className="py-1 font-mono">
