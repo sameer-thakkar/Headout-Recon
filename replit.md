@@ -181,18 +181,17 @@ shared/              # Shared code between client and server
 - **TID-Level Grouping (Rows 10 & 11)**:
   - Within each reason group, bookings are further grouped by TID
   - Each TID group is collapsible with its own header showing count and total
-  - TID headers show warning badge when bookings have Final Net Price != HO Net without disputes logged
+  - TID headers show warning badge when bookings have Final Net Price != SP Net
   - State tracked via `expandedTids` Set using format `${rowId}-${reason}-${tid}`
 - **Final Net Price Column**:
   - Added after Difference column in booking detail tables
   - Defaults to SP Net value, editable per booking via input field
-  - Warning indicator (amber triangle) shown when Final Net Price differs from HO Net and no dispute is logged
-  - Warning text: "Difference to be logged as dispute"
+  - Warning indicator (amber triangle) shown when Final Net Price differs from SP Net
+  - Warning text: "Difference to be logged in into issue tracker"
   - State tracked via `finalNetPrices` Map (bookingId → value)
 - **TID-Level Bulk Update**:
-  - Each TID group header has a bulk Final Net Price input + "Apply All" button
-  - Applies the same Final Net Price to all bookings in that TID group
-  - State tracked via `tidBulkInputs` Map (tidKey → input string)
+  - Each TID group header has "Use SP Net" and "Use HO Net" buttons
+  - Applies the chosen value (SP Net or HO Net) as Final Net Price to all bookings in that TID group
 - **TID-Level Dispute & Issue Actions**:
   - "Dispute All" button per TID: raises disputes for all undisputed bookings in the TID
   - "Issue All" button per TID: flags a single issue for all bookings in the TID

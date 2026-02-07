@@ -75,8 +75,6 @@ export function PurchaseReconciliationPanel({
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
   // Final Net Price state: bookingId → final net price (defaults to SP Net)
   const [finalNetPrices, setFinalNetPrices] = useState<Map<string, number>>(new Map());
-  // TID-level bulk update input
-  const [tidBulkInputs, setTidBulkInputs] = useState<Map<string, string>>(new Map());
   
   // Dispute tracking state
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
@@ -183,23 +181,19 @@ export function PurchaseReconciliationPanel({
     });
   }, []);
 
-  const applyBulkFinalNetPrice = useCallback((tidKey: string, bookings: { bookingId: string }[]) => {
-    const inputVal = tidBulkInputs.get(tidKey);
-    if (!inputVal) return;
-    const value = parseFloat(inputVal);
-    if (isNaN(value)) return;
+  const applyBulkFinalNetPrice = useCallback((source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     setFinalNetPrices(prev => {
       const next = new Map(prev);
       for (const b of bookings) {
-        next.set(b.bookingId, value);
+        next.set(b.bookingId, source === "spNet" ? b.spNet : b.hoNet);
       }
       return next;
     });
     toast({
       title: "Bulk Update Applied",
-      description: `Final Net Price set to ${formatNumber(value)} for ${bookings.length} bookings.`,
+      description: `Final Net Price set to ${source === "spNet" ? "SP Net" : "HO Net"} for ${bookings.length} bookings.`,
     });
-  }, [tidBulkInputs, toast]);
+  }, [toast]);
 
   const handleTidBulkDispute = useCallback(async (tidBookings: { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[], reason: string) => {
     if (!runId) return;
@@ -838,7 +832,7 @@ export function PurchaseReconciliationPanel({
                                         const tidTotal = tidBookings.reduce((s, b) => s + b.difference, 0);
                                         const undisputedWarnings = tidBookings.filter(b => {
                                           const fnp = getFinalNetPrice(b.bookingId, b.spNet);
-                                          return Math.abs(fnp - b.hoNet) > 0.01 && !activeDisputes.has(b.bookingId);
+                                          return Math.abs(fnp - b.spNet) > 0.01;
                                         });
                                         return (
                                           <div key={tidKey} className="rounded-md border bg-background overflow-hidden">
@@ -858,7 +852,7 @@ export function PurchaseReconciliationPanel({
                                                 {undisputedWarnings.length > 0 && (
                                                   <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
                                                     <AlertTriangle className="h-3 w-3 mr-0.5" />
-                                                    {undisputedWarnings.length} to dispute
+                                                    {undisputedWarnings.length} to log
                                                   </Badge>
                                                 )}
                                               </div>
@@ -871,24 +865,24 @@ export function PurchaseReconciliationPanel({
                                             {isTidExpanded && (
                                               <div>
                                                 <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10" onClick={(e) => e.stopPropagation()}>
-                                                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Bulk Final Net Price:</span>
-                                                  <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    className="h-7 text-xs w-32 font-mono"
-                                                    placeholder="Amount"
-                                                    value={tidBulkInputs.get(tidKey) || ""}
-                                                    onChange={(e) => setTidBulkInputs(prev => { const next = new Map(prev); next.set(tidKey, e.target.value); return next; })}
-                                                    data-testid={`input-bulk-fnp-${tid}`}
-                                                  />
+                                                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Update Final Net Price:</span>
                                                   <Button
                                                     size="sm"
                                                     variant="outline"
                                                     className="text-[10px]"
-                                                    onClick={() => applyBulkFinalNetPrice(tidKey, tidBookings)}
-                                                    data-testid={`button-apply-bulk-fnp-${tid}`}
+                                                    onClick={() => applyBulkFinalNetPrice("spNet", tidBookings)}
+                                                    data-testid={`button-bulk-fnp-spnet-${tid}`}
                                                   >
-                                                    Apply All
+                                                    Use SP Net
+                                                  </Button>
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="text-[10px]"
+                                                    onClick={() => applyBulkFinalNetPrice("hoNet", tidBookings)}
+                                                    data-testid={`button-bulk-fnp-honet-${tid}`}
+                                                  >
+                                                    Use HO Net
                                                   </Button>
                                                   <div className="flex-1" />
                                                   {runId && (
@@ -932,8 +926,8 @@ export function PurchaseReconciliationPanel({
                                                       const hasDispute = activeDisputes.has(booking.bookingId);
                                                       const disputeAmount = disputeAmounts.get(booking.bookingId);
                                                       const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
-                                                      const fnpDiffersFromHo = Math.abs(fnp - booking.hoNet) > 0.01;
-                                                      const needsDisputeWarning = fnpDiffersFromHo && !hasDispute;
+                                                      const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
+                                                      const needsDisputeWarning = fnpDiffersFromSp;
                                                       return (
                                                         <TableRow key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`} className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
                                                           <TableCell className="py-1 font-mono">
@@ -962,7 +956,7 @@ export function PurchaseReconciliationPanel({
                                                                 data-testid={`input-fnp-${booking.bookingId}`}
                                                               />
                                                               {needsDisputeWarning && (
-                                                                <div className="flex items-center gap-0.5 text-amber-600" title="Difference to be logged as dispute">
+                                                                <div className="flex items-center gap-0.5 text-amber-600" title="Difference to be logged in into issue tracker">
                                                                   <AlertTriangle className="h-3.5 w-3.5" />
                                                                 </div>
                                                               )}
