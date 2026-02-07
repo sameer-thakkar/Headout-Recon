@@ -71,6 +71,12 @@ export function PurchaseReconciliationPanel({
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   // State for expanded reason groups within rows 10 and 11
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
+  // State for expanded TID groups within reason groups
+  const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
+  // Final Net Price state: bookingId → final net price (defaults to SP Net)
+  const [finalNetPrices, setFinalNetPrices] = useState<Map<string, number>>(new Map());
+  // TID-level bulk update input
+  const [tidBulkInputs, setTidBulkInputs] = useState<Map<string, string>>(new Map());
   
   // Dispute tracking state
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
@@ -153,6 +159,110 @@ export function PurchaseReconciliationPanel({
     });
   };
   
+  const toggleTidExpand = (key: string) => {
+    setExpandedTids(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const getFinalNetPrice = useCallback((bookingId: string, defaultSpNet: number) => {
+    return finalNetPrices.has(bookingId) ? finalNetPrices.get(bookingId)! : defaultSpNet;
+  }, [finalNetPrices]);
+
+  const updateFinalNetPrice = useCallback((bookingId: string, value: number) => {
+    setFinalNetPrices(prev => {
+      const next = new Map(prev);
+      next.set(bookingId, value);
+      return next;
+    });
+  }, []);
+
+  const applyBulkFinalNetPrice = useCallback((tidKey: string, bookings: { bookingId: string }[]) => {
+    const inputVal = tidBulkInputs.get(tidKey);
+    if (!inputVal) return;
+    const value = parseFloat(inputVal);
+    if (isNaN(value)) return;
+    setFinalNetPrices(prev => {
+      const next = new Map(prev);
+      for (const b of bookings) {
+        next.set(b.bookingId, value);
+      }
+      return next;
+    });
+    toast({
+      title: "Bulk Update Applied",
+      description: `Final Net Price set to ${formatNumber(value)} for ${bookings.length} bookings.`,
+    });
+  }, [tidBulkInputs, toast]);
+
+  const handleTidBulkDispute = useCallback(async (tidBookings: { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[], reason: string) => {
+    if (!runId) return;
+    let count = 0;
+    for (const booking of tidBookings) {
+      if (activeDisputes.has(booking.bookingId)) continue;
+      try {
+        await apiRequest("POST", `/api/disputes/${runId}`, {
+          bookingId: booking.bookingId,
+          billingEntityId: beId,
+          billingEntityName: billingEntityName,
+          ticketId: booking.ticketId,
+          tid: booking.tid,
+          currency: currency,
+          disputeAmount: Math.abs(booking.difference),
+          maxDisputeAmount: Math.abs(booking.difference),
+          reconciledNet: Math.abs(booking.hoNet),
+          status: "pending",
+          closureStatus: "open",
+        });
+        setActiveDisputes(prev => { const next = new Set(prev); next.add(booking.bookingId); return next; });
+        setDisputeAmounts(prev => { const next = new Map(prev); next.set(booking.bookingId, Math.abs(booking.difference)); return next; });
+        count++;
+      } catch (err) {
+        console.error(`Failed to raise dispute for ${booking.bookingId}:`, err);
+      }
+    }
+    if (count > 0) {
+      toast({ title: "Bulk Disputes Raised", description: `${count} disputes raised for TID group.` });
+      queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+    }
+  }, [runId, activeDisputes, beId, billingEntityName, currency, toast]);
+
+  const handleTidBulkIssue = useCallback(async (tidBookings: { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[], reason: string, tid: string) => {
+    if (!runId) return;
+    const fxRate = effectiveFxRate || 1;
+    let driTeam = "Finance";
+    if (reason.includes("Cancelled")) driTeam = "Operations";
+    else if (reason.includes("NPD") || reason.includes("MTB")) driTeam = "Supplier Management";
+    const totalDiscrepancy = tidBookings.reduce((sum, b) => sum + b.difference, 0);
+    try {
+      await apiRequest("POST", `/api/issues`, {
+        runId,
+        createdDate: new Date().toISOString(),
+        billingEntityId: beId,
+        billingEntityName: billingEntityName,
+        currency: currency,
+        discrepancyLocal: totalDiscrepancy,
+        discrepancyUsd: totalDiscrepancy * fxRate,
+        reason: reason,
+        driTeam: driTeam,
+        bookingIds: tidBookings.map(b => b.bookingId),
+        ticketId: tidBookings[0]?.ticketId || "",
+        tid: tid,
+      });
+      toast({ title: "Issue Flagged", description: `Issue created for TID ${tid} with ${tidBookings.length} bookings.` });
+      queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+    } catch (err) {
+      console.error("Failed to flag TID issue:", err);
+      toast({ title: "Error", description: "Failed to flag issue.", variant: "destructive" });
+    }
+  }, [runId, beId, billingEntityName, currency, effectiveFxRate, toast]);
+
   // Handler to open dispute modal for a booking
   const openDisputeModal = useCallback((booking: BookingForDispute) => {
     setSelectedBooking(booking);
@@ -374,7 +484,7 @@ export function PurchaseReconciliationPanel({
     const netDifference = difference + inSPNotInHO - inHONotInSP;
     
     // Breakup data for row 10: In SP not in HO (grouped by reason)
-    const row10ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string }[]>();
+    const row10ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[]>();
     allRows
       .filter(row => row.spNetInHo > row.hoNet)
       .forEach(row => {
@@ -388,6 +498,8 @@ export function PurchaseReconciliationPanel({
           hoNet: row.hoNet,
           difference: row.spNetInHo - row.hoNet,
           reason,
+          tid: row.tid || "Unknown",
+          ticketId: row.ticketId || "",
         });
       });
     
@@ -402,7 +514,7 @@ export function PurchaseReconciliationPanel({
       .sort((a, b) => b.totalDifference - a.totalDifference);
     
     // Breakup data for row 11: In HO not in SP (grouped by reason)
-    const row11ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string }[]>();
+    const row11ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[]>();
     allRows
       .filter(row => row.hoNet > row.spNetInHo)
       .forEach(row => {
@@ -416,6 +528,8 @@ export function PurchaseReconciliationPanel({
           hoNet: row.hoNet,
           difference: row.hoNet - row.spNetInHo,
           reason,
+          tid: row.tid || "Unknown",
+          ticketId: row.ticketId || "",
         });
       });
     
@@ -681,6 +795,17 @@ export function PurchaseReconciliationPanel({
                             {breakupData.map((reasonGroup, groupIdx) => {
                               const reasonKey = `${item.id}-${reasonGroup.reason}`;
                               const isReasonExpanded = expandedReasons.has(reasonKey);
+                              const tidGroups = new Map<string, typeof reasonGroup.bookings>();
+                              for (const b of reasonGroup.bookings) {
+                                const tid = b.tid || "Unknown";
+                                if (!tidGroups.has(tid)) tidGroups.set(tid, []);
+                                tidGroups.get(tid)!.push(b);
+                              }
+                              const tidEntries = Array.from(tidGroups.entries()).sort((a, b) => {
+                                const totalA = a[1].reduce((s, x) => s + x.difference, 0);
+                                const totalB = b[1].reduce((s, x) => s + x.difference, 0);
+                                return totalB - totalA;
+                              });
                               return (
                                 <div key={`${item.id}-reason-${groupIdx}`} className="rounded-md border bg-background overflow-hidden">
                                   <div 
@@ -696,6 +821,7 @@ export function PurchaseReconciliationPanel({
                                       )}
                                       <span className="font-medium text-sm">{reasonGroup.reason}</span>
                                       <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
+                                      <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
                                     </div>
                                     <div className="flex items-center gap-3 text-xs">
                                       <span className="text-muted-foreground">Total:</span>
@@ -705,93 +831,205 @@ export function PurchaseReconciliationPanel({
                                     </div>
                                   </div>
                                   {isReasonExpanded && (
-                                    <Table className="text-xs">
-                                      <TableHeader>
-                                        <TableRow className="h-7">
-                                          <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                                          <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                                          <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                                          <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
-                                          {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {reasonGroup.bookings.map((booking, bookingIdx) => {
-                                          const hasDispute = activeDisputes.has(booking.bookingId);
-                                          const disputeAmount = disputeAmounts.get(booking.bookingId);
-                                          return (
-                                            <TableRow key={`${item.id}-booking-${groupIdx}-${bookingIdx}`} className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
-                                              <TableCell className="py-1 font-mono">
-                                                <div className="flex items-center gap-1">
-                                                  {booking.bookingId}
-                                                  {hasDispute && (
-                                                    <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">
-                                                      Dispute: {disputeAmount?.toFixed(2)}
-                                                    </Badge>
+                                    <div className="space-y-1 p-2">
+                                      {tidEntries.map(([tid, tidBookings]) => {
+                                        const tidKey = `${item.id}-${reasonGroup.reason}-${tid}`;
+                                        const isTidExpanded = expandedTids.has(tidKey);
+                                        const tidTotal = tidBookings.reduce((s, b) => s + b.difference, 0);
+                                        const undisputedWarnings = tidBookings.filter(b => {
+                                          const fnp = getFinalNetPrice(b.bookingId, b.spNet);
+                                          return Math.abs(fnp - b.hoNet) > 0.01 && !activeDisputes.has(b.bookingId);
+                                        });
+                                        return (
+                                          <div key={tidKey} className="rounded-md border bg-background overflow-hidden">
+                                            <div
+                                              className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                              onClick={() => toggleTidExpand(tidKey)}
+                                              data-testid={`tid-header-${item.id}-${groupIdx}-${tid}`}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                {isTidExpanded ? (
+                                                  <ChevronDown className="h-3 w-3 text-primary" />
+                                                ) : (
+                                                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                                                )}
+                                                <span className="font-mono text-xs font-medium">TID: {tid}</span>
+                                                <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+                                                {undisputedWarnings.length > 0 && (
+                                                  <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                                                    <AlertTriangle className="h-3 w-3 mr-0.5" />
+                                                    {undisputedWarnings.length} to dispute
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-2 text-xs">
+                                                <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
+                                                  {formatNumber(tidTotal)} {currency}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            {isTidExpanded && (
+                                              <div>
+                                                <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10" onClick={(e) => e.stopPropagation()}>
+                                                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Bulk Final Net Price:</span>
+                                                  <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="h-7 text-xs w-32 font-mono"
+                                                    placeholder="Amount"
+                                                    value={tidBulkInputs.get(tidKey) || ""}
+                                                    onChange={(e) => setTidBulkInputs(prev => { const next = new Map(prev); next.set(tidKey, e.target.value); return next; })}
+                                                    data-testid={`input-bulk-fnp-${tid}`}
+                                                  />
+                                                  <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="text-[10px]"
+                                                    onClick={() => applyBulkFinalNetPrice(tidKey, tidBookings)}
+                                                    data-testid={`button-apply-bulk-fnp-${tid}`}
+                                                  >
+                                                    Apply All
+                                                  </Button>
+                                                  <div className="flex-1" />
+                                                  {runId && (
+                                                    <>
+                                                      <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-[10px] text-amber-600"
+                                                        onClick={() => handleTidBulkDispute(tidBookings, reasonGroup.reason)}
+                                                        data-testid={`button-tid-bulk-dispute-${tid}`}
+                                                      >
+                                                        <FileWarning className="h-3 w-3 mr-0.5" />
+                                                        Dispute All
+                                                      </Button>
+                                                      <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-[10px] text-blue-600"
+                                                        onClick={() => handleTidBulkIssue(tidBookings, reasonGroup.reason, tid)}
+                                                        data-testid={`button-tid-bulk-issue-${tid}`}
+                                                      >
+                                                        <AlertTriangle className="h-3 w-3 mr-0.5" />
+                                                        Issue All
+                                                      </Button>
+                                                    </>
                                                   )}
                                                 </div>
-                                              </TableCell>
-                                              <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
-                                              <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
-                                              <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                                {formatNumber(booking.difference)}
-                                              </TableCell>
-                                              {runId && (
-                                                <TableCell className="py-1">
-                                                  <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                    {hasDispute ? (
-                                                      <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-xs text-red-600"
-                                                        onClick={() => handleRemoveDispute(booking.bookingId)}
-                                                        data-testid={`button-remove-dispute-${booking.bookingId}`}
-                                                      >
-                                                        <X className="h-3 w-3 mr-1" />
-                                                        Remove
-                                                      </Button>
-                                                    ) : (
-                                                      <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-xs text-amber-600"
-                                                        onClick={() => openDisputeModal({
-                                                          bookingId: booking.bookingId,
-                                                          spNet: booking.spNet,
-                                                          hoNet: booking.hoNet,
-                                                          difference: booking.difference,
-                                                          reason: reasonGroup.reason,
-                                                        })}
-                                                        data-testid={`button-raise-dispute-${booking.bookingId}`}
-                                                      >
-                                                        <FileWarning className="h-3 w-3 mr-1" />
-                                                        Dispute
-                                                      </Button>
-                                                    )}
-                                                    <Button
-                                                      size="sm"
-                                                      variant="ghost"
-                                                      className="text-xs text-blue-600"
-                                                      onClick={() => openIssueModal({
-                                                        bookingId: booking.bookingId,
-                                                        spNet: booking.spNet,
-                                                        hoNet: booking.hoNet,
-                                                        difference: booking.difference,
-                                                        reason: reasonGroup.reason,
-                                                      })}
-                                                      data-testid={`button-flag-issue-${booking.bookingId}`}
-                                                    >
-                                                      <AlertTriangle className="h-3 w-3 mr-1" />
-                                                      Issue
-                                                    </Button>
-                                                  </div>
-                                                </TableCell>
-                                              )}
-                                            </TableRow>
-                                          );
-                                        })}
-                                      </TableBody>
-                                    </Table>
+                                                <Table className="text-xs">
+                                                  <TableHeader>
+                                                    <TableRow className="h-7">
+                                                      <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                                      <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                                      <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                                      <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
+                                                      <TableHead className="py-1 text-xs text-right">Final Net Price ({currency})</TableHead>
+                                                      {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
+                                                    </TableRow>
+                                                  </TableHeader>
+                                                  <TableBody>
+                                                    {tidBookings.map((booking, bookingIdx) => {
+                                                      const hasDispute = activeDisputes.has(booking.bookingId);
+                                                      const disputeAmount = disputeAmounts.get(booking.bookingId);
+                                                      const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
+                                                      const fnpDiffersFromHo = Math.abs(fnp - booking.hoNet) > 0.01;
+                                                      const needsDisputeWarning = fnpDiffersFromHo && !hasDispute;
+                                                      return (
+                                                        <TableRow key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`} className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
+                                                          <TableCell className="py-1 font-mono">
+                                                            <div className="flex items-center gap-1">
+                                                              {booking.bookingId}
+                                                              {hasDispute && (
+                                                                <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">
+                                                                  Dispute: {disputeAmount?.toFixed(2)}
+                                                                </Badge>
+                                                              )}
+                                                            </div>
+                                                          </TableCell>
+                                                          <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
+                                                          <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
+                                                          <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+                                                            {formatNumber(booking.difference)}
+                                                          </TableCell>
+                                                          <TableCell className="py-1 text-right" onClick={(e) => e.stopPropagation()}>
+                                                            <div className="flex items-center justify-end gap-1">
+                                                              <Input
+                                                                type="number"
+                                                                step="0.01"
+                                                                className="h-6 text-xs w-28 font-mono text-right"
+                                                                value={finalNetPrices.has(booking.bookingId) ? finalNetPrices.get(booking.bookingId) : booking.spNet}
+                                                                onChange={(e) => updateFinalNetPrice(booking.bookingId, parseFloat(e.target.value) || 0)}
+                                                                data-testid={`input-fnp-${booking.bookingId}`}
+                                                              />
+                                                              {needsDisputeWarning && (
+                                                                <div className="flex items-center gap-0.5 text-amber-600" title="Difference to be logged as dispute">
+                                                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          </TableCell>
+                                                          {runId && (
+                                                            <TableCell className="py-1">
+                                                              <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                                {hasDispute ? (
+                                                                  <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-xs text-red-600"
+                                                                    onClick={() => handleRemoveDispute(booking.bookingId)}
+                                                                    data-testid={`button-remove-dispute-${booking.bookingId}`}
+                                                                  >
+                                                                    <X className="h-3 w-3 mr-1" />
+                                                                    Remove
+                                                                  </Button>
+                                                                ) : (
+                                                                  <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-xs text-amber-600"
+                                                                    onClick={() => openDisputeModal({
+                                                                      bookingId: booking.bookingId,
+                                                                      spNet: booking.spNet,
+                                                                      hoNet: booking.hoNet,
+                                                                      difference: booking.difference,
+                                                                      reason: reasonGroup.reason,
+                                                                    })}
+                                                                    data-testid={`button-raise-dispute-${booking.bookingId}`}
+                                                                  >
+                                                                    <FileWarning className="h-3 w-3 mr-1" />
+                                                                    Dispute
+                                                                  </Button>
+                                                                )}
+                                                                <Button
+                                                                  size="sm"
+                                                                  variant="ghost"
+                                                                  className="text-xs text-blue-600"
+                                                                  onClick={() => openIssueModal({
+                                                                    bookingId: booking.bookingId,
+                                                                    spNet: booking.spNet,
+                                                                    hoNet: booking.hoNet,
+                                                                    difference: booking.difference,
+                                                                    reason: reasonGroup.reason,
+                                                                  })}
+                                                                  data-testid={`button-flag-issue-${booking.bookingId}`}
+                                                                >
+                                                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                                                  Issue
+                                                                </Button>
+                                                              </div>
+                                                            </TableCell>
+                                                          )}
+                                                        </TableRow>
+                                                      );
+                                                    })}
+                                                  </TableBody>
+                                                </Table>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   )}
                                 </div>
                               );
