@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition, forwardRef, useImperativeHandle } from "react";
 import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -1963,6 +1964,37 @@ export function PurchaseReconciliationPanel({
   const [expandedCancellations, setExpandedCancellations] = useState(false);
   const [expandedCancType, setExpandedCancType] = useState<string | null>(null);
 
+  const [expandedTableSections, setExpandedTableSections] = useState<Set<string>>(() => new Set(["purchase", "reconciliation"]));
+  const toggleTableSection = useCallback((section: string) => {
+    setExpandedTableSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }, []);
+
+  const tableSections = useMemo(() => [
+    { key: "balance", label: "Balance & Deposits", rows: [1, 2, 3, 4], description: "Opening/closing balances, reloads, refunds" },
+    { key: "purchase", label: "Purchase Comparison", rows: [5, 6, 7, 8, 9], description: "Computed vs actual purchases" },
+    { key: "reconciliation", label: "Reconciliation Breakdown", rows: [10, 11, 12], description: "SP vs HO discrepancies" },
+  ], []);
+
+  const insightTabsCount = useMemo(() => {
+    let count = 0;
+    if (alreadyReconciledData.hasData) count++;
+    if (paymentMismatchData.hasData) count++;
+    if (cancellationData.hasData) count++;
+    return count;
+  }, [alreadyReconciledData.hasData, paymentMismatchData.hasData, cancellationData.hasData]);
+
+  const defaultInsightTab = useMemo(() => {
+    if (alreadyReconciledData.hasData) return "reconciled";
+    if (paymentMismatchData.hasData) return "mismatch";
+    if (cancellationData.hasData) return "cancellations";
+    return "reconciled";
+  }, [alreadyReconciledData.hasData, paymentMismatchData.hasData, cancellationData.hasData]);
+
   if (!beId) {
     return (
       <div className="space-y-4">
@@ -2027,429 +2059,514 @@ export function PurchaseReconciliationPanel({
         </div>
       )}
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="summary-strip">
+        <Card className="p-3" data-testid="card-summary-net-diff">
+          <div className="flex items-center gap-2 mb-1">
+            <div className={`h-2 w-2 rounded-full ${calculations.netDifference === 0 ? "bg-green-500" : "bg-red-500"}`} />
+            <span className="text-xs text-muted-foreground">Net Difference</span>
+          </div>
+          <p className={`font-mono text-sm font-semibold ${calculations.netDifference === 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-summary-net-diff">
+            {formatNumber(calculations.netDifference)}
+          </p>
+          <p className="text-[10px] text-muted-foreground">{calculations.netDifference === 0 ? "Balanced" : "Unbalanced"}</p>
+        </Card>
+        <Card className="p-3" data-testid="card-summary-difference">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingDown className="h-3 w-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Difference (Row 9)</span>
+          </div>
+          <p className="font-mono text-sm font-semibold" data-testid="text-summary-difference">
+            {formatNumber(calculations.difference)}
+          </p>
+          <p className="text-[10px] text-muted-foreground">HO vs SP</p>
+        </Card>
+        <Card className="p-3" data-testid="card-summary-discrepancies">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="h-3 w-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Discrepancies</span>
+          </div>
+          <p className="font-mono text-sm font-semibold" data-testid="text-summary-discrepancies">
+            {calculations.row10Breakup.reduce((s, g) => s + g.count, 0) + calculations.row11Breakup.reduce((s, g) => s + g.count, 0)}
+          </p>
+          <p className="text-[10px] text-muted-foreground">Row 10 + Row 11 items</p>
+        </Card>
+        <Card className="p-3" data-testid="card-summary-insights">
+          <div className="flex items-center gap-2 mb-1">
+            <FileWarning className="h-3 w-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Insights</span>
+          </div>
+          <p className="font-mono text-sm font-semibold" data-testid="text-summary-insights">
+            {insightTabsCount}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {[
+              alreadyReconciledData.hasData ? `${alreadyReconciledData.totalBookings} reconciled` : null,
+              paymentMismatchData.hasData ? `${paymentMismatchData.totalBookings} mismatches` : null,
+              cancellationData.hasData ? `${cancellationData.totalBookings} cancelled` : null,
+            ].filter(Boolean).join(", ") || "None"}
+          </p>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className="text-sm flex items-center justify-between gap-2 flex-wrap">
             <span>{billingEntityName || "Supplier"}</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table className="text-sm">
-            <TableHeader>
-              <TableRow className="h-8">
-                <TableHead className="py-1.5 text-xs w-8">#</TableHead>
-                <TableHead className="py-1.5 text-xs">Line Item</TableHead>
-                <TableHead className="py-1.5 text-xs text-right">Amount ({currency})</TableHead>
-                <TableHead className="py-1.5 text-xs text-right">Amount (USD)</TableHead>
-                <TableHead className="py-1.5 text-xs">Notes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lineItems.map((item) => {
-                const IconComponent = item.icon;
-                const isNegative = item.value < 0;
-                const isPositive = item.value > 0;
-                const usdValue = effectiveFxRate ? item.value * effectiveFxRate : null;
-                const isUsdNegative = usdValue !== null && usdValue < 0;
-                const isUsdPositive = usdValue !== null && usdValue > 0;
-                const breakupData = item.id === 10 ? calculations.row10Breakup : item.id === 11 ? calculations.row11Breakup : [];
-                const breakupWithTids = item.id === 10 ? calculations.row10WithTids : item.id === 11 ? calculations.row11WithTids : [];
-                const hasBreakup = (item.id === 10 || item.id === 11) && breakupData.length > 0;
-                const isExpanded = expandedRows.has(item.id);
-                
-                return (
-                  <Fragment key={item.id}>
-                    <TableRow 
-                      className={`h-10 ${item.isHighlight ? "bg-primary/5" : ""} ${item.isReco ? "bg-muted/50" : ""} ${item.isValidation ? (item.value === 0 ? "bg-green-50 dark:bg-green-950/30 border-t-2 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-t-2 border-red-200 dark:border-red-800") : ""} ${hasBreakup ? "cursor-pointer hover-elevate" : ""}`}
-                      data-testid={`purchase-reco-row-${item.id}`}
-                      onClick={hasBreakup ? () => toggleRowExpand(item.id) : undefined}
-                    >
-                      <TableCell className="py-2 font-mono text-xs text-muted-foreground">
-                        {item.id}
-                      </TableCell>
-                      <TableCell className="py-2">
-                        <div className="flex items-center gap-2">
-                          {hasBreakup && (
-                            isExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                          <IconComponent className={`h-4 w-4 ${item.isFormula ? "text-blue-500" : "text-muted-foreground"}`} />
-                          <span className={`${item.isHighlight ? "font-semibold" : ""}`}>
-                            {item.label}
-                          </span>
-                          {item.isFromDb && !hasBalance && (
-                            <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                              Not set
-                            </Badge>
-                          )}
-                          {hasBreakup && (
-                            <Badge variant="secondary" className="text-xs">
-                              {breakupData.length} items
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
-                        {formatNumber(item.value)}
-                      </TableCell>
-                      <TableCell className={`py-2 text-right font-mono ${isUsdNegative ? "text-red-600 dark:text-red-400" : isUsdPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
-                        {usdValue !== null ? formatNumber(usdValue) : "-"}
-                      </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">
-                        {item.description}
-                        {hasBreakup && <span className="ml-1 text-primary">(click to expand)</span>}
-                      </TableCell>
-                    </TableRow>
-                    {hasBreakup && isExpanded && (
-                      <TableRow className="bg-muted/30">
-                        <TableCell colSpan={5} className="py-3 px-8">
-                          <div className="space-y-2">
-                            {breakupWithTids.map((reasonGroup, groupIdx) => {
-                              const reasonKey = `${item.id}-${reasonGroup.reason}`;
-                              const isReasonExpanded = expandedReasons.has(reasonKey);
-                              const visibleCount = getVisibleTidCount(reasonKey);
-                              return (
-                                <ReasonGroup
-                                  key={`${item.id}-reason-${groupIdx}`}
-                                  itemId={item.id}
-                                  groupIdx={groupIdx}
-                                  reasonGroup={reasonGroup}
-                                  currency={currency}
-                                  runId={runId}
-                                  isReasonExpanded={isReasonExpanded}
-                                  expandedTids={expandedTids}
-                                  visibleTidCount={visibleCount}
-                                  onToggleReason={toggleReasonExpand}
-                                  onToggleTid={toggleTidExpand}
-                                  onShowMoreTids={showMoreTids}
-                                  activeDisputes={activeDisputes}
-                                  disputeAmounts={disputeAmounts}
-                                  loggedIssues={loggedIssues}
-                                  fnpVersion={fnpVersion}
-                                  getFinalNetPrice={getFinalNetPrice}
-                                  updateFinalNetPrice={updateFinalNetPrice}
-                                  getFinalVendorId={getFinalVendorId}
-                                  updateFinalVendorId={updateFinalVendorId}
-                                  openFnpModal={openFnpModal}
-                                  handleTidBulkIssue={handleTidBulkIssue}
-                                  openIssueModal={openIssueModal}
-                                />
-                              );
-                            })}
-                            <div className="flex items-center justify-end gap-3 pt-2 border-t text-sm">
-                              <span className="text-muted-foreground">Grand Total ({breakupData.reduce((sum, g) => sum + g.count, 0)} items):</span>
-                              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-                                {formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0))} {currency}
-                              </span>
-                              {effectiveFxRate && (
-                                <span className="font-mono text-muted-foreground">
-                                  ({formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0) * effectiveFxRate)} USD)
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-
-          <Separator className="my-4" />
-
-          <div className="flex items-center justify-between text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Reconciliation Summary:</span>
-              <Badge variant={calculations.netDifference === 0 ? "default" : "destructive"}>
+              <Badge variant={calculations.netDifference === 0 ? "default" : "destructive"} className="text-xs">
                 {calculations.netDifference === 0 ? "Balanced" : "Unbalanced"}
               </Badge>
               {effectiveFxRate && effectiveFxRate !== 1 && (
                 <Badge variant="outline" className="text-xs">
-                  FX Rate: {effectiveFxRate.toFixed(6)}
+                  FX: {effectiveFxRate.toFixed(4)}
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <span className="text-xs text-muted-foreground">Net Difference (Line 12)</span>
-                <p className={`font-mono font-semibold ${calculations.netDifference !== 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
-                  {formatNumber(calculations.netDifference)} {currency}
-                  {effectiveFxRate && (
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({formatNumber(calculations.netDifference * effectiveFxRate)} USD)
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {tableSections.map((section) => {
+            const isSectionExpanded = expandedTableSections.has(section.key);
+            const sectionLineItems = lineItems.filter(item => section.rows.includes(item.id));
+            const sectionTotal = sectionLineItems.reduce((s, item) => s + item.value, 0);
+            const lastItem = sectionLineItems[sectionLineItems.length - 1];
 
-      {alreadyReconciledData.hasData && (
-        <Card data-testid="section-already-reconciled">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
-              <span>Already Reconciled</span>
-              <Badge variant="secondary" className="text-xs">{alreadyReconciledData.totalBookings} bookings</Badge>
-              <span className="ml-auto font-mono text-xs text-muted-foreground">
-                {formatNumber(alreadyReconciledData.totalAmount)} {currency}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {alreadyReconciledData.sameBE.bookings.length > 0 && (
-              <div className="rounded-md border bg-background overflow-hidden">
+            return (
+              <div key={section.key} className="rounded-md border overflow-hidden">
                 <div
-                  className="flex items-center justify-between px-3 py-2 bg-green-50/50 dark:bg-green-950/20 cursor-pointer hover-elevate"
-                  onClick={() => setExpandedAlreadyRecon(prev => prev === "same_be" ? null : "same_be")}
-                  data-testid="already-recon-same-be-header"
+                  className="flex items-center justify-between px-3 py-2 bg-muted/40 cursor-pointer hover-elevate"
+                  onClick={() => toggleTableSection(section.key)}
+                  data-testid={`table-section-${section.key}`}
                 >
                   <div className="flex items-center gap-2">
-                    {expandedAlreadyRecon === "same_be" ? <ChevronDown className="h-4 w-4 text-green-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                    <span className="text-sm font-medium">Same BE</span>
-                    <Badge variant="secondary" className="text-xs">{alreadyReconciledData.sameBE.bookings.length}</Badge>
+                    {isSectionExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-sm font-medium">{section.label}</span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">{section.description}</span>
                   </div>
-                  <span className="font-mono text-xs">{formatNumber(alreadyReconciledData.sameBE.total)} {currency}</span>
+                  <div className="flex items-center gap-2">
+                    {!isSectionExpanded && lastItem && (
+                      <span className={`font-mono text-xs ${lastItem.value < 0 ? "text-red-600 dark:text-red-400" : lastItem.value > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                        {lastItem.label}: {formatNumber(lastItem.value)} {currency}
+                      </span>
+                    )}
+                    <Badge variant="outline" className="text-[10px]">
+                      Rows {section.rows[0]}-{section.rows[section.rows.length - 1]}
+                    </Badge>
+                  </div>
                 </div>
-                {expandedAlreadyRecon === "same_be" && (
-                  <Table className="text-xs">
+                {isSectionExpanded && (
+                  <Table className="text-sm">
                     <TableHeader>
-                      <TableRow className="h-7">
-                        <TableHead className="py-1 text-xs">TID</TableHead>
-                        <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                        <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                        <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                        <TableHead className="py-1 text-xs">Payment</TableHead>
+                      <TableRow className="h-8">
+                        <TableHead className="py-1.5 text-xs w-8">#</TableHead>
+                        <TableHead className="py-1.5 text-xs">Line Item</TableHead>
+                        <TableHead className="py-1.5 text-xs text-right">Amount ({currency})</TableHead>
+                        <TableHead className="py-1.5 text-xs text-right">Amount (USD)</TableHead>
+                        <TableHead className="py-1.5 text-xs">Notes</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {alreadyReconciledData.sameBE.bookings.map((b, i) => {
-                        const hoP = (b.paymentMethod || "").trim();
-                        const spP = (b.spPaymentMethod || "").trim();
-                        const mismatch = hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
+                      {sectionLineItems.map((item) => {
+                        const IconComponent = item.icon;
+                        const isNegative = item.value < 0;
+                        const isPositive = item.value > 0;
+                        const usdValue = effectiveFxRate ? item.value * effectiveFxRate : null;
+                        const isUsdNegative = usdValue !== null && usdValue < 0;
+                        const isUsdPositive = usdValue !== null && usdValue > 0;
+                        const breakupData = item.id === 10 ? calculations.row10Breakup : item.id === 11 ? calculations.row11Breakup : [];
+                        const breakupWithTids = item.id === 10 ? calculations.row10WithTids : item.id === 11 ? calculations.row11WithTids : [];
+                        const hasBreakup = (item.id === 10 || item.id === 11) && breakupData.length > 0;
+                        const isExpanded = expandedRows.has(item.id);
+
                         return (
-                          <TableRow key={`ar-same-${i}`} className="h-8">
-                            <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
-                            <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                            <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                            <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                            <TableCell className="py-1">
-                              {mismatch ? (
-                                <Badge variant="destructive" className="text-[10px]">{hoP} vs {spP}</Badge>
-                              ) : (
-                                <span className="text-muted-foreground">{hoP || spP || "-"}</span>
-                              )}
-                            </TableCell>
-                          </TableRow>
+                          <Fragment key={item.id}>
+                            <TableRow
+                              className={`h-10 ${item.isHighlight ? "bg-primary/5" : ""} ${item.isReco ? "bg-muted/50" : ""} ${item.isValidation ? (item.value === 0 ? "bg-green-50 dark:bg-green-950/30 border-t-2 border-green-200 dark:border-green-800" : "bg-red-50 dark:bg-red-950/30 border-t-2 border-red-200 dark:border-red-800") : ""} ${hasBreakup ? "cursor-pointer hover-elevate" : ""}`}
+                              data-testid={`purchase-reco-row-${item.id}`}
+                              onClick={hasBreakup ? () => toggleRowExpand(item.id) : undefined}
+                            >
+                              <TableCell className="py-2 font-mono text-xs text-muted-foreground">
+                                {item.id}
+                              </TableCell>
+                              <TableCell className="py-2">
+                                <div className="flex items-center gap-2">
+                                  {hasBreakup && (
+                                    isExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                  <IconComponent className={`h-4 w-4 ${item.isFormula ? "text-blue-500" : "text-muted-foreground"}`} />
+                                  <span className={`${item.isHighlight ? "font-semibold" : ""}`}>
+                                    {item.label}
+                                  </span>
+                                  {item.isFromDb && !hasBalance && (
+                                    <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                                      Not set
+                                    </Badge>
+                                  )}
+                                  {hasBreakup && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      {breakupData.length} items
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
+                                {formatNumber(item.value)}
+                              </TableCell>
+                              <TableCell className={`py-2 text-right font-mono ${isUsdNegative ? "text-red-600 dark:text-red-400" : isUsdPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
+                                {usdValue !== null ? formatNumber(usdValue) : "-"}
+                              </TableCell>
+                              <TableCell className="py-2 text-xs text-muted-foreground">
+                                {item.description}
+                                {hasBreakup && <span className="ml-1 text-primary">(click to expand)</span>}
+                              </TableCell>
+                            </TableRow>
+                            {hasBreakup && isExpanded && (
+                              <TableRow className="bg-muted/30">
+                                <TableCell colSpan={5} className="py-3 px-8">
+                                  <div className="space-y-2">
+                                    {breakupWithTids.map((reasonGroup, groupIdx) => {
+                                      const reasonKey = `${item.id}-${reasonGroup.reason}`;
+                                      const isReasonExpanded = expandedReasons.has(reasonKey);
+                                      const visibleCount = getVisibleTidCount(reasonKey);
+                                      return (
+                                        <ReasonGroup
+                                          key={`${item.id}-reason-${groupIdx}`}
+                                          itemId={item.id}
+                                          groupIdx={groupIdx}
+                                          reasonGroup={reasonGroup}
+                                          currency={currency}
+                                          runId={runId}
+                                          isReasonExpanded={isReasonExpanded}
+                                          expandedTids={expandedTids}
+                                          visibleTidCount={visibleCount}
+                                          onToggleReason={toggleReasonExpand}
+                                          onToggleTid={toggleTidExpand}
+                                          onShowMoreTids={showMoreTids}
+                                          activeDisputes={activeDisputes}
+                                          disputeAmounts={disputeAmounts}
+                                          loggedIssues={loggedIssues}
+                                          fnpVersion={fnpVersion}
+                                          getFinalNetPrice={getFinalNetPrice}
+                                          updateFinalNetPrice={updateFinalNetPrice}
+                                          getFinalVendorId={getFinalVendorId}
+                                          updateFinalVendorId={updateFinalVendorId}
+                                          openFnpModal={openFnpModal}
+                                          handleTidBulkIssue={handleTidBulkIssue}
+                                          openIssueModal={openIssueModal}
+                                        />
+                                      );
+                                    })}
+                                    <div className="flex items-center justify-end gap-3 pt-2 border-t text-sm">
+                                      <span className="text-muted-foreground">Grand Total ({breakupData.reduce((sum, g) => sum + g.count, 0)} items):</span>
+                                      <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                                        {formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0))} {currency}
+                                      </span>
+                                      {effectiveFxRate && (
+                                        <span className="font-mono text-muted-foreground">
+                                          ({formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0) * effectiveFxRate)} USD)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </Fragment>
                         );
                       })}
                     </TableBody>
                   </Table>
                 )}
               </div>
-            )}
-            {alreadyReconciledData.differentBE.bookings.length > 0 && (
-              <div className="rounded-md border bg-background overflow-hidden">
-                <div
-                  className="flex items-center justify-between px-3 py-2 bg-amber-50/50 dark:bg-amber-950/20 cursor-pointer hover-elevate"
-                  onClick={() => setExpandedAlreadyRecon(prev => prev === "different_be" ? null : "different_be")}
-                  data-testid="already-recon-diff-be-header"
-                >
-                  <div className="flex items-center gap-2">
-                    {expandedAlreadyRecon === "different_be" ? <ChevronDown className="h-4 w-4 text-amber-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                    <span className="text-sm font-medium">Different BE</span>
-                    <Badge variant="secondary" className="text-xs">{alreadyReconciledData.differentBE.bookings.length}</Badge>
-                  </div>
-                  <span className="font-mono text-xs">{formatNumber(alreadyReconciledData.differentBE.total)} {currency}</span>
-                </div>
-                {expandedAlreadyRecon === "different_be" && (
-                  <Table className="text-xs">
-                    <TableHeader>
-                      <TableRow className="h-7">
-                        <TableHead className="py-1 text-xs">TID</TableHead>
-                        <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                        <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                        <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                        <TableHead className="py-1 text-xs">HO BE ID</TableHead>
-                        <TableHead className="py-1 text-xs">SP BE ID</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {alreadyReconciledData.differentBE.bookings.map((b, i) => (
-                        <TableRow key={`ar-diff-${i}`} className="h-8">
-                          <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
-                          <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                          <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                          <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                          <TableCell className="py-1 font-mono">{b.hoBeId || "-"}</TableCell>
-                          <TableCell className="py-1 font-mono">{b.spBeId || b.beId || "-"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {insightTabsCount > 0 && (
+        <Card data-testid="section-insights">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileWarning className="h-4 w-4 text-muted-foreground" />
+              <span>Insights</span>
+              <Badge variant="secondary" className="text-xs">{insightTabsCount} categories</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue={defaultInsightTab}>
+              <TabsList className="w-full justify-start gap-1 flex-wrap" data-testid="insight-tabs">
+                {alreadyReconciledData.hasData && (
+                  <TabsTrigger value="reconciled" className="text-xs gap-1.5" data-testid="tab-reconciled">
+                    <Check className="h-3 w-3 text-green-600" />
+                    Reconciled
+                    <Badge variant="secondary" className="text-[10px] ml-0.5">{alreadyReconciledData.totalBookings}</Badge>
+                  </TabsTrigger>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                {paymentMismatchData.hasData && (
+                  <TabsTrigger value="mismatch" className="text-xs gap-1.5" data-testid="tab-mismatch">
+                    <AlertTriangle className="h-3 w-3 text-violet-600" />
+                    Payment Mismatch
+                    <Badge variant="secondary" className="text-[10px] ml-0.5">{paymentMismatchData.totalBookings}</Badge>
+                  </TabsTrigger>
+                )}
+                {cancellationData.hasData && (
+                  <TabsTrigger value="cancellations" className="text-xs gap-1.5" data-testid="tab-cancellations">
+                    <X className="h-3 w-3 text-red-500" />
+                    Cancellations
+                    <Badge variant="secondary" className="text-[10px] ml-0.5">{cancellationData.totalBookings}</Badge>
+                  </TabsTrigger>
+                )}
+              </TabsList>
 
-      {paymentMismatchData.hasData && (
-        <Card className="border-violet-200 dark:border-violet-800" data-testid="section-payment-mismatch">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-violet-600" />
-              <span>Payment Method Mismatch</span>
-              <Badge className="text-xs bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300 no-default-hover-elevate no-default-active-elevate">{paymentMismatchData.totalBookings} bookings</Badge>
-              <span className="ml-auto font-mono text-xs text-muted-foreground">
-                {formatNumber(paymentMismatchData.totalAmount)} {currency}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border bg-background overflow-hidden">
-              <div
-                className="flex items-center justify-between px-3 py-2 bg-violet-50/50 dark:bg-violet-950/20 cursor-pointer hover-elevate"
-                onClick={() => setExpandedPaymentMismatch(prev => !prev)}
-                data-testid="payment-mismatch-header"
-              >
-                <div className="flex items-center gap-2">
-                  {expandedPaymentMismatch ? <ChevronDown className="h-4 w-4 text-violet-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                  <span className="text-sm font-medium">Mismatched Bookings</span>
-                  <Badge variant="outline" className="text-xs">{paymentMismatchData.tidEntries.length} TIDs</Badge>
-                </div>
-              </div>
-              {expandedPaymentMismatch && (
-                <div className="p-2 space-y-1">
-                  {paymentMismatchData.tidEntries.map(([tid, bookings]) => (
-                    <div key={`pm-tid-${tid}`} className="rounded-md border overflow-hidden">
-                      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-medium">TID: {tid}</span>
-                          <Badge variant="secondary" className="text-[10px]">{bookings.length}</Badge>
-                        </div>
-                      </div>
-                      <Table className="text-xs">
-                        <TableHeader>
-                          <TableRow className="h-7">
-                            <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                            <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                            <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                            <TableHead className="py-1 text-xs">HO Payment</TableHead>
-                            <TableHead className="py-1 text-xs">SP Payment</TableHead>
-                            <TableHead className="py-1 text-xs">Reason</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {bookings.map((b, i) => (
-                            <TableRow key={`pm-${tid}-${i}`} className="h-8">
-                              <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                              <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                              <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                              <TableCell className="py-1">
-                                <Badge variant="outline" className="text-[10px]">{b.paymentMethod || "-"}</Badge>
-                              </TableCell>
-                              <TableCell className="py-1">
-                                <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:border-violet-700 dark:text-violet-300">{b.spPaymentMethod || "-"}</Badge>
-                              </TableCell>
-                              <TableCell className="py-1 text-muted-foreground">{b.reason}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+              {alreadyReconciledData.hasData && (
+                <TabsContent value="reconciled" data-testid="section-already-reconciled">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs px-1">
+                      <span className="text-muted-foreground">{alreadyReconciledData.totalBookings} bookings already reconciled</span>
+                      <span className="font-mono">{formatNumber(alreadyReconciledData.totalAmount)} {currency}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {cancellationData.hasData && (
-        <Card data-testid="section-cancellations">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <X className="h-4 w-4 text-red-500" />
-              <span>Cancellations Summary</span>
-              <Badge variant="secondary" className="text-xs">{cancellationData.totalBookings} bookings</Badge>
-              <span className="ml-auto font-mono text-xs text-muted-foreground">
-                {formatNumber(cancellationData.totalAmount)} {currency}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border bg-background overflow-hidden">
-              <div
-                className="flex items-center justify-between px-3 py-2 bg-red-50/30 dark:bg-red-950/10 cursor-pointer hover-elevate"
-                onClick={() => setExpandedCancellations(prev => !prev)}
-                data-testid="cancellations-header"
-              >
-                <div className="flex items-center gap-2">
-                  {expandedCancellations ? <ChevronDown className="h-4 w-4 text-red-500" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                  <span className="text-sm font-medium">Breakdown by Type</span>
-                  <Badge variant="outline" className="text-xs">{cancellationData.breakdown.length} types</Badge>
-                </div>
-              </div>
-              {expandedCancellations && (
-                <div className="p-2 space-y-1">
-                  {cancellationData.breakdown.map((group) => (
-                    <div key={`canc-${group.reason}`} className="rounded-md border overflow-hidden">
-                      <div
-                        className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
-                        onClick={() => setExpandedCancType(prev => prev === group.reason ? null : group.reason)}
-                        data-testid={`cancellation-type-${group.reason}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          {expandedCancType === group.reason ? <ChevronDown className="h-3 w-3 text-red-500" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                          <span className="text-xs font-medium">{group.reason}</span>
-                          <Badge variant="secondary" className="text-[10px]">{group.count}</Badge>
+                    {alreadyReconciledData.sameBE.bookings.length > 0 && (
+                      <div className="rounded-md border bg-background overflow-hidden">
+                        <div
+                          className="flex items-center justify-between px-3 py-2 bg-green-50/50 dark:bg-green-950/20 cursor-pointer hover-elevate"
+                          onClick={() => setExpandedAlreadyRecon(prev => prev === "same_be" ? null : "same_be")}
+                          data-testid="already-recon-same-be-header"
+                        >
+                          <div className="flex items-center gap-2">
+                            {expandedAlreadyRecon === "same_be" ? <ChevronDown className="h-4 w-4 text-green-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                            <span className="text-sm font-medium">Same BE</span>
+                            <Badge variant="secondary" className="text-xs">{alreadyReconciledData.sameBE.bookings.length}</Badge>
+                          </div>
+                          <span className="font-mono text-xs">{formatNumber(alreadyReconciledData.sameBE.total)} {currency}</span>
                         </div>
-                        <span className="font-mono text-xs text-muted-foreground">{formatNumber(group.total)} {currency}</span>
-                      </div>
-                      {expandedCancType === group.reason && (
-                        <Table className="text-xs">
-                          <TableHeader>
-                            <TableRow className="h-7">
-                              <TableHead className="py-1 text-xs">TID</TableHead>
-                              <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                              <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                              <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                              <TableHead className="py-1 text-xs">Charged Loss</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {group.bookings.map((b, i) => (
-                              <TableRow key={`canc-${group.reason}-${i}`} className="h-8">
-                                <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
-                                <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                                <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                                <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                                <TableCell className="py-1">
-                                  <Badge variant={b.chargedLoss === "TRUE" ? "destructive" : "outline"} className="text-[10px]">
-                                    {b.chargedLoss || "FALSE"}
-                                  </Badge>
-                                </TableCell>
+                        {expandedAlreadyRecon === "same_be" && (
+                          <Table className="text-xs">
+                            <TableHeader>
+                              <TableRow className="h-7">
+                                <TableHead className="py-1 text-xs">TID</TableHead>
+                                <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                <TableHead className="py-1 text-xs">Payment</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-end gap-3 pt-2 border-t text-xs">
-                    <span className="text-muted-foreground">Total ({cancellationData.totalBookings} bookings):</span>
-                    <span className="font-mono font-semibold">{formatNumber(cancellationData.totalAmount)} {currency}</span>
-                    {effectiveFxRate && (
-                      <span className="font-mono text-muted-foreground">({formatNumber(cancellationData.totalAmount * effectiveFxRate)} USD)</span>
+                            </TableHeader>
+                            <TableBody>
+                              {alreadyReconciledData.sameBE.bookings.map((b, i) => {
+                                const hoP = (b.paymentMethod || "").trim();
+                                const spP = (b.spPaymentMethod || "").trim();
+                                const mismatch = hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
+                                return (
+                                  <TableRow key={`ar-same-${i}`} className="h-8">
+                                    <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                                    <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                    <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                    <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                    <TableCell className="py-1">
+                                      {mismatch ? (
+                                        <Badge variant="destructive" className="text-[10px]">{hoP} vs {spP}</Badge>
+                                      ) : (
+                                        <span className="text-muted-foreground">{hoP || spP || "-"}</span>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </div>
+                    )}
+                    {alreadyReconciledData.differentBE.bookings.length > 0 && (
+                      <div className="rounded-md border bg-background overflow-hidden">
+                        <div
+                          className="flex items-center justify-between px-3 py-2 bg-amber-50/50 dark:bg-amber-950/20 cursor-pointer hover-elevate"
+                          onClick={() => setExpandedAlreadyRecon(prev => prev === "different_be" ? null : "different_be")}
+                          data-testid="already-recon-diff-be-header"
+                        >
+                          <div className="flex items-center gap-2">
+                            {expandedAlreadyRecon === "different_be" ? <ChevronDown className="h-4 w-4 text-amber-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                            <span className="text-sm font-medium">Different BE</span>
+                            <Badge variant="secondary" className="text-xs">{alreadyReconciledData.differentBE.bookings.length}</Badge>
+                          </div>
+                          <span className="font-mono text-xs">{formatNumber(alreadyReconciledData.differentBE.total)} {currency}</span>
+                        </div>
+                        {expandedAlreadyRecon === "different_be" && (
+                          <Table className="text-xs">
+                            <TableHeader>
+                              <TableRow className="h-7">
+                                <TableHead className="py-1 text-xs">TID</TableHead>
+                                <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                <TableHead className="py-1 text-xs">HO BE ID</TableHead>
+                                <TableHead className="py-1 text-xs">SP BE ID</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {alreadyReconciledData.differentBE.bookings.map((b, i) => (
+                                <TableRow key={`ar-diff-${i}`} className="h-8">
+                                  <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                                  <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                  <TableCell className="py-1 font-mono">{b.hoBeId || "-"}</TableCell>
+                                  <TableCell className="py-1 font-mono">{b.spBeId || b.beId || "-"}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
+                </TabsContent>
               )}
-            </div>
+
+              {paymentMismatchData.hasData && (
+                <TabsContent value="mismatch" data-testid="section-payment-mismatch">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs px-1">
+                      <span className="text-muted-foreground">{paymentMismatchData.totalBookings} bookings with different HO/SP payment methods</span>
+                      <span className="font-mono">{formatNumber(paymentMismatchData.totalAmount)} {currency}</span>
+                    </div>
+                    <div className="rounded-md border bg-background overflow-hidden">
+                      <div
+                        className="flex items-center justify-between px-3 py-2 bg-muted/40 cursor-pointer hover-elevate"
+                        onClick={() => setExpandedPaymentMismatch(prev => !prev)}
+                        data-testid="payment-mismatch-header"
+                      >
+                        <div className="flex items-center gap-2">
+                          {expandedPaymentMismatch ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                          <span className="text-sm font-medium">Mismatched Bookings</span>
+                          <Badge variant="outline" className="text-xs">{paymentMismatchData.tidEntries.length} TIDs</Badge>
+                        </div>
+                      </div>
+                      {expandedPaymentMismatch && (
+                        <div className="p-2 space-y-1">
+                          {paymentMismatchData.tidEntries.map(([tid, bookings]) => (
+                            <div key={`pm-tid-${tid}`} className="rounded-md border overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs font-medium">TID: {tid}</span>
+                                  <Badge variant="secondary" className="text-[10px]">{bookings.length}</Badge>
+                                </div>
+                              </div>
+                              <Table className="text-xs">
+                                <TableHeader>
+                                  <TableRow className="h-7">
+                                    <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                    <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                    <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                    <TableHead className="py-1 text-xs">HO Payment</TableHead>
+                                    <TableHead className="py-1 text-xs">SP Payment</TableHead>
+                                    <TableHead className="py-1 text-xs">Reason</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {bookings.map((b, i) => (
+                                    <TableRow key={`pm-${tid}-${i}`} className="h-8">
+                                      <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                      <TableCell className="py-1">
+                                        <Badge variant="outline" className="text-[10px]">{b.paymentMethod || "-"}</Badge>
+                                      </TableCell>
+                                      <TableCell className="py-1">
+                                        <Badge variant="outline" className="text-[10px]">{b.spPaymentMethod || "-"}</Badge>
+                                      </TableCell>
+                                      <TableCell className="py-1 text-muted-foreground">{b.reason}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              )}
+
+              {cancellationData.hasData && (
+                <TabsContent value="cancellations" data-testid="section-cancellations">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs px-1">
+                      <span className="text-muted-foreground">{cancellationData.totalBookings} cancelled bookings</span>
+                      <span className="font-mono">{formatNumber(cancellationData.totalAmount)} {currency}</span>
+                    </div>
+                    <div className="rounded-md border bg-background overflow-hidden">
+                      <div
+                        className="flex items-center justify-between px-3 py-2 bg-muted/40 cursor-pointer hover-elevate"
+                        onClick={() => setExpandedCancellations(prev => !prev)}
+                        data-testid="cancellations-header"
+                      >
+                        <div className="flex items-center gap-2">
+                          {expandedCancellations ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                          <span className="text-sm font-medium">Breakdown by Type</span>
+                          <Badge variant="outline" className="text-xs">{cancellationData.breakdown.length} types</Badge>
+                        </div>
+                      </div>
+                      {expandedCancellations && (
+                        <div className="p-2 space-y-1">
+                          {cancellationData.breakdown.map((group) => (
+                            <div key={`canc-${group.reason}`} className="rounded-md border overflow-hidden">
+                              <div
+                                className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                onClick={() => setExpandedCancType(prev => prev === group.reason ? null : group.reason)}
+                                data-testid={`cancellation-type-${group.reason}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {expandedCancType === group.reason ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                                  <span className="text-xs font-medium">{group.reason}</span>
+                                  <Badge variant="secondary" className="text-[10px]">{group.count}</Badge>
+                                </div>
+                                <span className="font-mono text-xs text-muted-foreground">{formatNumber(group.total)} {currency}</span>
+                              </div>
+                              {expandedCancType === group.reason && (
+                                <Table className="text-xs">
+                                  <TableHeader>
+                                    <TableRow className="h-7">
+                                      <TableHead className="py-1 text-xs">TID</TableHead>
+                                      <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                                      <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                                      <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                      <TableHead className="py-1 text-xs">Charged Loss</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {group.bookings.map((b, i) => (
+                                      <TableRow key={`canc-${group.reason}-${i}`} className="h-8">
+                                        <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                                        <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                        <TableCell className="py-1">
+                                          <Badge variant={b.chargedLoss === "TRUE" ? "destructive" : "outline"} className="text-[10px]">
+                                            {b.chargedLoss || "FALSE"}
+                                          </Badge>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              )}
+                            </div>
+                          ))}
+                          <div className="flex items-center justify-end gap-3 pt-2 border-t text-xs">
+                            <span className="text-muted-foreground">Total ({cancellationData.totalBookings} bookings):</span>
+                            <span className="font-mono font-semibold">{formatNumber(cancellationData.totalAmount)} {currency}</span>
+                            {effectiveFxRate && (
+                              <span className="font-mono text-muted-foreground">({formatNumber(cancellationData.totalAmount * effectiveFxRate)} USD)</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              )}
+            </Tabs>
           </CardContent>
         </Card>
       )}
