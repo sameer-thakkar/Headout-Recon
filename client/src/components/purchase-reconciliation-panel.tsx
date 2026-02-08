@@ -430,32 +430,6 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const formatDisplayName = (paxType: string) =>
     paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
-  const renderPaxBreakdownTable = (priceSource: "sp" | "ho") => {
-    if (!hasPax || paxDateRows.length === 0) return null;
-    return (
-      <div className="rounded-md border overflow-hidden mt-2">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-xs">Pax Type</TableHead>
-              <TableHead className="text-xs text-right">Count</TableHead>
-              <TableHead className="text-xs text-right">Unit Price ({currency})</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paxDateRows.map((row) => (
-              <TableRow key={row.rowKey}>
-                <TableCell className="text-xs font-medium">{formatDisplayName(row.paxType)}</TableCell>
-                <TableCell className="text-xs text-right font-mono">{row.count}</TableCell>
-                <TableCell className="text-xs text-right font-mono">{formatNumber(priceSource === "sp" ? row.spUnitPrice : row.hoUnitPrice)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    );
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
@@ -488,11 +462,6 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
             </div>
-            {hasPax && (
-              <div className="px-4 pb-3">
-                {renderPaxBreakdownTable("sp")}
-              </div>
-            )}
           </div>
 
           <div className="rounded-md border bg-background overflow-hidden">
@@ -514,11 +483,6 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
             </div>
-            {hasPax && (
-              <div className="px-4 pb-3">
-                {renderPaxBreakdownTable("ho")}
-              </div>
-            )}
           </div>
 
           {hasPax && (
