@@ -834,6 +834,7 @@ interface TidGroupProps {
   activeDisputes: Set<string>;
   disputeAmounts: Map<string, number>;
   loggedIssues: Set<string>;
+  fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
@@ -843,7 +844,7 @@ interface TidGroupProps {
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
-  isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues,
+  isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: TidGroupProps) {
@@ -960,6 +961,7 @@ interface ReasonGroupProps {
   activeDisputes: Set<string>;
   disputeAmounts: Map<string, number>;
   loggedIssues: Set<string>;
+  fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
@@ -971,7 +973,7 @@ const ReasonGroup = memo(function ReasonGroup({
   itemId, groupIdx, reasonGroup, currency, runId,
   isReasonExpanded, expandedTids, visibleTidCount,
   onToggleReason, onToggleTid, onShowMoreTids,
-  activeDisputes, disputeAmounts, loggedIssues,
+  activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: ReasonGroupProps) {
@@ -1021,6 +1023,7 @@ const ReasonGroup = memo(function ReasonGroup({
                 activeDisputes={activeDisputes}
                 disputeAmounts={disputeAmounts}
                 loggedIssues={loggedIssues}
+                fnpVersion={fnpVersion}
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
                 openFnpModal={openFnpModal}
@@ -1069,6 +1072,7 @@ export function PurchaseReconciliationPanel({
   const [visibleTidCounts, setVisibleTidCounts] = useState<Map<string, number>>(new Map());
   // Final Net Price state: bookingId → final net price (defaults to SP Net)
   const [finalNetPrices, setFinalNetPrices] = useState<Map<string, number>>(new Map());
+  const [fnpVersion, setFnpVersion] = useState(0);
   const finalNetPricesRef = useRef(finalNetPrices);
   finalNetPricesRef.current = finalNetPrices;
   const [isPriceUpdatePending, startPriceTransition] = useTransition();
@@ -1186,6 +1190,7 @@ export function PurchaseReconciliationPanel({
         next.set(bookingId, value);
         return next;
       });
+      setFnpVersion(v => v + 1);
     });
   }, []);
 
@@ -1198,28 +1203,27 @@ export function PurchaseReconciliationPanel({
     const useDateField: "experienceDate" | "bookingCreationDate" =
       paymentBasisVal.toUpperCase().includes("EXPERIENCE") ? "experienceDate" : "bookingCreationDate";
 
-    startPriceTransition(() => {
-      setFinalNetPrices(prev => {
-        const next = new Map(prev);
-        for (const booking of bookings) {
-          if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
-          const rawDate = (useDateField === "experienceDate" ? booking.experienceDate : booking.bookingCreationDate) || "";
-          const dtObj = normalizeDate(rawDate);
-          const bookingDate = dtObj ? dtObj.toISOString() : "Unknown";
-          let newTotal = 0;
-          for (const pb of booking.paxBreakdown) {
-            const lookupKey = `${pb.paxType}||${bookingDate}`;
-            const rowKey = dtRowKeyMap.get(lookupKey);
-            const priceStr = rowKey ? newPrices[rowKey] : undefined;
-            const parsedPrice = priceStr ? parseFloat(priceStr) : NaN;
-            const finalPrice = !isNaN(parsedPrice) ? parsedPrice : pb.unitPrice;
-            newTotal += pb.count * finalPrice;
-          }
-          next.set(booking.bookingId, Math.round(newTotal * 100) / 100);
+    setFinalNetPrices(prev => {
+      const next = new Map(prev);
+      for (const booking of bookings) {
+        if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
+        const rawDate = (useDateField === "experienceDate" ? booking.experienceDate : booking.bookingCreationDate) || "";
+        const dtObj = normalizeDate(rawDate);
+        const bookingDate = dtObj ? dtObj.toISOString() : "Unknown";
+        let newTotal = 0;
+        for (const pb of booking.paxBreakdown) {
+          const lookupKey = `${pb.paxType}||${bookingDate}`;
+          const rowKey = dtRowKeyMap.get(lookupKey);
+          const priceStr = rowKey ? newPrices[rowKey] : undefined;
+          const parsedPrice = priceStr ? parseFloat(priceStr) : NaN;
+          const finalPrice = !isNaN(parsedPrice) ? parsedPrice : pb.unitPrice;
+          newTotal += pb.count * finalPrice;
         }
-        return next;
-      });
+        next.set(booking.bookingId, Math.round(newTotal * 100) / 100);
+      }
+      return next;
     });
+    setFnpVersion(v => v + 1);
     toast({
       title: "Pax prices updated",
       description: `Final Net Price recalculated for ${bookings.length} bookings in TID ${tid}.`,
@@ -1227,15 +1231,14 @@ export function PurchaseReconciliationPanel({
   }, [toast]);
 
   const applyBulkFinalNetPrice = useCallback((source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
-    startPriceTransition(() => {
-      setFinalNetPrices(prev => {
-        const next = new Map(prev);
-        for (const b of bookings) {
-          next.set(b.bookingId, source === "spNet" ? b.spNet : b.hoNet);
-        }
-        return next;
-      });
+    setFinalNetPrices(prev => {
+      const next = new Map(prev);
+      for (const b of bookings) {
+        next.set(b.bookingId, source === "spNet" ? b.spNet : b.hoNet);
+      }
+      return next;
     });
+    setFnpVersion(v => v + 1);
     toast({
       title: "Bulk Update Applied",
       description: `Final Net Price set to ${source === "spNet" ? "SP Net" : "HO Net"} for ${bookings.length} bookings.`,
@@ -1835,6 +1838,7 @@ export function PurchaseReconciliationPanel({
                                   activeDisputes={activeDisputes}
                                   disputeAmounts={disputeAmounts}
                                   loggedIssues={loggedIssues}
+                                  fnpVersion={fnpVersion}
                                   getFinalNetPrice={getFinalNetPrice}
                                   updateFinalNetPrice={updateFinalNetPrice}
                                   openFnpModal={openFnpModal}
