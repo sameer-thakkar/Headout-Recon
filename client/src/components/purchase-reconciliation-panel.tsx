@@ -430,7 +430,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const formatDisplayName = (paxType: string) =>
     paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
-  const renderPaxBreakdownTable = () => {
+  const renderPaxBreakdownTable = (priceSource: "sp" | "ho") => {
     if (!hasPax || paxDateRows.length === 0) return null;
     return (
       <div className="rounded-md border overflow-hidden mt-2">
@@ -447,7 +447,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
               <TableRow key={row.rowKey}>
                 <TableCell className="text-xs font-medium">{formatDisplayName(row.paxType)}</TableCell>
                 <TableCell className="text-xs text-right font-mono">{row.count}</TableCell>
-                <TableCell className="text-xs text-right font-mono">{formatNumber(row.hoUnitPrice)}</TableCell>
+                <TableCell className="text-xs text-right font-mono">{formatNumber(priceSource === "sp" ? row.spUnitPrice : row.hoUnitPrice)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -490,7 +490,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
             </div>
             {hasPax && (
               <div className="px-4 pb-3">
-                {renderPaxBreakdownTable()}
+                {renderPaxBreakdownTable("sp")}
               </div>
             )}
           </div>
@@ -516,7 +516,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
             </div>
             {hasPax && (
               <div className="px-4 pb-3">
-                {renderPaxBreakdownTable()}
+                {renderPaxBreakdownTable("ho")}
               </div>
             )}
           </div>
