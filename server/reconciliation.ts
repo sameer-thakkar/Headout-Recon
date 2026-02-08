@@ -135,24 +135,26 @@ function getRowValue(row: Record<string, unknown>, ...columnNames: string[]): un
  * Parse HO Data sheet into typed rows
  */
 function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
-  // Write debug info to a file for troubleshooting
-  const debugInfo = {
-    headers: sheet.headers,
-    sampleRowKeys: sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : [],
-    sampleRow: sheet.rows.length > 0 ? sheet.rows[0] : null,
-  };
-  fs.writeFileSync('/tmp/ho_data_debug.json', JSON.stringify(debugInfo, null, 2));
-  
-  // Build a set of normalized pax type names for column detection
-  const normalizedPaxTypes = paxTypeNames.map(name => name.toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_"));
-  
-  // Pre-scan headers to find which pax type columns exist
   const rowKeys = sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : sheet.headers;
   const normalizedKeys = rowKeys.map(k => k.toLowerCase().replace(/\s+/g, "_"));
   
-  // For each pax type, check if _count, _unit_price, _price_net columns exist
   const detectedPaxColumns: { paxType: string; countKey: string | null; unitPriceKey: string | null; priceNetKey: string | null }[] = [];
-  for (const pt of normalizedPaxTypes) {
+
+  // Auto-detect pax types from column headers: any column ending in _count is a potential pax type
+  const autoDetectedPaxTypes = new Set<string>();
+  for (const nk of normalizedKeys) {
+    if (nk.endsWith("_count")) {
+      const paxName = nk.replace(/_count$/, "");
+      if (paxName) autoDetectedPaxTypes.add(paxName);
+    }
+  }
+
+  // Merge with pre-configured pax type names (if any) for backward compatibility
+  const configuredPaxTypes = paxTypeNames.map(name => name.toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_"));
+  configuredPaxTypes.forEach(pt => autoDetectedPaxTypes.add(pt));
+
+  const allPaxTypes = Array.from(autoDetectedPaxTypes);
+  for (const pt of allPaxTypes) {
     const countSuffix = `${pt}_count`;
     const unitPriceSuffix = `${pt}_unit_price`;
     const priceNetSuffix = `${pt}_price_net`;
@@ -167,13 +169,10 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       if (normalizedKeys[i] === priceNetSuffix) priceNetKey = rowKeys[i];
     }
     
-    // Only include if at least the count column exists
-    if (countKey) {
+    if (countKey && (unitPriceKey || priceNetKey)) {
       detectedPaxColumns.push({ paxType: pt, countKey, unitPriceKey, priceNetKey });
     }
   }
-  
-  fs.writeFileSync('/tmp/pax_columns_debug.json', JSON.stringify({ paxTypeNames: normalizedPaxTypes, detectedPaxColumns }, null, 2));
   
   return sheet.rows.map((row) => {
     const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
