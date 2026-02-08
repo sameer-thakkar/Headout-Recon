@@ -161,6 +161,18 @@ const BookingRow = memo(function BookingRow({
                 Dispute: {disputeAmount?.toFixed(2)}
               </Badge>
             )}
+            {(() => {
+              const hoP = (booking.paymentMethod || "").trim();
+              const spP = (booking.spPaymentMethod || "").trim();
+              if (hoP && spP && hoP.toLowerCase() !== spP.toLowerCase()) {
+                return (
+                  <Badge variant="destructive" className="text-[10px] px-1 py-0" data-testid={`badge-payment-mismatch-${booking.bookingId}`}>
+                    {hoP} vs {spP}
+                  </Badge>
+                );
+              }
+              return null;
+            })()}
           </div>
         </TableCell>
         <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
