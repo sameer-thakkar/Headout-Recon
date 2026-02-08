@@ -210,16 +210,19 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
   const paxSummary = useMemo(() => {
-    const map = new Map<string, { count: number; hoUnitPrice: number; hoTotal: number }>();
+    const map = new Map<string, { count: number; hoUnitPrice: number; hoTotal: number; spTotal: number }>();
     for (const b of bookings) {
       if (b.paxBreakdown) {
+        const bookingHoTotal = b.paxBreakdown.reduce((s, pb) => s + pb.priceNet, 0);
         for (const pb of b.paxBreakdown) {
+          const spContribution = bookingHoTotal > 0 ? (pb.priceNet / bookingHoTotal) * b.spNet : 0;
           const existing = map.get(pb.paxType);
           if (existing) {
             existing.count += pb.count;
             existing.hoTotal += pb.priceNet;
+            existing.spTotal += spContribution;
           } else {
-            map.set(pb.paxType, { count: pb.count, hoUnitPrice: pb.unitPrice, hoTotal: pb.priceNet });
+            map.set(pb.paxType, { count: pb.count, hoUnitPrice: pb.unitPrice, hoTotal: pb.priceNet, spTotal: spContribution });
           }
         }
       }
@@ -388,15 +391,21 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                       <TableRow>
                         <TableHead className="text-xs">Pax Type</TableHead>
                         <TableHead className="text-xs text-right">Count</TableHead>
+                        <TableHead className="text-xs text-right">SP Unit Price ({currency})</TableHead>
                         <TableHead className="text-xs text-right">HO Unit Price ({currency})</TableHead>
                         <TableHead className="text-xs text-right">Final Price ({currency})</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {Array.from(paxSummary.entries()).map(([paxType, data]) => (
+                      {Array.from(paxSummary.entries()).map(([paxType, data]) => {
+                        const spUnitPrice = data.count > 0 ? data.spTotal / data.count : 0;
+                        return (
                         <TableRow key={paxType}>
                           <TableCell className="text-xs font-medium">{formatDisplayName(paxType)}</TableCell>
                           <TableCell className="text-xs text-right font-mono">{data.count}</TableCell>
+                          <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                            {formatNumber(spUnitPrice)}
+                          </TableCell>
                           <TableCell className="text-xs text-right font-mono text-muted-foreground">
                             {formatNumber(data.hoUnitPrice)}
                           </TableCell>
@@ -412,7 +421,8 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                             />
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
