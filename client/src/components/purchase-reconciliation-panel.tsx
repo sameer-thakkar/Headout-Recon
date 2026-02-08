@@ -1131,19 +1131,22 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId]); // Only depend on runId, reload when it changes
 
-  // Auto-log unmapped transactions as issues for Portal Deposit runs
-  const autoLoggedRunRef = useRef<string | null>(null);
+  // Unmapped DRI team selection state
+  const [unmappedDriPromptVisible, setUnmappedDriPromptVisible] = useState(false);
+  const [unmappedDriLogging, setUnmappedDriLogging] = useState(false);
+  const unmappedCheckedRunRef = useRef<string | null>(null);
+  const pendingUnmappedRef = useRef<PrimaryRow[]>([]);
+
+  // Detect unlogged unmapped transactions and show DRI team prompt
   useEffect(() => {
     if (!runId || !disputesLoaded || unmappedRows.length === 0) return;
-    if (autoLoggedRunRef.current === runId) return;
-    autoLoggedRunRef.current = runId;
+    if (unmappedCheckedRunRef.current === runId) return;
+    unmappedCheckedRunRef.current = runId;
 
     const controller = new AbortController();
-    const signal = controller.signal;
-
     (async () => {
       try {
-        const issuesRes = await fetch(`/api/issues/${runId}`, { signal });
+        const issuesRes = await fetch(`/api/issues/${runId}`, { signal: controller.signal });
         const issuesData = await issuesRes.json();
         const existingIssues = issuesData.issues || [];
         const alreadyLoggedBookingIds = new Set<string>();
@@ -1152,64 +1155,85 @@ export function PurchaseReconciliationPanel({
             for (const bid of iss.bookingIds) alreadyLoggedBookingIds.add(bid);
           }
         }
-
-        const unloggedUnmapped = unmappedRows.filter(r => !alreadyLoggedBookingIds.has(r.bookingId));
-        if (signal.aborted || unloggedUnmapped.length === 0) return;
-
-        const byTid = new Map<string, typeof unloggedUnmapped>();
-        for (const row of unloggedUnmapped) {
-          const tid = row.tid || "Unknown";
-          if (!byTid.has(tid)) byTid.set(tid, []);
-          byTid.get(tid)!.push(row);
+        const unlogged = unmappedRows.filter(r => !alreadyLoggedBookingIds.has(r.bookingId));
+        if (controller.signal.aborted || unlogged.length === 0) {
+          // Mark already-logged ones in local state
+          if (alreadyLoggedBookingIds.size > 0) {
+            setLoggedIssues(prev => {
+              const next = new Set(prev);
+              unmappedRows.forEach(r => { if (alreadyLoggedBookingIds.has(r.bookingId)) next.add(r.bookingId); });
+              return next;
+            });
+          }
+          return;
         }
-
-        const fxRate = effectiveFxRate || 1;
-        const newLoggedIds: string[] = [];
-
-        const tidEntries = Array.from(byTid.entries());
-        for (let i = 0; i < tidEntries.length; i++) {
-          if (signal.aborted) return;
-          const [tid, rows] = tidEntries[i];
-          const totalDiscrepancy = rows.reduce((sum: number, r: PrimaryRow) => sum + r.spNetInHo, 0);
-          const bookingIds = rows.map((r: PrimaryRow) => r.bookingId);
-          await fetch("/api/issues", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              runId,
-              createdDate: new Date().toISOString(),
-              billingEntityId: beId,
-              billingEntityName: billingEntityName,
-              currency: currency,
-              discrepancyLocal: totalDiscrepancy,
-              discrepancyUsd: totalDiscrepancy * fxRate,
-              reason: "Unmapped",
-              driTeam: "Finance",
-              bookingIds,
-              ticketId: rows[0]?.ticketId || "",
-              tid,
-            }),
-            signal,
-          });
-          bookingIds.forEach((bid: string) => newLoggedIds.push(bid));
-        }
-
-        if (!signal.aborted && newLoggedIds.length > 0) {
-          setLoggedIssues(prev => {
-            const next = new Set(prev);
-            newLoggedIds.forEach(bid => next.add(bid));
-            return next;
-          });
-          queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
-        }
+        pendingUnmappedRef.current = unlogged;
+        setUnmappedDriPromptVisible(true);
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        console.error("Auto-log unmapped issues failed:", err);
+        console.error("Check unmapped issues failed:", err);
       }
     })();
-
     return () => { controller.abort(); };
-  }, [runId, disputesLoaded, unmappedRows, beId, billingEntityName, currency, effectiveFxRate]);
+  }, [runId, disputesLoaded, unmappedRows]);
+
+  // Log unmapped transactions with the user-selected DRI team
+  const logUnmappedWithDri = useCallback(async (driTeam: string) => {
+    if (!runId) return;
+    setUnmappedDriLogging(true);
+    const rows = pendingUnmappedRef.current;
+    const byTid = new Map<string, PrimaryRow[]>();
+    for (const row of rows) {
+      const tid = row.tid || "Unknown";
+      if (!byTid.has(tid)) byTid.set(tid, []);
+      byTid.get(tid)!.push(row);
+    }
+    const fxRate = effectiveFxRate || 1;
+    const newLoggedIds: string[] = [];
+    try {
+      const tidEntries = Array.from(byTid.entries());
+      for (let i = 0; i < tidEntries.length; i++) {
+        const [tid, tidRows] = tidEntries[i];
+        const totalDiscrepancy = tidRows.reduce((sum: number, r: PrimaryRow) => sum + r.spNetInHo, 0);
+        const bookingIds = tidRows.map((r: PrimaryRow) => r.bookingId);
+        await fetch("/api/issues", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            runId,
+            createdDate: new Date().toISOString(),
+            billingEntityId: beId,
+            billingEntityName: billingEntityName,
+            currency: currency,
+            discrepancyLocal: totalDiscrepancy,
+            discrepancyUsd: totalDiscrepancy * fxRate,
+            reason: "Unmapped",
+            driTeam,
+            bookingIds,
+            ticketId: tidRows[0]?.ticketId || "",
+            tid,
+          }),
+        });
+        bookingIds.forEach((bid: string) => newLoggedIds.push(bid));
+      }
+      if (newLoggedIds.length > 0) {
+        setLoggedIssues(prev => {
+          const next = new Set(prev);
+          newLoggedIds.forEach(bid => next.add(bid));
+          return next;
+        });
+        queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+      }
+      toast({ title: "Unmapped Issues Logged", description: `${newLoggedIds.length} unmapped bookings logged to ${driTeam}.` });
+    } catch (err) {
+      console.error("Failed to log unmapped issues:", err);
+      toast({ title: "Error", description: "Failed to log unmapped issues.", variant: "destructive" });
+    } finally {
+      setUnmappedDriLogging(false);
+      setUnmappedDriPromptVisible(false);
+      pendingUnmappedRef.current = [];
+    }
+  }, [runId, beId, billingEntityName, currency, effectiveFxRate, toast]);
 
   const [, startExpandTransition] = useTransition();
 
@@ -1994,6 +2018,47 @@ export function PurchaseReconciliationPanel({
       />
       <DisputeModal ref={disputeModalRef} currency={currency} onSave={handleDisputeSave} />
       <IssueModal ref={issueModalRef} currency={currency} billingEntityName={billingEntityName} effectiveFxRate={effectiveFxRate} onSave={handleIssueSave} />
+
+      <Dialog open={unmappedDriPromptVisible} onOpenChange={(open) => {
+        if (!unmappedDriLogging) {
+          setUnmappedDriPromptVisible(open);
+          if (!open) unmappedCheckedRunRef.current = null;
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Unmapped Transactions Detected
+            </DialogTitle>
+            <DialogDescription>
+              {pendingUnmappedRef.current.length} unmapped booking{pendingUnmappedRef.current.length !== 1 ? "s" : ""} found. Select the DRI team to log these in the Issue Tracker.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 py-2">
+            <Button
+              variant="outline"
+              className="justify-start gap-2"
+              disabled={unmappedDriLogging}
+              onClick={() => logUnmappedWithDri("Finance- Prepurchase")}
+              data-testid="button-dri-finance-prepurchase"
+            >
+              {unmappedDriLogging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+              Finance- Prepurchase
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-start gap-2"
+              disabled={unmappedDriLogging}
+              onClick={() => logUnmappedWithDri("Reservation Ops")}
+              data-testid="button-dri-reservation-ops"
+            >
+              {unmappedDriLogging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
+              Reservation Ops
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
