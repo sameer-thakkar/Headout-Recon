@@ -39,6 +39,8 @@ type PurchaseBooking = {
   experienceDate?: string;
   bookingCreationDate?: string | null;
   paymentBasis?: string;
+  isSecondaryVendor?: boolean;
+  vid?: string;
 };
 
 interface BookingForDispute {
@@ -76,9 +78,11 @@ interface BookingRowProps {
   disputeAmount?: number;
   fnpValue: number;
   needsDisputeWarning: boolean;
+  finalVendorIdValue?: string;
 
   reasonName: string;
   onUpdateFnp: (bookingId: string, value: number) => void;
+  onUpdateFinalVendorId?: (bookingId: string, value: string) => void;
   onOpenIssueModal: (booking: BookingForDispute) => void;
 }
 
@@ -94,8 +98,10 @@ const BookingRow = memo(function BookingRow({
   disputeAmount,
   fnpValue,
   needsDisputeWarning,
+  finalVendorIdValue,
   reasonName,
   onUpdateFnp,
+  onUpdateFinalVendorId,
   onOpenIssueModal,
 }: BookingRowProps) {
   const [localFnp, setLocalFnp] = useState(String(fnpValue));
@@ -114,6 +120,25 @@ const BookingRow = memo(function BookingRow({
       onUpdateFnp(booking.bookingId, parsed);
     }
   }, [localFnp, fnpValue, booking.bookingId, onUpdateFnp]);
+
+  const [localVid, setLocalVid] = useState(finalVendorIdValue || "");
+  const localVidRef = useRef(localVid);
+  localVidRef.current = localVid;
+
+  useEffect(() => {
+    const newVal = finalVendorIdValue || "";
+    if (newVal !== localVidRef.current) {
+      setLocalVid(newVal);
+    }
+  }, [finalVendorIdValue]);
+
+  const commitVid = useCallback(() => {
+    if (onUpdateFinalVendorId && localVid !== (finalVendorIdValue || "")) {
+      onUpdateFinalVendorId(booking.bookingId, localVid);
+    }
+  }, [localVid, finalVendorIdValue, booking.bookingId, onUpdateFinalVendorId]);
+
+  const isSecondary = booking.isSecondaryVendor;
 
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
@@ -152,6 +177,27 @@ const BookingRow = memo(function BookingRow({
             )}
           </div>
         </TableCell>
+        {isSecondary && (
+          <TableCell className="py-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1">
+              <Input
+                type="text"
+                placeholder="Vendor ID *"
+                className={`h-6 text-xs w-32 font-mono ${!localVid ? "border-red-400 dark:border-red-600" : ""}`}
+                value={localVid}
+                onChange={(e) => setLocalVid(e.target.value)}
+                onBlur={commitVid}
+                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                data-testid={`input-vid-${booking.bookingId}`}
+              />
+              {!localVid && (
+                <span title="Final Vendor ID is mandatory">
+                  <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                </span>
+              )}
+            </div>
+          </TableCell>
+        )}
         {runId && (
           <TableCell className="py-1">
             <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -869,6 +915,8 @@ interface TidGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
+  getFinalVendorId: (bookingId: string, defaultVid: string) => string;
+  updateFinalVendorId: (bookingId: string, value: string) => void;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -877,7 +925,7 @@ interface TidGroupProps {
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
+  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
@@ -935,6 +983,9 @@ const TidGroup = memo(function TidGroup({
                 <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
                 <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
                 <TableHead className="py-1 text-xs text-right">Final Net Price ({currency})</TableHead>
+                {tidBookings.some(b => b.isSecondaryVendor) && (
+                  <TableHead className="py-1 text-xs">Final Vendor ID</TableHead>
+                )}
                 {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -945,6 +996,7 @@ const TidGroup = memo(function TidGroup({
                 const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                 const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                 const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
+                const vidValue = booking.isSecondaryVendor ? getFinalVendorId(booking.bookingId, booking.vid || "") : undefined;
                 return (
                   <BookingRow
                     key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}
@@ -959,8 +1011,10 @@ const TidGroup = memo(function TidGroup({
                     disputeAmount={disputeAmt}
                     fnpValue={fnp}
                     needsDisputeWarning={needsDisputeWarning}
+                    finalVendorIdValue={vidValue}
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
+                    onUpdateFinalVendorId={booking.isSecondaryVendor ? updateFinalVendorId : undefined}
                     onOpenIssueModal={openIssueModal}
                   />
                 );
@@ -996,6 +1050,8 @@ interface ReasonGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
+  getFinalVendorId: (bookingId: string, defaultVid: string) => string;
+  updateFinalVendorId: (bookingId: string, value: string) => void;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -1006,7 +1062,7 @@ const ReasonGroup = memo(function ReasonGroup({
   isReasonExpanded, expandedTids, visibleTidCount,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
+  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
@@ -1058,6 +1114,8 @@ const ReasonGroup = memo(function ReasonGroup({
                 fnpVersion={fnpVersion}
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
+                getFinalVendorId={getFinalVendorId}
+                updateFinalVendorId={updateFinalVendorId}
                 openFnpModal={openFnpModal}
                 handleTidBulkIssue={handleTidBulkIssue}
                 openIssueModal={openIssueModal}
@@ -1107,6 +1165,10 @@ export function PurchaseReconciliationPanel({
   const [fnpVersion, setFnpVersion] = useState(0);
   const finalNetPricesRef = useRef(finalNetPrices);
   finalNetPricesRef.current = finalNetPrices;
+  // Final Vendor ID state: bookingId → corrected vendor ID (for secondary vendor rows)
+  const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
+  const finalVendorIdsRef = useRef(finalVendorIds);
+  finalVendorIdsRef.current = finalVendorIds;
   const [isPriceUpdatePending, startPriceTransition] = useTransition();
   
   // Dispute tracking state
@@ -1225,6 +1287,19 @@ export function PurchaseReconciliationPanel({
       });
       setFnpVersion(v => v + 1);
     });
+  }, []);
+
+  const getFinalVendorId = useCallback((bookingId: string, defaultVid: string) => {
+    return finalVendorIdsRef.current.has(bookingId) ? finalVendorIdsRef.current.get(bookingId)! : defaultVid;
+  }, []);
+
+  const updateFinalVendorId = useCallback((bookingId: string, value: string) => {
+    setFinalVendorIds(prev => {
+      const next = new Map(prev);
+      next.set(bookingId, value);
+      return next;
+    });
+    setFnpVersion(v => v + 1);
   }, []);
 
   const openFnpModal = useCallback((tidBookings: PurchaseBooking[], tid: string) => {
@@ -1494,27 +1569,35 @@ export function PurchaseReconciliationPanel({
     
     const difference = purchasesAsPerHO - actualPurchase;
     
-    // In SP not in HO: From all rows where SP Net > HO Net
-    const inSPNotInHO = allRows
-      .filter(row => row.spNetInHo > row.hoNet)
+    // Secondary vendor rows (isSecondaryVendor=true) - separate from primaryRows and unmappedRows
+    const secondaryRows = secondaryVendorRows;
+
+    // In SP not in HO: primary rows where SP > HO + all secondary SP + all unmapped SP
+    const inSPNotInHO_primary = primaryRows
+      .filter(row => !row.isSecondaryVendor && row.spNetInHo > row.hoNet)
       .reduce((sum, row) => sum + (row.spNetInHo - row.hoNet), 0);
+    const inSPNotInHO_secondary = secondaryRows
+      .reduce((sum, row) => sum + row.spNetInHo, 0);
+    const inSPNotInHO_unmapped = unmappedRows
+      .reduce((sum, row) => sum + row.spNetInHo, 0);
+    const inSPNotInHO = inSPNotInHO_primary + inSPNotInHO_secondary + inSPNotInHO_unmapped;
     
-    // In HO not in SP: From all rows where HO Net > SP Net
-    const inHONotInSP = allRows
-      .filter(row => row.hoNet > row.spNetInHo)
+    // In HO not in SP: Only from primary rows where HO > SP (secondary/unmapped never go here)
+    const inHONotInSP = primaryRows
+      .filter(row => !row.isSecondaryVendor && row.hoNet > row.spNetInHo)
       .reduce((sum, row) => sum + (row.hoNet - row.spNetInHo), 0);
 
     const netDifference = difference + inSPNotInHO - inHONotInSP;
     
     // Breakup data for row 10: In SP not in HO (grouped by reason)
     const row10ByReason = new Map<string, PurchaseBooking[]>();
-    allRows
-      .filter(row => row.spNetInHo > row.hoNet)
+    
+    // Primary rows where SP > HO
+    primaryRows
+      .filter(row => !row.isSecondaryVendor && row.spNetInHo > row.hoNet)
       .forEach(row => {
         const reason = row.reason || "Unknown";
-        if (!row10ByReason.has(reason)) {
-          row10ByReason.set(reason, []);
-        }
+        if (!row10ByReason.has(reason)) row10ByReason.set(reason, []);
         row10ByReason.get(reason)!.push({
           bookingId: row.bookingId,
           spNet: row.spNetInHo,
@@ -1530,6 +1613,46 @@ export function PurchaseReconciliationPanel({
         });
       });
     
+    // Secondary vendor rows always go to row 10 (full spNetInHo as difference, hoNet treated as 0)
+    secondaryRows.forEach(row => {
+      const reason = row.reason || "Secondary Vendor";
+      if (!row10ByReason.has(reason)) row10ByReason.set(reason, []);
+      row10ByReason.get(reason)!.push({
+        bookingId: row.bookingId,
+        spNet: row.spNetInHo,
+        hoNet: 0,
+        difference: row.spNetInHo,
+        reason,
+        tid: row.tid || "Unknown",
+        ticketId: row.ticketId || "",
+        paxBreakdown: row.paxBreakdown,
+        experienceDate: row.experienceDate,
+        bookingCreationDate: row.bookingCreationDate,
+        paymentBasis: row.paymentBasis,
+        isSecondaryVendor: true,
+        vid: row.vid,
+      });
+    });
+
+    // Unmapped rows always go to row 10 (full spNetInHo as difference)
+    unmappedRows.forEach(row => {
+      const reason = row.reason || "Unmapped";
+      if (!row10ByReason.has(reason)) row10ByReason.set(reason, []);
+      row10ByReason.get(reason)!.push({
+        bookingId: row.bookingId,
+        spNet: row.spNetInHo,
+        hoNet: 0,
+        difference: row.spNetInHo,
+        reason,
+        tid: row.tid || "Unknown",
+        ticketId: row.ticketId || "",
+        paxBreakdown: row.paxBreakdown,
+        experienceDate: row.experienceDate,
+        bookingCreationDate: row.bookingCreationDate,
+        paymentBasis: row.paymentBasis,
+      });
+    });
+    
     // Convert to array and sort by total discrepancy
     const row10Breakup = Array.from(row10ByReason.entries())
       .map(([reason, bookings]) => ({
@@ -1540,10 +1663,10 @@ export function PurchaseReconciliationPanel({
       }))
       .sort((a, b) => b.totalDifference - a.totalDifference);
     
-    // Breakup data for row 11: In HO not in SP (grouped by reason)
+    // Breakup data for row 11: In HO not in SP - only primary rows (secondary/unmapped never here)
     const row11ByReason = new Map<string, PurchaseBooking[]>();
-    allRows
-      .filter(row => row.hoNet > row.spNetInHo)
+    primaryRows
+      .filter(row => !row.isSecondaryVendor && row.hoNet > row.spNetInHo)
       .forEach(row => {
         const reason = row.reason || "Unknown";
         if (!row11ByReason.has(reason)) {
@@ -1612,7 +1735,7 @@ export function PurchaseReconciliationPanel({
       row10WithTids,
       row11WithTids,
     };
-  }, [allRows, primaryRows, balance]);
+  }, [allRows, primaryRows, secondaryVendorRows, unmappedRows, balance]);
 
   const lineItems = useMemo(() => [
     {
@@ -1876,6 +1999,8 @@ export function PurchaseReconciliationPanel({
                                   fnpVersion={fnpVersion}
                                   getFinalNetPrice={getFinalNetPrice}
                                   updateFinalNetPrice={updateFinalNetPrice}
+                                  getFinalVendorId={getFinalVendorId}
+                                  updateFinalVendorId={updateFinalVendorId}
                                   openFnpModal={openFnpModal}
                                   handleTidBulkIssue={handleTidBulkIssue}
                                   openIssueModal={openIssueModal}
