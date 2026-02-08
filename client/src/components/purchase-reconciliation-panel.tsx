@@ -1,4 +1,4 @@
-import { useMemo, useState, Fragment, useCallback, useEffect } from "react";
+import { useMemo, useState, Fragment, useCallback, useEffect, memo } from "react";
 import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -66,6 +66,130 @@ interface PurchaseReconciliationPanelProps {
   runId?: string | null; // Run ID for saving disputes and issues
 }
 
+const INITIAL_TID_LIMIT = 10;
+
+interface BookingRowProps {
+  booking: PurchaseBooking;
+  itemId: number;
+  groupIdx: number;
+  tid: string;
+  bookingIdx: number;
+  currency: string;
+  runId?: string | null;
+  hasDispute: boolean;
+  disputeAmount?: number;
+  fnpValue: number;
+  needsDisputeWarning: boolean;
+  hasPax: boolean;
+  reasonName: string;
+  onUpdateFnp: (bookingId: string, value: number) => void;
+  onOpenIssueModal: (booking: BookingForDispute) => void;
+}
+
+const BookingRow = memo(function BookingRow({
+  booking,
+  itemId,
+  groupIdx,
+  tid,
+  bookingIdx,
+  currency,
+  runId,
+  hasDispute,
+  disputeAmount,
+  fnpValue,
+  needsDisputeWarning,
+  hasPax,
+  reasonName,
+  onUpdateFnp,
+  onOpenIssueModal,
+}: BookingRowProps) {
+  return (
+    <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
+      <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
+        <TableCell className="py-1 font-mono">
+          <div className="flex items-center gap-1">
+            {booking.bookingId}
+            {hasDispute && (
+              <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">
+                Dispute: {disputeAmount?.toFixed(2)}
+              </Badge>
+            )}
+          </div>
+        </TableCell>
+        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
+        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
+        <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+          {formatNumber(booking.difference)}
+        </TableCell>
+        <TableCell className="py-1 text-right" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-end gap-1">
+            <Input
+              type="number"
+              step="0.01"
+              className="h-6 text-xs w-28 font-mono text-right"
+              value={fnpValue}
+              onChange={(e) => onUpdateFnp(booking.bookingId, parseFloat(e.target.value) || 0)}
+              data-testid={`input-fnp-${booking.bookingId}`}
+            />
+            {needsDisputeWarning && (
+              <div className="flex items-center gap-0.5 text-amber-600" title="Difference to be logged in into issue tracker">
+                <AlertTriangle className="h-3.5 w-3.5" />
+              </div>
+            )}
+          </div>
+        </TableCell>
+        {runId && (
+          <TableCell className="py-1">
+            <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs text-amber-600 opacity-50 cursor-not-allowed"
+                disabled
+                title="Dispute functionality coming soon"
+                data-testid={`button-raise-dispute-${booking.bookingId}`}
+              >
+                <FileWarning className="h-3 w-3 mr-1" />
+                Dispute
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs text-blue-600"
+                onClick={() => onOpenIssueModal({
+                  bookingId: booking.bookingId,
+                  spNet: booking.spNet,
+                  hoNet: booking.hoNet,
+                  difference: booking.difference,
+                  reason: reasonName,
+                })}
+                data-testid={`button-flag-issue-${booking.bookingId}`}
+              >
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                Issue
+              </Button>
+            </div>
+          </TableCell>
+        )}
+      </TableRow>
+      {hasPax && (
+        <TableRow className="h-6 bg-violet-50/30 dark:bg-violet-950/10">
+          <TableCell colSpan={runId ? 6 : 5} className="py-0.5 pl-8">
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+              <span className="font-medium text-violet-600 dark:text-violet-400">Pax:</span>
+              {booking.paxBreakdown!.map((pb, pi) => (
+                <span key={pi} className="font-mono">
+                  {pb.paxType.replace(/_/g, " ")} ({pb.count} x {formatNumber(pb.unitPrice)} = {formatNumber(pb.priceNet)})
+                </span>
+              ))}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </Fragment>
+  );
+});
+
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-IN", {
     minimumFractionDigits: 2,
@@ -92,6 +216,8 @@ export function PurchaseReconciliationPanel({
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   // State for expanded TID groups within reason groups
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
+  // State for visible TID count per reason group (pagination)
+  const [visibleTidCounts, setVisibleTidCounts] = useState<Map<string, number>>(new Map());
   // Final Net Price state: bookingId → final net price (defaults to SP Net)
   const [finalNetPrices, setFinalNetPrices] = useState<Map<string, number>>(new Map());
   
@@ -196,6 +322,19 @@ export function PurchaseReconciliationPanel({
       return next;
     });
   };
+
+  const getVisibleTidCount = useCallback((reasonKey: string) => {
+    return visibleTidCounts.get(reasonKey) || INITIAL_TID_LIMIT;
+  }, [visibleTidCounts]);
+
+  const showMoreTids = useCallback((reasonKey: string, totalCount: number) => {
+    setVisibleTidCounts(prev => {
+      const next = new Map(prev);
+      const current = prev.get(reasonKey) || INITIAL_TID_LIMIT;
+      next.set(reasonKey, Math.min(current + INITIAL_TID_LIMIT, totalCount));
+      return next;
+    });
+  }, []);
 
   const getFinalNetPrice = useCallback((bookingId: string, defaultSpNet: number) => {
     return finalNetPrices.has(bookingId) ? finalNetPrices.get(bookingId)! : defaultSpNet;
@@ -632,7 +771,7 @@ export function PurchaseReconciliationPanel({
     };
   }, [allRows, primaryRows, balance]);
 
-  const lineItems = [
+  const lineItems = useMemo(() => [
     {
       id: 1,
       label: "Opening Balance",
@@ -728,7 +867,7 @@ export function PurchaseReconciliationPanel({
       isFormula: true,
       isValidation: true,
     },
-  ];
+  ], [calculations, hasBalance]);
 
   if (!beId) {
     return (
@@ -901,16 +1040,17 @@ export function PurchaseReconciliationPanel({
                                       </span>
                                     </div>
                                   </div>
-                                  {isReasonExpanded && (
+                                  {isReasonExpanded && (() => {
+                                    const reasonKey = `${item.id}-${reasonGroup.reason}`;
+                                    const visibleCount = getVisibleTidCount(reasonKey);
+                                    const visibleTids = tidEntries.slice(0, visibleCount);
+                                    const hasMore = tidEntries.length > visibleCount;
+                                    return (
                                     <div className="space-y-1 p-2">
-                                      {tidEntries.map(([tid, tidBookings]) => {
+                                      {visibleTids.map(([tid, tidBookings]) => {
                                         const tidKey = `${item.id}-${reasonGroup.reason}-${tid}`;
                                         const isTidExpanded = expandedTids.has(tidKey);
                                         const tidTotal = tidBookings.reduce((s, b) => s + b.difference, 0);
-                                        const undisputedWarnings = tidBookings.filter(b => {
-                                          const fnp = getFinalNetPrice(b.bookingId, b.spNet);
-                                          return Math.abs(fnp - b.spNet) > 0.01 && !loggedIssues.has(b.bookingId);
-                                        });
                                         return (
                                           <div key={tidKey} className="rounded-md border bg-background overflow-hidden">
                                             <div
@@ -926,12 +1066,6 @@ export function PurchaseReconciliationPanel({
                                                 )}
                                                 <span className="font-mono text-xs font-medium">TID: {tid}</span>
                                                 <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
-                                                {undisputedWarnings.length > 0 && (
-                                                  <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
-                                                    <AlertTriangle className="h-3 w-3 mr-0.5" />
-                                                    {undisputedWarnings.length} to log
-                                                  </Badge>
-                                                )}
                                               </div>
                                               <div className="flex items-center gap-2 text-xs">
                                                 <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
@@ -1039,95 +1173,31 @@ export function PurchaseReconciliationPanel({
                                                   <TableBody>
                                                     {tidBookings.map((booking, bookingIdx) => {
                                                       const hasDispute = activeDisputes.has(booking.bookingId);
-                                                      const disputeAmount = disputeAmounts.get(booking.bookingId);
+                                                      const disputeAmt = disputeAmounts.get(booking.bookingId);
                                                       const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                                                       const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                                                       const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
-                                                      const hasPax = booking.paxBreakdown && booking.paxBreakdown.length > 0;
+                                                      const hasPax = !!(booking.paxBreakdown && booking.paxBreakdown.length > 0);
                                                       return (
-                                                        <Fragment key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
-                                                          <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
-                                                          <TableCell className="py-1 font-mono">
-                                                            <div className="flex items-center gap-1">
-                                                              {booking.bookingId}
-                                                              {hasDispute && (
-                                                                <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">
-                                                                  Dispute: {disputeAmount?.toFixed(2)}
-                                                                </Badge>
-                                                              )}
-                                                            </div>
-                                                          </TableCell>
-                                                          <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
-                                                          <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
-                                                          <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
-                                                            {formatNumber(booking.difference)}
-                                                          </TableCell>
-                                                          <TableCell className="py-1 text-right" onClick={(e) => e.stopPropagation()}>
-                                                            <div className="flex items-center justify-end gap-1">
-                                                              <Input
-                                                                type="number"
-                                                                step="0.01"
-                                                                className="h-6 text-xs w-28 font-mono text-right"
-                                                                value={finalNetPrices.has(booking.bookingId) ? finalNetPrices.get(booking.bookingId) : booking.spNet}
-                                                                onChange={(e) => updateFinalNetPrice(booking.bookingId, parseFloat(e.target.value) || 0)}
-                                                                data-testid={`input-fnp-${booking.bookingId}`}
-                                                              />
-                                                              {needsDisputeWarning && (
-                                                                <div className="flex items-center gap-0.5 text-amber-600" title="Difference to be logged in into issue tracker">
-                                                                  <AlertTriangle className="h-3.5 w-3.5" />
-                                                                </div>
-                                                              )}
-                                                            </div>
-                                                          </TableCell>
-                                                          {runId && (
-                                                            <TableCell className="py-1">
-                                                              <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                                <Button
-                                                                  size="sm"
-                                                                  variant="ghost"
-                                                                  className="text-xs text-amber-600 opacity-50 cursor-not-allowed"
-                                                                  disabled
-                                                                  title="Dispute functionality coming soon"
-                                                                  data-testid={`button-raise-dispute-${booking.bookingId}`}
-                                                                >
-                                                                  <FileWarning className="h-3 w-3 mr-1" />
-                                                                  Dispute
-                                                                </Button>
-                                                                <Button
-                                                                  size="sm"
-                                                                  variant="ghost"
-                                                                  className="text-xs text-blue-600"
-                                                                  onClick={() => openIssueModal({
-                                                                    bookingId: booking.bookingId,
-                                                                    spNet: booking.spNet,
-                                                                    hoNet: booking.hoNet,
-                                                                    difference: booking.difference,
-                                                                    reason: reasonGroup.reason,
-                                                                  })}
-                                                                  data-testid={`button-flag-issue-${booking.bookingId}`}
-                                                                >
-                                                                  <AlertTriangle className="h-3 w-3 mr-1" />
-                                                                  Issue
-                                                                </Button>
-                                                              </div>
-                                                            </TableCell>
-                                                          )}
-                                                        </TableRow>
-                                                        {hasPax && (
-                                                          <TableRow className="h-6 bg-violet-50/30 dark:bg-violet-950/10">
-                                                            <TableCell colSpan={runId ? 6 : 5} className="py-0.5 pl-8">
-                                                              <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
-                                                                <span className="font-medium text-violet-600 dark:text-violet-400">Pax:</span>
-                                                                {booking.paxBreakdown!.map((pb, pi) => (
-                                                                  <span key={pi} className="font-mono">
-                                                                    {pb.paxType.replace(/_/g, " ")} ({pb.count} x {formatNumber(pb.unitPrice)} = {formatNumber(pb.priceNet)})
-                                                                  </span>
-                                                                ))}
-                                                              </div>
-                                                            </TableCell>
-                                                          </TableRow>
-                                                        )}
-                                                        </Fragment>
+                                                        <BookingRow
+                                                          key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`}
+                                                          booking={booking}
+                                                          itemId={item.id}
+                                                          groupIdx={groupIdx}
+                                                          tid={tid}
+                                                          bookingIdx={bookingIdx}
+                                                          currency={currency}
+                                                          runId={runId}
+                                                          hasDispute={hasDispute}
+                                                          disputeAmount={disputeAmt}
+                                                          fnpValue={fnp}
+
+                                                          needsDisputeWarning={needsDisputeWarning}
+                                                          hasPax={hasPax}
+                                                          reasonName={reasonGroup.reason}
+                                                          onUpdateFnp={updateFinalNetPrice}
+                                                          onOpenIssueModal={openIssueModal}
+                                                        />
                                                       );
                                                     })}
                                                   </TableBody>
@@ -1137,8 +1207,20 @@ export function PurchaseReconciliationPanel({
                                           </div>
                                         );
                                       })}
+                                      {hasMore && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="w-full text-xs"
+                                          onClick={() => showMoreTids(reasonKey, tidEntries.length)}
+                                          data-testid={`button-show-more-tids-${reasonKey}`}
+                                        >
+                                          Show More ({tidEntries.length - visibleCount} remaining)
+                                        </Button>
+                                      )}
                                     </div>
-                                  )}
+                                    );
+                                  })()}
                                 </div>
                               );
                             })}
