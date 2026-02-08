@@ -201,6 +201,8 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
     const netPrice = getRowValue(row, "netPrice", "Net Price", "net_price", "finalNetPrice", "Final Net Price");
     const currency = getRowValue(row, "currency", "Currency", "Billing Currency");
     const bookingStatus = getRowValue(row, "bookingStatus", "Booking Status", "booking_status", "status");
+    const rawExpDate = getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "Fulfillment Date", "fulfillmentDate", "tour_date", "Tour Date", "Travel Date", "travelDate", "Date of Experience", "dateOfExperience", "Visit Date", "visitDate", "Activity Date", "activityDate", "Tour Start Date", "tourStartDate", "Service Date", "serviceDate", "Event Date", "eventDate");
+    const convertedExpDate = excelSerialToDateString(rawExpDate);
     
     const chargedLoss = getRowValue(row, "chargedLoss", "Charged Loss", "charged_loss", "charge_loss");
     const commentValue = getRowValue(row, "comment", "Comment", "comments", "Comments", "notes", "Notes");
@@ -229,7 +231,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       hoReason: getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason") ? String(getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason")) : undefined,
       dateOfPayment: excelSerialToDateString(getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date")) || undefined,
       vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
-      experienceDate: excelSerialToDateString(getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "Fulfillment Date", "fulfillmentDate", "tour_date", "Tour Date", "Travel Date", "travelDate", "Date of Experience", "dateOfExperience", "Visit Date", "visitDate", "Activity Date", "activityDate", "Tour Start Date", "tourStartDate", "Service Date", "serviceDate", "Event Date", "eventDate")),
+      experienceDate: convertedExpDate,
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
     };
   });
