@@ -41,6 +41,13 @@ type PurchaseBooking = {
   paymentBasis?: string;
   isSecondaryVendor?: boolean;
   vid?: string;
+  paymentMethod?: string;
+  spPaymentMethod?: string;
+  alreadyReconciledType?: "same_be" | "different_be";
+  hoBeId?: string;
+  spBeId?: string;
+  chargedLoss?: string;
+  comment?: string;
 };
 
 interface BookingForDispute {
@@ -1070,16 +1077,19 @@ const ReasonGroup = memo(function ReasonGroup({
   const visibleTids = tidEntries.slice(0, visibleTidCount);
   const hasMore = tidEntries.length > visibleTidCount;
 
+  const isSecondaryVendorGroup = reasonGroup.reason.startsWith("SV: ");
+
   return (
-    <div className="rounded-md border bg-background overflow-hidden">
+    <div className={`rounded-md border bg-background overflow-hidden ${isSecondaryVendorGroup ? "border-orange-200 dark:border-orange-800" : ""}`}>
       <div
-        className="flex items-center justify-between px-3 py-2 bg-muted/50 cursor-pointer hover-elevate"
+        className={`flex items-center justify-between px-3 py-2 cursor-pointer hover-elevate ${isSecondaryVendorGroup ? "bg-orange-50/50 dark:bg-orange-950/20" : "bg-muted/50"}`}
         onClick={() => onToggleReason(reasonKey)}
         data-testid={`reason-header-${itemId}-${groupIdx}`}
       >
         <div className="flex items-center gap-2">
-          {isReasonExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          {isReasonExpanded ? <ChevronDown className={`h-4 w-4 ${isSecondaryVendorGroup ? "text-orange-600" : "text-primary"}`} /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
           <span className="font-medium text-sm">{reasonGroup.reason}</span>
+          {isSecondaryVendorGroup && <Badge className="text-[10px] bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 no-default-hover-elevate no-default-active-elevate">Secondary Vendor</Badge>}
           <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
           <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
         </div>
@@ -1610,12 +1620,20 @@ export function PurchaseReconciliationPanel({
           experienceDate: row.experienceDate,
           bookingCreationDate: row.bookingCreationDate,
           paymentBasis: row.paymentBasis,
+          paymentMethod: row.paymentMethod,
+          spPaymentMethod: row.spPaymentMethod,
+          alreadyReconciledType: row.alreadyReconciledType,
+          hoBeId: row.hoBeId,
+          spBeId: row.spBeId || row.beId,
+          chargedLoss: row.chargedLoss,
+          comment: row.comment,
         });
       });
     
-    // Secondary vendor rows always go to row 10 (full spNetInHo as difference, hoNet treated as 0)
+    // Secondary vendor rows always go to row 10 with "SV: " prefix to keep them visually distinct
     secondaryRows.forEach(row => {
-      const reason = row.reason || "Secondary Vendor";
+      const baseReason = row.reason || "Secondary Vendor";
+      const reason = `SV: ${baseReason}`;
       if (!row10ByReason.has(reason)) row10ByReason.set(reason, []);
       row10ByReason.get(reason)!.push({
         bookingId: row.bookingId,
@@ -1631,6 +1649,13 @@ export function PurchaseReconciliationPanel({
         paymentBasis: row.paymentBasis,
         isSecondaryVendor: true,
         vid: row.vid,
+        paymentMethod: row.paymentMethod,
+        spPaymentMethod: row.spPaymentMethod,
+        alreadyReconciledType: row.alreadyReconciledType,
+        hoBeId: row.hoBeId,
+        spBeId: row.spBeId || row.beId,
+        chargedLoss: row.chargedLoss,
+        comment: row.comment,
       });
     });
 
@@ -1650,6 +1675,8 @@ export function PurchaseReconciliationPanel({
         experienceDate: row.experienceDate,
         bookingCreationDate: row.bookingCreationDate,
         paymentBasis: row.paymentBasis,
+        paymentMethod: row.paymentMethod,
+        spPaymentMethod: row.spPaymentMethod,
       });
     });
     
@@ -1684,6 +1711,13 @@ export function PurchaseReconciliationPanel({
           experienceDate: row.experienceDate,
           bookingCreationDate: row.bookingCreationDate,
           paymentBasis: row.paymentBasis,
+          paymentMethod: row.paymentMethod,
+          spPaymentMethod: row.spPaymentMethod,
+          alreadyReconciledType: row.alreadyReconciledType,
+          hoBeId: row.hoBeId,
+          spBeId: row.spBeId || row.beId,
+          chargedLoss: row.chargedLoss,
+          comment: row.comment,
         });
       });
     
@@ -1834,6 +1868,103 @@ export function PurchaseReconciliationPanel({
       isValidation: true,
     },
   ], [calculations, hasBalance]);
+
+  const cancellationReasons = useMemo(() => [
+    "Cancelled-SP error",
+    "Cancelled-Insured Booking",
+    "Cancelled-DSS policy",
+    "Cancelled-Check for Charge loss",
+  ], []);
+
+  const alreadyReconciledData = useMemo(() => {
+    const sameBE: PrimaryRow[] = [];
+    const differentBE: PrimaryRow[] = [];
+    const seen = new Set<string>();
+    for (const row of [...primaryRows, ...secondaryVendorRows]) {
+      if (seen.has(row.bookingId)) continue;
+      if (row.alreadyReconciledType === "same_be" || row.reason === "Already Reconciled-Same BE") {
+        seen.add(row.bookingId);
+        sameBE.push(row);
+      } else if (row.alreadyReconciledType === "different_be" || row.reason === "Already Reconciled-Different BE") {
+        seen.add(row.bookingId);
+        differentBE.push(row);
+      }
+    }
+    const total = sameBE.length + differentBE.length;
+    const sameBETotal = sameBE.reduce((s, r) => s + r.spNetInHo, 0);
+    const differentBETotal = differentBE.reduce((s, r) => s + r.spNetInHo, 0);
+    return {
+      hasData: total > 0,
+      sameBE: { bookings: sameBE, total: sameBETotal },
+      differentBE: { bookings: differentBE, total: differentBETotal },
+      totalBookings: total,
+      totalAmount: sameBETotal + differentBETotal,
+    };
+  }, [primaryRows, secondaryVendorRows]);
+
+  const paymentMismatchData = useMemo(() => {
+    const mismatches: Array<PrimaryRow & { mismatchLabel: string }> = [];
+    const seen = new Set<string>();
+    for (const row of [...primaryRows, ...secondaryVendorRows, ...unmappedRows]) {
+      if (seen.has(row.bookingId)) continue;
+      const ho = (row.paymentMethod || "").trim();
+      const sp = (row.spPaymentMethod || "").trim();
+      if (ho && sp && ho.toLowerCase() !== sp.toLowerCase()) {
+        seen.add(row.bookingId);
+        mismatches.push({ ...row, mismatchLabel: `${ho} vs ${sp}` });
+      }
+    }
+    const byTid = new Map<string, typeof mismatches>();
+    for (const m of mismatches) {
+      const tid = m.tid || "Unknown";
+      if (!byTid.has(tid)) byTid.set(tid, []);
+      byTid.get(tid)!.push(m);
+    }
+    const tidEntries = Array.from(byTid.entries()).sort((a, b) => b[1].length - a[1].length);
+    return {
+      hasData: mismatches.length > 0,
+      mismatches,
+      tidEntries,
+      totalBookings: mismatches.length,
+      totalAmount: mismatches.reduce((s, m) => s + m.spNetInHo, 0),
+    };
+  }, [primaryRows, secondaryVendorRows, unmappedRows]);
+
+  const cancellationData = useMemo(() => {
+    const seenCanc = new Set<string>();
+    const cancBookings = [...primaryRows, ...secondaryVendorRows].filter(r => {
+      if (seenCanc.has(r.bookingId)) return false;
+      const isCanc = cancellationReasons.includes(r.reason) || (r.reason === "Reconciled" && (r.comment || "").startsWith("Cancelled"));
+      if (isCanc) seenCanc.add(r.bookingId);
+      return isCanc;
+    });
+    if (cancBookings.length === 0) return { hasData: false, breakdown: [], totalBookings: 0, totalAmount: 0 };
+    const breakdown = cancellationReasons.map(reason => {
+      const bookings = cancBookings.filter(b => b.reason === reason);
+      const total = bookings.reduce((s, b) => s + b.spNetInHo, 0);
+      return { reason, bookings, total, count: bookings.length };
+    }).filter(g => g.count > 0);
+    const cancelledOKBookings = cancBookings.filter(b => b.reason === "Reconciled" && (b.comment || "").startsWith("Cancelled"));
+    if (cancelledOKBookings.length > 0) {
+      breakdown.unshift({
+        reason: "Cancelled-OK",
+        bookings: cancelledOKBookings,
+        total: cancelledOKBookings.reduce((s, b) => s + b.spNetInHo, 0),
+        count: cancelledOKBookings.length,
+      });
+    }
+    return {
+      hasData: true,
+      breakdown,
+      totalBookings: cancBookings.length,
+      totalAmount: cancBookings.reduce((s, b) => s + b.spNetInHo, 0),
+    };
+  }, [primaryRows, secondaryVendorRows, cancellationReasons]);
+
+  const [expandedAlreadyRecon, setExpandedAlreadyRecon] = useState<"same_be" | "different_be" | null>(null);
+  const [expandedPaymentMismatch, setExpandedPaymentMismatch] = useState(false);
+  const [expandedCancellations, setExpandedCancellations] = useState(false);
+  const [expandedCancType, setExpandedCancType] = useState<string | null>(null);
 
   if (!beId) {
     return (
@@ -2058,6 +2189,273 @@ export function PurchaseReconciliationPanel({
           </div>
         </CardContent>
       </Card>
+
+      {alreadyReconciledData.hasData && (
+        <Card data-testid="section-already-reconciled">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Check className="h-4 w-4 text-green-600" />
+              <span>Already Reconciled</span>
+              <Badge variant="secondary" className="text-xs">{alreadyReconciledData.totalBookings} bookings</Badge>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                {formatNumber(alreadyReconciledData.totalAmount)} {currency}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {alreadyReconciledData.sameBE.bookings.length > 0 && (
+              <div className="rounded-md border bg-background overflow-hidden">
+                <div
+                  className="flex items-center justify-between px-3 py-2 bg-green-50/50 dark:bg-green-950/20 cursor-pointer hover-elevate"
+                  onClick={() => setExpandedAlreadyRecon(prev => prev === "same_be" ? null : "same_be")}
+                  data-testid="already-recon-same-be-header"
+                >
+                  <div className="flex items-center gap-2">
+                    {expandedAlreadyRecon === "same_be" ? <ChevronDown className="h-4 w-4 text-green-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-sm font-medium">Same BE</span>
+                    <Badge variant="secondary" className="text-xs">{alreadyReconciledData.sameBE.bookings.length}</Badge>
+                  </div>
+                  <span className="font-mono text-xs">{formatNumber(alreadyReconciledData.sameBE.total)} {currency}</span>
+                </div>
+                {expandedAlreadyRecon === "same_be" && (
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="h-7">
+                        <TableHead className="py-1 text-xs">TID</TableHead>
+                        <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                        <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                        <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                        <TableHead className="py-1 text-xs">Payment</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {alreadyReconciledData.sameBE.bookings.map((b, i) => {
+                        const hoP = (b.paymentMethod || "").trim();
+                        const spP = (b.spPaymentMethod || "").trim();
+                        const mismatch = hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
+                        return (
+                          <TableRow key={`ar-same-${i}`} className="h-8">
+                            <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                            <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                            <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                            <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                            <TableCell className="py-1">
+                              {mismatch ? (
+                                <Badge variant="destructive" className="text-[10px]">{hoP} vs {spP}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">{hoP || spP || "-"}</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            )}
+            {alreadyReconciledData.differentBE.bookings.length > 0 && (
+              <div className="rounded-md border bg-background overflow-hidden">
+                <div
+                  className="flex items-center justify-between px-3 py-2 bg-amber-50/50 dark:bg-amber-950/20 cursor-pointer hover-elevate"
+                  onClick={() => setExpandedAlreadyRecon(prev => prev === "different_be" ? null : "different_be")}
+                  data-testid="already-recon-diff-be-header"
+                >
+                  <div className="flex items-center gap-2">
+                    {expandedAlreadyRecon === "different_be" ? <ChevronDown className="h-4 w-4 text-amber-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-sm font-medium">Different BE</span>
+                    <Badge variant="secondary" className="text-xs">{alreadyReconciledData.differentBE.bookings.length}</Badge>
+                  </div>
+                  <span className="font-mono text-xs">{formatNumber(alreadyReconciledData.differentBE.total)} {currency}</span>
+                </div>
+                {expandedAlreadyRecon === "different_be" && (
+                  <Table className="text-xs">
+                    <TableHeader>
+                      <TableRow className="h-7">
+                        <TableHead className="py-1 text-xs">TID</TableHead>
+                        <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                        <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                        <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                        <TableHead className="py-1 text-xs">HO BE ID</TableHead>
+                        <TableHead className="py-1 text-xs">SP BE ID</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {alreadyReconciledData.differentBE.bookings.map((b, i) => (
+                        <TableRow key={`ar-diff-${i}`} className="h-8">
+                          <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                          <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                          <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                          <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                          <TableCell className="py-1 font-mono">{b.hoBeId || "-"}</TableCell>
+                          <TableCell className="py-1 font-mono">{b.spBeId || b.beId || "-"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {paymentMismatchData.hasData && (
+        <Card className="border-violet-200 dark:border-violet-800" data-testid="section-payment-mismatch">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-violet-600" />
+              <span>Payment Method Mismatch</span>
+              <Badge className="text-xs bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300 no-default-hover-elevate no-default-active-elevate">{paymentMismatchData.totalBookings} bookings</Badge>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                {formatNumber(paymentMismatchData.totalAmount)} {currency}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border bg-background overflow-hidden">
+              <div
+                className="flex items-center justify-between px-3 py-2 bg-violet-50/50 dark:bg-violet-950/20 cursor-pointer hover-elevate"
+                onClick={() => setExpandedPaymentMismatch(prev => !prev)}
+                data-testid="payment-mismatch-header"
+              >
+                <div className="flex items-center gap-2">
+                  {expandedPaymentMismatch ? <ChevronDown className="h-4 w-4 text-violet-600" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-sm font-medium">Mismatched Bookings</span>
+                  <Badge variant="outline" className="text-xs">{paymentMismatchData.tidEntries.length} TIDs</Badge>
+                </div>
+              </div>
+              {expandedPaymentMismatch && (
+                <div className="p-2 space-y-1">
+                  {paymentMismatchData.tidEntries.map(([tid, bookings]) => (
+                    <div key={`pm-tid-${tid}`} className="rounded-md border overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-medium">TID: {tid}</span>
+                          <Badge variant="secondary" className="text-[10px]">{bookings.length}</Badge>
+                        </div>
+                      </div>
+                      <Table className="text-xs">
+                        <TableHeader>
+                          <TableRow className="h-7">
+                            <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                            <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                            <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                            <TableHead className="py-1 text-xs">HO Payment</TableHead>
+                            <TableHead className="py-1 text-xs">SP Payment</TableHead>
+                            <TableHead className="py-1 text-xs">Reason</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {bookings.map((b, i) => (
+                            <TableRow key={`pm-${tid}-${i}`} className="h-8">
+                              <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                              <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                              <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                              <TableCell className="py-1">
+                                <Badge variant="outline" className="text-[10px]">{b.paymentMethod || "-"}</Badge>
+                              </TableCell>
+                              <TableCell className="py-1">
+                                <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:border-violet-700 dark:text-violet-300">{b.spPaymentMethod || "-"}</Badge>
+                              </TableCell>
+                              <TableCell className="py-1 text-muted-foreground">{b.reason}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {cancellationData.hasData && (
+        <Card data-testid="section-cancellations">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <X className="h-4 w-4 text-red-500" />
+              <span>Cancellations Summary</span>
+              <Badge variant="secondary" className="text-xs">{cancellationData.totalBookings} bookings</Badge>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                {formatNumber(cancellationData.totalAmount)} {currency}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border bg-background overflow-hidden">
+              <div
+                className="flex items-center justify-between px-3 py-2 bg-red-50/30 dark:bg-red-950/10 cursor-pointer hover-elevate"
+                onClick={() => setExpandedCancellations(prev => !prev)}
+                data-testid="cancellations-header"
+              >
+                <div className="flex items-center gap-2">
+                  {expandedCancellations ? <ChevronDown className="h-4 w-4 text-red-500" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                  <span className="text-sm font-medium">Breakdown by Type</span>
+                  <Badge variant="outline" className="text-xs">{cancellationData.breakdown.length} types</Badge>
+                </div>
+              </div>
+              {expandedCancellations && (
+                <div className="p-2 space-y-1">
+                  {cancellationData.breakdown.map((group) => (
+                    <div key={`canc-${group.reason}`} className="rounded-md border overflow-hidden">
+                      <div
+                        className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                        onClick={() => setExpandedCancType(prev => prev === group.reason ? null : group.reason)}
+                        data-testid={`cancellation-type-${group.reason}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {expandedCancType === group.reason ? <ChevronDown className="h-3 w-3 text-red-500" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                          <span className="text-xs font-medium">{group.reason}</span>
+                          <Badge variant="secondary" className="text-[10px]">{group.count}</Badge>
+                        </div>
+                        <span className="font-mono text-xs text-muted-foreground">{formatNumber(group.total)} {currency}</span>
+                      </div>
+                      {expandedCancType === group.reason && (
+                        <Table className="text-xs">
+                          <TableHeader>
+                            <TableRow className="h-7">
+                              <TableHead className="py-1 text-xs">TID</TableHead>
+                              <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                              <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                              <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                              <TableHead className="py-1 text-xs">Charged Loss</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.bookings.map((b, i) => (
+                              <TableRow key={`canc-${group.reason}-${i}`} className="h-8">
+                                <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                                <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                <TableCell className="py-1">
+                                  <Badge variant={b.chargedLoss === "TRUE" ? "destructive" : "outline"} className="text-[10px]">
+                                    {b.chargedLoss || "FALSE"}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-end gap-3 pt-2 border-t text-xs">
+                    <span className="text-muted-foreground">Total ({cancellationData.totalBookings} bookings):</span>
+                    <span className="font-mono font-semibold">{formatNumber(cancellationData.totalAmount)} {currency}</span>
+                    {effectiveFxRate && (
+                      <span className="font-mono text-muted-foreground">({formatNumber(cancellationData.totalAmount * effectiveFxRate)} USD)</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex justify-end pt-2">
         <Button variant="outline" size="sm" onClick={onClose} data-testid="button-close-purchase-reco">
