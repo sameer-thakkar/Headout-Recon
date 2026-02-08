@@ -224,23 +224,30 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const [newPrices, setNewPrices] = useState<Record<string, string>>({});
   const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
-  useImperativeHandle(ref, () => ({
-    open: (tidBookings: PurchaseBooking[], tidVal: string) => {
-      const paxTypeMap = new Map<string, number>();
-      for (const b of tidBookings) {
-        if (b.paxBreakdown) {
-          for (const pb of b.paxBreakdown) {
-            if (!paxTypeMap.has(pb.paxType)) {
-              paxTypeMap.set(pb.paxType, pb.unitPrice);
-            }
+  const paxSummary = useMemo(() => {
+    const map = new Map<string, { count: number; hoUnitPrice: number; hoTotal: number }>();
+    for (const b of bookings) {
+      if (b.paxBreakdown) {
+        for (const pb of b.paxBreakdown) {
+          const existing = map.get(pb.paxType);
+          if (existing) {
+            existing.count += pb.count;
+            existing.hoTotal += pb.priceNet;
+          } else {
+            map.set(pb.paxType, { count: pb.count, hoUnitPrice: pb.unitPrice, hoTotal: pb.priceNet });
           }
         }
       }
-      const initialPrices: Record<string, string> = {};
-      for (const [paxType, unitPrice] of Array.from(paxTypeMap.entries())) {
-        initialPrices[paxType] = String(unitPrice);
-      }
-      setNewPrices(initialPrices);
+    }
+    return map;
+  }, [bookings]);
+
+  const spTotal = useMemo(() => bookings.reduce((s, b) => s + b.spNet, 0), [bookings]);
+  const hoTotal = useMemo(() => bookings.reduce((s, b) => s + b.hoNet, 0), [bookings]);
+
+  useImperativeHandle(ref, () => ({
+    open: (tidBookings: PurchaseBooking[], tidVal: string) => {
+      setNewPrices({});
       setBookings(tidBookings);
       setTid(tidVal);
       setIsOpen(true);
@@ -257,14 +264,53 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
     onApplyHoNet(bookings);
   }, [bookings, onApplyHoNet]);
 
+  const allPaxFilled = useMemo(() => {
+    if (!hasPax) return false;
+    for (const [paxType] of Array.from(paxSummary.entries())) {
+      const val = newPrices[paxType];
+      if (val === undefined || val === "") return false;
+    }
+    return paxSummary.size > 0;
+  }, [hasPax, paxSummary, newPrices]);
+
   const handleApplyPax = useCallback(() => {
+    if (!allPaxFilled) return;
     setIsOpen(false);
     onApplyPax(bookings, newPrices, tid);
-  }, [bookings, newPrices, tid, onApplyPax]);
+  }, [bookings, newPrices, tid, onApplyPax, allPaxFilled]);
+
+  const formatDisplayName = (paxType: string) =>
+    paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  const renderPaxBreakdownTable = () => {
+    if (!hasPax || paxSummary.size === 0) return null;
+    return (
+      <div className="rounded-md border overflow-hidden mt-2">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-xs">Pax Type</TableHead>
+              <TableHead className="text-xs text-right">Count</TableHead>
+              <TableHead className="text-xs text-right">Unit Price ({currency})</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from(paxSummary.entries()).map(([paxType, data]) => (
+              <TableRow key={paxType}>
+                <TableCell className="text-xs font-medium">{formatDisplayName(paxType)}</TableCell>
+                <TableCell className="text-xs text-right font-mono">{data.count}</TableCell>
+                <TableCell className="text-xs text-right font-mono">{formatNumber(data.hoUnitPrice)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
@@ -287,11 +333,18 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                 </div>
                 <div>
                   <div className="text-sm font-medium">Update to SP Net</div>
-                  <div className="text-xs text-muted-foreground">Set Final Net Price = SP Net for all bookings</div>
+                  <div className="text-xs text-muted-foreground">
+                    Set Final Net Price = SP Net for all bookings (Total: {formatNumber(spTotal)} {currency})
+                  </div>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
             </div>
+            {hasPax && (
+              <div className="px-4 pb-3">
+                {renderPaxBreakdownTable()}
+              </div>
+            )}
           </div>
 
           <div className="rounded-md border bg-background overflow-hidden">
@@ -306,11 +359,18 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                 </div>
                 <div>
                   <div className="text-sm font-medium">Update to HO Net</div>
-                  <div className="text-xs text-muted-foreground">Set Final Net Price = HO Net for all bookings</div>
+                  <div className="text-xs text-muted-foreground">
+                    Set Final Net Price = HO Net for all bookings (Total: {formatNumber(hoTotal)} {currency})
+                  </div>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
             </div>
+            {hasPax && (
+              <div className="px-4 pb-3">
+                {renderPaxBreakdownTable()}
+              </div>
+            )}
           </div>
 
           {hasPax && (
@@ -322,55 +382,63 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                   </div>
                   <div>
                     <div className="text-sm font-medium">Update based on Pax Type</div>
-                    <div className="text-xs text-muted-foreground">Set unit prices per pax type to recalculate Final Net Price</div>
+                    <div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate Final Net Price</div>
                   </div>
                 </div>
               </div>
               <div className="p-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3 text-xs mb-2">
+                  <div className="rounded-md border p-2 bg-blue-50 dark:bg-blue-900/20">
+                    <span className="text-muted-foreground">SP Net Total:</span>{" "}
+                    <span className="font-mono font-semibold text-blue-700 dark:text-blue-300">{formatNumber(spTotal)} {currency}</span>
+                  </div>
+                  <div className="rounded-md border p-2 bg-green-50 dark:bg-green-900/20">
+                    <span className="text-muted-foreground">HO Net Total:</span>{" "}
+                    <span className="font-mono font-semibold text-green-700 dark:text-green-300">{formatNumber(hoTotal)} {currency}</span>
+                  </div>
+                </div>
                 <div className="rounded-md border overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-xs">Pax Type</TableHead>
-                        <TableHead className="text-xs text-right">Current Price ({currency})</TableHead>
-                        <TableHead className="text-xs text-right">New Price ({currency})</TableHead>
+                        <TableHead className="text-xs text-right">Count</TableHead>
+                        <TableHead className="text-xs text-right">HO Unit Price ({currency})</TableHead>
+                        <TableHead className="text-xs text-right">Final Price ({currency})</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {Object.entries(newPrices).map(([paxType, price]) => {
-                        const currentPrice = bookings
-                          .flatMap(b => b.paxBreakdown || [])
-                          .find(pb => pb.paxType === paxType)?.unitPrice || 0;
-                        const displayName = paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-                        return (
-                          <TableRow key={paxType}>
-                            <TableCell className="text-xs font-medium">{displayName}</TableCell>
-                            <TableCell className="text-xs text-right font-mono text-muted-foreground">
-                              {formatNumber(currentPrice)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={price}
-                                onChange={(e) => setNewPrices(prev => ({ ...prev, [paxType]: e.target.value }))}
-                                className="w-32 text-xs font-mono text-right ml-auto"
-                                data-testid={`input-pax-price-${paxType}`}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {Array.from(paxSummary.entries()).map(([paxType, data]) => (
+                        <TableRow key={paxType}>
+                          <TableCell className="text-xs font-medium">{formatDisplayName(paxType)}</TableCell>
+                          <TableCell className="text-xs text-right font-mono">{data.count}</TableCell>
+                          <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                            {formatNumber(data.hoUnitPrice)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="Enter price"
+                              value={newPrices[paxType] ?? ""}
+                              onChange={(e) => setNewPrices(prev => ({ ...prev, [paxType]: e.target.value }))}
+                              className="w-32 text-xs font-mono text-right ml-auto"
+                              data-testid={`input-pax-price-${paxType}`}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <p className="text-xs text-muted-foreground">
-                    New FNP = Sum of (Count x New Price) per pax type
+                    New FNP = Sum of (Count x Final Price) per pax type
                   </p>
                   <Button
                     size="sm"
                     onClick={handleApplyPax}
+                    disabled={!allPaxFilled}
                     data-testid="button-apply-pax-update"
                   >
                     <Check className="h-3.5 w-3.5 mr-1.5" />
