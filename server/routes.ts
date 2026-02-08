@@ -197,7 +197,7 @@ const upload = multer({
  * Parse Excel file with multiple sheets
  */
 function parseXlsxWithSheets(buffer: Buffer): Map<string, SheetData> {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheets = new Map<string, SheetData>();
 
   for (const sheetName of workbook.SheetNames) {

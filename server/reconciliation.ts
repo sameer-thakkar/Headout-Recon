@@ -176,6 +176,21 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
     }
   }
   
+  const excelSerialToDateString = (val: unknown): string | null => {
+    if (val === null || val === undefined || val === "") return null;
+    if (val instanceof Date) {
+      return val.toISOString();
+    }
+    const str = String(val);
+    if (!isNaN(Date.parse(str))) return str;
+    const num = Number(val);
+    if (!isNaN(num) && num > 10000 && num < 100000) {
+      const epoch = new Date((num - 25569) * 86400000);
+      if (!isNaN(epoch.getTime())) return epoch.toISOString();
+    }
+    return str || null;
+  };
+
   return sheet.rows.map((row) => {
     const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
     const bookingId = getRowValue(row, "bookingId", "Booking ID", "booking_id");
@@ -190,7 +205,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       bookingId: String(bookingId || ""),
       netPrice: Number(netPrice) || 0,
       currency: String(currency || "USD"),
-      bookingCreationDate: bookingCreationDate ? String(bookingCreationDate) : null,
+      bookingCreationDate: excelSerialToDateString(bookingCreationDate),
       bookingStatus: String(bookingStatus || ""),
       cancellable: getRowValue(row, "Cancellable", "cancellable") ? String(getRowValue(row, "Cancellable", "cancellable")) : null,
       cancellationInsurance: getRowValue(row, "Cancellation Insurance", "cancellationInsurance") ? String(getRowValue(row, "Cancellation Insurance", "cancellationInsurance")) : null,
@@ -209,11 +224,11 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       paymentMethod: getRowValue(row, "paymentMethod", "Payment Method", "payment_method", "PaymentMethod") ? String(getRowValue(row, "paymentMethod", "Payment Method", "payment_method", "PaymentMethod")) : undefined,
       // Already Reconciled detection - capture "reason" column from HO data
       hoReason: getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason") ? String(getRowValue(row, "reason", "Reason", "reconReason", "Recon Reason", "reconciliation_reason")) : undefined,
-      dateOfPayment: getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date") ? String(getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date")) : undefined,
+      dateOfPayment: excelSerialToDateString(getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date")) || undefined,
       // Vendor ID for correction
       vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
       // Experience date
-      experienceDate: getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "tour_date", "Travel Date") ? String(getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "tour_date", "Travel Date")) : null,
+      experienceDate: excelSerialToDateString(getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "tour_date", "Travel Date")),
       // Pax type breakdown
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
     };
