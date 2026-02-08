@@ -720,27 +720,33 @@ const IssueModal = forwardRef<IssueModalHandle, {
   currency: string;
   billingEntityName: string;
   effectiveFxRate: number | null;
-  onSave: (booking: BookingForDispute) => Promise<void>;
+  onSave: (booking: BookingForDispute, driTeamOverride?: string) => Promise<void>;
 }>(function IssueModal({ currency, billingEntityName, effectiveFxRate, onSave }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [booking, setBooking] = useState<BookingForDispute | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedDriTeam, setSelectedDriTeam] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const isUnmapped = booking?.reason === "Unmapped";
 
   useImperativeHandle(ref, () => ({
     open: (b: BookingForDispute) => {
       setBooking(b);
+      setSelectedDriTeam(null);
       setIsOpen(true);
     }
   }));
 
   const handleSave = useCallback(async () => {
     if (!booking) return;
+    if (isUnmapped && !selectedDriTeam) return;
     setIsSaving(true);
     try {
-      await onSave(booking);
+      await onSave(booking, isUnmapped ? selectedDriTeam! : undefined);
       setIsOpen(false);
       setBooking(null);
+      setSelectedDriTeam(null);
     } catch {
       toast({
         title: "Error",
@@ -750,7 +756,7 @@ const IssueModal = forwardRef<IssueModalHandle, {
     } finally {
       setIsSaving(false);
     }
-  }, [booking, onSave, toast]);
+  }, [booking, isUnmapped, selectedDriTeam, onSave, toast]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -790,22 +796,48 @@ const IssueModal = forwardRef<IssueModalHandle, {
                 <span className="font-medium">{billingEntityName}</span>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">
-              This issue will be assigned to the appropriate DRI team based on the reason classification.
-            </p>
+            {isUnmapped ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Select DRI Team:</p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant={selectedDriTeam === "Finance- Prepurchase" ? "default" : "outline"}
+                    className="justify-start gap-2"
+                    onClick={() => setSelectedDriTeam("Finance- Prepurchase")}
+                    data-testid="button-dri-finance-prepurchase"
+                  >
+                    <Wallet className="h-4 w-4" />
+                    Finance- Prepurchase
+                  </Button>
+                  <Button
+                    variant={selectedDriTeam === "Reservation Ops" ? "default" : "outline"}
+                    className="justify-start gap-2"
+                    onClick={() => setSelectedDriTeam("Reservation Ops")}
+                    data-testid="button-dri-reservation-ops"
+                  >
+                    <Calculator className="h-4 w-4" />
+                    Reservation Ops
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                This issue will be assigned to the appropriate DRI team based on the reason classification.
+              </p>
+            )}
           </div>
         )}
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => { setIsOpen(false); setBooking(null); }}
+            onClick={() => { setIsOpen(false); setBooking(null); setSelectedDriTeam(null); }}
             data-testid="button-cancel-issue"
           >
             Cancel
           </Button>
           <Button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || (isUnmapped && !selectedDriTeam)}
             data-testid="button-submit-issue"
           >
             {isSaving ? (
@@ -1131,109 +1163,6 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId]); // Only depend on runId, reload when it changes
 
-  // Unmapped DRI team selection state
-  const [unmappedDriPromptVisible, setUnmappedDriPromptVisible] = useState(false);
-  const [unmappedDriLogging, setUnmappedDriLogging] = useState(false);
-  const unmappedCheckedRunRef = useRef<string | null>(null);
-  const pendingUnmappedRef = useRef<PrimaryRow[]>([]);
-
-  // Detect unlogged unmapped transactions and show DRI team prompt
-  useEffect(() => {
-    if (!runId || !disputesLoaded || unmappedRows.length === 0) return;
-    if (unmappedCheckedRunRef.current === runId) return;
-    unmappedCheckedRunRef.current = runId;
-
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const issuesRes = await fetch(`/api/issues/${runId}`, { signal: controller.signal });
-        const issuesData = await issuesRes.json();
-        const existingIssues = issuesData.issues || [];
-        const alreadyLoggedBookingIds = new Set<string>();
-        for (const iss of existingIssues) {
-          if (Array.isArray(iss.bookingIds)) {
-            for (const bid of iss.bookingIds) alreadyLoggedBookingIds.add(bid);
-          }
-        }
-        const unlogged = unmappedRows.filter(r => !alreadyLoggedBookingIds.has(r.bookingId));
-        if (controller.signal.aborted || unlogged.length === 0) {
-          // Mark already-logged ones in local state
-          if (alreadyLoggedBookingIds.size > 0) {
-            setLoggedIssues(prev => {
-              const next = new Set(prev);
-              unmappedRows.forEach(r => { if (alreadyLoggedBookingIds.has(r.bookingId)) next.add(r.bookingId); });
-              return next;
-            });
-          }
-          return;
-        }
-        pendingUnmappedRef.current = unlogged;
-        setUnmappedDriPromptVisible(true);
-      } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        console.error("Check unmapped issues failed:", err);
-      }
-    })();
-    return () => { controller.abort(); };
-  }, [runId, disputesLoaded, unmappedRows]);
-
-  // Log unmapped transactions with the user-selected DRI team
-  const logUnmappedWithDri = useCallback(async (driTeam: string) => {
-    if (!runId) return;
-    setUnmappedDriLogging(true);
-    const rows = pendingUnmappedRef.current;
-    const byTid = new Map<string, PrimaryRow[]>();
-    for (const row of rows) {
-      const tid = row.tid || "Unknown";
-      if (!byTid.has(tid)) byTid.set(tid, []);
-      byTid.get(tid)!.push(row);
-    }
-    const fxRate = effectiveFxRate || 1;
-    const newLoggedIds: string[] = [];
-    try {
-      const tidEntries = Array.from(byTid.entries());
-      for (let i = 0; i < tidEntries.length; i++) {
-        const [tid, tidRows] = tidEntries[i];
-        const totalDiscrepancy = tidRows.reduce((sum: number, r: PrimaryRow) => sum + r.spNetInHo, 0);
-        const bookingIds = tidRows.map((r: PrimaryRow) => r.bookingId);
-        await fetch("/api/issues", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            runId,
-            createdDate: new Date().toISOString(),
-            billingEntityId: beId,
-            billingEntityName: billingEntityName,
-            currency: currency,
-            discrepancyLocal: totalDiscrepancy,
-            discrepancyUsd: totalDiscrepancy * fxRate,
-            reason: "Unmapped",
-            driTeam,
-            bookingIds,
-            ticketId: tidRows[0]?.ticketId || "",
-            tid,
-          }),
-        });
-        bookingIds.forEach((bid: string) => newLoggedIds.push(bid));
-      }
-      if (newLoggedIds.length > 0) {
-        setLoggedIssues(prev => {
-          const next = new Set(prev);
-          newLoggedIds.forEach(bid => next.add(bid));
-          return next;
-        });
-        queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
-      }
-      toast({ title: "Unmapped Issues Logged", description: `${newLoggedIds.length} unmapped bookings logged to ${driTeam}.` });
-    } catch (err) {
-      console.error("Failed to log unmapped issues:", err);
-      toast({ title: "Error", description: "Failed to log unmapped issues.", variant: "destructive" });
-    } finally {
-      setUnmappedDriLogging(false);
-      setUnmappedDriPromptVisible(false);
-      pendingUnmappedRef.current = [];
-    }
-  }, [runId, beId, billingEntityName, currency, effectiveFxRate, toast]);
 
   const [, startExpandTransition] = useTransition();
 
@@ -1457,16 +1386,18 @@ export function PurchaseReconciliationPanel({
     issueModalRef.current?.open(booking);
   }, []);
 
-  const handleIssueSave = useCallback(async (booking: BookingForDispute) => {
+  const handleIssueSave = useCallback(async (booking: BookingForDispute, driTeamOverride?: string) => {
     if (!runId) return;
     const allRowsArr = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
     const bookingRow = allRowsArr.find(r => r.bookingId === booking.bookingId);
     
-    let driTeam = "Finance";
-    if (booking.reason.includes("Cancelled")) {
-      driTeam = "Operations";
-    } else if (booking.reason.includes("NPD") || booking.reason.includes("MTB")) {
-      driTeam = "Supplier Management";
+    let driTeam = driTeamOverride || "Finance";
+    if (!driTeamOverride) {
+      if (booking.reason.includes("Cancelled")) {
+        driTeam = "Operations";
+      } else if (booking.reason.includes("NPD") || booking.reason.includes("MTB")) {
+        driTeam = "Supplier Management";
+      }
     }
     
     const fxRate = effectiveFxRate || 1;
@@ -2019,46 +1950,6 @@ export function PurchaseReconciliationPanel({
       <DisputeModal ref={disputeModalRef} currency={currency} onSave={handleDisputeSave} />
       <IssueModal ref={issueModalRef} currency={currency} billingEntityName={billingEntityName} effectiveFxRate={effectiveFxRate} onSave={handleIssueSave} />
 
-      <Dialog open={unmappedDriPromptVisible} onOpenChange={(open) => {
-        if (!unmappedDriLogging) {
-          setUnmappedDriPromptVisible(open);
-          if (!open) unmappedCheckedRunRef.current = null;
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Unmapped Transactions Detected
-            </DialogTitle>
-            <DialogDescription>
-              {pendingUnmappedRef.current.length} unmapped booking{pendingUnmappedRef.current.length !== 1 ? "s" : ""} found. Select the DRI team to log these in the Issue Tracker.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 py-2">
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
-              disabled={unmappedDriLogging}
-              onClick={() => logUnmappedWithDri("Finance- Prepurchase")}
-              data-testid="button-dri-finance-prepurchase"
-            >
-              {unmappedDriLogging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-              Finance- Prepurchase
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2"
-              disabled={unmappedDriLogging}
-              onClick={() => logUnmappedWithDri("Reservation Ops")}
-              data-testid="button-dri-reservation-ops"
-            >
-              {unmappedDriLogging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
-              Reservation Ops
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
