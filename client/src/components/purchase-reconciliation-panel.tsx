@@ -1121,6 +1121,22 @@ const ReasonGroup = memo(function ReasonGroup({
             <span className="font-medium text-sm">{reasonGroup.reason}</span>
             <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
             <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
+            {(() => {
+              const allBookings = reasonGroup.tidEntries.flatMap(([, bookings]) => bookings);
+              const mismatchCount = allBookings.filter((b: PurchaseBooking) => {
+                const hoP = (b.paymentMethod || "").trim();
+                const spP = (b.spPaymentMethod || "").trim();
+                return hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
+              }).length;
+              if (mismatchCount > 0) {
+                return (
+                  <Badge variant="destructive" className="text-[10px]" data-testid={`badge-reason-mismatch-${groupIdx}`}>
+                    {mismatchCount} payment mismatch{mismatchCount !== 1 ? "es" : ""}
+                  </Badge>
+                );
+              }
+              return null;
+            })()}
             {isSingleTid && (
               <span className="text-[10px] text-muted-foreground italic">single TID</span>
             )}
@@ -2268,6 +2284,24 @@ export function PurchaseReconciliationPanel({
         </div>
       )}
 
+      {paymentMismatchData.hasData && (
+        <div className="flex items-center gap-3 p-3 bg-violet-50 dark:bg-violet-950/30 border border-violet-300 dark:border-violet-700 rounded-md" data-testid="banner-payment-mismatch">
+          <AlertTriangle className="h-5 w-5 text-violet-600 dark:text-violet-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-violet-800 dark:text-violet-200">
+              Payment Method Mismatch Detected
+            </p>
+            <p className="text-xs text-violet-600 dark:text-violet-300 mt-0.5">
+              {paymentMismatchData.totalBookings} booking{paymentMismatchData.totalBookings !== 1 ? "s" : ""} across {paymentMismatchData.tidEntries.length} TID{paymentMismatchData.tidEntries.length !== 1 ? "s" : ""} have different HO and SP payment methods.
+              Total amount: {formatNumber(paymentMismatchData.totalAmount)} {currency}
+            </p>
+          </div>
+          <Badge variant="destructive" className="shrink-0" data-testid="badge-mismatch-count">
+            {paymentMismatchData.totalBookings}
+          </Badge>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="summary-strip">
         <Card className="p-3" data-testid="card-summary-net-diff">
           <div className="flex items-center gap-2 mb-1">
@@ -2416,6 +2450,22 @@ export function PurchaseReconciliationPanel({
                                       {breakupData.length} items
                                     </Badge>
                                   )}
+                                  {(item.id === 10 || item.id === 11) && paymentMismatchData.hasData && (() => {
+                                    const mismatchInRow = breakupData.reduce((count, group) => 
+                                      count + group.bookings.filter(b => {
+                                        const hoP = (b.paymentMethod || "").trim();
+                                        const spP = (b.spPaymentMethod || "").trim();
+                                        return hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
+                                      }).length, 0);
+                                    if (mismatchInRow > 0) {
+                                      return (
+                                        <Badge variant="destructive" className="text-[10px]" data-testid={`badge-row-${item.id}-mismatch`}>
+                                          {mismatchInRow} payment mismatch{mismatchInRow !== 1 ? "es" : ""}
+                                        </Badge>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
                                 </div>
                               </TableCell>
                               <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
