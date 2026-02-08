@@ -314,12 +314,6 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
       return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
     };
 
-    const nextDay = (dateOnly: string): string => {
-      const [y, m, d] = dateOnly.split("-").map(Number);
-      const dt = new Date(y, m - 1, d + 1);
-      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-    };
-
     const rows: PaxDateRow[] = [];
     const dtRowKeyMap = new Map<string, string>();
 
@@ -335,9 +329,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
         if (lastRun) {
           const lastEntry = lastRun[lastRun.length - 1];
           const samePrice = lastEntry.spUnitPrice === entry.spUnitPrice && lastEntry.hoUnitPrice === entry.hoUnitPrice;
-          const isNextDay = nextDay(toDateOnly(lastEntry.date)) === toDateOnly(entry.date);
-          const isSameDay = toDateOnly(lastEntry.date) === toDateOnly(entry.date);
-          if (samePrice && (isNextDay || isSameDay)) {
+          if (samePrice) {
             lastRun.push(entry);
             continue;
           }
