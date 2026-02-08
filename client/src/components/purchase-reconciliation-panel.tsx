@@ -1077,19 +1077,16 @@ const ReasonGroup = memo(function ReasonGroup({
   const visibleTids = tidEntries.slice(0, visibleTidCount);
   const hasMore = tidEntries.length > visibleTidCount;
 
-  const isSecondaryVendorGroup = reasonGroup.reason.startsWith("SV: ");
-
   return (
-    <div className={`rounded-md border bg-background overflow-hidden ${isSecondaryVendorGroup ? "border-orange-200 dark:border-orange-800" : ""}`}>
+    <div className="rounded-md border bg-background overflow-hidden">
       <div
-        className={`flex items-center justify-between px-3 py-2 cursor-pointer hover-elevate ${isSecondaryVendorGroup ? "bg-orange-50/50 dark:bg-orange-950/20" : "bg-muted/50"}`}
+        className="flex items-center justify-between px-3 py-2 cursor-pointer hover-elevate bg-muted/50"
         onClick={() => onToggleReason(reasonKey)}
         data-testid={`reason-header-${itemId}-${groupIdx}`}
       >
         <div className="flex items-center gap-2">
-          {isReasonExpanded ? <ChevronDown className={`h-4 w-4 ${isSecondaryVendorGroup ? "text-orange-600" : "text-primary"}`} /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          {isReasonExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
           <span className="font-medium text-sm">{reasonGroup.reason}</span>
-          {isSecondaryVendorGroup && <Badge className="text-[10px] bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 no-default-hover-elevate no-default-active-elevate">Secondary Vendor</Badge>}
           <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
           <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
         </div>
