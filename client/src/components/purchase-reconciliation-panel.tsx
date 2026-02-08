@@ -1,5 +1,5 @@
 import { useMemo, useState, Fragment, useCallback, useEffect } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -934,36 +942,62 @@ export function PurchaseReconciliationPanel({
                                             {isTidExpanded && (
                                               <div>
                                                 <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10" onClick={(e) => e.stopPropagation()}>
-                                                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Update Final Net Price:</span>
-                                                  <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="text-[10px]"
-                                                    onClick={() => applyBulkFinalNetPrice("spNet", tidBookings)}
-                                                    data-testid={`button-bulk-fnp-spnet-${tid}`}
-                                                  >
-                                                    Use SP Net
-                                                  </Button>
-                                                  <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="text-[10px]"
-                                                    onClick={() => applyBulkFinalNetPrice("hoNet", tidBookings)}
-                                                    data-testid={`button-bulk-fnp-honet-${tid}`}
-                                                  >
-                                                    Use HO Net
-                                                  </Button>
-                                                  {tidBookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0) && (
-                                                    <Button
-                                                      size="sm"
-                                                      variant="outline"
-                                                      className="text-[10px] text-violet-600 border-violet-300"
-                                                      onClick={() => openPaxPriceModal(tidBookings, tid)}
-                                                      data-testid={`button-pax-update-${tid}`}
-                                                    >
-                                                      Pax Update
-                                                    </Button>
-                                                  )}
+                                                  <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                      <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="text-[10px]"
+                                                        data-testid={`button-update-fnp-${tid}`}
+                                                      >
+                                                        <Pencil className="h-3 w-3 mr-1" />
+                                                        Update Final Net Price
+                                                        <ChevronDown className="h-3 w-3 ml-1" />
+                                                      </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="start" className="w-64">
+                                                      <DropdownMenuLabel className="text-[11px] text-muted-foreground">Choose update method</DropdownMenuLabel>
+                                                      <DropdownMenuSeparator />
+                                                      <DropdownMenuItem
+                                                        onClick={() => applyBulkFinalNetPrice("spNet", tidBookings)}
+                                                        data-testid={`menu-bulk-fnp-spnet-${tid}`}
+                                                        className="cursor-pointer"
+                                                      >
+                                                        <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
+                                                        <div>
+                                                          <div className="text-xs font-medium">Update to SP Net</div>
+                                                          <div className="text-[10px] text-muted-foreground">Set Final Net Price = SP Net for all bookings</div>
+                                                        </div>
+                                                      </DropdownMenuItem>
+                                                      <DropdownMenuItem
+                                                        onClick={() => applyBulkFinalNetPrice("hoNet", tidBookings)}
+                                                        data-testid={`menu-bulk-fnp-honet-${tid}`}
+                                                        className="cursor-pointer"
+                                                      >
+                                                        <TrendingDown className="h-3.5 w-3.5 text-green-600" />
+                                                        <div>
+                                                          <div className="text-xs font-medium">Update to HO Net</div>
+                                                          <div className="text-[10px] text-muted-foreground">Set Final Net Price = HO Net for all bookings</div>
+                                                        </div>
+                                                      </DropdownMenuItem>
+                                                      {tidBookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0) && (
+                                                        <>
+                                                          <DropdownMenuSeparator />
+                                                          <DropdownMenuItem
+                                                            onClick={() => openPaxPriceModal(tidBookings, tid)}
+                                                            data-testid={`menu-pax-update-${tid}`}
+                                                            className="cursor-pointer"
+                                                          >
+                                                            <Calculator className="h-3.5 w-3.5 text-violet-600" />
+                                                            <div>
+                                                              <div className="text-xs font-medium">Update based on Pax Type</div>
+                                                              <div className="text-[10px] text-muted-foreground">Set unit prices per pax type to recalculate</div>
+                                                            </div>
+                                                          </DropdownMenuItem>
+                                                        </>
+                                                      )}
+                                                    </DropdownMenuContent>
+                                                  </DropdownMenu>
                                                   <div className="flex-1" />
                                                   {runId && (
                                                     <>
