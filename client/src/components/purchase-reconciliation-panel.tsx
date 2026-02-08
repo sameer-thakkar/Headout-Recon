@@ -452,8 +452,8 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
             Update Final Net Price
@@ -462,7 +462,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
             Choose how to update Final Net Price for {bookings.length} bookings in TID {tid}.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="modal-scroll-area">
           <div className="rounded-md border bg-background overflow-hidden">
             <div
               className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
