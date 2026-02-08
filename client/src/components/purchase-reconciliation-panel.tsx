@@ -233,17 +233,32 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
     rowKey: string;
   };
 
-  const formatDateShort = useCallback((d: string): string => {
+  const normalizeDate = useCallback((d: string): Date | null => {
+    const num = Number(d);
+    if (!isNaN(num) && num > 10000 && num < 100000) {
+      const epoch = new Date((num - 25569) * 86400000);
+      if (!isNaN(epoch.getTime())) return epoch;
+    }
     const ts = Date.parse(d);
-    if (isNaN(ts)) return d;
-    const dt = new Date(ts);
-    return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+    if (!isNaN(ts)) {
+      const dt = new Date(ts);
+      if (dt.getFullYear() > 1900 && dt.getFullYear() < 2200) return dt;
+    }
+    return null;
   }, []);
+
+  const formatDateShort = useCallback((d: string): string => {
+    const dt = normalizeDate(d);
+    if (!dt) return d;
+    return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+  }, [normalizeDate]);
 
   const { paxDateRows, dateToRowKeyMap } = useMemo(() => {
     const dateGroupKey = (b: PurchaseBooking) => {
       const raw = dateField === "experienceDate" ? b.experienceDate : b.bookingCreationDate;
-      return raw || "Unknown";
+      if (!raw) return "Unknown";
+      const dt = normalizeDate(raw);
+      return dt ? dt.toISOString() : "Unknown";
     };
 
     const byDateAndPax = new Map<string, {
@@ -294,9 +309,8 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
     }
 
     const toDateOnly = (d: string): string => {
-      const ts = Date.parse(d);
-      if (isNaN(ts)) return "";
-      const dt = new Date(ts);
+      const dt = normalizeDate(d);
+      if (!dt) return "";
       return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
     };
 
@@ -382,7 +396,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
 
     rows.sort((a, b) => a.paxType.localeCompare(b.paxType) || (a.dates[0] || "").localeCompare(b.dates[0] || ""));
     return { paxDateRows: rows, dateToRowKeyMap: dtRowKeyMap };
-  }, [bookings, dateField, formatDateShort]);
+  }, [bookings, dateField, formatDateShort, normalizeDate]);
 
   const spTotal = useMemo(() => bookings.reduce((s, b) => s + b.spNet, 0), [bookings]);
   const hoTotal = useMemo(() => bookings.reduce((s, b) => s + b.hoNet, 0), [bookings]);
@@ -1233,7 +1247,9 @@ export function PurchaseReconciliationPanel({
         const next = new Map(prev);
         for (const booking of bookings) {
           if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
-          const bookingDate = (useDateField === "experienceDate" ? booking.experienceDate : booking.bookingCreationDate) || "Unknown";
+          const rawDate = (useDateField === "experienceDate" ? booking.experienceDate : booking.bookingCreationDate) || "";
+          const dtObj = normalizeDate(rawDate);
+          const bookingDate = dtObj ? dtObj.toISOString() : "Unknown";
           let newTotal = 0;
           for (const pb of booking.paxBreakdown) {
             const lookupKey = `${pb.paxType}||${bookingDate}`;
@@ -1252,7 +1268,7 @@ export function PurchaseReconciliationPanel({
       title: "Pax prices updated",
       description: `Final Net Price recalculated for ${bookings.length} bookings in TID ${tid}.`,
     });
-  }, [toast]);
+  }, [toast, normalizeDate]);
 
   const applyBulkFinalNetPrice = useCallback((source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     startPriceTransition(() => {

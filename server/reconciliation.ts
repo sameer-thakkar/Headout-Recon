@@ -140,22 +140,6 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
   const rowKeys = sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : sheet.headers;
   const normalizedKeys = rowKeys.map(k => k.toLowerCase().replace(/\s+/g, "_"));
   
-  // Debug: log column headers and first row's experience date candidates
-  console.log("[DEBUG parseHOData] Column headers:", rowKeys);
-  if (sheet.rows.length > 0) {
-    const firstRow = sheet.rows[0];
-    const dateCandidates = ["experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "Fulfillment Date", "fulfillmentDate", "tour_date", "Tour Date", "Travel Date", "travelDate", "Date of Experience", "dateOfExperience", "Visit Date", "visitDate", "Activity Date", "activityDate", "Tour Start Date", "tourStartDate", "Service Date", "serviceDate", "Event Date", "eventDate"];
-    for (const key of rowKeys) {
-      const normalizedKey = key.toLowerCase().replace(/\s+/g, "");
-      for (const candidate of dateCandidates) {
-        const normalizedCandidate = candidate.toLowerCase().replace(/\s+/g, "");
-        if (normalizedKey === normalizedCandidate) {
-          console.log(`[DEBUG parseHOData] Found date column match: "${key}" = "${firstRow[key]}" (type: ${typeof firstRow[key]})`);
-        }
-      }
-    }
-  }
-  
   const detectedPaxColumns: { paxType: string; countKey: string | null; unitPriceKey: string | null; priceNetKey: string | null }[] = [];
 
   // Auto-detect pax types from column headers: any column ending in _count is a potential pax type
@@ -203,18 +187,13 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       const epoch = new Date((num - 25569) * 86400000);
       if (!isNaN(epoch.getTime())) return epoch.toISOString();
     }
-    if (!isNaN(Date.parse(str))) return str;
+    const parsed = Date.parse(str);
+    if (!isNaN(parsed)) {
+      const dt = new Date(parsed);
+      if (dt.getFullYear() > 1900 && dt.getFullYear() < 2200) return str;
+    }
     return str || null;
   };
-
-  // Debug: log first 3 raw rows' experience date values before parsing
-  console.log("[DEBUG parseHOData] First 3 rows experienceDate RAW:", 
-    sheet.rows.slice(0, 3).map((row, i) => {
-      const rawVal = getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "tour_date", "Travel Date");
-      const converted = excelSerialToDateString(rawVal);
-      return { index: i, rawVal: String(rawVal), rawType: typeof rawVal, isDate: rawVal instanceof Date, converted };
-    })
-  );
 
   const result = sheet.rows.map((row) => {
     const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
@@ -255,9 +234,6 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
     };
   });
 
-  // Debug: log first 3 parsed results
-  console.log("[DEBUG parseHOData] First 3 parsed experienceDate:", result.slice(0, 3).map(r => ({ bookingId: r.bookingId, experienceDate: r.experienceDate, bookingCreationDate: r.bookingCreationDate })));
-  
   return result;
 }
 
