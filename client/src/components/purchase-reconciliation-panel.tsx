@@ -72,7 +72,7 @@ interface BookingRowProps {
   disputeAmount?: number;
   fnpValue: number;
   needsDisputeWarning: boolean;
-  hasPax: boolean;
+
   reasonName: string;
   onUpdateFnp: (bookingId: string, value: number) => void;
   onOpenIssueModal: (booking: BookingForDispute) => void;
@@ -90,7 +90,6 @@ const BookingRow = memo(function BookingRow({
   disputeAmount,
   fnpValue,
   needsDisputeWarning,
-  hasPax,
   reasonName,
   onUpdateFnp,
   onOpenIssueModal,
@@ -183,20 +182,6 @@ const BookingRow = memo(function BookingRow({
           </TableCell>
         )}
       </TableRow>
-      {hasPax && (
-        <TableRow className="h-6 bg-violet-50/30 dark:bg-violet-950/10">
-          <TableCell colSpan={runId ? 6 : 5} className="py-0.5 pl-8">
-            <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
-              <span className="font-medium text-violet-600 dark:text-violet-400">Pax:</span>
-              {booking.paxBreakdown!.map((pb, pi) => (
-                <span key={pi} className="font-mono">
-                  {pb.paxType.replace(/_/g, " ")} ({pb.count} x {formatNumber(pb.unitPrice)} = {formatNumber(pb.priceNet)})
-                </span>
-              ))}
-            </div>
-          </TableCell>
-        </TableRow>
-      )}
     </Fragment>
   );
 });
@@ -788,7 +773,6 @@ const TidGroup = memo(function TidGroup({
                 const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                 const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                 const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
-                const hasPax = !!(booking.paxBreakdown && booking.paxBreakdown.length > 0);
                 return (
                   <BookingRow
                     key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}
@@ -803,7 +787,6 @@ const TidGroup = memo(function TidGroup({
                     disputeAmount={disputeAmt}
                     fnpValue={fnp}
                     needsDisputeWarning={needsDisputeWarning}
-                    hasPax={hasPax}
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
                     onOpenIssueModal={openIssueModal}
