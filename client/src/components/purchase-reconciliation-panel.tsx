@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition, forwardRef, useImperativeHandle } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -72,6 +72,8 @@ interface PurchaseReconciliationPanelProps {
 }
 
 const INITIAL_TID_LIMIT = 10;
+const INITIAL_REASON_LIMIT = 5;
+const AUTO_EXPAND_BOOKING_THRESHOLD = 3;
 
 
 interface BookingRowProps {
@@ -916,6 +918,7 @@ interface TidGroupProps {
   runId?: string | null;
   reasonName: string;
   isExpanded: boolean;
+  autoExpanded?: boolean;
   onToggle: (key: string) => void;
   activeDisputes: Set<string>;
   disputeAmounts: Map<string, number>;
@@ -932,17 +935,28 @@ interface TidGroupProps {
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
-  isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
+  isExpanded: isExpandedProp, autoExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
+  const [userCollapsed, setUserCollapsed] = useState(false);
+  const isExpanded = userCollapsed ? isExpandedProp : (isExpandedProp || (autoExpanded === true));
+
+  const handleToggle = useCallback(() => {
+    if (autoExpanded && !isExpandedProp) {
+      setUserCollapsed(prev => !prev);
+    } else {
+      onToggle(tidKey);
+      if (userCollapsed) setUserCollapsed(false);
+    }
+  }, [autoExpanded, isExpandedProp, userCollapsed, onToggle, tidKey]);
 
   return (
     <div className="rounded-md border bg-background overflow-hidden">
       <div
         className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
-        onClick={() => onToggle(tidKey)}
+        onClick={handleToggle}
         data-testid={`tid-header-${itemId}-${groupIdx}-${tid}`}
       >
         <div className="flex items-center gap-2">
@@ -958,11 +972,11 @@ const TidGroup = memo(function TidGroup({
       </div>
       {isExpanded && (
         <div>
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 px-3 py-2 border-b bg-primary/5 dark:bg-primary/10" onClick={(e) => e.stopPropagation()} data-testid={`tid-actions-${tid}`}>
             <Button
               size="sm"
-              variant="outline"
-              className="text-[10px]"
+              variant="default"
+              className="text-xs"
               onClick={() => openFnpModal(tidBookings, tid)}
               data-testid={`button-update-fnp-${tid}`}
             >
@@ -971,16 +985,16 @@ const TidGroup = memo(function TidGroup({
             </Button>
             <div className="flex-1" />
             {runId && (
-              <>
-                <Button size="sm" variant="ghost" className="text-[10px] text-amber-600 opacity-50 cursor-not-allowed" disabled title="Dispute functionality coming soon" data-testid={`button-tid-bulk-dispute-${tid}`}>
-                  <FileWarning className="h-3 w-3 mr-0.5" />
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" className="text-xs text-amber-600 opacity-50 cursor-not-allowed" disabled title="Dispute functionality coming soon" data-testid={`button-tid-bulk-dispute-${tid}`}>
+                  <FileWarning className="h-3 w-3 mr-1" />
                   Dispute All
                 </Button>
-                <Button size="sm" variant="ghost" className="text-[10px] text-blue-600" onClick={() => handleTidBulkIssue(tidBookings, reasonName, tid)} data-testid={`button-tid-bulk-issue-${tid}`}>
-                  <AlertTriangle className="h-3 w-3 mr-0.5" />
+                <Button size="sm" variant="outline" className="text-xs" onClick={() => handleTidBulkIssue(tidBookings, reasonName, tid)} data-testid={`button-tid-bulk-issue-${tid}`}>
+                  <AlertTriangle className="h-3 w-3 mr-1" />
                   Issue All
                 </Button>
-              </>
+              </div>
             )}
           </div>
           <Table className="text-xs">
@@ -1049,6 +1063,7 @@ interface ReasonGroupProps {
   isReasonExpanded: boolean;
   expandedTids: Set<string>;
   visibleTidCount: number;
+  grandTotal: number;
   onToggleReason: (key: string) => void;
   onToggleTid: (key: string) => void;
   onShowMoreTids: (reasonKey: string, totalCount: number) => void;
@@ -1067,7 +1082,7 @@ interface ReasonGroupProps {
 
 const ReasonGroup = memo(function ReasonGroup({
   itemId, groupIdx, reasonGroup, currency, runId,
-  isReasonExpanded, expandedTids, visibleTidCount,
+  isReasonExpanded, expandedTids, visibleTidCount, grandTotal,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId, openFnpModal,
@@ -1077,25 +1092,41 @@ const ReasonGroup = memo(function ReasonGroup({
   const tidEntries = reasonGroup.tidEntries;
   const visibleTids = tidEntries.slice(0, visibleTidCount);
   const hasMore = tidEntries.length > visibleTidCount;
+  const isSingleTid = tidEntries.length === 1;
+  const percentage = grandTotal !== 0 ? Math.round((Math.abs(reasonGroup.totalDifference) / Math.abs(grandTotal)) * 100) : 0;
+  const barWidth = Math.max(percentage, 2);
 
   return (
     <div className="rounded-md border bg-background overflow-hidden">
       <div
-        className="flex items-center justify-between px-3 py-2 cursor-pointer hover-elevate bg-muted/50"
+        className="flex flex-col cursor-pointer hover-elevate bg-muted/50"
         onClick={() => onToggleReason(reasonKey)}
         data-testid={`reason-header-${itemId}-${groupIdx}`}
       >
-        <div className="flex items-center gap-2">
-          {isReasonExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-          <span className="font-medium text-sm">{reasonGroup.reason}</span>
-          <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
-          <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
+        <div className="flex items-center justify-between px-3 py-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isReasonExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            <span className="font-medium text-sm">{reasonGroup.reason}</span>
+            <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
+            <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
+            {isSingleTid && (
+              <span className="text-[10px] text-muted-foreground italic">single TID</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-xs">
+            <Badge variant="outline" className="text-[10px] font-mono">{percentage}%</Badge>
+            <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
+              {formatNumber(reasonGroup.totalDifference)} {currency}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-3 text-xs">
-          <span className="text-muted-foreground">Total:</span>
-          <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
-            {formatNumber(reasonGroup.totalDifference)} {currency}
-          </span>
+        <div className="px-3 pb-1.5">
+          <div className="h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-amber-500/70 dark:bg-amber-400/60 transition-all"
+              style={{ width: `${barWidth}%` }}
+            />
+          </div>
         </div>
       </div>
       {isReasonExpanded && (
@@ -1103,6 +1134,7 @@ const ReasonGroup = memo(function ReasonGroup({
           {visibleTids.map(([tid, tidBookings]) => {
             const tidKey = `${itemId}-${reasonGroup.reason}-${tid}`;
             const isTidExpanded = expandedTids.has(tidKey);
+            const shouldAutoExpand = isSingleTid || tidBookings.length <= AUTO_EXPAND_BOOKING_THRESHOLD;
             return (
               <TidGroup
                 key={tidKey}
@@ -1115,6 +1147,7 @@ const ReasonGroup = memo(function ReasonGroup({
                 runId={runId}
                 reasonName={reasonGroup.reason}
                 isExpanded={isTidExpanded}
+                autoExpanded={shouldAutoExpand}
                 onToggle={onToggleTid}
                 activeDisputes={activeDisputes}
                 disputeAmounts={disputeAmounts}
@@ -1146,6 +1179,170 @@ const ReasonGroup = memo(function ReasonGroup({
     </div>
   );
 });
+
+interface BreakupSectionProps {
+  itemId: number;
+  breakupData: { reason: string; count: number; totalDifference: number }[];
+  breakupWithTids: { reason: string; count: number; totalDifference: number; tidEntries: [string, PurchaseBooking[]][] }[];
+  currency: string;
+  runId?: string | null;
+  effectiveFxRate: number | null;
+  expandedReasons: Set<string>;
+  expandedTids: Set<string>;
+  getVisibleTidCount: (reasonKey: string) => number;
+  toggleReasonExpand: (key: string) => void;
+  toggleTidExpand: (key: string) => void;
+  showMoreTids: (reasonKey: string, totalCount: number) => void;
+  activeDisputes: Set<string>;
+  disputeAmounts: Map<string, number>;
+  loggedIssues: Set<string>;
+  fnpVersion: number;
+  getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
+  updateFinalNetPrice: (bookingId: string, value: number) => void;
+  getFinalVendorId: (bookingId: string, defaultVid: string) => string;
+  updateFinalVendorId: (bookingId: string, value: string) => void;
+  openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
+  handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+  openIssueModal: (booking: BookingForDispute) => void;
+}
+
+function BreakupSection({
+  itemId, breakupData, breakupWithTids, currency, runId, effectiveFxRate,
+  expandedReasons, expandedTids, getVisibleTidCount,
+  toggleReasonExpand, toggleTidExpand, showMoreTids,
+  activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
+  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId,
+  openFnpModal, handleTidBulkIssue, openIssueModal,
+}: BreakupSectionProps) {
+  const [searchFilter, setSearchFilter] = useState("");
+  const [showAllReasons, setShowAllReasons] = useState(false);
+
+  const grandTotal = useMemo(() => breakupData.reduce((sum, g) => sum + g.totalDifference, 0), [breakupData]);
+  const totalItems = useMemo(() => breakupData.reduce((sum, g) => sum + g.count, 0), [breakupData]);
+
+  const filteredReasons = useMemo(() => {
+    if (!searchFilter.trim()) return breakupWithTids;
+    const query = searchFilter.trim().toLowerCase();
+    return breakupWithTids
+      .map(rg => {
+        const filteredTidEntries = rg.tidEntries
+          .map(([tid, bookings]) => {
+            const matchesTid = tid.toLowerCase().includes(query);
+            if (matchesTid) return [tid, bookings] as [string, PurchaseBooking[]];
+            const filteredBookings = bookings.filter(b => b.bookingId.toLowerCase().includes(query));
+            if (filteredBookings.length > 0) return [tid, filteredBookings] as [string, PurchaseBooking[]];
+            return null;
+          })
+          .filter((e): e is [string, PurchaseBooking[]] => e !== null);
+        if (filteredTidEntries.length === 0 && !rg.reason.toLowerCase().includes(query)) return null;
+        return {
+          ...rg,
+          tidEntries: filteredTidEntries.length > 0 ? filteredTidEntries : rg.tidEntries,
+          count: filteredTidEntries.length > 0 ? filteredTidEntries.reduce((s, [, b]) => s + b.length, 0) : rg.count,
+        };
+      })
+      .filter((rg): rg is NonNullable<typeof rg> => rg !== null);
+  }, [breakupWithTids, searchFilter]);
+
+  const isFiltering = searchFilter.trim().length > 0;
+  const needsLazyLoad = !isFiltering && filteredReasons.length > INITIAL_REASON_LIMIT;
+  const visibleReasons = needsLazyLoad && !showAllReasons
+    ? filteredReasons.slice(0, INITIAL_REASON_LIMIT)
+    : filteredReasons;
+  const hiddenReasonCount = filteredReasons.length - INITIAL_REASON_LIMIT;
+
+  return (
+    <div className="space-y-2">
+      {breakupWithTids.length > 3 && (
+        <div className="relative" data-testid={`breakup-search-${itemId}`}>
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Filter by Booking ID, TID, or reason..."
+            className="h-8 text-xs pl-8"
+            value={searchFilter}
+            onChange={(e) => { setSearchFilter(e.target.value); setShowAllReasons(false); }}
+            data-testid={`input-breakup-search-${itemId}`}
+          />
+          {searchFilter && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+              onClick={() => setSearchFilter("")}
+              data-testid={`button-clear-search-${itemId}`}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
+      {isFiltering && (
+        <div className="text-xs text-muted-foreground px-1">
+          Showing {filteredReasons.length} of {breakupWithTids.length} reason groups
+          {filteredReasons.length === 0 && (
+            <span className="ml-1 text-amber-600">— no matches found</span>
+          )}
+        </div>
+      )}
+      {visibleReasons.map((reasonGroup, groupIdx) => {
+        const reasonKey = `${itemId}-${reasonGroup.reason}`;
+        const isReasonExpanded = expandedReasons.has(reasonKey) || isFiltering;
+        const visibleCount = getVisibleTidCount(reasonKey);
+        return (
+          <ReasonGroup
+            key={`${itemId}-reason-${groupIdx}`}
+            itemId={itemId}
+            groupIdx={groupIdx}
+            reasonGroup={reasonGroup}
+            currency={currency}
+            runId={runId}
+            isReasonExpanded={isReasonExpanded}
+            expandedTids={expandedTids}
+            visibleTidCount={visibleCount}
+            grandTotal={grandTotal}
+            onToggleReason={toggleReasonExpand}
+            onToggleTid={toggleTidExpand}
+            onShowMoreTids={showMoreTids}
+            activeDisputes={activeDisputes}
+            disputeAmounts={disputeAmounts}
+            loggedIssues={loggedIssues}
+            fnpVersion={fnpVersion}
+            getFinalNetPrice={getFinalNetPrice}
+            updateFinalNetPrice={updateFinalNetPrice}
+            getFinalVendorId={getFinalVendorId}
+            updateFinalVendorId={updateFinalVendorId}
+            openFnpModal={openFnpModal}
+            handleTidBulkIssue={handleTidBulkIssue}
+            openIssueModal={openIssueModal}
+          />
+        );
+      })}
+      {needsLazyLoad && !showAllReasons && hiddenReasonCount > 0 && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full text-xs"
+          onClick={() => setShowAllReasons(true)}
+          data-testid={`button-show-all-reasons-${itemId}`}
+        >
+          Show all {filteredReasons.length} reasons ({hiddenReasonCount} more)
+        </Button>
+      )}
+      <div className="flex items-center justify-end gap-3 pt-2 border-t text-sm">
+        <span className="text-muted-foreground">Grand Total ({totalItems} items):</span>
+        <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+          {formatNumber(grandTotal)} {currency}
+        </span>
+        {effectiveFxRate && (
+          <span className="font-mono text-muted-foreground">
+            ({formatNumber(grandTotal * effectiveFxRate)} USD)
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function PurchaseReconciliationPanel({
   primaryRows,
@@ -2223,51 +2420,31 @@ export function PurchaseReconciliationPanel({
                             {hasBreakup && isExpanded && (
                               <TableRow className="bg-muted/30">
                                 <TableCell colSpan={5} className="py-3 px-8">
-                                  <div className="space-y-2">
-                                    {breakupWithTids.map((reasonGroup, groupIdx) => {
-                                      const reasonKey = `${item.id}-${reasonGroup.reason}`;
-                                      const isReasonExpanded = expandedReasons.has(reasonKey);
-                                      const visibleCount = getVisibleTidCount(reasonKey);
-                                      return (
-                                        <ReasonGroup
-                                          key={`${item.id}-reason-${groupIdx}`}
-                                          itemId={item.id}
-                                          groupIdx={groupIdx}
-                                          reasonGroup={reasonGroup}
-                                          currency={currency}
-                                          runId={runId}
-                                          isReasonExpanded={isReasonExpanded}
-                                          expandedTids={expandedTids}
-                                          visibleTidCount={visibleCount}
-                                          onToggleReason={toggleReasonExpand}
-                                          onToggleTid={toggleTidExpand}
-                                          onShowMoreTids={showMoreTids}
-                                          activeDisputes={activeDisputes}
-                                          disputeAmounts={disputeAmounts}
-                                          loggedIssues={loggedIssues}
-                                          fnpVersion={fnpVersion}
-                                          getFinalNetPrice={getFinalNetPrice}
-                                          updateFinalNetPrice={updateFinalNetPrice}
-                                          getFinalVendorId={getFinalVendorId}
-                                          updateFinalVendorId={updateFinalVendorId}
-                                          openFnpModal={openFnpModal}
-                                          handleTidBulkIssue={handleTidBulkIssue}
-                                          openIssueModal={openIssueModal}
-                                        />
-                                      );
-                                    })}
-                                    <div className="flex items-center justify-end gap-3 pt-2 border-t text-sm">
-                                      <span className="text-muted-foreground">Grand Total ({breakupData.reduce((sum, g) => sum + g.count, 0)} items):</span>
-                                      <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
-                                        {formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0))} {currency}
-                                      </span>
-                                      {effectiveFxRate && (
-                                        <span className="font-mono text-muted-foreground">
-                                          ({formatNumber(breakupData.reduce((sum, g) => sum + g.totalDifference, 0) * effectiveFxRate)} USD)
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+                                  <BreakupSection
+                                    itemId={item.id}
+                                    breakupData={breakupData}
+                                    breakupWithTids={breakupWithTids}
+                                    currency={currency}
+                                    runId={runId}
+                                    effectiveFxRate={effectiveFxRate}
+                                    expandedReasons={expandedReasons}
+                                    expandedTids={expandedTids}
+                                    getVisibleTidCount={getVisibleTidCount}
+                                    toggleReasonExpand={toggleReasonExpand}
+                                    toggleTidExpand={toggleTidExpand}
+                                    showMoreTids={showMoreTids}
+                                    activeDisputes={activeDisputes}
+                                    disputeAmounts={disputeAmounts}
+                                    loggedIssues={loggedIssues}
+                                    fnpVersion={fnpVersion}
+                                    getFinalNetPrice={getFinalNetPrice}
+                                    updateFinalNetPrice={updateFinalNetPrice}
+                                    getFinalVendorId={getFinalVendorId}
+                                    updateFinalVendorId={updateFinalVendorId}
+                                    openFnpModal={openFnpModal}
+                                    handleTidBulkIssue={handleTidBulkIssue}
+                                    openIssueModal={openIssueModal}
+                                  />
                                 </TableCell>
                               </TableRow>
                             )}
