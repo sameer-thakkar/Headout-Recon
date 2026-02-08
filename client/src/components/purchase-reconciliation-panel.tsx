@@ -36,6 +36,9 @@ type PurchaseBooking = {
   tid: string;
   ticketId: string;
   paxBreakdown?: PaxBreakdown[];
+  experienceDate?: string;
+  bookingCreationDate?: string | null;
+  paymentBasis?: string;
 };
 
 interface BookingForDispute {
@@ -59,6 +62,7 @@ interface PurchaseReconciliationPanelProps {
 }
 
 const INITIAL_TID_LIMIT = 10;
+
 
 interface BookingRowProps {
   booking: PurchaseBooking;
@@ -201,7 +205,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   currency: string;
   onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  onApplyPax: (bookings: PurchaseBooking[], newPrices: Record<string, string>, tid: string) => void;
+  onApplyPax: (bookings: PurchaseBooking[], newPrices: Record<string, string>, dateToRowKeyMap: Map<string, string>, tid: string) => void;
 }>(function FinalNetPriceModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [bookings, setBookings] = useState<PurchaseBooking[]>([]);
@@ -209,26 +213,176 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const [newPrices, setNewPrices] = useState<Record<string, string>>({});
   const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
-  const paxSummary = useMemo(() => {
-    const map = new Map<string, { count: number; hoUnitPrice: number; hoTotal: number; spTotal: number }>();
+  const paymentBasis = useMemo(() => {
+    const first = bookings.find(b => b.paymentBasis);
+    return first?.paymentBasis || "";
+  }, [bookings]);
+
+  const dateField = useMemo<"experienceDate" | "bookingCreationDate">(() => {
+    if (paymentBasis.toUpperCase().includes("EXPERIENCE")) return "experienceDate";
+    return "bookingCreationDate";
+  }, [paymentBasis]);
+
+  type PaxDateRow = {
+    paxType: string;
+    dateRange: string;
+    dates: string[];
+    count: number;
+    spUnitPrice: number;
+    hoUnitPrice: number;
+    rowKey: string;
+  };
+
+  const formatDateShort = useCallback((d: string): string => {
+    const ts = Date.parse(d);
+    if (isNaN(ts)) return d;
+    const dt = new Date(ts);
+    return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+  }, []);
+
+  const { paxDateRows, dateToRowKeyMap } = useMemo(() => {
+    const dateGroupKey = (b: PurchaseBooking) => {
+      const raw = dateField === "experienceDate" ? b.experienceDate : b.bookingCreationDate;
+      return raw || "Unknown";
+    };
+
+    const byDateAndPax = new Map<string, {
+      paxType: string;
+      date: string;
+      count: number;
+      spTotal: number;
+      hoUnitPrice: number;
+    }>();
+
     for (const b of bookings) {
-      if (b.paxBreakdown) {
-        const bookingHoTotal = b.paxBreakdown.reduce((s, pb) => s + pb.priceNet, 0);
-        for (const pb of b.paxBreakdown) {
-          const spContribution = bookingHoTotal > 0 ? (pb.priceNet / bookingHoTotal) * b.spNet : 0;
-          const existing = map.get(pb.paxType);
-          if (existing) {
-            existing.count += pb.count;
-            existing.hoTotal += pb.priceNet;
-            existing.spTotal += spContribution;
-          } else {
-            map.set(pb.paxType, { count: pb.count, hoUnitPrice: pb.unitPrice, hoTotal: pb.priceNet, spTotal: spContribution });
-          }
+      if (!b.paxBreakdown) continue;
+      const date = dateGroupKey(b);
+      const bookingHoTotal = b.paxBreakdown.reduce((s, pb) => s + pb.priceNet, 0);
+      for (const pb of b.paxBreakdown) {
+        const spContribution = bookingHoTotal > 0 ? (pb.priceNet / bookingHoTotal) * b.spNet : 0;
+        const key = `${pb.paxType}||${date}`;
+        const existing = byDateAndPax.get(key);
+        if (existing) {
+          existing.count += pb.count;
+          existing.spTotal += spContribution;
+        } else {
+          byDateAndPax.set(key, {
+            paxType: pb.paxType,
+            date,
+            count: pb.count,
+            spTotal: spContribution,
+            hoUnitPrice: pb.unitPrice,
+          });
         }
       }
     }
-    return map;
-  }, [bookings]);
+
+    const dateEntries = Array.from(byDateAndPax.values()).map(e => ({
+      paxType: e.paxType,
+      date: e.date,
+      count: e.count,
+      spUnitPrice: e.count > 0 ? Math.round((e.spTotal / e.count) * 100) / 100 : 0,
+      hoUnitPrice: e.hoUnitPrice,
+    }));
+
+    type DateEntry = { paxType: string; date: string; count: number; spUnitPrice: number; hoUnitPrice: number };
+    const byPaxType = new Map<string, DateEntry[]>();
+    for (const entry of dateEntries) {
+      const arr = byPaxType.get(entry.paxType) || [];
+      arr.push(entry);
+      byPaxType.set(entry.paxType, arr);
+    }
+
+    const toDateOnly = (d: string): string => {
+      const ts = Date.parse(d);
+      if (isNaN(ts)) return "";
+      const dt = new Date(ts);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    };
+
+    const nextDay = (dateOnly: string): string => {
+      const [y, m, d] = dateOnly.split("-").map(Number);
+      const dt = new Date(y, m - 1, d + 1);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    };
+
+    const rows: PaxDateRow[] = [];
+    const dtRowKeyMap = new Map<string, string>();
+
+    for (const [paxType, paxEntries] of Array.from(byPaxType.entries())) {
+      const unknowns = paxEntries.filter((e: DateEntry) => toDateOnly(e.date) === "");
+      const dated = paxEntries.filter((e: DateEntry) => toDateOnly(e.date) !== "");
+
+      dated.sort((a: DateEntry, b: DateEntry) => toDateOnly(a.date).localeCompare(toDateOnly(b.date)));
+
+      const runs: DateEntry[][] = [];
+      for (const entry of dated) {
+        const lastRun = runs[runs.length - 1];
+        if (lastRun) {
+          const lastEntry = lastRun[lastRun.length - 1];
+          const samePrice = lastEntry.spUnitPrice === entry.spUnitPrice && lastEntry.hoUnitPrice === entry.hoUnitPrice;
+          const isNextDay = nextDay(toDateOnly(lastEntry.date)) === toDateOnly(entry.date);
+          const isSameDay = toDateOnly(lastEntry.date) === toDateOnly(entry.date);
+          if (samePrice && (isNextDay || isSameDay)) {
+            lastRun.push(entry);
+            continue;
+          }
+        }
+        runs.push([entry]);
+      }
+
+      for (const run of runs) {
+        const totalCount = run.reduce((s: number, e: DateEntry) => s + e.count, 0);
+        const firstDate = run[0].date;
+        const lastDate = run[run.length - 1].date;
+        const dateRange = run.length === 1
+          ? formatDateShort(firstDate)
+          : `${formatDateShort(firstDate)} - ${formatDateShort(lastDate)}`;
+        const rowKey = `${paxType}__${dateRange}`;
+        rows.push({
+          paxType,
+          dateRange,
+          dates: run.map((e: DateEntry) => e.date),
+          count: totalCount,
+          spUnitPrice: run[0].spUnitPrice,
+          hoUnitPrice: run[0].hoUnitPrice,
+          rowKey,
+        });
+        for (const e of run) {
+          dtRowKeyMap.set(`${paxType}||${e.date}`, rowKey);
+        }
+      }
+
+      const unknownByPrice = new Map<string, DateEntry[]>();
+      for (const u of unknowns) {
+        const pk = `${u.spUnitPrice}||${u.hoUnitPrice}`;
+        const arr = unknownByPrice.get(pk) || [];
+        arr.push(u);
+        unknownByPrice.set(pk, arr);
+      }
+      let unknownIdx = 0;
+      for (const [, uGroup] of Array.from(unknownByPrice.entries())) {
+        const totalCount = uGroup.reduce((s: number, e: DateEntry) => s + e.count, 0);
+        const suffix = unknownByPrice.size > 1 ? `Unknown_${++unknownIdx}` : "Unknown";
+        const rowKey = `${paxType}__${suffix}`;
+        rows.push({
+          paxType,
+          dateRange: suffix,
+          dates: [suffix],
+          count: totalCount,
+          spUnitPrice: uGroup[0].spUnitPrice,
+          hoUnitPrice: uGroup[0].hoUnitPrice,
+          rowKey,
+        });
+        for (const e of uGroup) {
+          dtRowKeyMap.set(`${paxType}||${e.date}`, rowKey);
+        }
+      }
+    }
+
+    rows.sort((a, b) => a.paxType.localeCompare(b.paxType) || (a.dates[0] || "").localeCompare(b.dates[0] || ""));
+    return { paxDateRows: rows, dateToRowKeyMap: dtRowKeyMap };
+  }, [bookings, dateField, formatDateShort]);
 
   const spTotal = useMemo(() => bookings.reduce((s, b) => s + b.spNet, 0), [bookings]);
   const hoTotal = useMemo(() => bookings.reduce((s, b) => s + b.hoNet, 0), [bookings]);
@@ -253,25 +407,25 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   }, [bookings, onApplyHoNet]);
 
   const allPaxFilled = useMemo(() => {
-    if (!hasPax) return false;
-    for (const [paxType] of Array.from(paxSummary.entries())) {
-      const val = newPrices[paxType];
+    if (!hasPax || paxDateRows.length === 0) return false;
+    for (const row of paxDateRows) {
+      const val = newPrices[row.rowKey];
       if (val === undefined || val === "") return false;
     }
-    return paxSummary.size > 0;
-  }, [hasPax, paxSummary, newPrices]);
+    return true;
+  }, [hasPax, paxDateRows, newPrices]);
 
   const handleApplyPax = useCallback(() => {
     if (!allPaxFilled) return;
     setIsOpen(false);
-    onApplyPax(bookings, newPrices, tid);
-  }, [bookings, newPrices, tid, onApplyPax, allPaxFilled]);
+    onApplyPax(bookings, newPrices, dateToRowKeyMap, tid);
+  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled]);
 
   const formatDisplayName = (paxType: string) =>
     paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 
   const renderPaxBreakdownTable = () => {
-    if (!hasPax || paxSummary.size === 0) return null;
+    if (!hasPax || paxDateRows.length === 0) return null;
     return (
       <div className="rounded-md border overflow-hidden mt-2">
         <Table>
@@ -283,11 +437,11 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Array.from(paxSummary.entries()).map(([paxType, data]) => (
-              <TableRow key={paxType}>
-                <TableCell className="text-xs font-medium">{formatDisplayName(paxType)}</TableCell>
-                <TableCell className="text-xs text-right font-mono">{data.count}</TableCell>
-                <TableCell className="text-xs text-right font-mono">{formatNumber(data.hoUnitPrice)}</TableCell>
+            {paxDateRows.map((row) => (
+              <TableRow key={row.rowKey}>
+                <TableCell className="text-xs font-medium">{formatDisplayName(row.paxType)}</TableCell>
+                <TableCell className="text-xs text-right font-mono">{row.count}</TableCell>
+                <TableCell className="text-xs text-right font-mono">{formatNumber(row.hoUnitPrice)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -385,44 +539,49 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                     <span className="font-mono font-semibold text-green-700 dark:text-green-300">{formatNumber(hoTotal)} {currency}</span>
                   </div>
                 </div>
+                {paymentBasis && (
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Grouped by: <span className="font-medium text-foreground">{dateField === "experienceDate" ? "Experience Date" : "Booking Creation Date"}</span>
+                    <span className="ml-1">(Payment Basis: {paymentBasis})</span>
+                  </div>
+                )}
                 <div className="rounded-md border overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-xs">Pax Type</TableHead>
+                        <TableHead className="text-xs">{dateField === "experienceDate" ? "Experience Date" : "Booking Date"}</TableHead>
                         <TableHead className="text-xs text-right">Count</TableHead>
-                        <TableHead className="text-xs text-right">SP Unit Price ({currency})</TableHead>
-                        <TableHead className="text-xs text-right">HO Unit Price ({currency})</TableHead>
+                        <TableHead className="text-xs text-right">SP Unit ({currency})</TableHead>
+                        <TableHead className="text-xs text-right">HO Unit ({currency})</TableHead>
                         <TableHead className="text-xs text-right">Final Price ({currency})</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {Array.from(paxSummary.entries()).map(([paxType, data]) => {
-                        const spUnitPrice = data.count > 0 ? data.spTotal / data.count : 0;
-                        return (
-                        <TableRow key={paxType}>
-                          <TableCell className="text-xs font-medium">{formatDisplayName(paxType)}</TableCell>
-                          <TableCell className="text-xs text-right font-mono">{data.count}</TableCell>
+                      {paxDateRows.map((row) => (
+                        <TableRow key={row.rowKey}>
+                          <TableCell className="text-xs font-medium">{formatDisplayName(row.paxType)}</TableCell>
+                          <TableCell className="text-xs font-mono text-muted-foreground">{row.dateRange}</TableCell>
+                          <TableCell className="text-xs text-right font-mono">{row.count}</TableCell>
                           <TableCell className="text-xs text-right font-mono text-muted-foreground">
-                            {formatNumber(spUnitPrice)}
+                            {formatNumber(row.spUnitPrice)}
                           </TableCell>
                           <TableCell className="text-xs text-right font-mono text-muted-foreground">
-                            {formatNumber(data.hoUnitPrice)}
+                            {formatNumber(row.hoUnitPrice)}
                           </TableCell>
                           <TableCell className="text-right">
                             <Input
                               type="number"
                               step="0.01"
                               placeholder="Enter price"
-                              value={newPrices[paxType] ?? ""}
-                              onChange={(e) => setNewPrices(prev => ({ ...prev, [paxType]: e.target.value }))}
-                              className="w-32 text-xs font-mono text-right ml-auto"
-                              data-testid={`input-pax-price-${paxType}`}
+                              value={newPrices[row.rowKey] ?? ""}
+                              onChange={(e) => setNewPrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                              className="w-28 text-xs font-mono text-right ml-auto"
+                              data-testid={`input-pax-price-${row.rowKey}`}
                             />
                           </TableCell>
                         </TableRow>
-                        );
-                      })}
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -1064,16 +1223,25 @@ export function PurchaseReconciliationPanel({
     fnpModalRef.current?.open(tidBookings, tid);
   }, []);
 
-  const handlePaxApply = useCallback((bookings: PurchaseBooking[], newPrices: Record<string, string>, tid: string) => {
+  const handlePaxApply = useCallback((bookings: PurchaseBooking[], newPrices: Record<string, string>, dtRowKeyMap: Map<string, string>, tid: string) => {
+    const paymentBasisVal = bookings.find(b => b.paymentBasis)?.paymentBasis || "";
+    const useDateField: "experienceDate" | "bookingCreationDate" =
+      paymentBasisVal.toUpperCase().includes("EXPERIENCE") ? "experienceDate" : "bookingCreationDate";
+
     startPriceTransition(() => {
       setFinalNetPrices(prev => {
         const next = new Map(prev);
         for (const booking of bookings) {
           if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
+          const bookingDate = (useDateField === "experienceDate" ? booking.experienceDate : booking.bookingCreationDate) || "Unknown";
           let newTotal = 0;
           for (const pb of booking.paxBreakdown) {
-            const newPrice = parseFloat(newPrices[pb.paxType] || String(pb.unitPrice));
-            newTotal += pb.count * (isNaN(newPrice) ? pb.unitPrice : newPrice);
+            const lookupKey = `${pb.paxType}||${bookingDate}`;
+            const rowKey = dtRowKeyMap.get(lookupKey);
+            const priceStr = rowKey ? newPrices[rowKey] : undefined;
+            const parsedPrice = priceStr ? parseFloat(priceStr) : NaN;
+            const finalPrice = !isNaN(parsedPrice) ? parsedPrice : pb.unitPrice;
+            newTotal += pb.count * finalPrice;
           }
           next.set(booking.bookingId, Math.round(newTotal * 100) / 100);
         }
@@ -1346,6 +1514,9 @@ export function PurchaseReconciliationPanel({
           tid: row.tid || "Unknown",
           ticketId: row.ticketId || "",
           paxBreakdown: row.paxBreakdown,
+          experienceDate: row.experienceDate,
+          bookingCreationDate: row.bookingCreationDate,
+          paymentBasis: row.paymentBasis,
         });
       });
     
@@ -1377,6 +1548,9 @@ export function PurchaseReconciliationPanel({
           tid: row.tid || "Unknown",
           ticketId: row.ticketId || "",
           paxBreakdown: row.paxBreakdown,
+          experienceDate: row.experienceDate,
+          bookingCreationDate: row.bookingCreationDate,
+          paymentBasis: row.paymentBasis,
         });
       });
     

@@ -82,6 +82,8 @@ interface HORow {
   vid?: string;
   // Pax type breakdown
   paxBreakdown?: PaxBreakdown[];
+  // Experience date
+  experienceDate?: string | null;
 }
 
 // Result from reason assignment
@@ -210,6 +212,8 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       dateOfPayment: getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date") ? String(getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date")) : undefined,
       // Vendor ID for correction
       vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
+      // Experience date
+      experienceDate: getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "tour_date", "Travel Date") ? String(getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "tour_date", "Travel Date")) : null,
       // Pax type breakdown
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
     };
@@ -867,6 +871,8 @@ function computeReconciliationRows(
       spBeId: spBundle?.beId, // Store SP BE ID for comparison display
       // Pax type breakdown from HO data
       paxBreakdown: ho.paxBreakdown,
+      // Experience date from HO data
+      experienceDate: ho.experienceDate || undefined,
     });
   });
   

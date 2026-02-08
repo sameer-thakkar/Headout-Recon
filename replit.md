@@ -49,7 +49,7 @@ Preferred communication style: Simple, everyday language.
 - **Payment Method Mismatch**: Detection of differing payment methods, violet-styled UI section, TID-level grouping, and editable "Final Vendor ID" for manual corrections.
 - **Purchase Reconciliation (PORTAL_DEPOSIT)**: Replaces standard Amount Payable panel with a 12-line item reconciliation, including opening/closing balances, reloads, refunds, and computed/actual purchases. Features USD conversion, validation, collapsible reason/TID groups, editable "Final Net Price" with warnings, and TID-level bulk updates (SP Net, HO Net, Pax Type). Includes dispute and issue tracking per booking/TID.
 - **Vendor Balance Upload**: Dedicated section on the home page for uploading and managing vendor balances via Excel/CSV, with preview and bulk save functionality.
-- **Pax Type Management**: Database storage and UI for managing pax type names. Detection of pax-related columns in HO data, per-booking display, and TID-level bulk price updates based on pax types.
+- **Pax Type Management**: Database storage and UI for managing pax type names. Detection of pax-related columns in HO data, per-booking display, and TID-level bulk price updates based on pax types. Date-based grouping of pax unit prices: uses paymentBasis (DATE_OF_EXPERIENCE or DATE_OF_BOOKING) to determine grouping field, computes per-date SP/HO unit prices, collapses contiguous same-price dates into date ranges, and allows per-row Final Price input with direct date-to-rowKey mapping for precise price assignment.
 
 ## External Dependencies
 

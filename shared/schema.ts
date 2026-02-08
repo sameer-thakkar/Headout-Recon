@@ -99,6 +99,9 @@ export const primaryRowSchema = z.object({
   
   // Pax type breakdown (detected from HO data columns)
   paxBreakdown: z.array(paxBreakdownSchema).optional(),
+  
+  // Experience date (from HO data, used for pax type date grouping)
+  experienceDate: z.string().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
