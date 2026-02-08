@@ -22,14 +22,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -216,18 +208,21 @@ function formatNumber(value: number): string {
   }).format(value);
 }
 
-interface PaxPriceModalHandle {
+interface FinalNetPriceModalHandle {
   open: (bookings: PurchaseBooking[], tid: string) => void;
 }
 
-const PaxPriceModal = forwardRef<PaxPriceModalHandle, {
+const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   currency: string;
-  onApply: (bookings: PurchaseBooking[], newPrices: Record<string, string>, tid: string) => void;
-}>(function PaxPriceModal({ currency, onApply }, ref) {
+  onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  onApplyPax: (bookings: PurchaseBooking[], newPrices: Record<string, string>, tid: string) => void;
+}>(function FinalNetPriceModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [bookings, setBookings] = useState<PurchaseBooking[]>([]);
   const [tid, setTid] = useState("");
   const [newPrices, setNewPrices] = useState<Record<string, string>>({});
+  const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
   useImperativeHandle(ref, () => ({
     open: (tidBookings: PurchaseBooking[], tidVal: string) => {
@@ -252,86 +247,146 @@ const PaxPriceModal = forwardRef<PaxPriceModalHandle, {
     }
   }));
 
-  const handleApply = useCallback(() => {
+  const handleApplySpNet = useCallback(() => {
     setIsOpen(false);
-    onApply(bookings, newPrices, tid);
-  }, [bookings, newPrices, tid, onApply]);
+    onApplySpNet(bookings);
+  }, [bookings, onApplySpNet]);
+
+  const handleApplyHoNet = useCallback(() => {
+    setIsOpen(false);
+    onApplyHoNet(bookings);
+  }, [bookings, onApplyHoNet]);
+
+  const handleApplyPax = useCallback(() => {
+    setIsOpen(false);
+    onApplyPax(bookings, newPrices, tid);
+  }, [bookings, newPrices, tid, onApplyPax]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Calculator className="h-5 w-5 text-violet-600" />
-            Pax Price Update
+            <Pencil className="h-5 w-5 text-primary" />
+            Update Final Net Price
           </DialogTitle>
           <DialogDescription>
-            Update unit prices per pax type for TID {tid}. Final Net Price will be recalculated as sum of (count x new unit price) for each booking.
+            Choose how to update Final Net Price for {bookings.length} bookings in TID {tid}.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <div className="rounded-md border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">Pax Type</TableHead>
-                  <TableHead className="text-xs text-right">Current Unit Price</TableHead>
-                  <TableHead className="text-xs text-right">New Unit Price</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(newPrices).map(([paxType, price]) => {
-                  const currentPrice = bookings
-                    .flatMap(b => b.paxBreakdown || [])
-                    .find(pb => pb.paxType === paxType)?.unitPrice || 0;
-                  const displayName = paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-                  return (
-                    <TableRow key={paxType}>
-                      <TableCell className="text-xs font-medium">{displayName}</TableCell>
-                      <TableCell className="text-xs text-right font-mono text-muted-foreground">
-                        {formatNumber(currentPrice)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={price}
-                          onChange={(e) => setNewPrices(prev => ({ ...prev, [paxType]: e.target.value }))}
-                          className="w-32 text-xs font-mono text-right ml-auto"
-                          data-testid={`input-pax-price-${paxType}`}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+        <div className="space-y-3">
+          <div className="rounded-md border bg-background overflow-hidden">
+            <div
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
+              onClick={handleApplySpNet}
+              data-testid={`modal-btn-spnet-${tid}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                  <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Update to SP Net</div>
+                  <div className="text-xs text-muted-foreground">Set Final Net Price = SP Net for all bookings</div>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </div>
           </div>
-          <div className="rounded-md border p-3 bg-muted/50 space-y-1">
+
+          <div className="rounded-md border bg-background overflow-hidden">
+            <div
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
+              onClick={handleApplyHoNet}
+              data-testid={`modal-btn-honet-${tid}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-green-100 dark:bg-green-900/30">
+                  <TrendingDown className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Update to HO Net</div>
+                  <div className="text-xs text-muted-foreground">Set Final Net Price = HO Net for all bookings</div>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+
+          {hasPax && (
+            <div className="rounded-md border bg-background overflow-hidden">
+              <div className="px-4 py-3 border-b bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-violet-100 dark:bg-violet-900/30">
+                    <Calculator className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Update based on Pax Type</div>
+                    <div className="text-xs text-muted-foreground">Set unit prices per pax type to recalculate Final Net Price</div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 space-y-3">
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Pax Type</TableHead>
+                        <TableHead className="text-xs text-right">Current Price ({currency})</TableHead>
+                        <TableHead className="text-xs text-right">New Price ({currency})</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(newPrices).map(([paxType, price]) => {
+                        const currentPrice = bookings
+                          .flatMap(b => b.paxBreakdown || [])
+                          .find(pb => pb.paxType === paxType)?.unitPrice || 0;
+                        const displayName = paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                        return (
+                          <TableRow key={paxType}>
+                            <TableCell className="text-xs font-medium">{displayName}</TableCell>
+                            <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                              {formatNumber(currentPrice)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={price}
+                                onChange={(e) => setNewPrices(prev => ({ ...prev, [paxType]: e.target.value }))}
+                                className="w-32 text-xs font-mono text-right ml-auto"
+                                data-testid={`input-pax-price-${paxType}`}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    New FNP = Sum of (Count x New Price) per pax type
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={handleApplyPax}
+                    data-testid="button-apply-pax-update"
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1.5" />
+                    Apply Pax Prices
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-md border p-3 bg-muted/50">
             <p className="text-xs text-muted-foreground">
-              Applies to <span className="font-semibold">{bookings.length}</span> bookings in TID {tid}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              New Final Net Price = Sum of (Pax Count x New Unit Price) for each pax type
+              Applies to <span className="font-semibold">{bookings.length}</span> bookings in TID <span className="font-mono font-medium">{tid}</span>
             </p>
           </div>
         </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => setIsOpen(false)}
-            data-testid="button-cancel-pax-update"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleApply}
-            data-testid="button-apply-pax-update"
-          >
-            <Check className="h-4 w-4 mr-2" />
-            Apply Prices
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -589,8 +644,7 @@ interface TidGroupProps {
   loggedIssues: Set<string>;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  applyBulkFinalNetPrice: (source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  openPaxPriceModal: (tidBookings: PurchaseBooking[], tid: string) => void;
+  openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
 }
@@ -598,8 +652,8 @@ interface TidGroupProps {
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues,
-  getFinalNetPrice, updateFinalNetPrice, applyBulkFinalNetPrice,
-  openPaxPriceModal, handleTidBulkIssue, openIssueModal,
+  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
+  handleTidBulkIssue, openIssueModal,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
 
@@ -624,45 +678,16 @@ const TidGroup = memo(function TidGroup({
       {isExpanded && (
         <div>
           <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="text-[10px]" data-testid={`button-update-fnp-${tid}`}>
-                  <Pencil className="h-3 w-3 mr-1" />
-                  Update Final Net Price
-                  <ChevronDown className="h-3 w-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64">
-                <DropdownMenuLabel className="text-[11px] text-muted-foreground">Choose update method</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => applyBulkFinalNetPrice("spNet", tidBookings)} data-testid={`menu-bulk-fnp-spnet-${tid}`} className="cursor-pointer">
-                  <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
-                  <div>
-                    <div className="text-xs font-medium">Update to SP Net</div>
-                    <div className="text-[10px] text-muted-foreground">Set Final Net Price = SP Net for all bookings</div>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyBulkFinalNetPrice("hoNet", tidBookings)} data-testid={`menu-bulk-fnp-honet-${tid}`} className="cursor-pointer">
-                  <TrendingDown className="h-3.5 w-3.5 text-green-600" />
-                  <div>
-                    <div className="text-xs font-medium">Update to HO Net</div>
-                    <div className="text-[10px] text-muted-foreground">Set Final Net Price = HO Net for all bookings</div>
-                  </div>
-                </DropdownMenuItem>
-                {tidBookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0) && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => openPaxPriceModal(tidBookings, tid)} data-testid={`menu-pax-update-${tid}`} className="cursor-pointer">
-                      <Calculator className="h-3.5 w-3.5 text-violet-600" />
-                      <div>
-                        <div className="text-xs font-medium">Update based on Pax Type</div>
-                        <div className="text-[10px] text-muted-foreground">Set unit prices per pax type to recalculate</div>
-                      </div>
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-[10px]"
+              onClick={() => openFnpModal(tidBookings, tid)}
+              data-testid={`button-update-fnp-${tid}`}
+            >
+              <Pencil className="h-3 w-3 mr-1" />
+              Update Final Net Price
+            </Button>
             <div className="flex-1" />
             {runId && (
               <>
@@ -747,8 +772,7 @@ interface ReasonGroupProps {
   loggedIssues: Set<string>;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  applyBulkFinalNetPrice: (source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  openPaxPriceModal: (tidBookings: PurchaseBooking[], tid: string) => void;
+  openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
 }
@@ -758,8 +782,8 @@ const ReasonGroup = memo(function ReasonGroup({
   isReasonExpanded, expandedTids, visibleTidCount,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues,
-  getFinalNetPrice, updateFinalNetPrice, applyBulkFinalNetPrice,
-  openPaxPriceModal, handleTidBulkIssue, openIssueModal,
+  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
+  handleTidBulkIssue, openIssueModal,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
   const tidEntries = reasonGroup.tidEntries;
@@ -809,8 +833,7 @@ const ReasonGroup = memo(function ReasonGroup({
                 loggedIssues={loggedIssues}
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
-                applyBulkFinalNetPrice={applyBulkFinalNetPrice}
-                openPaxPriceModal={openPaxPriceModal}
+                openFnpModal={openFnpModal}
                 handleTidBulkIssue={handleTidBulkIssue}
                 openIssueModal={openIssueModal}
               />
@@ -869,7 +892,7 @@ export function PurchaseReconciliationPanel({
   const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
   
   // Imperative refs for modals (state lives inside modal components, not here)
-  const paxModalRef = useRef<PaxPriceModalHandle>(null);
+  const fnpModalRef = useRef<FinalNetPriceModalHandle>(null);
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
   
@@ -976,8 +999,8 @@ export function PurchaseReconciliationPanel({
     });
   }, []);
 
-  const openPaxPriceModal = useCallback((tidBookings: PurchaseBooking[], tid: string) => {
-    paxModalRef.current?.open(tidBookings, tid);
+  const openFnpModal = useCallback((tidBookings: PurchaseBooking[], tid: string) => {
+    fnpModalRef.current?.open(tidBookings, tid);
   }, []);
 
   const handlePaxApply = useCallback((bookings: PurchaseBooking[], newPrices: Record<string, string>, tid: string) => {
@@ -1017,6 +1040,14 @@ export function PurchaseReconciliationPanel({
       description: `Final Net Price set to ${source === "spNet" ? "SP Net" : "HO Net"} for ${bookings.length} bookings.`,
     });
   }, [toast]);
+
+  const handleApplySpNet = useCallback((bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
+    applyBulkFinalNetPrice("spNet", bookings);
+  }, [applyBulkFinalNetPrice]);
+
+  const handleApplyHoNet = useCallback((bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
+    applyBulkFinalNetPrice("hoNet", bookings);
+  }, [applyBulkFinalNetPrice]);
 
   const handleTidBulkDispute = useCallback(async (tidBookings: PurchaseBooking[], reason: string) => {
     if (!runId) return;
@@ -1599,8 +1630,7 @@ export function PurchaseReconciliationPanel({
                                   loggedIssues={loggedIssues}
                                   getFinalNetPrice={getFinalNetPrice}
                                   updateFinalNetPrice={updateFinalNetPrice}
-                                  applyBulkFinalNetPrice={applyBulkFinalNetPrice}
-                                  openPaxPriceModal={openPaxPriceModal}
+                                  openFnpModal={openFnpModal}
                                   handleTidBulkIssue={handleTidBulkIssue}
                                   openIssueModal={openIssueModal}
                                 />
@@ -1664,7 +1694,13 @@ export function PurchaseReconciliationPanel({
         </Button>
       </div>
       
-      <PaxPriceModal ref={paxModalRef} currency={currency} onApply={handlePaxApply} />
+      <FinalNetPriceModal
+        ref={fnpModalRef}
+        currency={currency}
+        onApplySpNet={handleApplySpNet}
+        onApplyHoNet={handleApplyHoNet}
+        onApplyPax={handlePaxApply}
+      />
       <DisputeModal ref={disputeModalRef} currency={currency} onSave={handleDisputeSave} />
       <IssueModal ref={issueModalRef} currency={currency} billingEntityName={billingEntityName} effectiveFxRate={effectiveFxRate} onSave={handleIssueSave} />
     </div>
