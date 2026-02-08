@@ -15,6 +15,8 @@ import type {
   VendorCorrection,
   VendorBalance,
   InsertVendorBalance,
+  PaxType,
+  InsertPaxType,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -69,6 +71,13 @@ export interface IStorage {
   getVendorBalances(): Promise<VendorBalance[]>;
   upsertVendorBalance(balance: InsertVendorBalance): Promise<VendorBalance>;
   deleteVendorBalance(beId: string): Promise<boolean>;
+
+  // Pax Types
+  getPaxTypes(): Promise<PaxType[]>;
+  createPaxType(paxType: InsertPaxType): Promise<PaxType>;
+  bulkCreatePaxTypes(names: string[]): Promise<PaxType[]>;
+  deletePaxType(id: number): Promise<boolean>;
+  deleteAllPaxTypes(): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -83,6 +92,8 @@ export class MemStorage implements IStorage {
   private issueCounter: number = 0;
   private vendorCorrections: Map<string, VendorCorrection> = new Map(); // key: runId:bookingId
   private vendorBalances: Map<string, VendorBalance> = new Map(); // key: beId
+  private paxTypesList: PaxType[] = [];
+  private paxTypeCounter: number = 0;
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -364,6 +375,44 @@ export class MemStorage implements IStorage {
   async deleteVendorBalance(beId: string): Promise<boolean> {
     return this.vendorBalances.delete(beId);
   }
+
+  // Pax Types
+  async getPaxTypes(): Promise<PaxType[]> {
+    return [...this.paxTypesList];
+  }
+
+  async createPaxType(paxType: InsertPaxType): Promise<PaxType> {
+    const existing = this.paxTypesList.find(p => p.name === paxType.name);
+    if (existing) return existing;
+    const newPaxType: PaxType = {
+      id: ++this.paxTypeCounter,
+      name: paxType.name,
+      createdAt: new Date().toISOString(),
+    };
+    this.paxTypesList.push(newPaxType);
+    return newPaxType;
+  }
+
+  async bulkCreatePaxTypes(names: string[]): Promise<PaxType[]> {
+    const results: PaxType[] = [];
+    for (const name of names) {
+      const result = await this.createPaxType({ name });
+      results.push(result);
+    }
+    return results;
+  }
+
+  async deletePaxType(id: number): Promise<boolean> {
+    const idx = this.paxTypesList.findIndex(p => p.id === id);
+    if (idx === -1) return false;
+    this.paxTypesList.splice(idx, 1);
+    return true;
+  }
+
+  async deleteAllPaxTypes(): Promise<boolean> {
+    this.paxTypesList = [];
+    return true;
+  }
 }
 
 // Database-backed storage implementation
@@ -375,6 +424,7 @@ import {
   issues as issuesTable,
   vendorCorrections as vendorCorrectionsTable,
   vendorBalances as vendorBalancesTable,
+  paxTypes as paxTypesTable,
   counters,
   type ReconciliationSession,
 } from "@shared/schema";
@@ -1023,6 +1073,45 @@ export class DatabaseStorage implements ISessionStorage {
   async deleteVendorBalance(beId: string): Promise<boolean> {
     const result = await db.delete(vendorBalancesTable).where(eq(vendorBalancesTable.beId, beId)).returning();
     return result.length > 0;
+  }
+
+  // Pax Types
+  async getPaxTypes(): Promise<PaxType[]> {
+    const results = await db.select().from(paxTypesTable).orderBy(paxTypesTable.name);
+    return results.map(r => ({
+      id: r.id,
+      name: r.name,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async createPaxType(paxType: InsertPaxType): Promise<PaxType> {
+    const [result] = await db.insert(paxTypesTable)
+      .values({ name: paxType.name })
+      .onConflictDoNothing()
+      .returning();
+    if (!result) {
+      const [existing] = await db.select().from(paxTypesTable).where(eq(paxTypesTable.name, paxType.name));
+      return { id: existing.id, name: existing.name, createdAt: existing.createdAt.toISOString() };
+    }
+    return { id: result.id, name: result.name, createdAt: result.createdAt.toISOString() };
+  }
+
+  async bulkCreatePaxTypes(names: string[]): Promise<PaxType[]> {
+    if (names.length === 0) return [];
+    const values = names.map(name => ({ name }));
+    await db.insert(paxTypesTable).values(values).onConflictDoNothing();
+    return this.getPaxTypes();
+  }
+
+  async deletePaxType(id: number): Promise<boolean> {
+    const result = await db.delete(paxTypesTable).where(eq(paxTypesTable.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async deleteAllPaxTypes(): Promise<boolean> {
+    await db.delete(paxTypesTable);
+    return true;
   }
 }
 

@@ -218,3 +218,19 @@ shared/              # Shared code between client and server
 - **Bulk Save**: Saves all valid balances to database at once
 - **Saved Balances Table**: Shows all stored balances with delete capability
 - **Purpose**: Upload balances upfront so reconciliation uses read-only data (prevents manipulation)
+
+### Pax Type Management & Bulk Price Updates
+- **Database**: `pax_types` table stores pax type names (e.g., "adult", "child", "senior")
+- **Management UI**: `client/src/components/pax-types-section.tsx` on home/landing page
+- **Upload**: CSV upload or manual add for pax type names
+- **API Endpoints**:
+  - `GET /api/pax-types` - List all pax types
+  - `POST /api/pax-types` - Add pax type (single or bulk)
+  - `DELETE /api/pax-types/:id` - Delete pax type
+- **Column Detection**: During reconciliation, HO data columns matching `{paxtype}_count`, `{paxtype}_unit_price`, `{paxtype}_price_net` are detected
+- **PaxBreakdown Schema**: `{ paxType: string, count: number, unitPrice: number, priceNet: number }`
+- **Per-Booking Display**: Pax breakdown shown as sub-row in booking detail tables (violet-styled)
+- **TID-Level Bulk Update**: "Pax Update" button appears on TID headers when bookings have pax data
+  - Opens modal with pax types and current/new unit price inputs
+  - Applies: Final Net Price = sum(count × newUnitPrice) for each pax type per booking
+- **Component**: Modal in `purchase-reconciliation-panel.tsx`

@@ -22,6 +22,15 @@ export const spFxDebugRowSchema = z.object({
 });
 export type SpFxDebugRow = z.infer<typeof spFxDebugRowSchema>;
 
+// Pax breakdown per booking (embedded in reconciliation data, not stored in DB)
+export const paxBreakdownSchema = z.object({
+  paxType: z.string(),
+  count: z.number(),
+  unitPrice: z.number(),
+  priceNet: z.number(),
+});
+export type PaxBreakdown = z.infer<typeof paxBreakdownSchema>;
+
 // Primary reconciliation row (HO-based)
 export const primaryRowSchema = z.object({
   bookingId: z.string(),
@@ -87,6 +96,9 @@ export const primaryRowSchema = z.object({
   // Secondary Vendor flag (cross-cutting check for all discrepancy types)
   isSecondaryVendor: z.boolean().optional(),
   spBeId: z.string().optional(), // SP billing entity ID (for comparison)
+  
+  // Pax type breakdown (detected from HO data columns)
+  paxBreakdown: z.array(paxBreakdownSchema).optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
@@ -438,7 +450,7 @@ export const driTeams = [
 
 // Database tables for persistent storage
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Users table (keeping existing structure)
@@ -578,3 +590,24 @@ export const vendorBalances = pgTable("vendor_balances", {
 });
 
 export type DbVendorBalance = typeof vendorBalances.$inferSelect;
+
+// Pax Types for booking price breakdown
+export const paxTypes = pgTable("pax_types", {
+  id: serial("id").primaryKey(),
+  name: varchar("name").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DbPaxType = typeof paxTypes.$inferSelect;
+
+export const paxTypeSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  createdAt: z.string(),
+});
+export type PaxType = z.infer<typeof paxTypeSchema>;
+
+export const insertPaxTypeSchema = z.object({
+  name: z.string().min(1),
+});
+export type InsertPaxType = z.infer<typeof insertPaxTypeSchema>;

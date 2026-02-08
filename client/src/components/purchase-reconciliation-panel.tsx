@@ -25,7 +25,18 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { PrimaryRow, VendorBalance } from "@shared/schema";
+import type { PrimaryRow, VendorBalance, PaxBreakdown } from "@shared/schema";
+
+type PurchaseBooking = {
+  bookingId: string;
+  spNet: number;
+  hoNet: number;
+  difference: number;
+  reason: string;
+  tid: string;
+  ticketId: string;
+  paxBreakdown?: PaxBreakdown[];
+};
 
 interface BookingForDispute {
   bookingId: string;
@@ -94,6 +105,12 @@ export function PurchaseReconciliationPanel({
   
   // Track bookings that have had issues logged (to suppress warning)
   const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
+  
+  // Pax Price Update modal state
+  const [paxModalOpen, setPaxModalOpen] = useState(false);
+  const [paxModalBookings, setPaxModalBookings] = useState<PurchaseBooking[]>([]);
+  const [paxModalTid, setPaxModalTid] = useState<string>("");
+  const [paxNewPrices, setPaxNewPrices] = useState<Record<string, string>>({});
   
   const effectiveFxRate = useMemo(() => {
     if (fxRateToUsd) return fxRateToUsd;
@@ -184,6 +201,51 @@ export function PurchaseReconciliationPanel({
     });
   }, []);
 
+  const openPaxPriceModal = useCallback((tidBookings: PurchaseBooking[], tid: string) => {
+    // Collect all unique pax types across these bookings with their current unit prices
+    const paxTypeMap = new Map<string, number>();
+    for (const b of tidBookings) {
+      if (b.paxBreakdown) {
+        for (const pb of b.paxBreakdown) {
+          if (!paxTypeMap.has(pb.paxType)) {
+            paxTypeMap.set(pb.paxType, pb.unitPrice);
+          }
+        }
+      }
+    }
+    // Initialize new prices with current unit prices
+    const initialPrices: Record<string, string> = {};
+    for (const [paxType, unitPrice] of paxTypeMap.entries()) {
+      initialPrices[paxType] = String(unitPrice);
+    }
+    setPaxNewPrices(initialPrices);
+    setPaxModalBookings(tidBookings);
+    setPaxModalTid(tid);
+    setPaxModalOpen(true);
+  }, []);
+
+  const applyPaxPriceUpdate = useCallback(() => {
+    // For each booking, recalculate Final Net Price based on new unit prices
+    setFinalNetPrices(prev => {
+      const next = new Map(prev);
+      for (const booking of paxModalBookings) {
+        if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
+        let newTotal = 0;
+        for (const pb of booking.paxBreakdown) {
+          const newPrice = parseFloat(paxNewPrices[pb.paxType] || String(pb.unitPrice));
+          newTotal += pb.count * (isNaN(newPrice) ? pb.unitPrice : newPrice);
+        }
+        next.set(booking.bookingId, Math.round(newTotal * 100) / 100);
+      }
+      return next;
+    });
+    setPaxModalOpen(false);
+    toast({
+      title: "Pax prices updated",
+      description: `Final Net Price recalculated for ${paxModalBookings.length} bookings in TID ${paxModalTid}.`,
+    });
+  }, [paxModalBookings, paxNewPrices, paxModalTid, toast]);
+
   const applyBulkFinalNetPrice = useCallback((source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     setFinalNetPrices(prev => {
       const next = new Map(prev);
@@ -198,7 +260,7 @@ export function PurchaseReconciliationPanel({
     });
   }, [toast]);
 
-  const handleTidBulkDispute = useCallback(async (tidBookings: { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[], reason: string) => {
+  const handleTidBulkDispute = useCallback(async (tidBookings: PurchaseBooking[], reason: string) => {
     if (!runId) return;
     let count = 0;
     for (const booking of tidBookings) {
@@ -230,7 +292,7 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId, activeDisputes, beId, billingEntityName, currency, toast]);
 
-  const handleTidBulkIssue = useCallback(async (tidBookings: { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[], reason: string, tid: string) => {
+  const handleTidBulkIssue = useCallback(async (tidBookings: PurchaseBooking[], reason: string, tid: string) => {
     if (!runId) return;
     const fxRate = effectiveFxRate || 1;
     let driTeam = "Finance";
@@ -483,7 +545,7 @@ export function PurchaseReconciliationPanel({
     const netDifference = difference + inSPNotInHO - inHONotInSP;
     
     // Breakup data for row 10: In SP not in HO (grouped by reason)
-    const row10ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[]>();
+    const row10ByReason = new Map<string, PurchaseBooking[]>();
     allRows
       .filter(row => row.spNetInHo > row.hoNet)
       .forEach(row => {
@@ -499,6 +561,7 @@ export function PurchaseReconciliationPanel({
           reason,
           tid: row.tid || "Unknown",
           ticketId: row.ticketId || "",
+          paxBreakdown: row.paxBreakdown,
         });
       });
     
@@ -513,7 +576,7 @@ export function PurchaseReconciliationPanel({
       .sort((a, b) => b.totalDifference - a.totalDifference);
     
     // Breakup data for row 11: In HO not in SP (grouped by reason)
-    const row11ByReason = new Map<string, { bookingId: string; spNet: number; hoNet: number; difference: number; reason: string; tid: string; ticketId: string }[]>();
+    const row11ByReason = new Map<string, PurchaseBooking[]>();
     allRows
       .filter(row => row.hoNet > row.spNetInHo)
       .forEach(row => {
@@ -529,6 +592,7 @@ export function PurchaseReconciliationPanel({
           reason,
           tid: row.tid || "Unknown",
           ticketId: row.ticketId || "",
+          paxBreakdown: row.paxBreakdown,
         });
       });
     
@@ -889,6 +953,17 @@ export function PurchaseReconciliationPanel({
                                                   >
                                                     Use HO Net
                                                   </Button>
+                                                  {tidBookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0) && (
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      className="text-[10px] text-violet-600 border-violet-300"
+                                                      onClick={() => openPaxPriceModal(tidBookings, tid)}
+                                                      data-testid={`button-pax-update-${tid}`}
+                                                    >
+                                                      Pax Update
+                                                    </Button>
+                                                  )}
                                                   <div className="flex-1" />
                                                   {runId && (
                                                     <>
@@ -934,8 +1009,10 @@ export function PurchaseReconciliationPanel({
                                                       const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                                                       const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                                                       const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
+                                                      const hasPax = booking.paxBreakdown && booking.paxBreakdown.length > 0;
                                                       return (
-                                                        <TableRow key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`} className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
+                                                        <Fragment key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
+                                                          <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
                                                           <TableCell className="py-1 font-mono">
                                                             <div className="flex items-center gap-1">
                                                               {booking.bookingId}
@@ -1002,6 +1079,21 @@ export function PurchaseReconciliationPanel({
                                                             </TableCell>
                                                           )}
                                                         </TableRow>
+                                                        {hasPax && (
+                                                          <TableRow className="h-6 bg-violet-50/30 dark:bg-violet-950/10">
+                                                            <TableCell colSpan={runId ? 6 : 5} className="py-0.5 pl-8">
+                                                              <div className="flex items-center gap-3 text-[10px] text-muted-foreground flex-wrap">
+                                                                <span className="font-medium text-violet-600 dark:text-violet-400">Pax:</span>
+                                                                {booking.paxBreakdown!.map((pb, pi) => (
+                                                                  <span key={pi} className="font-mono">
+                                                                    {pb.paxType.replace(/_/g, " ")} ({pb.count} x {formatNumber(pb.unitPrice)} = {formatNumber(pb.priceNet)})
+                                                                  </span>
+                                                                ))}
+                                                              </div>
+                                                            </TableCell>
+                                                          </TableRow>
+                                                        )}
+                                                        </Fragment>
                                                       );
                                                     })}
                                                   </TableBody>
@@ -1155,6 +1247,84 @@ export function PurchaseReconciliationPanel({
                   Raise Dispute
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Pax Price Update Modal */}
+      <Dialog open={paxModalOpen} onOpenChange={setPaxModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-violet-600" />
+              Pax Price Update
+            </DialogTitle>
+            <DialogDescription>
+              Update unit prices per pax type for TID {paxModalTid}. Final Net Price will be recalculated as sum of (count x new unit price) for each booking.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Pax Type</TableHead>
+                    <TableHead className="text-xs text-right">Current Unit Price</TableHead>
+                    <TableHead className="text-xs text-right">New Unit Price</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.entries(paxNewPrices).map(([paxType, price]) => {
+                    const currentPrice = paxModalBookings
+                      .flatMap(b => b.paxBreakdown || [])
+                      .find(pb => pb.paxType === paxType)?.unitPrice || 0;
+                    const displayName = paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                    return (
+                      <TableRow key={paxType}>
+                        <TableCell className="text-xs font-medium">{displayName}</TableCell>
+                        <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                          {formatNumber(currentPrice)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={price}
+                            onChange={(e) => setPaxNewPrices(prev => ({ ...prev, [paxType]: e.target.value }))}
+                            className="w-32 text-xs font-mono text-right ml-auto"
+                            data-testid={`input-pax-price-${paxType}`}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="rounded-md border p-3 bg-muted/50 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Applies to <span className="font-semibold">{paxModalBookings.length}</span> bookings in TID {paxModalTid}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                New Final Net Price = Sum of (Pax Count x New Unit Price) for each pax type
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPaxModalOpen(false)}
+              data-testid="button-cancel-pax-update"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={applyPaxPriceUpdate}
+              data-testid="button-apply-pax-update"
+            >
+              <Check className="h-4 w-4 mr-2" />
+              Apply Prices
             </Button>
           </DialogFooter>
         </DialogContent>

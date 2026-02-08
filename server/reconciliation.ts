@@ -8,10 +8,12 @@ import type {
   FxData,
   SpFxDebugRow,
   PrimaryRow,
+  PaxBreakdown,
   OverallSummaryRow,
   RunResult,
   SheetData,
 } from "@shared/schema";
+import { storage } from "./storage";
 
 // FX API endpoint
 const FX_API_URL = "https://open.er-api.com/v6/latest/USD";
@@ -78,6 +80,8 @@ interface HORow {
   dateOfPayment?: string;
   // Vendor ID for correction
   vid?: string;
+  // Pax type breakdown
+  paxBreakdown?: PaxBreakdown[];
 }
 
 // Result from reason assignment
@@ -130,7 +134,7 @@ function getRowValue(row: Record<string, unknown>, ...columnNames: string[]): un
 /**
  * Parse HO Data sheet into typed rows
  */
-function parseHOData(sheet: SheetData): HORow[] {
+function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
   // Write debug info to a file for troubleshooting
   const debugInfo = {
     headers: sheet.headers,
@@ -138,6 +142,38 @@ function parseHOData(sheet: SheetData): HORow[] {
     sampleRow: sheet.rows.length > 0 ? sheet.rows[0] : null,
   };
   fs.writeFileSync('/tmp/ho_data_debug.json', JSON.stringify(debugInfo, null, 2));
+  
+  // Build a set of normalized pax type names for column detection
+  const normalizedPaxTypes = paxTypeNames.map(name => name.toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_"));
+  
+  // Pre-scan headers to find which pax type columns exist
+  const rowKeys = sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : sheet.headers;
+  const normalizedKeys = rowKeys.map(k => k.toLowerCase().replace(/\s+/g, "_"));
+  
+  // For each pax type, check if _count, _unit_price, _price_net columns exist
+  const detectedPaxColumns: { paxType: string; countKey: string | null; unitPriceKey: string | null; priceNetKey: string | null }[] = [];
+  for (const pt of normalizedPaxTypes) {
+    const countSuffix = `${pt}_count`;
+    const unitPriceSuffix = `${pt}_unit_price`;
+    const priceNetSuffix = `${pt}_price_net`;
+    
+    let countKey: string | null = null;
+    let unitPriceKey: string | null = null;
+    let priceNetKey: string | null = null;
+    
+    for (let i = 0; i < normalizedKeys.length; i++) {
+      if (normalizedKeys[i] === countSuffix) countKey = rowKeys[i];
+      if (normalizedKeys[i] === unitPriceSuffix) unitPriceKey = rowKeys[i];
+      if (normalizedKeys[i] === priceNetSuffix) priceNetKey = rowKeys[i];
+    }
+    
+    // Only include if at least the count column exists
+    if (countKey) {
+      detectedPaxColumns.push({ paxType: pt, countKey, unitPriceKey, priceNetKey });
+    }
+  }
+  
+  fs.writeFileSync('/tmp/pax_columns_debug.json', JSON.stringify({ paxTypeNames: normalizedPaxTypes, detectedPaxColumns }, null, 2));
   
   return sheet.rows.map((row) => {
     const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
@@ -175,8 +211,33 @@ function parseHOData(sheet: SheetData): HORow[] {
       dateOfPayment: getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date") ? String(getRowValue(row, "dateOfPayment", "Date of Payment", "date_of_payment", "paymentDate", "Payment Date")) : undefined,
       // Vendor ID for correction
       vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
+      // Pax type breakdown
+      paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
     };
   });
+}
+
+/**
+ * Extract pax type breakdown from a single HO row
+ */
+function extractPaxBreakdown(
+  row: Record<string, unknown>,
+  paxColumns: { paxType: string; countKey: string | null; unitPriceKey: string | null; priceNetKey: string | null }[]
+): PaxBreakdown[] {
+  const breakdowns: PaxBreakdown[] = [];
+  for (const col of paxColumns) {
+    const count = col.countKey ? Number(row[col.countKey]) || 0 : 0;
+    if (count === 0) continue; // Skip pax types with zero count for this booking
+    const unitPrice = col.unitPriceKey ? Number(row[col.unitPriceKey]) || 0 : 0;
+    const priceNet = col.priceNetKey ? Number(row[col.priceNetKey]) || 0 : count * unitPrice;
+    breakdowns.push({
+      paxType: col.paxType,
+      count,
+      unitPrice,
+      priceNet,
+    });
+  }
+  return breakdowns;
 }
 
 /**
@@ -805,6 +866,8 @@ function computeReconciliationRows(
       // Secondary Vendor flag (cross-cutting check)
       isSecondaryVendor: reasonResult.isSecondaryVendor,
       spBeId: spBundle?.beId, // Store SP BE ID for comparison display
+      // Pax type breakdown from HO data
+      paxBreakdown: ho.paxBreakdown,
     });
   });
   
@@ -924,12 +987,16 @@ export async function runReconciliation(
   hoData: SheetData,
   spData: SheetData
 ): Promise<RunResult> {
-  // Fetch FX rates
-  const fx = await fetchFxRates();
+  // Fetch FX rates and pax types in parallel
+  const [fx, paxTypes] = await Promise.all([
+    fetchFxRates(),
+    storage.getPaxTypes(),
+  ]);
   const { usdToCcy } = fx;
+  const paxTypeNames = paxTypes.map(pt => pt.name);
   
   // Parse sheets
-  const hoRows = parseHOData(hoData);
+  const hoRows = parseHOData(hoData, paxTypeNames);
   const spRows = parseSPData(spData);
   
   // STEP B: Build Primary HO map

@@ -4203,6 +4203,76 @@ export async function registerRoutes(
     }
   });
 
+  // ========== Pax Types Endpoints ==========
+
+  app.get("/api/pax-types", async (req, res) => {
+    try {
+      const paxTypes = await storage.getPaxTypes();
+      res.json({ paxTypes });
+    } catch (error) {
+      console.error("Get pax types error:", error);
+      res.status(500).json({ error: "Failed to fetch pax types" });
+    }
+  });
+
+  app.post("/api/pax-types", async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ error: "Missing required field: name" });
+      }
+      const paxType = await storage.createPaxType({ name: name.trim().toLowerCase() });
+      res.json({ paxType });
+    } catch (error) {
+      console.error("Create pax type error:", error);
+      res.status(500).json({ error: "Failed to create pax type" });
+    }
+  });
+
+  app.post("/api/pax-types/bulk", async (req, res) => {
+    try {
+      const { names } = req.body;
+      if (!Array.isArray(names) || names.length === 0) {
+        return res.status(400).json({ error: "Missing required field: names (array of strings)" });
+      }
+      const cleanedNames = names
+        .map((n: unknown) => (typeof n === "string" ? n.trim().toLowerCase() : ""))
+        .filter((n: string) => n.length > 0);
+      if (cleanedNames.length === 0) {
+        return res.status(400).json({ error: "No valid pax type names provided" });
+      }
+      const paxTypes = await storage.bulkCreatePaxTypes(cleanedNames);
+      res.json({ paxTypes, count: paxTypes.length });
+    } catch (error) {
+      console.error("Bulk create pax types error:", error);
+      res.status(500).json({ error: "Failed to bulk create pax types" });
+    }
+  });
+
+  app.delete("/api/pax-types/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid pax type ID" });
+      }
+      const deleted = await storage.deletePaxType(id);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete pax type error:", error);
+      res.status(500).json({ error: "Failed to delete pax type" });
+    }
+  });
+
+  app.delete("/api/pax-types", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAllPaxTypes();
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete all pax types error:", error);
+      res.status(500).json({ error: "Failed to delete all pax types" });
+    }
+  });
+
   // ========== Session Management Endpoints ==========
 
   // Get all sessions
