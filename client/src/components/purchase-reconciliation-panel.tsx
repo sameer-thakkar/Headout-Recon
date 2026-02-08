@@ -103,6 +103,23 @@ const BookingRow = memo(function BookingRow({
   onUpdateFnp,
   onOpenIssueModal,
 }: BookingRowProps) {
+  const [localFnp, setLocalFnp] = useState(String(fnpValue));
+  const localFnpRef = useRef(localFnp);
+  localFnpRef.current = localFnp;
+
+  useEffect(() => {
+    if (String(fnpValue) !== localFnpRef.current) {
+      setLocalFnp(String(fnpValue));
+    }
+  }, [fnpValue]);
+
+  const commitFnp = useCallback(() => {
+    const parsed = parseFloat(localFnp) || 0;
+    if (parsed !== fnpValue) {
+      onUpdateFnp(booking.bookingId, parsed);
+    }
+  }, [localFnp, fnpValue, booking.bookingId, onUpdateFnp]);
+
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
       <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
@@ -127,8 +144,10 @@ const BookingRow = memo(function BookingRow({
               type="number"
               step="0.01"
               className="h-6 text-xs w-28 font-mono text-right"
-              value={fnpValue}
-              onChange={(e) => onUpdateFnp(booking.bookingId, parseFloat(e.target.value) || 0)}
+              value={localFnp}
+              onChange={(e) => setLocalFnp(e.target.value)}
+              onBlur={commitFnp}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
               data-testid={`input-fnp-${booking.bookingId}`}
             />
             {needsDisputeWarning && (
@@ -554,6 +573,266 @@ const IssueModal = forwardRef<IssueModalHandle, {
   );
 });
 
+interface TidGroupProps {
+  tidKey: string;
+  tid: string;
+  tidBookings: PurchaseBooking[];
+  itemId: number;
+  groupIdx: number;
+  currency: string;
+  runId?: string | null;
+  reasonName: string;
+  isExpanded: boolean;
+  onToggle: (key: string) => void;
+  activeDisputes: Set<string>;
+  disputeAmounts: Map<string, number>;
+  loggedIssues: Set<string>;
+  getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
+  updateFinalNetPrice: (bookingId: string, value: number) => void;
+  applyBulkFinalNetPrice: (source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  openPaxPriceModal: (tidBookings: PurchaseBooking[], tid: string) => void;
+  handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+  openIssueModal: (booking: BookingForDispute) => void;
+}
+
+const TidGroup = memo(function TidGroup({
+  tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
+  isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues,
+  getFinalNetPrice, updateFinalNetPrice, applyBulkFinalNetPrice,
+  openPaxPriceModal, handleTidBulkIssue, openIssueModal,
+}: TidGroupProps) {
+  const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
+
+  return (
+    <div className="rounded-md border bg-background overflow-hidden">
+      <div
+        className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+        onClick={() => onToggle(tidKey)}
+        data-testid={`tid-header-${itemId}-${groupIdx}-${tid}`}
+      >
+        <div className="flex items-center gap-2">
+          {isExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+          <span className="font-mono text-xs font-medium">TID: {tid}</span>
+          <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
+            {formatNumber(tidTotal)} {currency}
+          </span>
+        </div>
+      </div>
+      {isExpanded && (
+        <div>
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="text-[10px]" data-testid={`button-update-fnp-${tid}`}>
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Update Final Net Price
+                  <ChevronDown className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuLabel className="text-[11px] text-muted-foreground">Choose update method</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => applyBulkFinalNetPrice("spNet", tidBookings)} data-testid={`menu-bulk-fnp-spnet-${tid}`} className="cursor-pointer">
+                  <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
+                  <div>
+                    <div className="text-xs font-medium">Update to SP Net</div>
+                    <div className="text-[10px] text-muted-foreground">Set Final Net Price = SP Net for all bookings</div>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyBulkFinalNetPrice("hoNet", tidBookings)} data-testid={`menu-bulk-fnp-honet-${tid}`} className="cursor-pointer">
+                  <TrendingDown className="h-3.5 w-3.5 text-green-600" />
+                  <div>
+                    <div className="text-xs font-medium">Update to HO Net</div>
+                    <div className="text-[10px] text-muted-foreground">Set Final Net Price = HO Net for all bookings</div>
+                  </div>
+                </DropdownMenuItem>
+                {tidBookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => openPaxPriceModal(tidBookings, tid)} data-testid={`menu-pax-update-${tid}`} className="cursor-pointer">
+                      <Calculator className="h-3.5 w-3.5 text-violet-600" />
+                      <div>
+                        <div className="text-xs font-medium">Update based on Pax Type</div>
+                        <div className="text-[10px] text-muted-foreground">Set unit prices per pax type to recalculate</div>
+                      </div>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div className="flex-1" />
+            {runId && (
+              <>
+                <Button size="sm" variant="ghost" className="text-[10px] text-amber-600 opacity-50 cursor-not-allowed" disabled title="Dispute functionality coming soon" data-testid={`button-tid-bulk-dispute-${tid}`}>
+                  <FileWarning className="h-3 w-3 mr-0.5" />
+                  Dispute All
+                </Button>
+                <Button size="sm" variant="ghost" className="text-[10px] text-blue-600" onClick={() => handleTidBulkIssue(tidBookings, reasonName, tid)} data-testid={`button-tid-bulk-issue-${tid}`}>
+                  <AlertTriangle className="h-3 w-3 mr-0.5" />
+                  Issue All
+                </Button>
+              </>
+            )}
+          </div>
+          <Table className="text-xs">
+            <TableHeader>
+              <TableRow className="h-7">
+                <TableHead className="py-1 text-xs">Booking ID</TableHead>
+                <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
+                <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
+                <TableHead className="py-1 text-xs text-right">Final Net Price ({currency})</TableHead>
+                {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tidBookings.map((booking, bookingIdx) => {
+                const hasDispute = activeDisputes.has(booking.bookingId);
+                const disputeAmt = disputeAmounts.get(booking.bookingId);
+                const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
+                const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
+                const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
+                const hasPax = !!(booking.paxBreakdown && booking.paxBreakdown.length > 0);
+                return (
+                  <BookingRow
+                    key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}
+                    booking={booking}
+                    itemId={itemId}
+                    groupIdx={groupIdx}
+                    tid={tid}
+                    bookingIdx={bookingIdx}
+                    currency={currency}
+                    runId={runId}
+                    hasDispute={hasDispute}
+                    disputeAmount={disputeAmt}
+                    fnpValue={fnp}
+                    needsDisputeWarning={needsDisputeWarning}
+                    hasPax={hasPax}
+                    reasonName={reasonName}
+                    onUpdateFnp={updateFinalNetPrice}
+                    onOpenIssueModal={openIssueModal}
+                  />
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+});
+
+interface ReasonGroupProps {
+  itemId: number;
+  groupIdx: number;
+  reasonGroup: {
+    reason: string;
+    count: number;
+    totalDifference: number;
+    tidEntries: [string, PurchaseBooking[]][];
+  };
+  currency: string;
+  runId?: string | null;
+  isReasonExpanded: boolean;
+  expandedTids: Set<string>;
+  visibleTidCount: number;
+  onToggleReason: (key: string) => void;
+  onToggleTid: (key: string) => void;
+  onShowMoreTids: (reasonKey: string, totalCount: number) => void;
+  activeDisputes: Set<string>;
+  disputeAmounts: Map<string, number>;
+  loggedIssues: Set<string>;
+  getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
+  updateFinalNetPrice: (bookingId: string, value: number) => void;
+  applyBulkFinalNetPrice: (source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  openPaxPriceModal: (tidBookings: PurchaseBooking[], tid: string) => void;
+  handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+  openIssueModal: (booking: BookingForDispute) => void;
+}
+
+const ReasonGroup = memo(function ReasonGroup({
+  itemId, groupIdx, reasonGroup, currency, runId,
+  isReasonExpanded, expandedTids, visibleTidCount,
+  onToggleReason, onToggleTid, onShowMoreTids,
+  activeDisputes, disputeAmounts, loggedIssues,
+  getFinalNetPrice, updateFinalNetPrice, applyBulkFinalNetPrice,
+  openPaxPriceModal, handleTidBulkIssue, openIssueModal,
+}: ReasonGroupProps) {
+  const reasonKey = `${itemId}-${reasonGroup.reason}`;
+  const tidEntries = reasonGroup.tidEntries;
+  const visibleTids = tidEntries.slice(0, visibleTidCount);
+  const hasMore = tidEntries.length > visibleTidCount;
+
+  return (
+    <div className="rounded-md border bg-background overflow-hidden">
+      <div
+        className="flex items-center justify-between px-3 py-2 bg-muted/50 cursor-pointer hover-elevate"
+        onClick={() => onToggleReason(reasonKey)}
+        data-testid={`reason-header-${itemId}-${groupIdx}`}
+      >
+        <div className="flex items-center gap-2">
+          {isReasonExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <span className="font-medium text-sm">{reasonGroup.reason}</span>
+          <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
+          <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-muted-foreground">Total:</span>
+          <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
+            {formatNumber(reasonGroup.totalDifference)} {currency}
+          </span>
+        </div>
+      </div>
+      {isReasonExpanded && (
+        <div className="space-y-1 p-2">
+          {visibleTids.map(([tid, tidBookings]) => {
+            const tidKey = `${itemId}-${reasonGroup.reason}-${tid}`;
+            const isTidExpanded = expandedTids.has(tidKey);
+            return (
+              <TidGroup
+                key={tidKey}
+                tidKey={tidKey}
+                tid={tid}
+                tidBookings={tidBookings}
+                itemId={itemId}
+                groupIdx={groupIdx}
+                currency={currency}
+                runId={runId}
+                reasonName={reasonGroup.reason}
+                isExpanded={isTidExpanded}
+                onToggle={onToggleTid}
+                activeDisputes={activeDisputes}
+                disputeAmounts={disputeAmounts}
+                loggedIssues={loggedIssues}
+                getFinalNetPrice={getFinalNetPrice}
+                updateFinalNetPrice={updateFinalNetPrice}
+                applyBulkFinalNetPrice={applyBulkFinalNetPrice}
+                openPaxPriceModal={openPaxPriceModal}
+                handleTidBulkIssue={handleTidBulkIssue}
+                openIssueModal={openIssueModal}
+              />
+            );
+          })}
+          {hasMore && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-xs"
+              onClick={() => onShowMoreTids(reasonKey, tidEntries.length)}
+              data-testid={`button-show-more-tids-${reasonKey}`}
+            >
+              Show More ({tidEntries.length - visibleTidCount} remaining)
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
 export function PurchaseReconciliationPanel({
   primaryRows,
   secondaryVendorRows = [],
@@ -635,41 +914,40 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId]); // Only depend on runId, reload when it changes
   
-  const toggleRowExpand = (rowId: number) => {
-    setExpandedRows(prev => {
-      const next = new Set(prev);
-      if (next.has(rowId)) {
-        next.delete(rowId);
-      } else {
-        next.add(rowId);
-      }
-      return next;
+  const [, startExpandTransition] = useTransition();
+
+  const toggleRowExpand = useCallback((rowId: number) => {
+    startExpandTransition(() => {
+      setExpandedRows(prev => {
+        const next = new Set(prev);
+        if (next.has(rowId)) next.delete(rowId);
+        else next.add(rowId);
+        return next;
+      });
     });
-  };
+  }, []);
   
-  const toggleReasonExpand = (key: string) => {
-    setExpandedReasons(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
+  const toggleReasonExpand = useCallback((key: string) => {
+    startExpandTransition(() => {
+      setExpandedReasons(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
     });
-  };
+  }, []);
   
-  const toggleTidExpand = (key: string) => {
-    setExpandedTids(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
+  const toggleTidExpand = useCallback((key: string) => {
+    startExpandTransition(() => {
+      setExpandedTids(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
     });
-  };
+  }, []);
 
   const getVisibleTidCount = useCallback((reasonKey: string) => {
     return visibleTidCounts.get(reasonKey) || INITIAL_TID_LIMIT;
@@ -689,10 +967,12 @@ export function PurchaseReconciliationPanel({
   }, []);
 
   const updateFinalNetPrice = useCallback((bookingId: string, value: number) => {
-    setFinalNetPrices(prev => {
-      const next = new Map(prev);
-      next.set(bookingId, value);
-      return next;
+    startPriceTransition(() => {
+      setFinalNetPrices(prev => {
+        const next = new Map(prev);
+        next.set(bookingId, value);
+        return next;
+      });
     });
   }, []);
 
@@ -1299,213 +1579,31 @@ export function PurchaseReconciliationPanel({
                             {breakupWithTids.map((reasonGroup, groupIdx) => {
                               const reasonKey = `${item.id}-${reasonGroup.reason}`;
                               const isReasonExpanded = expandedReasons.has(reasonKey);
-                              const tidEntries = reasonGroup.tidEntries;
+                              const visibleCount = getVisibleTidCount(reasonKey);
                               return (
-                                <div key={`${item.id}-reason-${groupIdx}`} className="rounded-md border bg-background overflow-hidden">
-                                  <div 
-                                    className="flex items-center justify-between px-3 py-2 bg-muted/50 cursor-pointer hover-elevate"
-                                    onClick={() => toggleReasonExpand(reasonKey)}
-                                    data-testid={`reason-header-${item.id}-${groupIdx}`}
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      {isReasonExpanded ? (
-                                        <ChevronDown className="h-4 w-4 text-primary" />
-                                      ) : (
-                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                      )}
-                                      <span className="font-medium text-sm">{reasonGroup.reason}</span>
-                                      <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
-                                      <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-xs">
-                                      <span className="text-muted-foreground">Total:</span>
-                                      <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
-                                        {formatNumber(reasonGroup.totalDifference)} {currency}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {isReasonExpanded && (() => {
-                                    const reasonKey = `${item.id}-${reasonGroup.reason}`;
-                                    const visibleCount = getVisibleTidCount(reasonKey);
-                                    const visibleTids = tidEntries.slice(0, visibleCount);
-                                    const hasMore = tidEntries.length > visibleCount;
-                                    return (
-                                    <div className="space-y-1 p-2">
-                                      {visibleTids.map(([tid, tidBookings]) => {
-                                        const tidKey = `${item.id}-${reasonGroup.reason}-${tid}`;
-                                        const isTidExpanded = expandedTids.has(tidKey);
-                                        const tidTotal = tidBookings.reduce((s, b) => s + b.difference, 0);
-                                        return (
-                                          <div key={tidKey} className="rounded-md border bg-background overflow-hidden">
-                                            <div
-                                              className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
-                                              onClick={() => toggleTidExpand(tidKey)}
-                                              data-testid={`tid-header-${item.id}-${groupIdx}-${tid}`}
-                                            >
-                                              <div className="flex items-center gap-2">
-                                                {isTidExpanded ? (
-                                                  <ChevronDown className="h-3 w-3 text-primary" />
-                                                ) : (
-                                                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                                                )}
-                                                <span className="font-mono text-xs font-medium">TID: {tid}</span>
-                                                <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
-                                              </div>
-                                              <div className="flex items-center gap-2 text-xs">
-                                                <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
-                                                  {formatNumber(tidTotal)} {currency}
-                                                </span>
-                                              </div>
-                                            </div>
-                                            {isTidExpanded && (
-                                              <div>
-                                                <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-muted/10" onClick={(e) => e.stopPropagation()}>
-                                                  <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                      <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="text-[10px]"
-                                                        data-testid={`button-update-fnp-${tid}`}
-                                                      >
-                                                        <Pencil className="h-3 w-3 mr-1" />
-                                                        Update Final Net Price
-                                                        <ChevronDown className="h-3 w-3 ml-1" />
-                                                      </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="start" className="w-64">
-                                                      <DropdownMenuLabel className="text-[11px] text-muted-foreground">Choose update method</DropdownMenuLabel>
-                                                      <DropdownMenuSeparator />
-                                                      <DropdownMenuItem
-                                                        onClick={() => applyBulkFinalNetPrice("spNet", tidBookings)}
-                                                        data-testid={`menu-bulk-fnp-spnet-${tid}`}
-                                                        className="cursor-pointer"
-                                                      >
-                                                        <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
-                                                        <div>
-                                                          <div className="text-xs font-medium">Update to SP Net</div>
-                                                          <div className="text-[10px] text-muted-foreground">Set Final Net Price = SP Net for all bookings</div>
-                                                        </div>
-                                                      </DropdownMenuItem>
-                                                      <DropdownMenuItem
-                                                        onClick={() => applyBulkFinalNetPrice("hoNet", tidBookings)}
-                                                        data-testid={`menu-bulk-fnp-honet-${tid}`}
-                                                        className="cursor-pointer"
-                                                      >
-                                                        <TrendingDown className="h-3.5 w-3.5 text-green-600" />
-                                                        <div>
-                                                          <div className="text-xs font-medium">Update to HO Net</div>
-                                                          <div className="text-[10px] text-muted-foreground">Set Final Net Price = HO Net for all bookings</div>
-                                                        </div>
-                                                      </DropdownMenuItem>
-                                                      {tidBookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0) && (
-                                                        <>
-                                                          <DropdownMenuSeparator />
-                                                          <DropdownMenuItem
-                                                            onClick={() => openPaxPriceModal(tidBookings, tid)}
-                                                            data-testid={`menu-pax-update-${tid}`}
-                                                            className="cursor-pointer"
-                                                          >
-                                                            <Calculator className="h-3.5 w-3.5 text-violet-600" />
-                                                            <div>
-                                                              <div className="text-xs font-medium">Update based on Pax Type</div>
-                                                              <div className="text-[10px] text-muted-foreground">Set unit prices per pax type to recalculate</div>
-                                                            </div>
-                                                          </DropdownMenuItem>
-                                                        </>
-                                                      )}
-                                                    </DropdownMenuContent>
-                                                  </DropdownMenu>
-                                                  <div className="flex-1" />
-                                                  {runId && (
-                                                    <>
-                                                      <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-[10px] text-amber-600 opacity-50 cursor-not-allowed"
-                                                        disabled
-                                                        title="Dispute functionality coming soon"
-                                                        data-testid={`button-tid-bulk-dispute-${tid}`}
-                                                      >
-                                                        <FileWarning className="h-3 w-3 mr-0.5" />
-                                                        Dispute All
-                                                      </Button>
-                                                      <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-[10px] text-blue-600"
-                                                        onClick={() => handleTidBulkIssue(tidBookings, reasonGroup.reason, tid)}
-                                                        data-testid={`button-tid-bulk-issue-${tid}`}
-                                                      >
-                                                        <AlertTriangle className="h-3 w-3 mr-0.5" />
-                                                        Issue All
-                                                      </Button>
-                                                    </>
-                                                  )}
-                                                </div>
-                                                <Table className="text-xs">
-                                                  <TableHeader>
-                                                    <TableRow className="h-7">
-                                                      <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                                                      <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                                                      <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                                                      <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
-                                                      <TableHead className="py-1 text-xs text-right">Final Net Price ({currency})</TableHead>
-                                                      {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
-                                                    </TableRow>
-                                                  </TableHeader>
-                                                  <TableBody>
-                                                    {tidBookings.map((booking, bookingIdx) => {
-                                                      const hasDispute = activeDisputes.has(booking.bookingId);
-                                                      const disputeAmt = disputeAmounts.get(booking.bookingId);
-                                                      const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
-                                                      const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
-                                                      const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
-                                                      const hasPax = !!(booking.paxBreakdown && booking.paxBreakdown.length > 0);
-                                                      return (
-                                                        <BookingRow
-                                                          key={`${item.id}-booking-${groupIdx}-${tid}-${bookingIdx}`}
-                                                          booking={booking}
-                                                          itemId={item.id}
-                                                          groupIdx={groupIdx}
-                                                          tid={tid}
-                                                          bookingIdx={bookingIdx}
-                                                          currency={currency}
-                                                          runId={runId}
-                                                          hasDispute={hasDispute}
-                                                          disputeAmount={disputeAmt}
-                                                          fnpValue={fnp}
-
-                                                          needsDisputeWarning={needsDisputeWarning}
-                                                          hasPax={hasPax}
-                                                          reasonName={reasonGroup.reason}
-                                                          onUpdateFnp={updateFinalNetPrice}
-                                                          onOpenIssueModal={openIssueModal}
-                                                        />
-                                                      );
-                                                    })}
-                                                  </TableBody>
-                                                </Table>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                      {hasMore && (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="w-full text-xs"
-                                          onClick={() => showMoreTids(reasonKey, tidEntries.length)}
-                                          data-testid={`button-show-more-tids-${reasonKey}`}
-                                        >
-                                          Show More ({tidEntries.length - visibleCount} remaining)
-                                        </Button>
-                                      )}
-                                    </div>
-                                    );
-                                  })()}
-                                </div>
+                                <ReasonGroup
+                                  key={`${item.id}-reason-${groupIdx}`}
+                                  itemId={item.id}
+                                  groupIdx={groupIdx}
+                                  reasonGroup={reasonGroup}
+                                  currency={currency}
+                                  runId={runId}
+                                  isReasonExpanded={isReasonExpanded}
+                                  expandedTids={expandedTids}
+                                  visibleTidCount={visibleCount}
+                                  onToggleReason={toggleReasonExpand}
+                                  onToggleTid={toggleTidExpand}
+                                  onShowMoreTids={showMoreTids}
+                                  activeDisputes={activeDisputes}
+                                  disputeAmounts={disputeAmounts}
+                                  loggedIssues={loggedIssues}
+                                  getFinalNetPrice={getFinalNetPrice}
+                                  updateFinalNetPrice={updateFinalNetPrice}
+                                  applyBulkFinalNetPrice={applyBulkFinalNetPrice}
+                                  openPaxPriceModal={openPaxPriceModal}
+                                  handleTidBulkIssue={handleTidBulkIssue}
+                                  openIssueModal={openIssueModal}
+                                />
                               );
                             })}
                             <div className="flex items-center justify-end gap-3 pt-2 border-t text-sm">
