@@ -1130,7 +1130,87 @@ export function PurchaseReconciliationPanel({
       setDisputesLoaded(false);
     }
   }, [runId]); // Only depend on runId, reload when it changes
-  
+
+  // Auto-log unmapped transactions as issues for Portal Deposit runs
+  const autoLoggedRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!runId || !disputesLoaded || unmappedRows.length === 0) return;
+    if (autoLoggedRunRef.current === runId) return;
+    autoLoggedRunRef.current = runId;
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    (async () => {
+      try {
+        const issuesRes = await fetch(`/api/issues/${runId}`, { signal });
+        const issuesData = await issuesRes.json();
+        const existingIssues = issuesData.issues || [];
+        const alreadyLoggedBookingIds = new Set<string>();
+        for (const iss of existingIssues) {
+          if (Array.isArray(iss.bookingIds)) {
+            for (const bid of iss.bookingIds) alreadyLoggedBookingIds.add(bid);
+          }
+        }
+
+        const unloggedUnmapped = unmappedRows.filter(r => !alreadyLoggedBookingIds.has(r.bookingId));
+        if (signal.aborted || unloggedUnmapped.length === 0) return;
+
+        const byTid = new Map<string, typeof unloggedUnmapped>();
+        for (const row of unloggedUnmapped) {
+          const tid = row.tid || "Unknown";
+          if (!byTid.has(tid)) byTid.set(tid, []);
+          byTid.get(tid)!.push(row);
+        }
+
+        const fxRate = effectiveFxRate || 1;
+        const newLoggedIds: string[] = [];
+
+        const tidEntries = Array.from(byTid.entries());
+        for (let i = 0; i < tidEntries.length; i++) {
+          if (signal.aborted) return;
+          const [tid, rows] = tidEntries[i];
+          const totalDiscrepancy = rows.reduce((sum: number, r: PrimaryRow) => sum + r.spNetInHo, 0);
+          const bookingIds = rows.map((r: PrimaryRow) => r.bookingId);
+          await fetch("/api/issues", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              runId,
+              createdDate: new Date().toISOString(),
+              billingEntityId: beId,
+              billingEntityName: billingEntityName,
+              currency: currency,
+              discrepancyLocal: totalDiscrepancy,
+              discrepancyUsd: totalDiscrepancy * fxRate,
+              reason: "Unmapped",
+              driTeam: "Finance",
+              bookingIds,
+              ticketId: rows[0]?.ticketId || "",
+              tid,
+            }),
+            signal,
+          });
+          bookingIds.forEach((bid: string) => newLoggedIds.push(bid));
+        }
+
+        if (!signal.aborted && newLoggedIds.length > 0) {
+          setLoggedIssues(prev => {
+            const next = new Set(prev);
+            newLoggedIds.forEach(bid => next.add(bid));
+            return next;
+          });
+          queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+        }
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        console.error("Auto-log unmapped issues failed:", err);
+      }
+    })();
+
+    return () => { controller.abort(); };
+  }, [runId, disputesLoaded, unmappedRows, beId, billingEntityName, currency, effectiveFxRate]);
+
   const [, startExpandTransition] = useTransition();
 
   const toggleRowExpand = useCallback((rowId: number) => {
