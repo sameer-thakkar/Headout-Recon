@@ -1,4 +1,4 @@
-import { useMemo, useState, Fragment, useCallback, useEffect, memo } from "react";
+import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition } from "react";
 import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -220,6 +220,9 @@ export function PurchaseReconciliationPanel({
   const [visibleTidCounts, setVisibleTidCounts] = useState<Map<string, number>>(new Map());
   // Final Net Price state: bookingId → final net price (defaults to SP Net)
   const [finalNetPrices, setFinalNetPrices] = useState<Map<string, number>>(new Map());
+  const finalNetPricesRef = useRef(finalNetPrices);
+  finalNetPricesRef.current = finalNetPrices;
+  const [isPriceUpdatePending, startPriceTransition] = useTransition();
   
   // Dispute tracking state
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
@@ -337,8 +340,8 @@ export function PurchaseReconciliationPanel({
   }, []);
 
   const getFinalNetPrice = useCallback((bookingId: string, defaultSpNet: number) => {
-    return finalNetPrices.has(bookingId) ? finalNetPrices.get(bookingId)! : defaultSpNet;
-  }, [finalNetPrices]);
+    return finalNetPricesRef.current.has(bookingId) ? finalNetPricesRef.current.get(bookingId)! : defaultSpNet;
+  }, []);
 
   const updateFinalNetPrice = useCallback((bookingId: string, value: number) => {
     setFinalNetPrices(prev => {
@@ -372,21 +375,22 @@ export function PurchaseReconciliationPanel({
   }, []);
 
   const applyPaxPriceUpdate = useCallback(() => {
-    // For each booking, recalculate Final Net Price based on new unit prices
-    setFinalNetPrices(prev => {
-      const next = new Map(prev);
-      for (const booking of paxModalBookings) {
-        if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
-        let newTotal = 0;
-        for (const pb of booking.paxBreakdown) {
-          const newPrice = parseFloat(paxNewPrices[pb.paxType] || String(pb.unitPrice));
-          newTotal += pb.count * (isNaN(newPrice) ? pb.unitPrice : newPrice);
-        }
-        next.set(booking.bookingId, Math.round(newTotal * 100) / 100);
-      }
-      return next;
-    });
     setPaxModalOpen(false);
+    startPriceTransition(() => {
+      setFinalNetPrices(prev => {
+        const next = new Map(prev);
+        for (const booking of paxModalBookings) {
+          if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
+          let newTotal = 0;
+          for (const pb of booking.paxBreakdown) {
+            const newPrice = parseFloat(paxNewPrices[pb.paxType] || String(pb.unitPrice));
+            newTotal += pb.count * (isNaN(newPrice) ? pb.unitPrice : newPrice);
+          }
+          next.set(booking.bookingId, Math.round(newTotal * 100) / 100);
+        }
+        return next;
+      });
+    });
     toast({
       title: "Pax prices updated",
       description: `Final Net Price recalculated for ${paxModalBookings.length} bookings in TID ${paxModalTid}.`,
@@ -394,12 +398,14 @@ export function PurchaseReconciliationPanel({
   }, [paxModalBookings, paxNewPrices, paxModalTid, toast]);
 
   const applyBulkFinalNetPrice = useCallback((source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
-    setFinalNetPrices(prev => {
-      const next = new Map(prev);
-      for (const b of bookings) {
-        next.set(b.bookingId, source === "spNet" ? b.spNet : b.hoNet);
-      }
-      return next;
+    startPriceTransition(() => {
+      setFinalNetPrices(prev => {
+        const next = new Map(prev);
+        for (const b of bookings) {
+          next.set(b.bookingId, source === "spNet" ? b.spNet : b.hoNet);
+        }
+        return next;
+      });
     });
     toast({
       title: "Bulk Update Applied",
@@ -753,6 +759,26 @@ export function PurchaseReconciliationPanel({
       }))
       .sort((a, b) => b.totalDifference - a.totalDifference);
 
+    const precomputeTidGroups = (breakup: typeof row10Breakup) => {
+      return breakup.map(reasonGroup => {
+        const tidMap = new Map<string, typeof reasonGroup.bookings>();
+        for (const b of reasonGroup.bookings) {
+          const tid = b.tid || "Unknown";
+          if (!tidMap.has(tid)) tidMap.set(tid, []);
+          tidMap.get(tid)!.push(b);
+        }
+        const tidEntries = Array.from(tidMap.entries()).sort((a, b) => {
+          const totalA = a[1].reduce((s, x) => s + x.difference, 0);
+          const totalB = b[1].reduce((s, x) => s + x.difference, 0);
+          return totalB - totalA;
+        });
+        return { ...reasonGroup, tidEntries };
+      });
+    };
+
+    const row10WithTids = precomputeTidGroups(row10Breakup);
+    const row11WithTids = precomputeTidGroups(row11Breakup);
+
     return {
       openingBalance,
       reloads,
@@ -768,6 +794,8 @@ export function PurchaseReconciliationPanel({
       netDifference,
       row10Breakup,
       row11Breakup,
+      row10WithTids,
+      row11WithTids,
     };
   }, [allRows, primaryRows, balance]);
 
@@ -905,6 +933,12 @@ export function PurchaseReconciliationPanel({
           <Badge variant="outline" className="text-xs">
             {currency}
           </Badge>
+          {isPriceUpdatePending && (
+            <Badge variant="secondary" className="text-xs animate-pulse">
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              Updating...
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="text-xs">
@@ -953,6 +987,7 @@ export function PurchaseReconciliationPanel({
                 const isUsdNegative = usdValue !== null && usdValue < 0;
                 const isUsdPositive = usdValue !== null && usdValue > 0;
                 const breakupData = item.id === 10 ? calculations.row10Breakup : item.id === 11 ? calculations.row11Breakup : [];
+                const breakupWithTids = item.id === 10 ? calculations.row10WithTids : item.id === 11 ? calculations.row11WithTids : [];
                 const hasBreakup = (item.id === 10 || item.id === 11) && breakupData.length > 0;
                 const isExpanded = expandedRows.has(item.id);
                 
@@ -1002,20 +1037,10 @@ export function PurchaseReconciliationPanel({
                       <TableRow className="bg-muted/30">
                         <TableCell colSpan={5} className="py-3 px-8">
                           <div className="space-y-2">
-                            {breakupData.map((reasonGroup, groupIdx) => {
+                            {breakupWithTids.map((reasonGroup, groupIdx) => {
                               const reasonKey = `${item.id}-${reasonGroup.reason}`;
                               const isReasonExpanded = expandedReasons.has(reasonKey);
-                              const tidGroups = new Map<string, typeof reasonGroup.bookings>();
-                              for (const b of reasonGroup.bookings) {
-                                const tid = b.tid || "Unknown";
-                                if (!tidGroups.has(tid)) tidGroups.set(tid, []);
-                                tidGroups.get(tid)!.push(b);
-                              }
-                              const tidEntries = Array.from(tidGroups.entries()).sort((a, b) => {
-                                const totalA = a[1].reduce((s, x) => s + x.difference, 0);
-                                const totalB = b[1].reduce((s, x) => s + x.difference, 0);
-                                return totalB - totalA;
-                              });
+                              const tidEntries = reasonGroup.tidEntries;
                               return (
                                 <div key={`${item.id}-reason-${groupIdx}`} className="rounded-md border bg-background overflow-hidden">
                                   <div 
