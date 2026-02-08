@@ -215,7 +215,7 @@ export function PurchaseReconciliationPanel({
     }
     // Initialize new prices with current unit prices
     const initialPrices: Record<string, string> = {};
-    for (const [paxType, unitPrice] of paxTypeMap.entries()) {
+    for (const [paxType, unitPrice] of Array.from(paxTypeMap.entries())) {
       initialPrices[paxType] = String(unitPrice);
     }
     setPaxNewPrices(initialPrices);

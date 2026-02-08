@@ -87,6 +87,8 @@ export interface BookingForPayable {
   spPaymentMethod?: string;
   // Vendor ID from HO data
   vid?: string;
+  // Pax breakdown data
+  paxBreakdown?: { paxType: string; count: number; unitPrice: number; priceNet: number }[];
 }
 
 export interface FinalNetSelection {

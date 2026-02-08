@@ -2320,8 +2320,8 @@ export function AmountPayablePanel({
                                             const canDispute = isBookingDisputable(booking);
 
                                             return (
+                                              <div key={booking.bookingId}>
                                               <div
-                                                key={booking.bookingId}
                                                 className="grid grid-cols-18 gap-1 px-3 py-1.5 items-center text-xs border-t bg-muted/10"
                                                 data-testid={`booking-row-${booking.bookingId}`}
                                               >
@@ -2423,6 +2423,18 @@ export function AmountPayablePanel({
                                                 <div className="col-span-4 text-right font-mono font-semibold">
                                                   {formatCurrency(finalNet)} {currency}
                                                 </div>
+                                              </div>
+                                              {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
+                                                <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-t border-violet-200/50 dark:border-violet-800/30">
+                                                  <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
+                                                    {booking.paxBreakdown.map((pax, pi) => (
+                                                      <span key={pi} className="font-mono">
+                                                        {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
                                               </div>
                                             );
                                           })}
@@ -2647,8 +2659,8 @@ export function AmountPayablePanel({
                                           const currentDisputeAmt = disputeAmounts.get(booking.bookingId) ?? maxDispute;
                                           const pricePayable = currentSelection === "ho" ? booking.hoNet : booking.spNet;
                                           return (
+                                            <div key={booking.bookingId}>
                                             <div 
-                                              key={booking.bookingId} 
                                               className="grid grid-cols-18 gap-1 px-3 py-1.5 border-t border-dashed items-center"
                                             >
                                               <div className="col-span-2 pl-6">
@@ -2719,6 +2731,18 @@ export function AmountPayablePanel({
                                               <div className="col-span-5 text-right font-mono text-xs">
                                                 {formatCurrency(getFinalNetPrice(booking))}
                                               </div>
+                                            </div>
+                                            {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
+                                              <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-t border-violet-200/50 dark:border-violet-800/30">
+                                                <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
+                                                  {booking.paxBreakdown.map((pax, pi) => (
+                                                    <span key={pi} className="font-mono">
+                                                      {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
                                             </div>
                                           );
                                         })}
@@ -2966,8 +2990,8 @@ export function AmountPayablePanel({
                                       const canDispute = reason !== "Reconciled" && isBookingDisputable(booking);
 
                                       return (
+                                        <div key={booking.bookingId}>
                                         <div
-                                          key={booking.bookingId}
                                           className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/10 items-center border-t"
                                         >
                                           <div className="col-span-2 pl-6">
@@ -3028,6 +3052,18 @@ export function AmountPayablePanel({
                                           <div className="col-span-5 text-right font-mono text-xs font-semibold">
                                             {formatCurrency(finalNet)} {currency}
                                           </div>
+                                        </div>
+                                        {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
+                                          <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-t border-violet-200/50 dark:border-violet-800/30">
+                                            <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
+                                              {booking.paxBreakdown.map((pax, pi) => (
+                                                <span key={pi} className="font-mono">
+                                                  {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                         </div>
                                       );
                                     })}

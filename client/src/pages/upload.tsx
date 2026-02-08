@@ -201,6 +201,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         spPaymentMethod: row.spPaymentMethod,
         // Vendor ID from HO data
         vid: row.vid,
+        // Pax breakdown data
+        paxBreakdown: row.paxBreakdown,
       }));
   }, [primaryRows, secondaryVendorRows, unmappedRows, selectedPayableCurrency]);
 
