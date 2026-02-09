@@ -75,6 +75,13 @@ const INITIAL_TID_LIMIT = 10;
 const INITIAL_REASON_LIMIT = 5;
 const AUTO_EXPAND_BOOKING_THRESHOLD = 3;
 
+function needsVendorCorrection(booking: PurchaseBooking): boolean {
+  if (booking.isSecondaryVendor) return true;
+  const hoP = (booking.paymentMethod || "").trim();
+  const spP = (booking.spPaymentMethod || "").trim();
+  return !!(hoP && spP && hoP.toLowerCase() !== spP.toLowerCase());
+}
+
 
 interface BookingRowProps {
   booking: PurchaseBooking;
@@ -149,6 +156,12 @@ const BookingRow = memo(function BookingRow({
   }, [localVid, finalVendorIdValue, booking.bookingId, onUpdateFinalVendorId]);
 
   const isSecondary = booking.isSecondaryVendor;
+  const hasMismatch = (() => {
+    const hoP = (booking.paymentMethod || "").trim();
+    const spP = (booking.spPaymentMethod || "").trim();
+    return !!(hoP && spP && hoP.toLowerCase() !== spP.toLowerCase());
+  })();
+  const showVidInput = isSecondary || hasMismatch;
 
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
@@ -161,18 +174,19 @@ const BookingRow = memo(function BookingRow({
                 Dispute: {disputeAmount?.toFixed(2)}
               </Badge>
             )}
-            {(() => {
-              const hoP = (booking.paymentMethod || "").trim();
-              const spP = (booking.spPaymentMethod || "").trim();
-              if (hoP && spP && hoP.toLowerCase() !== spP.toLowerCase()) {
-                return (
-                  <Badge variant="destructive" className="text-[10px] px-1 py-0" data-testid={`badge-payment-mismatch-${booking.bookingId}`}>
-                    {hoP} vs {spP}
-                  </Badge>
-                );
-              }
-              return null;
-            })()}
+            {hasMismatch && (
+              <span
+                title={`Payment method mismatch: HO="${booking.paymentMethod}" vs SP="${booking.spPaymentMethod}". Update Final Vendor ID to map under correct payment method.`}
+                data-testid={`badge-payment-mismatch-${booking.bookingId}`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+              </span>
+            )}
+            {isSecondary && !hasMismatch && (
+              <span title="Secondary vendor booking. Update Final Vendor ID.">
+                <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+              </span>
+            )}
           </div>
         </TableCell>
         <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
@@ -199,24 +213,19 @@ const BookingRow = memo(function BookingRow({
             )}
           </div>
         </TableCell>
-        {isSecondary && (
+        {showVidInput && (
           <TableCell className="py-1" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-1">
               <Input
                 type="text"
-                placeholder="Vendor ID *"
-                className={`h-6 text-xs w-32 font-mono ${!localVid ? "border-red-400 dark:border-red-600" : ""}`}
+                placeholder="Vendor ID"
+                className={`h-6 text-xs w-28 font-mono ${!localVid ? "border-violet-400 dark:border-violet-600" : ""}`}
                 value={localVid}
                 onChange={(e) => setLocalVid(e.target.value)}
                 onBlur={commitVid}
                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
                 data-testid={`input-vid-${booking.bookingId}`}
               />
-              {!localVid && (
-                <span title="Final Vendor ID is mandatory">
-                  <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                </span>
-              )}
             </div>
           </TableCell>
         )}
@@ -920,6 +929,51 @@ const IssueModal = forwardRef<IssueModalHandle, {
   );
 });
 
+const BulkVendorIdInput = memo(function BulkVendorIdInput({
+  tidBookings, tid, updateFinalVendorId,
+}: {
+  tidBookings: PurchaseBooking[];
+  tid: string;
+  updateFinalVendorId: (bookingId: string, value: string) => void;
+}) {
+  const [bulkVid, setBulkVid] = useState("");
+  const correctionCount = tidBookings.filter(b => needsVendorCorrection(b)).length;
+
+  const applyBulk = useCallback(() => {
+    if (!bulkVid.trim()) return;
+    for (const b of tidBookings) {
+      if (needsVendorCorrection(b)) {
+        updateFinalVendorId(b.bookingId, bulkVid.trim());
+      }
+    }
+    setBulkVid("");
+  }, [bulkVid, tidBookings, updateFinalVendorId]);
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="text"
+        placeholder={`Vendor ID (${correctionCount})`}
+        value={bulkVid}
+        onChange={(e) => setBulkVid(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") applyBulk(); }}
+        className="h-7 text-xs w-32 font-mono"
+        data-testid={`input-bulk-vid-${tid}`}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        className="text-xs h-7"
+        onClick={applyBulk}
+        disabled={!bulkVid.trim()}
+        data-testid={`button-apply-bulk-vid-${tid}`}
+      >
+        Apply
+      </Button>
+    </div>
+  );
+});
+
 interface TidGroupProps {
   tidKey: string;
   tid: string;
@@ -975,6 +1029,11 @@ const TidGroup = memo(function TidGroup({
           {isExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
           <span className="font-mono text-xs font-medium">TID: {tid}</span>
           <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+          {tidBookings.some(b => needsVendorCorrection(b)) && (
+            <span title={`${tidBookings.filter(b => needsVendorCorrection(b)).length} booking(s) need Vendor ID correction`}>
+              <AlertTriangle className="h-3 w-3 text-violet-500" />
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
@@ -984,7 +1043,7 @@ const TidGroup = memo(function TidGroup({
       </div>
       {isExpanded && (
         <div>
-          <div className="flex items-center gap-2 px-3 py-2 border-b bg-primary/5 dark:bg-primary/10" onClick={(e) => e.stopPropagation()} data-testid={`tid-actions-${tid}`}>
+          <div className="flex items-center gap-2 px-3 py-2 border-b bg-primary/5 dark:bg-primary/10 flex-wrap" onClick={(e) => e.stopPropagation()} data-testid={`tid-actions-${tid}`}>
             <Button
               size="sm"
               variant="default"
@@ -995,6 +1054,13 @@ const TidGroup = memo(function TidGroup({
               <Pencil className="h-3 w-3 mr-1" />
               Update Final Net Price
             </Button>
+            {tidBookings.some(b => needsVendorCorrection(b)) && (
+              <BulkVendorIdInput
+                tidBookings={tidBookings}
+                tid={tid}
+                updateFinalVendorId={updateFinalVendorId}
+              />
+            )}
             <div className="flex-1" />
             {runId && (
               <div className="flex items-center gap-1">
@@ -1017,7 +1083,7 @@ const TidGroup = memo(function TidGroup({
                 <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
                 <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
                 <TableHead className="py-1 text-xs text-right">Final Net Price ({currency})</TableHead>
-                {tidBookings.some(b => b.isSecondaryVendor) && (
+                {tidBookings.some(b => needsVendorCorrection(b)) && (
                   <TableHead className="py-1 text-xs">Final Vendor ID</TableHead>
                 )}
                 {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
@@ -1030,7 +1096,8 @@ const TidGroup = memo(function TidGroup({
                 const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                 const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                 const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
-                const vidValue = booking.isSecondaryVendor ? getFinalVendorId(booking.bookingId, booking.vid || "") : undefined;
+                const showVid = needsVendorCorrection(booking);
+                const vidValue = showVid ? getFinalVendorId(booking.bookingId, booking.vid || "") : undefined;
                 return (
                   <BookingRow
                     key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}
@@ -1048,7 +1115,7 @@ const TidGroup = memo(function TidGroup({
                     finalVendorIdValue={vidValue}
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
-                    onUpdateFinalVendorId={booking.isSecondaryVendor ? updateFinalVendorId : undefined}
+                    onUpdateFinalVendorId={showVid ? updateFinalVendorId : undefined}
                     onOpenIssueModal={openIssueModal}
                   />
                 );
@@ -1121,22 +1188,6 @@ const ReasonGroup = memo(function ReasonGroup({
             <span className="font-medium text-sm">{reasonGroup.reason}</span>
             <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
             <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
-            {(() => {
-              const allBookings = reasonGroup.tidEntries.flatMap(([, bookings]) => bookings);
-              const mismatchCount = allBookings.filter((b: PurchaseBooking) => {
-                const hoP = (b.paymentMethod || "").trim();
-                const spP = (b.spPaymentMethod || "").trim();
-                return hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
-              }).length;
-              if (mismatchCount > 0) {
-                return (
-                  <Badge variant="destructive" className="text-[10px]" data-testid={`badge-reason-mismatch-${groupIdx}`}>
-                    {mismatchCount} payment mismatch{mismatchCount !== 1 ? "es" : ""}
-                  </Badge>
-                );
-              }
-              return null;
-            })()}
             {isSingleTid && (
               <span className="text-[10px] text-muted-foreground italic">single TID</span>
             )}
@@ -2285,20 +2336,11 @@ export function PurchaseReconciliationPanel({
       )}
 
       {paymentMismatchData.hasData && (
-        <div className="flex items-center gap-3 p-3 bg-violet-50 dark:bg-violet-950/30 border border-violet-300 dark:border-violet-700 rounded-md" data-testid="banner-payment-mismatch">
-          <AlertTriangle className="h-5 w-5 text-violet-600 dark:text-violet-400 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-violet-800 dark:text-violet-200">
-              Payment Method Mismatch Detected
-            </p>
-            <p className="text-xs text-violet-600 dark:text-violet-300 mt-0.5">
-              {paymentMismatchData.totalBookings} booking{paymentMismatchData.totalBookings !== 1 ? "s" : ""} across {paymentMismatchData.tidEntries.length} TID{paymentMismatchData.tidEntries.length !== 1 ? "s" : ""} have different HO and SP payment methods.
-              Total amount: {formatNumber(paymentMismatchData.totalAmount)} {currency}
-            </p>
-          </div>
-          <Badge variant="destructive" className="shrink-0" data-testid="badge-mismatch-count">
-            {paymentMismatchData.totalBookings}
-          </Badge>
+        <div className="flex items-center gap-2 px-3 py-2 bg-violet-50/60 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-md text-xs" data-testid="banner-payment-mismatch">
+          <AlertTriangle className="h-4 w-4 text-violet-500 shrink-0" />
+          <span className="text-violet-700 dark:text-violet-300">
+            {paymentMismatchData.totalBookings} booking{paymentMismatchData.totalBookings !== 1 ? "s" : ""} with payment method mismatch — update Final Vendor ID in Row 10/11 breakup.
+          </span>
         </div>
       )}
 
@@ -2450,22 +2492,6 @@ export function PurchaseReconciliationPanel({
                                       {breakupData.length} items
                                     </Badge>
                                   )}
-                                  {(item.id === 10 || item.id === 11) && paymentMismatchData.hasData && (() => {
-                                    const mismatchInRow = breakupData.reduce((count, group) => 
-                                      count + group.bookings.filter(b => {
-                                        const hoP = (b.paymentMethod || "").trim();
-                                        const spP = (b.spPaymentMethod || "").trim();
-                                        return hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
-                                      }).length, 0);
-                                    if (mismatchInRow > 0) {
-                                      return (
-                                        <Badge variant="destructive" className="text-[10px]" data-testid={`badge-row-${item.id}-mismatch`}>
-                                          {mismatchInRow} payment mismatch{mismatchInRow !== 1 ? "es" : ""}
-                                        </Badge>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
                                 </div>
                               </TableCell>
                               <TableCell className={`py-2 text-right font-mono ${isNegative ? "text-red-600 dark:text-red-400" : isPositive && item.isHighlight ? "text-green-600 dark:text-green-400" : ""}`}>
