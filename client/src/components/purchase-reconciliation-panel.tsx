@@ -99,7 +99,6 @@ interface BookingRowProps {
 
   reasonName: string;
   onUpdateFnp: (bookingId: string, value: number) => void;
-  onUpdateFinalVendorId?: (bookingId: string, value: string) => void;
   onOpenIssueModal: (booking: BookingForDispute) => void;
 }
 
@@ -118,7 +117,6 @@ const BookingRow = memo(function BookingRow({
   finalVendorIdValue,
   reasonName,
   onUpdateFnp,
-  onUpdateFinalVendorId,
   onOpenIssueModal,
 }: BookingRowProps) {
   const [localFnp, setLocalFnp] = useState(String(fnpValue));
@@ -138,30 +136,13 @@ const BookingRow = memo(function BookingRow({
     }
   }, [localFnp, fnpValue, booking.bookingId, onUpdateFnp]);
 
-  const [localVid, setLocalVid] = useState(finalVendorIdValue || "");
-  const localVidRef = useRef(localVid);
-  localVidRef.current = localVid;
-
-  useEffect(() => {
-    const newVal = finalVendorIdValue || "";
-    if (newVal !== localVidRef.current) {
-      setLocalVid(newVal);
-    }
-  }, [finalVendorIdValue]);
-
-  const commitVid = useCallback(() => {
-    if (onUpdateFinalVendorId && localVid !== (finalVendorIdValue || "")) {
-      onUpdateFinalVendorId(booking.bookingId, localVid);
-    }
-  }, [localVid, finalVendorIdValue, booking.bookingId, onUpdateFinalVendorId]);
-
   const isSecondary = booking.isSecondaryVendor;
   const hasMismatch = (() => {
     const hoP = (booking.paymentMethod || "").trim();
     const spP = (booking.spPaymentMethod || "").trim();
     return !!(hoP && spP && hoP.toLowerCase() !== spP.toLowerCase());
   })();
-  const showVidInput = isSecondary || hasMismatch;
+  const showVidLabel = (isSecondary || hasMismatch) && finalVendorIdValue;
 
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
@@ -176,16 +157,21 @@ const BookingRow = memo(function BookingRow({
             )}
             {hasMismatch && (
               <span
-                title={`Payment method mismatch: HO="${booking.paymentMethod}" vs SP="${booking.spPaymentMethod}". Update Final Vendor ID to map under correct payment method.`}
+                title={`Payment method mismatch: HO="${booking.paymentMethod}" vs SP="${booking.spPaymentMethod}". Update Final Vendor ID via the "Update Final Net Price" button.`}
                 data-testid={`badge-payment-mismatch-${booking.bookingId}`}
               >
                 <AlertTriangle className="h-3.5 w-3.5 text-violet-500 shrink-0" />
               </span>
             )}
             {isSecondary && !hasMismatch && (
-              <span title="Secondary vendor booking. Update Final Vendor ID.">
+              <span title="Secondary vendor booking. Update Final Vendor ID via the &quot;Update Final Net Price&quot; button.">
                 <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
               </span>
+            )}
+            {showVidLabel && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono" data-testid={`label-vid-${booking.bookingId}`}>
+                {finalVendorIdValue}
+              </Badge>
             )}
           </div>
         </TableCell>
@@ -213,22 +199,6 @@ const BookingRow = memo(function BookingRow({
             )}
           </div>
         </TableCell>
-        {showVidInput && (
-          <TableCell className="py-1" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-1">
-              <Input
-                type="text"
-                placeholder="Vendor ID"
-                className={`h-6 text-xs w-28 font-mono ${!localVid ? "border-violet-400 dark:border-violet-600" : ""}`}
-                value={localVid}
-                onChange={(e) => setLocalVid(e.target.value)}
-                onBlur={commitVid}
-                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                data-testid={`input-vid-${booking.bookingId}`}
-              />
-            </div>
-          </TableCell>
-        )}
         {runId && (
           <TableCell className="py-1">
             <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -297,11 +267,13 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyPax: (bookings: PurchaseBooking[], newPrices: Record<string, string>, dateToRowKeyMap: Map<string, string>, tid: string) => void;
-}>(function FinalNetPriceModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax }, ref) {
+  onApplyVendorId: (bookingIds: string[], vendorId: string) => void;
+}>(function FinalNetPriceModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [bookings, setBookings] = useState<PurchaseBooking[]>([]);
   const [tid, setTid] = useState("");
   const [newPrices, setNewPrices] = useState<Record<string, string>>({});
+  const [vendorId, setVendorId] = useState("");
   const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
   const paymentBasis = useMemo(() => {
@@ -470,24 +442,35 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const spTotal = useMemo(() => bookings.reduce((s, b) => s + b.spNet, 0), [bookings]);
   const hoTotal = useMemo(() => bookings.reduce((s, b) => s + b.hoNet, 0), [bookings]);
 
+  const vendorCorrectionBookings = useMemo(() => bookings.filter(b => needsVendorCorrection(b)), [bookings]);
+
   useImperativeHandle(ref, () => ({
     open: (tidBookings: PurchaseBooking[], tidVal: string) => {
       setNewPrices({});
+      setVendorId("");
       setBookings(tidBookings);
       setTid(tidVal);
       setIsOpen(true);
     }
   }));
 
+  const applyVendorIdIfSet = useCallback(() => {
+    if (vendorId.trim() && vendorCorrectionBookings.length > 0) {
+      onApplyVendorId(vendorCorrectionBookings.map(b => b.bookingId), vendorId.trim());
+    }
+  }, [vendorId, vendorCorrectionBookings, onApplyVendorId]);
+
   const handleApplySpNet = useCallback(() => {
+    applyVendorIdIfSet();
     setIsOpen(false);
     onApplySpNet(bookings);
-  }, [bookings, onApplySpNet]);
+  }, [bookings, onApplySpNet, applyVendorIdIfSet]);
 
   const handleApplyHoNet = useCallback(() => {
+    applyVendorIdIfSet();
     setIsOpen(false);
     onApplyHoNet(bookings);
-  }, [bookings, onApplyHoNet]);
+  }, [bookings, onApplyHoNet, applyVendorIdIfSet]);
 
   const allPaxFilled = useMemo(() => {
     if (!hasPax || paxDateRows.length === 0) return false;
@@ -500,9 +483,10 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
 
   const handleApplyPax = useCallback(() => {
     if (!allPaxFilled) return;
+    applyVendorIdIfSet();
     setIsOpen(false);
     onApplyPax(bookings, newPrices, dateToRowKeyMap, tid);
-  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled]);
+  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled, applyVendorIdIfSet]);
 
   const formatDisplayName = (paxType: string) =>
     paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -646,6 +630,32 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                     Apply Pax Prices
                   </Button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {vendorCorrectionBookings.length > 0 && (
+            <div className="rounded-md border bg-background overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-violet-100 dark:bg-violet-900/30">
+                    <AlertTriangle className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Final Vendor ID</div>
+                    <div className="text-xs text-muted-foreground">
+                      {vendorCorrectionBookings.length} booking{vendorCorrectionBookings.length !== 1 ? "s" : ""} need vendor correction (secondary/mismatch)
+                    </div>
+                  </div>
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Enter Vendor ID"
+                  value={vendorId}
+                  onChange={(e) => setVendorId(e.target.value)}
+                  className="w-40 text-xs font-mono"
+                  data-testid={`input-modal-vendor-id-${tid}`}
+                />
               </div>
             </div>
           )}
@@ -929,51 +939,6 @@ const IssueModal = forwardRef<IssueModalHandle, {
   );
 });
 
-const BulkVendorIdInput = memo(function BulkVendorIdInput({
-  tidBookings, tid, updateFinalVendorId,
-}: {
-  tidBookings: PurchaseBooking[];
-  tid: string;
-  updateFinalVendorId: (bookingId: string, value: string) => void;
-}) {
-  const [bulkVid, setBulkVid] = useState("");
-  const correctionCount = tidBookings.filter(b => needsVendorCorrection(b)).length;
-
-  const applyBulk = useCallback(() => {
-    if (!bulkVid.trim()) return;
-    for (const b of tidBookings) {
-      if (needsVendorCorrection(b)) {
-        updateFinalVendorId(b.bookingId, bulkVid.trim());
-      }
-    }
-    setBulkVid("");
-  }, [bulkVid, tidBookings, updateFinalVendorId]);
-
-  return (
-    <div className="flex items-center gap-1">
-      <Input
-        type="text"
-        placeholder={`Vendor ID (${correctionCount})`}
-        value={bulkVid}
-        onChange={(e) => setBulkVid(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") applyBulk(); }}
-        className="h-7 text-xs w-32 font-mono"
-        data-testid={`input-bulk-vid-${tid}`}
-      />
-      <Button
-        size="sm"
-        variant="outline"
-        className="text-xs h-7"
-        onClick={applyBulk}
-        disabled={!bulkVid.trim()}
-        data-testid={`button-apply-bulk-vid-${tid}`}
-      >
-        Apply
-      </Button>
-    </div>
-  );
-});
-
 interface TidGroupProps {
   tidKey: string;
   tid: string;
@@ -993,7 +958,6 @@ interface TidGroupProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   getFinalVendorId: (bookingId: string, defaultVid: string) => string;
-  updateFinalVendorId: (bookingId: string, value: string) => void;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -1002,7 +966,7 @@ interface TidGroupProps {
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded: isExpandedProp, autoExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId, openFnpModal,
+  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
@@ -1054,13 +1018,6 @@ const TidGroup = memo(function TidGroup({
               <Pencil className="h-3 w-3 mr-1" />
               Update Final Net Price
             </Button>
-            {tidBookings.some(b => needsVendorCorrection(b)) && (
-              <BulkVendorIdInput
-                tidBookings={tidBookings}
-                tid={tid}
-                updateFinalVendorId={updateFinalVendorId}
-              />
-            )}
             <div className="flex-1" />
             {runId && (
               <div className="flex items-center gap-1">
@@ -1083,9 +1040,6 @@ const TidGroup = memo(function TidGroup({
                 <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
                 <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
                 <TableHead className="py-1 text-xs text-right">Final Net Price ({currency})</TableHead>
-                {tidBookings.some(b => needsVendorCorrection(b)) && (
-                  <TableHead className="py-1 text-xs">Final Vendor ID</TableHead>
-                )}
                 {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -1115,7 +1069,6 @@ const TidGroup = memo(function TidGroup({
                     finalVendorIdValue={vidValue}
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
-                    onUpdateFinalVendorId={showVid ? updateFinalVendorId : undefined}
                     onOpenIssueModal={openIssueModal}
                   />
                 );
@@ -1153,7 +1106,6 @@ interface ReasonGroupProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   getFinalVendorId: (bookingId: string, defaultVid: string) => string;
-  updateFinalVendorId: (bookingId: string, value: string) => void;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -1164,7 +1116,7 @@ const ReasonGroup = memo(function ReasonGroup({
   isReasonExpanded, expandedTids, visibleTidCount, grandTotal,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId, openFnpModal,
+  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
@@ -1235,7 +1187,6 @@ const ReasonGroup = memo(function ReasonGroup({
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
                 getFinalVendorId={getFinalVendorId}
-                updateFinalVendorId={updateFinalVendorId}
                 openFnpModal={openFnpModal}
                 handleTidBulkIssue={handleTidBulkIssue}
                 openIssueModal={openIssueModal}
@@ -1279,7 +1230,6 @@ interface BreakupSectionProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   getFinalVendorId: (bookingId: string, defaultVid: string) => string;
-  updateFinalVendorId: (bookingId: string, value: string) => void;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -1290,7 +1240,7 @@ function BreakupSection({
   expandedReasons, expandedTids, getVisibleTidCount,
   toggleReasonExpand, toggleTidExpand, showMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, updateFinalVendorId,
+  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId,
   openFnpModal, handleTidBulkIssue, openIssueModal,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
@@ -1390,7 +1340,6 @@ function BreakupSection({
             getFinalNetPrice={getFinalNetPrice}
             updateFinalNetPrice={updateFinalNetPrice}
             getFinalVendorId={getFinalVendorId}
-            updateFinalVendorId={updateFinalVendorId}
             openFnpModal={openFnpModal}
             handleTidBulkIssue={handleTidBulkIssue}
             openIssueModal={openIssueModal}
@@ -1644,6 +1593,12 @@ export function PurchaseReconciliationPanel({
   const handleApplyHoNet = useCallback((bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     applyBulkFinalNetPrice("hoNet", bookings);
   }, [applyBulkFinalNetPrice]);
+
+  const handleApplyVendorIdBulk = useCallback((bookingIds: string[], vid: string) => {
+    for (const bookingId of bookingIds) {
+      updateFinalVendorId(bookingId, vid);
+    }
+  }, [updateFinalVendorId]);
 
   const handleTidBulkDispute = useCallback(async (tidBookings: PurchaseBooking[], reason: string) => {
     if (!runId) return;
@@ -2528,7 +2483,6 @@ export function PurchaseReconciliationPanel({
                                     getFinalNetPrice={getFinalNetPrice}
                                     updateFinalNetPrice={updateFinalNetPrice}
                                     getFinalVendorId={getFinalVendorId}
-                                    updateFinalVendorId={updateFinalVendorId}
                                     openFnpModal={openFnpModal}
                                     handleTidBulkIssue={handleTidBulkIssue}
                                     openIssueModal={openIssueModal}
@@ -2848,6 +2802,7 @@ export function PurchaseReconciliationPanel({
         onApplySpNet={handleApplySpNet}
         onApplyHoNet={handleApplyHoNet}
         onApplyPax={handlePaxApply}
+        onApplyVendorId={handleApplyVendorIdBulk}
       />
       <DisputeModal ref={disputeModalRef} currency={currency} onSave={handleDisputeSave} />
       <IssueModal ref={issueModalRef} currency={currency} billingEntityName={billingEntityName} effectiveFxRate={effectiveFxRate} onSave={handleIssueSave} />
