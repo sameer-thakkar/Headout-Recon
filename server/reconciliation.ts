@@ -553,7 +553,8 @@ function assignReason(
   spNetInHo: number,
   hoBeId: string | undefined,
   spBeId: string | undefined,
-  hoReason: string | undefined
+  hoReason: string | undefined,
+  hoNet: number = 0
 ): ReasonResult {
   // Normalize chargedLoss to check if it's already TRUE
   const isChargedLossTrue = chargedLossOriginal?.toUpperCase() === "TRUE";
@@ -600,6 +601,26 @@ function assignReason(
     }
   }
   
+  // 1.5) Negative SP Net handling
+  if (spNetInHo < 0) {
+    // CANCELLED + HO Net = 0 → Reconciled (SP refunded, we were never charged)
+    if (bookingStatus.toLowerCase() === "cancelled" && hoNet === 0) {
+      return {
+        reason: "Reconciled",
+        chargedLoss: chargedLossOriginal || "FALSE",
+        comment: "Cancelled-Refund OK",
+        isSecondaryVendor
+      };
+    }
+    // All other negative SP Net cases → Partial refund discrepancy
+    return {
+      reason: "Negative SP - Partial Refund",
+      chargedLoss: chargedLossOriginal || "FALSE",
+      comment: "SP has negative value (refund)",
+      isSecondaryVendor
+    };
+  }
+
   // 2) Cancelled cases - NEW LOGIC per user requirements
   if (bookingStatus.toLowerCase() === "cancelled") {
     // Case 1: Cancellable = "Yes"
@@ -840,7 +861,8 @@ function computeReconciliationRows(
       spNetInHo,
       ho.beId,
       spBundle?.beId,
-      ho.hoReason
+      ho.hoReason,
+      ho.netPrice
     );
     
     // Compute DRI team based on reason and fulfillment method

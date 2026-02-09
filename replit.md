@@ -42,7 +42,8 @@ Preferred communication style: Simple, everyday language.
 - **Demo data support**: Provides an immediate exploration of features.
 - **UI/UX**: Material Design 3 principles, Inter font for UI, JetBrains Mono for data, CSS custom properties for theming.
 - **Export Formatting**: Indian number format, DD/MM/YYYY date format, specific sorting, table styling, and auto column widths for Excel and Google Sheets.
-- **Reason Priority Order**: Defined hierarchy for discrepancy assignment (e.g., Already Reconciled, Cancellations, MTB, NPD).
+- **Reason Priority Order**: Defined hierarchy for discrepancy assignment (e.g., Already Reconciled, Negative SP, Cancellations, MTB, NPD).
+- **Negative SP Net Handling**: Bookings with negative SP Net are handled in two cases: (1) CANCELLED + HO Net = 0 → auto-reconciled as "Cancelled-Refund OK" with Final Net Price = 0, (2) all other negatives → "Negative SP - Partial Refund" discrepancy reason. UI shows red-tinted rows with "Refund" badge and bold red SP Net values. In Purchase Reconciliation, negative values are called out as refunds in the Balance & Deposits section.
 - **Secondary Vendor**: Segregated detection, reason prefixing, separate UI display, and distinct reporting.
 - **Already Reconciled Feature**: Highest priority detection, sub-classification, DRI team assignment, UI display with modals, and integration into amount payable adjustments.
 - **Cancellations Consolidation**: Grouping of various cancellation types for summarized display, specific discrepancy calculation, and hierarchical modal breakdown.

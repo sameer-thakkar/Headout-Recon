@@ -133,9 +133,11 @@ const BookingRow = memo(function BookingRow({
     }
   }, [localFnp, fnpValue, booking.bookingId, onUpdateFnp]);
 
+  const isNegativeSp = booking.spNet < 0;
+
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
-      <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
+      <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : isNegativeSp ? "bg-red-50/60 dark:bg-red-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
         <TableCell className="py-1 font-mono">
           <div className="flex items-center gap-1">
             {booking.bookingId}
@@ -144,9 +146,14 @@ const BookingRow = memo(function BookingRow({
                 Dispute: {disputeAmount?.toFixed(2)}
               </Badge>
             )}
+            {isNegativeSp && (
+              <Badge variant="outline" className="text-[10px] px-1 py-0 text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                Refund
+              </Badge>
+            )}
           </div>
         </TableCell>
-        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.spNet)}</TableCell>
+        <TableCell className={`py-1 text-right font-mono ${isNegativeSp ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>{formatNumber(booking.spNet)}</TableCell>
         <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
         <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
           {formatNumber(booking.difference)}
