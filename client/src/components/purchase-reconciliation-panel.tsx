@@ -95,8 +95,6 @@ interface BookingRowProps {
   disputeAmount?: number;
   fnpValue: number;
   needsDisputeWarning: boolean;
-  finalVendorIdValue?: string;
-
   reasonName: string;
   onUpdateFnp: (bookingId: string, value: number) => void;
   onOpenIssueModal: (booking: BookingForDispute) => void;
@@ -114,7 +112,6 @@ const BookingRow = memo(function BookingRow({
   disputeAmount,
   fnpValue,
   needsDisputeWarning,
-  finalVendorIdValue,
   reasonName,
   onUpdateFnp,
   onOpenIssueModal,
@@ -136,14 +133,6 @@ const BookingRow = memo(function BookingRow({
     }
   }, [localFnp, fnpValue, booking.bookingId, onUpdateFnp]);
 
-  const isSecondary = booking.isSecondaryVendor;
-  const hasMismatch = (() => {
-    const hoP = (booking.paymentMethod || "").trim();
-    const spP = (booking.spPaymentMethod || "").trim();
-    return !!(hoP && spP && hoP.toLowerCase() !== spP.toLowerCase());
-  })();
-  const showVidLabel = (isSecondary || hasMismatch) && finalVendorIdValue;
-
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
       <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
@@ -153,24 +142,6 @@ const BookingRow = memo(function BookingRow({
             {hasDispute && (
               <Badge variant="outline" className="text-[10px] px-1 py-0 text-amber-600 border-amber-300">
                 Dispute: {disputeAmount?.toFixed(2)}
-              </Badge>
-            )}
-            {hasMismatch && (
-              <span
-                title={`Payment method mismatch: HO="${booking.paymentMethod}" vs SP="${booking.spPaymentMethod}". Update Final Vendor ID via the "Update Final Net Price" button.`}
-                data-testid={`badge-payment-mismatch-${booking.bookingId}`}
-              >
-                <AlertTriangle className="h-3.5 w-3.5 text-violet-500 shrink-0" />
-              </span>
-            )}
-            {isSecondary && !hasMismatch && (
-              <span title="Secondary vendor booking. Update Final Vendor ID via the &quot;Update Final Net Price&quot; button.">
-                <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
-              </span>
-            )}
-            {showVidLabel && (
-              <Badge variant="secondary" className="text-[10px] px-1 py-0 font-mono" data-testid={`label-vid-${booking.bookingId}`}>
-                {finalVendorIdValue}
               </Badge>
             )}
           </div>
@@ -957,7 +928,6 @@ interface TidGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  getFinalVendorId: (bookingId: string, defaultVid: string) => string;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -966,7 +936,7 @@ interface TidGroupProps {
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded: isExpandedProp, autoExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, openFnpModal,
+  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
@@ -993,45 +963,37 @@ const TidGroup = memo(function TidGroup({
           {isExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
           <span className="font-mono text-xs font-medium">TID: {tid}</span>
           <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
-          {tidBookings.some(b => needsVendorCorrection(b)) && (
-            <span title={`${tidBookings.filter(b => needsVendorCorrection(b)).length} booking(s) need Vendor ID correction`}>
-              <AlertTriangle className="h-3 w-3 text-violet-500" />
-            </span>
-          )}
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
+        <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={() => openFnpModal(tidBookings, tid)}
+            data-testid={`button-update-fnp-${tid}`}
+          >
+            <Pencil className="h-3 w-3 mr-1" />
+            {tidBookings.some(b => needsVendorCorrection(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+          </Button>
+          {runId && (
+            <>
+              <Button size="sm" variant="outline" className="text-xs text-amber-600 opacity-50 cursor-not-allowed" disabled title="Dispute functionality coming soon" data-testid={`button-tid-bulk-dispute-${tid}`}>
+                <FileWarning className="h-3 w-3 mr-1" />
+                Dispute All
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => handleTidBulkIssue(tidBookings, reasonName, tid)} data-testid={`button-tid-bulk-issue-${tid}`}>
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                Issue All
+              </Button>
+            </>
+          )}
+          <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
             {formatNumber(tidTotal)} {currency}
           </span>
         </div>
       </div>
       {isExpanded && (
         <div>
-          <div className="flex items-center gap-2 px-3 py-2 border-b bg-primary/5 dark:bg-primary/10 flex-wrap" onClick={(e) => e.stopPropagation()} data-testid={`tid-actions-${tid}`}>
-            <Button
-              size="sm"
-              variant="default"
-              className="text-xs"
-              onClick={() => openFnpModal(tidBookings, tid)}
-              data-testid={`button-update-fnp-${tid}`}
-            >
-              <Pencil className="h-3 w-3 mr-1" />
-              Update Final Net Price
-            </Button>
-            <div className="flex-1" />
-            {runId && (
-              <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" className="text-xs text-amber-600 opacity-50 cursor-not-allowed" disabled title="Dispute functionality coming soon" data-testid={`button-tid-bulk-dispute-${tid}`}>
-                  <FileWarning className="h-3 w-3 mr-1" />
-                  Dispute All
-                </Button>
-                <Button size="sm" variant="outline" className="text-xs" onClick={() => handleTidBulkIssue(tidBookings, reasonName, tid)} data-testid={`button-tid-bulk-issue-${tid}`}>
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  Issue All
-                </Button>
-              </div>
-            )}
-          </div>
           <Table className="text-xs">
             <TableHeader>
               <TableRow className="h-7">
@@ -1050,8 +1012,6 @@ const TidGroup = memo(function TidGroup({
                 const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                 const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                 const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
-                const showVid = needsVendorCorrection(booking);
-                const vidValue = showVid ? getFinalVendorId(booking.bookingId, booking.vid || "") : undefined;
                 return (
                   <BookingRow
                     key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}
@@ -1066,7 +1026,6 @@ const TidGroup = memo(function TidGroup({
                     disputeAmount={disputeAmt}
                     fnpValue={fnp}
                     needsDisputeWarning={needsDisputeWarning}
-                    finalVendorIdValue={vidValue}
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
                     onOpenIssueModal={openIssueModal}
@@ -1105,7 +1064,6 @@ interface ReasonGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  getFinalVendorId: (bookingId: string, defaultVid: string) => string;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -1116,7 +1074,7 @@ const ReasonGroup = memo(function ReasonGroup({
   isReasonExpanded, expandedTids, visibleTidCount, grandTotal,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId, openFnpModal,
+  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
   handleTidBulkIssue, openIssueModal,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
@@ -1186,7 +1144,6 @@ const ReasonGroup = memo(function ReasonGroup({
                 fnpVersion={fnpVersion}
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
-                getFinalVendorId={getFinalVendorId}
                 openFnpModal={openFnpModal}
                 handleTidBulkIssue={handleTidBulkIssue}
                 openIssueModal={openIssueModal}
@@ -1229,7 +1186,6 @@ interface BreakupSectionProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  getFinalVendorId: (bookingId: string, defaultVid: string) => string;
   openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
   handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
@@ -1240,7 +1196,7 @@ function BreakupSection({
   expandedReasons, expandedTids, getVisibleTidCount,
   toggleReasonExpand, toggleTidExpand, showMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, getFinalVendorId,
+  getFinalNetPrice, updateFinalNetPrice,
   openFnpModal, handleTidBulkIssue, openIssueModal,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
@@ -1339,7 +1295,6 @@ function BreakupSection({
             fnpVersion={fnpVersion}
             getFinalNetPrice={getFinalNetPrice}
             updateFinalNetPrice={updateFinalNetPrice}
-            getFinalVendorId={getFinalVendorId}
             openFnpModal={openFnpModal}
             handleTidBulkIssue={handleTidBulkIssue}
             openIssueModal={openIssueModal}
@@ -2482,7 +2437,6 @@ export function PurchaseReconciliationPanel({
                                     fnpVersion={fnpVersion}
                                     getFinalNetPrice={getFinalNetPrice}
                                     updateFinalNetPrice={updateFinalNetPrice}
-                                    getFinalVendorId={getFinalVendorId}
                                     openFnpModal={openFnpModal}
                                     handleTidBulkIssue={handleTidBulkIssue}
                                     openIssueModal={openIssueModal}
