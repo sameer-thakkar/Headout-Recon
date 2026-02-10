@@ -346,19 +346,23 @@ export function AmountPayablePanel({
   ];
 
   // Regular discrepancy bookings (excludes cancellations)
+  const hasAmountPaidOrSettled = (b: BookingForPayable) =>
+    (b.amountPaid != null && b.amountPaid > 0) || (b.disputeSettled != null && b.disputeSettled > 0);
+
   const discrepancyBookings = useMemo(() => 
     (bookings || []).filter(b => 
       b.reason !== "Reconciled" && 
       !b.reason.startsWith("Already Reconciled") && 
       !b.isSecondaryVendor &&
-      !cancellationReasons.includes(b.reason)
+      !cancellationReasons.includes(b.reason) &&
+      !hasAmountPaidOrSettled(b)
     ), 
     [bookings]
   );
 
   // Cancellation bookings grouped separately
   const cancellationBookings = useMemo(() => 
-    (bookings || []).filter(b => cancellationReasons.includes(b.reason) && !b.isSecondaryVendor), 
+    (bookings || []).filter(b => cancellationReasons.includes(b.reason) && !b.isSecondaryVendor && !hasAmountPaidOrSettled(b)), 
     [bookings]
   );
 
@@ -437,7 +441,7 @@ export function AmountPayablePanel({
 
   // Secondary Vendor bookings - using isSecondaryVendor flag
   const secondaryVendorBookings = useMemo(() => {
-    return bookings.filter(b => b.isSecondaryVendor);
+    return bookings.filter(b => b.isSecondaryVendor && !hasAmountPaidOrSettled(b));
   }, [bookings]);
 
   // Group Secondary Vendor bookings by their reason
