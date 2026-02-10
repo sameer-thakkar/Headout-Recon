@@ -1408,82 +1408,86 @@ export async function registerRoutes(
                  kLower === "finalnet" || kLower === "final net" || kLower === "final payable";
         };
         
-        // Build new row with SP Net, Difference, Difference % inserted before finalNetPrice
+        // Build new row preserving original column order exactly, only updating values in known columns
         const newRow: Record<string, unknown> = {};
+        
+        // Track which columns exist in original so we know what to append
+        let hasFinNetCol = false;
+        let hasErrorTeamCol = false;
+        let hasErrorBucketCol = false;
+        let hasCommentsCol = false;
+        let hasChargedLossCol = false;
+        let hasAnyReconCol = false;
+        
         for (const key of originalKeys) {
           const keyLower = key.toLowerCase();
           
-          // Insert SP Net, Difference, Difference % just before finalNetPrice
-          if (isFinalNetCol(key)) {
-            newRow["SP Net"] = spNet;
-            newRow["Difference"] = difference;
-            newRow["Difference %"] = differencePercent;
-          }
-          
-          // Update specific columns
           if (isFinalNetCol(key)) {
             newRow[key] = finalNetPrice;
+            hasFinNetCol = true;
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
             newRow[key] = errorTeamAttribution;
+            hasErrorTeamCol = true;
           } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
             newRow[key] = errorBucket;
+            hasErrorBucketCol = true;
           } else if (keyLower === "comments" || keyLower === "comment") {
             newRow[key] = comments;
+            hasCommentsCol = true;
           } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
             newRow[key] = chargedLoss;
-          } 
-          // ========== 8 Reconciliation Columns ==========
-          else if (keyLower === "finalvendorid" || keyLower === "final vendor id" || keyLower === "final_vendor_id") {
+            hasChargedLossCol = true;
+          } else if (keyLower === "finalvendorid" || keyLower === "final vendor id" || keyLower === "final_vendor_id") {
             newRow[key] = finalVendorIdValue;
+            hasAnyReconCol = true;
           } else if (keyLower === "ticketid" || keyLower === "ticket id" || keyLower === "ticket_id") {
             newRow[key] = ticketIdValue;
+            hasAnyReconCol = true;
           } else if (keyLower === "disputedamount" || keyLower === "disputed amount" || keyLower === "disputed_amount") {
             newRow[key] = disputedAmount;
+            hasAnyReconCol = true;
           } else if (keyLower === "adjustedinticketid" || keyLower === "adjusted in ticket id" || keyLower === "adjusted_in_ticket_id") {
             newRow[key] = adjustedInTicketId;
+            hasAnyReconCol = true;
           } else if (keyLower === "finaldisputeamount" || keyLower === "final dispute amount" || keyLower === "final_dispute_amount") {
             newRow[key] = finalDisputeAmount;
+            hasAnyReconCol = true;
           } else if (keyLower === "disputestatus" || keyLower === "dispute status" || keyLower === "dispute_status") {
             newRow[key] = disputeStatus;
+            hasAnyReconCol = true;
           } else if (keyLower === "reconcilednetprice" || keyLower === "reconciled net price" || keyLower === "reconciled_net_price") {
             newRow[key] = reconciledNetPrice;
+            hasAnyReconCol = true;
           } else if (keyLower === "utrnumber" || keyLower === "utr number" || keyLower === "utr_number" || keyLower === "utr") {
             newRow[key] = utrNumber;
+            hasAnyReconCol = true;
           } else {
             newRow[key] = row[key];
           }
         }
         
-        // If finalNetPrice/Final Net column wasn't found in original, append the new columns at end
-        const hasFinalNetColInOriginal = originalKeys.some(k => isFinalNetCol(k));
-        if (!hasFinalNetColInOriginal) {
-          newRow["SP Net"] = spNet;
-          newRow["Difference"] = difference;
-          newRow["Difference %"] = differencePercent;
+        // Append new columns at the end (only if they don't already exist in original)
+        newRow["SP Net"] = spNet;
+        newRow["Difference"] = difference;
+        newRow["Difference %"] = differencePercent;
+        
+        if (!hasFinNetCol) {
           newRow["finalNetPrice"] = finalNetPrice;
+        }
+        if (!hasErrorTeamCol) {
           newRow["errorTeamAttribution"] = errorTeamAttribution;
+        }
+        if (!hasErrorBucketCol) {
           newRow["errorBucket"] = errorBucket;
+        }
+        if (!hasCommentsCol) {
           newRow["comments"] = comments;
+        }
+        if (!hasChargedLossCol) {
           newRow["chargedLoss"] = chargedLoss;
         }
         
-        // Always append the 8 reconciliation columns if not already set (in case they don't exist in original)
-        const hasReconCols = (col: string) => {
-          const lc = col.toLowerCase();
-          return lc === "finalvendorid" || lc === "final vendor id" || lc === "final_vendor_id" ||
-                 lc === "ticketid" || lc === "ticket id" || lc === "ticket_id" ||
-                 lc === "disputedamount" || lc === "disputed amount" || lc === "disputed_amount" ||
-                 lc === "adjustedinticketid" || lc === "adjusted in ticket id" || lc === "adjusted_in_ticket_id" ||
-                 lc === "finaldisputeamount" || lc === "final dispute amount" || lc === "final_dispute_amount" ||
-                 lc === "disputestatus" || lc === "dispute status" || lc === "dispute_status" ||
-                 lc === "reconcilednetprice" || lc === "reconciled net price" || lc === "reconciled_net_price" ||
-                 lc === "utrnumber" || lc === "utr number" || lc === "utr_number" || lc === "utr";
-        };
-        
-        // Check if any reconciliation columns exist in original
-        const hasAnyReconCol = originalKeys.some(k => hasReconCols(k));
         if (!hasAnyReconCol) {
-          // Append all 8 reconciliation columns
           newRow["finalVendorId"] = finalVendorIdValue;
           newRow["Ticket ID"] = ticketIdValue;
           newRow["Disputed amount"] = disputedAmount;
