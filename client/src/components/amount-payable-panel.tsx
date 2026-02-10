@@ -86,6 +86,7 @@ export function AmountPayablePanel({
   const [isAlreadyReconciledExpanded, setIsAlreadyReconciledExpanded] = useState(false);
   const [isPaymentMismatchExpanded, setIsPaymentMismatchExpanded] = useState(false);
   const [isAmountPaidExpanded, setIsAmountPaidExpanded] = useState(false);
+  const [amountPaidTotals, setAmountPaidTotals] = useState<Record<string, number>>({});
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
@@ -553,6 +554,27 @@ export function AmountPayablePanel({
     bookings.filter(b => (b.amountPaid && b.amountPaid > 0) || (b.disputeSettled && b.disputeSettled > 0)),
     [bookings]
   );
+
+  const getAmountPaidTotal = useCallback((booking: BookingForPayable): number => {
+    if (amountPaidTotals[booking.bookingId] !== undefined) {
+      return amountPaidTotals[booking.bookingId];
+    }
+    return getFinalNetPrice(booking);
+  }, [amountPaidTotals, getFinalNetPrice]);
+
+  const handleAmountPaidTotalChange = useCallback((bookingId: string, value: string, spNet: number) => {
+    const numVal = parseFloat(value);
+    if (isNaN(numVal)) {
+      setAmountPaidTotals(prev => {
+        const next = { ...prev };
+        delete next[bookingId];
+        return next;
+      });
+      return;
+    }
+    const capped = Math.min(numVal, spNet);
+    setAmountPaidTotals(prev => ({ ...prev, [bookingId]: capped }));
+  }, []);
 
   // Group closed disputes by displayId for display in adjustments section (only SP Error disputes)
   const groupedClosedDisputes = useMemo(() => {
@@ -3218,8 +3240,8 @@ export function AmountPayablePanel({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t overflow-x-auto">
-                      <div className="min-w-[1100px]">
-                        <div className="grid grid-cols-22 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground">
+                      <div className="min-w-[1200px]">
+                        <div className="grid grid-cols-24 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground">
                           <div className="col-span-2">Booking ID</div>
                           <div className="col-span-2">Reason</div>
                           <div className="col-span-2 text-right">HO Net</div>
@@ -3230,60 +3252,76 @@ export function AmountPayablePanel({
                           <div className="col-span-2 text-right">Dispute Adj.</div>
                           <div className="col-span-2">Adj. in Ticket ID</div>
                           <div className="col-span-2 text-right">Closing Dispute</div>
+                          <div className="col-span-2 text-right">Total Amt Payable</div>
                           <div className="col-span-2 text-center">Action</div>
                         </div>
                         <div className="max-h-80 overflow-y-auto">
-                          {amountPaidBookings.map((booking) => (
-                            <div 
-                              key={booking.bookingId}
-                              className="grid grid-cols-22 gap-1 px-3 py-1.5 text-xs border-t items-center"
-                              data-testid={`amount-paid-row-${booking.bookingId}`}
-                            >
-                              <div className="col-span-2 font-mono truncate" title={booking.bookingId}>
-                                {booking.bookingId}
+                          {amountPaidBookings.map((booking) => {
+                            const totalPayable = getAmountPaidTotal(booking);
+                            const isEdited = amountPaidTotals[booking.bookingId] !== undefined;
+                            return (
+                              <div 
+                                key={booking.bookingId}
+                                className="grid grid-cols-24 gap-1 px-3 py-1.5 text-xs border-t items-center"
+                                data-testid={`amount-paid-row-${booking.bookingId}`}
+                              >
+                                <div className="col-span-2 font-mono truncate" title={booking.bookingId}>
+                                  {booking.bookingId}
+                                </div>
+                                <div className="col-span-2 truncate" title={booking.reason}>
+                                  <Badge variant="outline" className="text-xs">
+                                    {booking.reason}
+                                  </Badge>
+                                </div>
+                                <div className="col-span-2 text-right font-mono">
+                                  {formatCurrency(booking.hoNet)}
+                                </div>
+                                <div className="col-span-2 text-right font-mono">
+                                  {formatCurrency(booking.spNet)}
+                                </div>
+                                <div className="col-span-2 text-right font-mono font-medium text-blue-600 dark:text-blue-400">
+                                  {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
+                                </div>
+                                <div className="col-span-2 text-right font-mono">
+                                  -
+                                </div>
+                                <div className="col-span-2 text-right font-mono font-medium text-orange-600 dark:text-orange-400">
+                                  {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
+                                </div>
+                                <div className="col-span-2 text-right font-mono">
+                                  -
+                                </div>
+                                <div className="col-span-2 font-mono truncate">
+                                  -
+                                </div>
+                                <div className="col-span-2 text-right font-mono">
+                                  -
+                                </div>
+                                <div className="col-span-2">
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    max={booking.spNet}
+                                    value={isEdited ? amountPaidTotals[booking.bookingId] : totalPayable}
+                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                    className={`h-6 text-xs font-mono text-right ${isEdited ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                    data-testid={`input-total-payable-${booking.bookingId}`}
+                                  />
+                                </div>
+                                <div className="col-span-2 flex justify-center">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-xs"
+                                    data-testid={`button-create-dispute-${booking.bookingId}`}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Dispute
+                                  </Button>
+                                </div>
                               </div>
-                              <div className="col-span-2 truncate" title={booking.reason}>
-                                <Badge variant="outline" className="text-xs">
-                                  {booking.reason}
-                                </Badge>
-                              </div>
-                              <div className="col-span-2 text-right font-mono">
-                                {formatCurrency(booking.hoNet)}
-                              </div>
-                              <div className="col-span-2 text-right font-mono">
-                                {formatCurrency(booking.spNet)}
-                              </div>
-                              <div className="col-span-2 text-right font-mono font-medium text-blue-600 dark:text-blue-400">
-                                {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
-                              </div>
-                              <div className="col-span-2 text-right font-mono">
-                                -
-                              </div>
-                              <div className="col-span-2 text-right font-mono font-medium text-orange-600 dark:text-orange-400">
-                                {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
-                              </div>
-                              <div className="col-span-2 text-right font-mono">
-                                -
-                              </div>
-                              <div className="col-span-2 font-mono truncate">
-                                -
-                              </div>
-                              <div className="col-span-2 text-right font-mono">
-                                -
-                              </div>
-                              <div className="col-span-2 flex justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-xs"
-                                  data-testid={`button-create-dispute-${booking.bookingId}`}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Dispute
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
