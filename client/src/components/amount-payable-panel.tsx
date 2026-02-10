@@ -2432,8 +2432,16 @@ export function AmountPayablePanel({
                                                     <span className="text-xs text-muted-foreground">-</span>
                                                   )}
                                                 </div>
-                                                <div className="col-span-2 text-right font-mono">
-                                                  {formatCurrency(pricePayable)}
+                                                <div className="col-span-2">
+                                                  <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    max={booking.spNet}
+                                                    value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet)}
+                                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                                    className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                                    data-testid={`input-total-payable-${booking.bookingId}`}
+                                                  />
                                                 </div>
                                                 <div className="col-span-3 text-right">
                                                   {isDisputed && (
@@ -2740,8 +2748,16 @@ export function AmountPayablePanel({
                                                   <span className="text-xs text-muted-foreground">-</span>
                                                 )}
                                               </div>
-                                              <div className="col-span-2 text-right font-mono text-xs">
-                                                {formatCurrency(pricePayable)}
+                                              <div className="col-span-2">
+                                                <Input
+                                                  type="number"
+                                                  step="0.01"
+                                                  max={booking.spNet}
+                                                  value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable}
+                                                  onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                                  className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                                  data-testid={`input-total-payable-${booking.bookingId}`}
+                                                />
                                               </div>
                                               <div className="col-span-3 text-right">
                                                 {canDispute && isDisputed ? (
@@ -3066,8 +3082,16 @@ export function AmountPayablePanel({
                                               <span className="text-xs text-muted-foreground">-</span>
                                             )}
                                           </div>
-                                          <div className="col-span-2 text-right font-mono text-xs">
-                                            {formatCurrency(pricePayable)}
+                                          <div className="col-span-2">
+                                            <Input
+                                              type="number"
+                                              step="0.01"
+                                              max={booking.spNet}
+                                              value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable}
+                                              onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                              className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                              data-testid={`input-total-payable-${booking.bookingId}`}
+                                            />
                                           </div>
                                           <div className="col-span-3 text-right">
                                             {isDisputed ? (
@@ -3246,13 +3270,13 @@ export function AmountPayablePanel({
                           <div className="col-span-2">Reason</div>
                           <div className="col-span-2 text-right">HO Net</div>
                           <div className="col-span-2 text-right">SP Net</div>
+                          <div className="col-span-2 text-right">Total Amt Payable</div>
                           <div className="col-span-2 text-right">Amount Paid</div>
                           <div className="col-span-2 text-right">Dispute Amount</div>
                           <div className="col-span-2 text-right">Dispute Settled</div>
                           <div className="col-span-2 text-right">Dispute Adj.</div>
                           <div className="col-span-2">Adj. in Ticket ID</div>
                           <div className="col-span-2 text-right">Closing Dispute</div>
-                          <div className="col-span-2 text-right">Total Amt Payable</div>
                           <div className="col-span-2 text-center">Action</div>
                         </div>
                         <div className="max-h-80 overflow-y-auto">
@@ -3279,6 +3303,17 @@ export function AmountPayablePanel({
                                 <div className="col-span-2 text-right font-mono">
                                   {formatCurrency(booking.spNet)}
                                 </div>
+                                <div className="col-span-2">
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    max={booking.spNet}
+                                    value={isEdited ? amountPaidTotals[booking.bookingId] : totalPayable}
+                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                    className={`h-6 text-xs font-mono text-right ${isEdited ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                    data-testid={`input-total-payable-${booking.bookingId}`}
+                                  />
+                                </div>
                                 <div className="col-span-2 text-right font-mono font-medium text-blue-600 dark:text-blue-400">
                                   {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
                                 </div>
@@ -3296,17 +3331,6 @@ export function AmountPayablePanel({
                                 </div>
                                 <div className="col-span-2 text-right font-mono">
                                   -
-                                </div>
-                                <div className="col-span-2">
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    max={booking.spNet}
-                                    value={isEdited ? amountPaidTotals[booking.bookingId] : totalPayable}
-                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
-                                    className={`h-6 text-xs font-mono text-right ${isEdited ? 'border-blue-400 dark:border-blue-600' : ''}`}
-                                    data-testid={`input-total-payable-${booking.bookingId}`}
-                                  />
                                 </div>
                                 <div className="col-span-2 flex justify-center">
                                   <Button
