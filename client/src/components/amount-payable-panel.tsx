@@ -1981,7 +1981,7 @@ export function AmountPayablePanel({
                           <div className="truncate" title={booking.paymentMethod || "-"}>
                             {booking.paymentMethod || "-"}
                           </div>
-                          {/* Reconciled Net Price */}
+                          {/* Total Amount Payable Price */}
                           <div className="text-right font-mono">
                             {formatCurrency(booking.spNet)}
                           </div>
@@ -2284,7 +2284,7 @@ export function AmountPayablePanel({
                                 <div className="col-span-2 text-right">SP Net</div>
                                 <div className="col-span-2 text-center">Net</div>
                                 <div className="col-span-1 text-center">Dispute</div>
-                                <div className="col-span-2 text-right">Reconciled Net</div>
+                                <div className="col-span-2 text-right">Total Amount Payable</div>
                                 <div className="col-span-3 text-right">Dispute Amt</div>
                                 <div className="col-span-4 text-right">Price Payable</div>
                               </div>
@@ -2557,7 +2557,7 @@ export function AmountPayablePanel({
                             <div className="col-span-2 text-right">SP Net</div>
                             <div className="col-span-1 text-center">Net</div>
                             <div className="col-span-1 text-center">Dispute</div>
-                            <div className="col-span-2 text-right">Reconciled Net</div>
+                            <div className="col-span-2 text-right">Total Amount Payable</div>
                             <div className="col-span-3 text-right">Dispute Amt</div>
                             <div className="col-span-5 text-right">Price Payable</div>
                           </div>
@@ -2900,7 +2900,7 @@ export function AmountPayablePanel({
                           <div className="col-span-2 text-right">SP Net</div>
                           <div className="col-span-1 text-center">Net</div>
                           <div className="col-span-1 text-center">Dispute</div>
-                          <div className="col-span-2 text-right">Reconciled Net</div>
+                          <div className="col-span-2 text-right">Total Amount Payable</div>
                           <div className="col-span-3 text-right">Dispute Amt</div>
                           <div className="col-span-5 text-right">Price Payable</div>
                         </div>

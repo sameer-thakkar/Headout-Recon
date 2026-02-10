@@ -844,7 +844,7 @@ export function AmountPayableModal({
                               <div className="col-span-1 text-center">Dispute</div>
                               <div className="col-span-2 text-right">Price Payable</div>
                               <div className="col-span-2 text-right">Dispute Amt</div>
-                              <div className="col-span-3 text-right">Reconciled Net</div>
+                              <div className="col-span-3 text-right">Total Amount Payable</div>
                             </div>
 
                             <div>
