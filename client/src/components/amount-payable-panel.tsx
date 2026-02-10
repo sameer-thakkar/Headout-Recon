@@ -85,6 +85,7 @@ export function AmountPayablePanel({
   const [isCancellationsExpanded, setIsCancellationsExpanded] = useState(false);
   const [isAlreadyReconciledExpanded, setIsAlreadyReconciledExpanded] = useState(false);
   const [isPaymentMismatchExpanded, setIsPaymentMismatchExpanded] = useState(false);
+  const [isAmountPaidExpanded, setIsAmountPaidExpanded] = useState(false);
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
@@ -541,6 +542,11 @@ export function AmountPayablePanel({
 
   const totalAmountPaid = useMemo(() => 
     bookings.reduce((sum, b) => sum + (b.amountPaid || 0), 0),
+    [bookings]
+  );
+
+  const amountPaidBookings = useMemo(() => 
+    bookings.filter(b => (b.amountPaid && b.amountPaid > 0) || (b.disputeSettled && b.disputeSettled > 0)),
     [bookings]
   );
 
@@ -2268,12 +2274,10 @@ export function AmountPayablePanel({
                             </div>
 
                             <CollapsibleContent>
-                              <div className="grid grid-cols-22 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                              <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
                                 <div className="col-span-2">TID / Booking ID</div>
                                 <div className="col-span-2 text-right">HO Net</div>
                                 <div className="col-span-2 text-right">SP Net</div>
-                                <div className="col-span-2 text-right">Amt Paid</div>
-                                <div className="col-span-2 text-right">Disp. Settled</div>
                                 <div className="col-span-2 text-center">Net</div>
                                 <div className="col-span-1 text-center">Dispute</div>
                                 <div className="col-span-2 text-right">Reconciled Net</div>
@@ -2292,7 +2296,7 @@ export function AmountPayablePanel({
                                         open={isTidExpanded}
                                         onOpenChange={() => toggleTid(tidKeyStr)}
                                       >
-                                        <div className="grid grid-cols-22 gap-1 px-3 py-2 items-center hover:bg-muted/20">
+                                        <div className="grid grid-cols-18 gap-1 px-3 py-2 items-center hover:bg-muted/20">
                                           <div className="col-span-2 flex items-center gap-1">
                                             <CollapsibleTrigger asChild>
                                               <Button variant="ghost" size="icon" className="h-5 w-5">
@@ -2310,7 +2314,7 @@ export function AmountPayablePanel({
                                               {tidBookings.length}
                                             </Badge>
                                           </div>
-                                          <div className="col-span-20" />
+                                          <div className="col-span-16" />
                                         </div>
 
                                         <CollapsibleContent>
@@ -2325,7 +2329,7 @@ export function AmountPayablePanel({
                                             return (
                                               <div key={booking.bookingId}>
                                               <div
-                                                className="grid grid-cols-22 gap-1 px-3 py-1.5 items-center text-xs border-t bg-muted/10"
+                                                className="grid grid-cols-18 gap-1 px-3 py-1.5 items-center text-xs border-t bg-muted/10"
                                                 data-testid={`booking-row-${booking.bookingId}`}
                                               >
                                                 <div className="col-span-2 pl-6 font-mono truncate" title={booking.bookingId}>
@@ -2336,12 +2340,6 @@ export function AmountPayablePanel({
                                                 </div>
                                                 <div className="col-span-2 text-right font-mono">
                                                   {formatCurrency(booking.spNet)}
-                                                </div>
-                                                <div className="col-span-2 text-right font-mono text-xs">
-                                                  {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
-                                                </div>
-                                                <div className="col-span-2 text-right font-mono text-xs">
-                                                  {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
                                                 </div>
                                                 <div className="col-span-2 flex justify-center">
                                                   <Select
@@ -2549,12 +2547,10 @@ export function AmountPayablePanel({
                         </div>
 
                         <CollapsibleContent>
-                          <div className="grid grid-cols-22 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                          <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
                             <div className="col-span-2">TID / Booking ID</div>
                             <div className="col-span-2 text-right">HO Net</div>
                             <div className="col-span-2 text-right">SP Net</div>
-                            <div className="col-span-2 text-right">Amt Paid</div>
-                            <div className="col-span-2 text-right">Disp. Settled</div>
                             <div className="col-span-1 text-center">Net</div>
                             <div className="col-span-1 text-center">Dispute</div>
                             <div className="col-span-2 text-right">Reconciled Net</div>
@@ -2573,7 +2569,7 @@ export function AmountPayablePanel({
                                   onOpenChange={() => toggleTid(tidKeyStr)}
                                 >
                                   <div className="border-t">
-                                    <div className="grid grid-cols-22 gap-1 px-3 py-2 bg-background items-center">
+                                    <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-background items-center">
                                       <div className="col-span-2 flex items-center gap-1">
                                         <CollapsibleTrigger asChild>
                                           <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
@@ -2610,12 +2606,6 @@ export function AmountPayablePanel({
                                       </div>
                                       <div className="col-span-2 text-right font-mono text-xs">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
-                                      </div>
-                                      <div className="col-span-2 text-right font-mono text-xs">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}
-                                      </div>
-                                      <div className="col-span-2 text-right font-mono text-xs">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + (b.disputeSettled || 0), 0))}
                                       </div>
                                       <div className="col-span-1 flex justify-center">
                                         {reason === "Unmapped" ? (
@@ -2678,7 +2668,7 @@ export function AmountPayablePanel({
                                           return (
                                             <div key={booking.bookingId}>
                                             <div 
-                                              className="grid grid-cols-22 gap-1 px-3 py-1.5 border-t border-dashed items-center"
+                                              className="grid grid-cols-18 gap-1 px-3 py-1.5 border-t border-dashed items-center"
                                             >
                                               <div className="col-span-2 pl-6">
                                                 <span className="text-xs text-muted-foreground truncate block" title={booking.bookingId}>
@@ -2690,12 +2680,6 @@ export function AmountPayablePanel({
                                               </div>
                                               <div className="col-span-2 text-right font-mono text-xs text-muted-foreground">
                                                 {formatCurrency(booking.spNet)}
-                                              </div>
-                                              <div className="col-span-2 text-right font-mono text-xs">
-                                                {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
-                                              </div>
-                                              <div className="col-span-2 text-right font-mono text-xs">
-                                                {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
                                               </div>
                                               <div className="col-span-1 flex justify-center">
                                                 {reason === "Unmapped" ? (
@@ -2906,12 +2890,10 @@ export function AmountPayablePanel({
                       </div>
 
                       <CollapsibleContent>
-                        <div className="grid grid-cols-22 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
+                        <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
                           <div className="col-span-2">TID / Booking ID</div>
                           <div className="col-span-2 text-right">HO Net</div>
                           <div className="col-span-2 text-right">SP Net</div>
-                          <div className="col-span-2 text-right">Amt Paid</div>
-                          <div className="col-span-2 text-right">Disp. Settled</div>
                           <div className="col-span-1 text-center">Net</div>
                           <div className="col-span-1 text-center">Dispute</div>
                           <div className="col-span-2 text-right">Reconciled Net</div>
@@ -2930,7 +2912,7 @@ export function AmountPayablePanel({
                                 onOpenChange={() => toggleTid(tidKeyStr)}
                               >
                                 <div className="border-t">
-                                  <div className="grid grid-cols-22 gap-1 px-3 py-2 bg-muted/20 items-center">
+                                  <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-muted/20 items-center">
                                     <div className="col-span-2 flex items-center gap-1">
                                       <CollapsibleTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
@@ -2955,12 +2937,6 @@ export function AmountPayablePanel({
                                     </div>
                                     <div className="col-span-2 text-right font-mono text-xs">
                                       {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
-                                    </div>
-                                    <div className="col-span-2 text-right font-mono text-xs">
-                                      {formatCurrency(tidBookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}
-                                    </div>
-                                    <div className="col-span-2 text-right font-mono text-xs">
-                                      {formatCurrency(tidBookings.reduce((s, b) => s + (b.disputeSettled || 0), 0))}
                                     </div>
                                     <div className="col-span-1 flex justify-center">
                                       {reason !== "Reconciled" && reason !== "Unmapped" && (
@@ -3023,7 +2999,7 @@ export function AmountPayablePanel({
                                       return (
                                         <div key={booking.bookingId}>
                                         <div
-                                          className="grid grid-cols-22 gap-1 px-3 py-1.5 bg-muted/10 items-center border-t"
+                                          className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/10 items-center border-t"
                                         >
                                           <div className="col-span-2 pl-6">
                                             <span className="text-xs font-mono">{booking.bookingId}</span>
@@ -3033,12 +3009,6 @@ export function AmountPayablePanel({
                                           </div>
                                           <div className="col-span-2 text-right font-mono text-xs">
                                             {formatCurrency(booking.spNet)}
-                                          </div>
-                                          <div className="col-span-2 text-right font-mono text-xs">
-                                            {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
-                                          </div>
-                                          <div className="col-span-2 text-right font-mono text-xs">
-                                            {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
                                           </div>
                                           <div className="col-span-1 flex justify-center">
                                             {reason === "Reconciled" ? (
@@ -3206,6 +3176,85 @@ export function AmountPayablePanel({
                     ))}
                   </div>
                 </CollapsibleContent>
+              </Collapsible>
+            </div>
+          )}
+
+          {/* Amount Paid & Dispute Settled Section */}
+          {amountPaidBookings.length > 0 && (
+            <div className="pt-3 mt-3 border-t">
+              <Collapsible 
+                open={isAmountPaidExpanded}
+                onOpenChange={setIsAmountPaidExpanded}
+              >
+                <div className="border rounded-lg overflow-hidden">
+                  <CollapsibleTrigger asChild>
+                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 items-center cursor-pointer hover-elevate" data-testid="trigger-amount-paid-section">
+                      <div className="col-span-6 flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="h-6 w-6">
+                          {isAmountPaidExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <CreditCard className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <span className="text-sm font-medium">Amount Paid & Dispute Settled</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {amountPaidBookings.length}
+                        </Badge>
+                      </div>
+                      <div className="col-span-3 text-right font-mono text-xs text-muted-foreground">
+                        Paid: {formatCurrency(amountPaidBookings.reduce((s, b) => s + (b.amountPaid || 0), 0))} {currency}
+                      </div>
+                      <div className="col-span-3 text-right font-mono text-xs text-muted-foreground">
+                        Settled: {formatCurrency(amountPaidBookings.reduce((s, b) => s + (b.disputeSettled || 0), 0))} {currency}
+                      </div>
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="border-t">
+                      <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground">
+                        <div className="col-span-2">Booking ID</div>
+                        <div className="col-span-2">Reason</div>
+                        <div className="col-span-2 text-right">HO Net</div>
+                        <div className="col-span-2 text-right">SP Net</div>
+                        <div className="col-span-2 text-right">Amount Paid</div>
+                        <div className="col-span-2 text-right">Dispute Settled</div>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {amountPaidBookings.map((booking) => (
+                          <div 
+                            key={booking.bookingId}
+                            className="grid grid-cols-12 gap-2 px-3 py-1.5 text-xs border-t items-center"
+                            data-testid={`amount-paid-row-${booking.bookingId}`}
+                          >
+                            <div className="col-span-2 font-mono truncate" title={booking.bookingId}>
+                              {booking.bookingId}
+                            </div>
+                            <div className="col-span-2 truncate" title={booking.reason}>
+                              <Badge variant="outline" className="text-xs">
+                                {booking.reason}
+                              </Badge>
+                            </div>
+                            <div className="col-span-2 text-right font-mono">
+                              {formatCurrency(booking.hoNet)}
+                            </div>
+                            <div className="col-span-2 text-right font-mono">
+                              {formatCurrency(booking.spNet)}
+                            </div>
+                            <div className="col-span-2 text-right font-mono font-medium text-blue-600 dark:text-blue-400">
+                              {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
+                            </div>
+                            <div className="col-span-2 text-right font-mono font-medium text-orange-600 dark:text-orange-400">
+                              {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </div>
               </Collapsible>
             </div>
           )}
