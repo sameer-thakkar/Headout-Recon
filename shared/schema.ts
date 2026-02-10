@@ -102,6 +102,10 @@ export const primaryRowSchema = z.object({
   
   // Experience date (from HO data, used for pax type date grouping)
   experienceDate: z.string().optional(),
+  
+  // Amount Paid & Dispute Settled (from HO data, for Amount Payable deductions)
+  amountPaid: z.number().optional(),
+  disputeSettled: z.number().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 

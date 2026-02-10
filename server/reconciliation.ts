@@ -84,6 +84,9 @@ interface HORow {
   paxBreakdown?: PaxBreakdown[];
   // Experience date
   experienceDate?: string | null;
+  // Amount Paid & Dispute Settled
+  amountPaid?: number;
+  disputeSettled?: number;
 }
 
 // Result from reason assignment
@@ -233,6 +236,8 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
       experienceDate: convertedExpDate,
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
+      amountPaid: Number(getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid")) || undefined,
+      disputeSettled: Number(getRowValue(row, "disputeSettled", "Dispute Settled", "dispute_settled", "DisputeSettled", "Dispute Amount Settled", "dispute_amount_settled")) || undefined,
     };
   });
 
@@ -914,6 +919,9 @@ function computeReconciliationRows(
       paxBreakdown: ho.paxBreakdown,
       // Experience date from HO data
       experienceDate: ho.experienceDate || undefined,
+      // Amount Paid & Dispute Settled from HO data
+      amountPaid: ho.amountPaid,
+      disputeSettled: ho.disputeSettled,
     });
   });
   

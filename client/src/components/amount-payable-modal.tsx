@@ -89,6 +89,9 @@ export interface BookingForPayable {
   vid?: string;
   // Pax breakdown data
   paxBreakdown?: { paxType: string; count: number; unitPrice: number; priceNet: number }[];
+  // Amount Paid & Dispute Settled from HO data
+  amountPaid?: number;
+  disputeSettled?: number;
 }
 
 export interface FinalNetSelection {
