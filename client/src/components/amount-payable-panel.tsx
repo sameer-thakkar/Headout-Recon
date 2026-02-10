@@ -3217,44 +3217,74 @@ export function AmountPayablePanel({
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="border-t">
-                      <div className="grid grid-cols-12 gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground">
-                        <div className="col-span-2">Booking ID</div>
-                        <div className="col-span-2">Reason</div>
-                        <div className="col-span-2 text-right">HO Net</div>
-                        <div className="col-span-2 text-right">SP Net</div>
-                        <div className="col-span-2 text-right">Amount Paid</div>
-                        <div className="col-span-2 text-right">Dispute Settled</div>
-                      </div>
-                      <div className="max-h-80 overflow-y-auto">
-                        {amountPaidBookings.map((booking) => (
-                          <div 
-                            key={booking.bookingId}
-                            className="grid grid-cols-12 gap-2 px-3 py-1.5 text-xs border-t items-center"
-                            data-testid={`amount-paid-row-${booking.bookingId}`}
-                          >
-                            <div className="col-span-2 font-mono truncate" title={booking.bookingId}>
-                              {booking.bookingId}
+                    <div className="border-t overflow-x-auto">
+                      <div className="min-w-[1100px]">
+                        <div className="grid grid-cols-22 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground">
+                          <div className="col-span-2">Booking ID</div>
+                          <div className="col-span-2">Reason</div>
+                          <div className="col-span-2 text-right">HO Net</div>
+                          <div className="col-span-2 text-right">SP Net</div>
+                          <div className="col-span-2 text-right">Amount Paid</div>
+                          <div className="col-span-2 text-right">Dispute Amount</div>
+                          <div className="col-span-2 text-right">Dispute Settled</div>
+                          <div className="col-span-2 text-right">Dispute Adj.</div>
+                          <div className="col-span-2">Adj. in Ticket ID</div>
+                          <div className="col-span-2 text-right">Closing Dispute</div>
+                          <div className="col-span-2 text-center">Action</div>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {amountPaidBookings.map((booking) => (
+                            <div 
+                              key={booking.bookingId}
+                              className="grid grid-cols-22 gap-1 px-3 py-1.5 text-xs border-t items-center"
+                              data-testid={`amount-paid-row-${booking.bookingId}`}
+                            >
+                              <div className="col-span-2 font-mono truncate" title={booking.bookingId}>
+                                {booking.bookingId}
+                              </div>
+                              <div className="col-span-2 truncate" title={booking.reason}>
+                                <Badge variant="outline" className="text-xs">
+                                  {booking.reason}
+                                </Badge>
+                              </div>
+                              <div className="col-span-2 text-right font-mono">
+                                {formatCurrency(booking.hoNet)}
+                              </div>
+                              <div className="col-span-2 text-right font-mono">
+                                {formatCurrency(booking.spNet)}
+                              </div>
+                              <div className="col-span-2 text-right font-mono font-medium text-blue-600 dark:text-blue-400">
+                                {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
+                              </div>
+                              <div className="col-span-2 text-right font-mono">
+                                -
+                              </div>
+                              <div className="col-span-2 text-right font-mono font-medium text-orange-600 dark:text-orange-400">
+                                {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
+                              </div>
+                              <div className="col-span-2 text-right font-mono">
+                                -
+                              </div>
+                              <div className="col-span-2 font-mono truncate">
+                                -
+                              </div>
+                              <div className="col-span-2 text-right font-mono">
+                                -
+                              </div>
+                              <div className="col-span-2 flex justify-center">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-xs"
+                                  data-testid={`button-create-dispute-${booking.bookingId}`}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Dispute
+                                </Button>
+                              </div>
                             </div>
-                            <div className="col-span-2 truncate" title={booking.reason}>
-                              <Badge variant="outline" className="text-xs">
-                                {booking.reason}
-                              </Badge>
-                            </div>
-                            <div className="col-span-2 text-right font-mono">
-                              {formatCurrency(booking.hoNet)}
-                            </div>
-                            <div className="col-span-2 text-right font-mono">
-                              {formatCurrency(booking.spNet)}
-                            </div>
-                            <div className="col-span-2 text-right font-mono font-medium text-blue-600 dark:text-blue-400">
-                              {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
-                            </div>
-                            <div className="col-span-2 text-right font-mono font-medium text-orange-600 dark:text-orange-400">
-                              {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </CollapsibleContent>
