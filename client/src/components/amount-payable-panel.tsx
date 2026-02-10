@@ -3264,20 +3264,21 @@ export function AmountPayablePanel({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t overflow-x-auto overflow-y-hidden">
-                      <div className="min-w-[1500px]">
-                        <div className="grid grid-cols-24 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
-                          <div className="col-span-2">Booking ID</div>
-                          <div className="col-span-2">Reason</div>
-                          <div className="col-span-2 text-right">HO Net</div>
-                          <div className="col-span-2 text-right">SP Net</div>
-                          <div className="col-span-2 text-right">Total Amt Payable</div>
-                          <div className="col-span-2 text-right">Amount Paid</div>
-                          <div className="col-span-2 text-right">Dispute Amount</div>
-                          <div className="col-span-2 text-right">Dispute Settled</div>
-                          <div className="col-span-2 text-right">Dispute Adj.</div>
-                          <div className="col-span-2">Adj. in Ticket ID</div>
-                          <div className="col-span-2 text-right">Closing Dispute</div>
-                          <div className="col-span-2 text-center">Action</div>
+                      <div className="min-w-[1600px]">
+                        <div className="grid grid-cols-[110px_100px_90px_90px_100px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                          <div>Booking ID</div>
+                          <div>Reason</div>
+                          <div className="text-right">HO Net</div>
+                          <div className="text-right">SP Net</div>
+                          <div className="text-right">Total Amt Payable</div>
+                          <div className="text-right">Amount Paid</div>
+                          <div className="text-right">Dispute Amount</div>
+                          <div className="text-right">Dispute Settled</div>
+                          <div className="text-right">Discrepancy Total</div>
+                          <div className="text-right">Dispute Adjustment</div>
+                          <div className="text-right">Final Dispute Amt</div>
+                          <div>Adjusted in Ticket ID</div>
+                          <div className="text-center">Action</div>
                         </div>
                         <div className="max-h-80 overflow-y-auto">
                           {amountPaidBookings.map((booking) => {
@@ -3286,24 +3287,24 @@ export function AmountPayablePanel({
                             return (
                               <div 
                                 key={booking.bookingId}
-                                className="grid grid-cols-24 gap-1 px-3 py-1.5 text-xs border-t items-center"
+                                className="grid grid-cols-[110px_100px_90px_90px_100px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
                                 data-testid={`amount-paid-row-${booking.bookingId}`}
                               >
-                                <div className="col-span-2 font-mono truncate" title={booking.bookingId}>
+                                <div className="font-mono truncate" title={booking.bookingId}>
                                   {booking.bookingId}
                                 </div>
-                                <div className="col-span-2 truncate" title={booking.reason}>
+                                <div className="truncate" title={booking.reason}>
                                   <Badge variant="outline" className="text-xs">
                                     {booking.reason}
                                   </Badge>
                                 </div>
-                                <div className="col-span-2 text-right font-mono">
+                                <div className="text-right font-mono">
                                   {formatCurrency(booking.hoNet)}
                                 </div>
-                                <div className="col-span-2 text-right font-mono">
+                                <div className="text-right font-mono">
                                   {formatCurrency(booking.spNet)}
                                 </div>
-                                <div className="col-span-2">
+                                <div>
                                   <Input
                                     type="number"
                                     step="0.01"
@@ -3314,25 +3315,28 @@ export function AmountPayablePanel({
                                     data-testid={`input-total-payable-${booking.bookingId}`}
                                   />
                                 </div>
-                                <div className="col-span-2 text-right font-mono font-medium text-blue-600 dark:text-blue-400">
+                                <div className="text-right font-mono font-medium text-blue-600 dark:text-blue-400">
                                   {booking.amountPaid ? formatCurrency(booking.amountPaid) : "-"}
                                 </div>
-                                <div className="col-span-2 text-right font-mono">
+                                <div className="text-right font-mono">
                                   -
                                 </div>
-                                <div className="col-span-2 text-right font-mono font-medium text-orange-600 dark:text-orange-400">
+                                <div className="text-right font-mono font-medium text-orange-600 dark:text-orange-400">
                                   {booking.disputeSettled ? formatCurrency(booking.disputeSettled) : "-"}
                                 </div>
-                                <div className="col-span-2 text-right font-mono">
+                                <div className="text-right font-mono">
                                   -
                                 </div>
-                                <div className="col-span-2 font-mono truncate">
+                                <div className="text-right font-mono">
                                   -
                                 </div>
-                                <div className="col-span-2 text-right font-mono">
+                                <div className="text-right font-mono">
                                   -
                                 </div>
-                                <div className="col-span-2 flex justify-center">
+                                <div className="font-mono truncate">
+                                  -
+                                </div>
+                                <div className="flex justify-center">
                                   <Button
                                     size="sm"
                                     variant="outline"
