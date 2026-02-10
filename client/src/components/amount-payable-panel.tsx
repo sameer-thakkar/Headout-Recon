@@ -3263,8 +3263,8 @@ export function AmountPayablePanel({
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <ScrollArea className="border-t max-h-[400px]" type="always">
-                      <div style={{ minWidth: 1500 }}>
+                    <div className="border-t overflow-x-auto overflow-y-hidden">
+                      <div className="min-w-[1500px]">
                         <div className="grid grid-cols-24 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                           <div className="col-span-2">Booking ID</div>
                           <div className="col-span-2">Reason</div>
@@ -3279,7 +3279,7 @@ export function AmountPayablePanel({
                           <div className="col-span-2 text-right">Closing Dispute</div>
                           <div className="col-span-2 text-center">Action</div>
                         </div>
-                        <div>
+                        <div className="max-h-80 overflow-y-auto">
                           {amountPaidBookings.map((booking) => {
                             const totalPayable = getAmountPaidTotal(booking);
                             const isEdited = amountPaidTotals[booking.bookingId] !== undefined;
@@ -3348,8 +3348,7 @@ export function AmountPayablePanel({
                           })}
                         </div>
                       </div>
-                      <ScrollBar orientation="horizontal" />
-                    </ScrollArea>
+                    </div>
                   </CollapsibleContent>
                 </div>
               </Collapsible>
