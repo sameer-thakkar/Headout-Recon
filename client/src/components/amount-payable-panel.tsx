@@ -3264,8 +3264,8 @@ export function AmountPayablePanel({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t overflow-x-auto">
-                      <div className="min-w-[1200px]">
-                        <div className="grid grid-cols-24 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground">
+                      <div className="min-w-[1500px]">
+                        <div className="grid grid-cols-24 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50">
                           <div className="col-span-2">Booking ID</div>
                           <div className="col-span-2">Reason</div>
                           <div className="col-span-2 text-right">HO Net</div>
