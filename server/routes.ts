@@ -1269,7 +1269,8 @@ export async function registerRoutes(
         const finalNetPriceKey = originalKeys.find(k => {
           const kLower = k.toLowerCase();
           return kLower === "finalnetprice" || kLower === "final net price" || 
-                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable";
+                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
+                 kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
         }) || "finalNetPrice";
         
         // Calculate values
@@ -1408,7 +1409,8 @@ export async function registerRoutes(
         const isFinalNetCol = (k: string) => {
           const kLower = k.toLowerCase();
           return kLower === "finalnetprice" || kLower === "final net price" || 
-                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable";
+                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
+                 kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
         };
         
         // Build new row preserving original column order exactly, only updating values in known columns
@@ -1507,9 +1509,13 @@ export async function registerRoutes(
       // Build canonical header order: original HO columns in exact order, then appended columns in fixed order
       const canonicalHeaders: string[] = [...firstRowKeys];
       
-      // Helper to check if a header already exists (case-insensitive)
+      // Helper to check if a header already exists (case-insensitive, with alias awareness)
+      const finalNetAliases = new Set(["finalnetprice", "final net price", "finalnet", "final net", "final payable", "amountpayable", "amount payable", "amount_payable"]);
       const headerExists = (name: string) => {
         const nameLower = name.toLowerCase();
+        if (finalNetAliases.has(nameLower)) {
+          return canonicalHeaders.some(h => finalNetAliases.has(h.toLowerCase()));
+        }
         return canonicalHeaders.some(h => h.toLowerCase() === nameLower);
       };
       
@@ -2520,7 +2526,8 @@ export async function registerRoutes(
       const gsIsFinalNetCol = (k: string) => {
         const kLower = k.toLowerCase();
         return kLower === "finalnetprice" || kLower === "final net price" || 
-               kLower === "finalnet" || kLower === "final net" || kLower === "final payable";
+               kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
+               kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
       };
       
       // Get headers from original data
