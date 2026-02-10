@@ -1251,6 +1251,9 @@ export async function registerRoutes(
         }
       });
       
+      // Use the stored header list as canonical column order - this is the exact order from the original uploaded file
+      const firstRowKeys = upload?.hoData?.headers || (originalHoData.length > 0 ? Object.keys(originalHoData[0] as Record<string, unknown>) : []);
+      
       const hoReportData = originalHoData.map((row: Record<string, unknown>, rowIndex: number) => {
         const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
         
@@ -1261,8 +1264,8 @@ export async function registerRoutes(
         // Check if this row is Secondary based on our pre-computed set
         const isSecondary = secondaryRowIndices.has(rowIndex);
         
-        // Get original row keys to preserve order and find finalNetPrice position
-        const originalKeys = Object.keys(row);
+        // Use canonical column order from first row
+        const originalKeys = firstRowKeys;
         const finalNetPriceKey = originalKeys.find(k => {
           const kLower = k.toLowerCase();
           return kLower === "finalnetprice" || kLower === "final net price" || 
@@ -1500,7 +1503,30 @@ export async function registerRoutes(
         
         return newRow;
       });
-      const hoReportSheet = XLSX.utils.json_to_sheet(hoReportData);
+      
+      // Build canonical header order: original HO columns in exact order, then appended columns in fixed order
+      const canonicalHeaders: string[] = [...firstRowKeys];
+      
+      // Helper to check if a header already exists (case-insensitive)
+      const headerExists = (name: string) => {
+        const nameLower = name.toLowerCase();
+        return canonicalHeaders.some(h => h.toLowerCase() === nameLower);
+      };
+      
+      // Append new columns in a fixed, deterministic order
+      const appendCols = [
+        "SP Net", "Difference", "Difference %",
+        "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss",
+        "finalVendorId", "Ticket ID", "Disputed amount", "Adjusted in Ticket ID",
+        "Final Dispute amount", "Dispute status", "Reconciled Net price", "UTR number"
+      ];
+      for (const col of appendCols) {
+        if (!headerExists(col)) {
+          canonicalHeaders.push(col);
+        }
+      }
+      
+      const hoReportSheet = XLSX.utils.json_to_sheet(hoReportData, { header: canonicalHeaders });
       hoReportSheet["!sheetViews"] = [{ showGridLines: false }];
       
       // Apply formatting to HO Report Updated (no fill colors)
