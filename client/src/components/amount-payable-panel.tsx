@@ -3237,9 +3237,9 @@ export function AmountPayablePanel({
                 open={isAmountPaidExpanded}
                 onOpenChange={setIsAmountPaidExpanded}
               >
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border rounded-lg">
                   <CollapsibleTrigger asChild>
-                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 items-center cursor-pointer hover-elevate" data-testid="trigger-amount-paid-section">
+                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 rounded-t-lg items-center cursor-pointer hover-elevate" data-testid="trigger-amount-paid-section">
                       <div className="col-span-6 flex items-center gap-2">
                         <Button variant="ghost" size="icon" className="h-6 w-6">
                           {isAmountPaidExpanded ? (
