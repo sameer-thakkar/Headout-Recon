@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
@@ -1922,7 +1922,7 @@ export function AmountPayablePanel({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-3">
           <div className="border rounded-lg overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 items-center">
@@ -3778,7 +3778,7 @@ export function AmountPayablePanel({
             )}
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       <div className="flex justify-end gap-2 p-4 border-t flex-shrink-0">
         <Button variant="outline" onClick={onClose} data-testid="button-cancel">
