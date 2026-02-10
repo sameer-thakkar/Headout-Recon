@@ -943,10 +943,8 @@ export function AmountPayableModal({
                                       </div>
                                       <div className="col-span-3 text-right font-mono text-xs font-medium text-green-600 dark:text-green-400">
                                         {formatCurrency(tidBookings.reduce((s, b) => {
-                                          const canDispute = getSelection(b.bookingId, b.reason) === "sp";
                                           const pricePayable = getFinalNetPrice(b);
-                                          const disputeAmt = canDispute ? getDisputeAmount(b.bookingId) : 0;
-                                          return s + (pricePayable - disputeAmt);
+                                          return s + pricePayable;
                                         }, 0))}
                                       </div>
                                     </div>

@@ -509,11 +509,6 @@ export function AmountPayablePanel({
     const pricePayable = selection === "ho" ? booking.hoNet : booking.spNet;
     const amtPaid = booking.amountPaid || 0;
     
-    if (activeDisputes.has(booking.bookingId)) {
-      const disputeAmt = disputeAmounts.get(booking.bookingId) || 0;
-      return pricePayable - disputeAmt - amtPaid;
-    }
-    
     return pricePayable - amtPaid;
   }, [localSelections, activeDisputes, disputeAmounts]);
 
@@ -623,8 +618,8 @@ export function AmountPayablePanel({
       }
     }, baseAmount);
     
-    // Deduct SP Error closed dispute adjustments and apply Already Reconciled adjustments
-    const result = adjustmentsResult - spErrorClosedAdjustments + alreadyReconciledAdjustment;
+    // Apply Already Reconciled adjustments (dispute amounts are informational only, not deducted)
+    const result = adjustmentsResult + alreadyReconciledAdjustment;
     return Math.round(result * 100) / 100;
   }, [baseAmount, localAdjustments, spErrorClosedAdjustments, alreadyReconciledAdjustment]);
 
@@ -2195,8 +2190,7 @@ export function AmountPayablePanel({
                       const reasonTotal = reasonBookings.reduce((sum, b) => {
                         const netType = localSelections[b.bookingId] || "sp";
                         const pricePayable = netType === "ho" ? b.hoNet : b.spNet;
-                        const disputeAmt = disputeAmounts.get(b.bookingId) || 0;
-                        return sum + pricePayable - disputeAmt;
+                        return sum + pricePayable;
                       }, 0);
                       const displayName = reason.replace("Cancelled-", "");
 
@@ -2325,7 +2319,7 @@ export function AmountPayablePanel({
                                             const pricePayable = netType === "ho" ? booking.hoNet : booking.spNet;
                                             const disputeAmt = disputeAmounts.get(booking.bookingId) || 0;
                                             const isDisputed = activeDisputes.has(booking.bookingId);
-                                            const finalNet = pricePayable - disputeAmt;
+                                            const finalNet = pricePayable;
                                             const canDispute = isBookingDisputable(booking);
 
                                             return (
@@ -3513,7 +3507,7 @@ export function AmountPayablePanel({
                 </span>
               </div>
               <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                Closed disputes where supplier pays - deducted from Amount Payable
+                Closed disputes where supplier pays - tracked for reference
               </p>
               
               {/* Show individual closed SP Error disputes with Edit and Reopen buttons */}
@@ -3626,11 +3620,6 @@ export function AmountPayablePanel({
                   {formatCurrency(adj.amount)}
                 </span>
               ))}
-              {spErrorClosedAdjustments > 0 && (
-                <span className="text-green-600 dark:text-green-400">
-                  {" - "}SP Error Deductions ({formatCurrency(spErrorClosedAdjustments)})
-                </span>
-              )}
               {alreadyReconciledAdjustment !== 0 && (
                 <span className="text-muted-foreground">
                   {alreadyReconciledAdjustment > 0 ? " + " : " - "}Already Reconciled Adj ({formatCurrency(Math.abs(alreadyReconciledAdjustment))})
