@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
@@ -1922,7 +1922,7 @@ export function AmountPayablePanel({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1" type="auto">
         <div className="p-4 space-y-3">
           <div className="border rounded-lg overflow-hidden">
             <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 items-center">
@@ -3263,8 +3263,8 @@ export function AmountPayablePanel({
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="border-t overflow-x-auto">
-                      <div className="min-w-[1500px] flex flex-col h-full">
+                    <div className="border-t">
+                      <div className="min-w-[1500px]">
                         <div className="grid grid-cols-24 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                           <div className="col-span-2">Booking ID</div>
                           <div className="col-span-2">Reason</div>
@@ -3279,7 +3279,7 @@ export function AmountPayablePanel({
                           <div className="col-span-2 text-right">Closing Dispute</div>
                           <div className="col-span-2 text-center">Action</div>
                         </div>
-                        <div className="max-h-80 overflow-y-auto overflow-x-hidden">
+                        <div className="max-h-80 overflow-y-auto">
                           {amountPaidBookings.map((booking) => {
                             const totalPayable = getAmountPaidTotal(booking);
                             const isEdited = amountPaidTotals[booking.bookingId] !== undefined;
@@ -3778,6 +3778,7 @@ export function AmountPayablePanel({
             )}
           </div>
         </div>
+        <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
       <div className="flex justify-end gap-2 p-4 border-t flex-shrink-0">
