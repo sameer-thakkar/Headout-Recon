@@ -92,6 +92,14 @@ export interface BookingForPayable {
   // Amount Paid & Dispute Settled from HO data
   amountPaid?: number;
   disputeSettled?: number;
+  // Dispute & Discrepancy fields from HO data
+  disputedAmount?: number;
+  disputeAdjustedTotal?: number;
+  discrepancyAmount?: number;
+  disputeAdjustment?: number;
+  finalDiscrepancyTotal?: number;
+  disputeStatus?: string;
+  adjustedInTicketId?: string;
 }
 
 export interface FinalNetSelection {

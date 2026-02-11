@@ -106,6 +106,14 @@ export const primaryRowSchema = z.object({
   // Amount Paid & Dispute Settled (from HO data, for Amount Payable deductions)
   amountPaid: z.number().optional(),
   disputeSettled: z.number().optional(),
+  // Dispute & Discrepancy fields from HO data
+  disputedAmount: z.number().optional(),
+  disputeAdjustedTotal: z.number().optional(),
+  discrepancyAmount: z.number().optional(),
+  disputeAdjustment: z.number().optional(),
+  finalDiscrepancyTotal: z.number().optional(),
+  disputeStatus: z.string().optional(),
+  adjustedInTicketId: z.string().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 

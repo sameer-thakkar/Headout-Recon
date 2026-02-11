@@ -206,6 +206,14 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         // Amount Paid & Dispute Settled from HO data
         amountPaid: row.amountPaid,
         disputeSettled: row.disputeSettled,
+        // Dispute & Discrepancy fields from HO data
+        disputedAmount: row.disputedAmount,
+        disputeAdjustedTotal: row.disputeAdjustedTotal,
+        discrepancyAmount: row.discrepancyAmount,
+        disputeAdjustment: row.disputeAdjustment,
+        finalDiscrepancyTotal: row.finalDiscrepancyTotal,
+        disputeStatus: row.disputeStatus,
+        adjustedInTicketId: row.adjustedInTicketId,
       }));
   }, [primaryRows, secondaryVendorRows, unmappedRows, selectedPayableCurrency]);
 

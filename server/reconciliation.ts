@@ -87,6 +87,14 @@ interface HORow {
   // Amount Paid & Dispute Settled
   amountPaid?: number;
   disputeSettled?: number;
+  // Dispute & Discrepancy fields from HO Data
+  disputedAmount?: number;
+  disputeAdjustedTotal?: number;
+  discrepancyAmount?: number;
+  disputeAdjustment?: number;
+  finalDiscrepancyTotal?: number;
+  disputeStatus?: string;
+  adjustedInTicketId?: string;
 }
 
 // Result from reason assignment
@@ -244,6 +252,13 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
         return Number(rawVal) || undefined;
       })(),
       disputeSettled: Number(getRowValue(row, "disputeSettled", "Dispute Settled", "dispute_settled", "DisputeSettled", "Dispute Amount Settled", "dispute_amount_settled")) || undefined,
+      disputedAmount: Number(getRowValue(row, "disputedAmount", "Disputed amount", "Disputed Amount", "disputed_amount", "DisputedAmount")) || undefined,
+      disputeAdjustedTotal: Number(getRowValue(row, "disputeAdjustedTotal", "Dispute adjusted total", "Dispute Adjusted Total", "dispute_adjusted_total", "DisputeAdjustedTotal")) || undefined,
+      discrepancyAmount: Number(getRowValue(row, "discrepancyAmount", "Discrepancy amount", "Discrepancy Amount", "discrepancy_amount", "DiscrepancyAmount")) || undefined,
+      disputeAdjustment: Number(getRowValue(row, "disputeAdjustment", "Dispute adjustment", "Dispute Adjustment", "dispute_adjustment", "DisputeAdjustment")) || undefined,
+      finalDiscrepancyTotal: Number(getRowValue(row, "finalDiscrepancyTotal", "Final Discrepancy Total", "final_discrepancy_total", "FinalDiscrepancyTotal")) || undefined,
+      disputeStatus: String(getRowValue(row, "disputeStatus", "Dispute status", "Dispute Status", "dispute_status", "DisputeStatus") || "") || undefined,
+      adjustedInTicketId: String(getRowValue(row, "adjustedInTicketId", "Adjusted in Ticket ID", "Adjusted In Ticket ID", "adjusted_in_ticket_id", "AdjustedInTicketID") || "") || undefined,
     };
   });
 
@@ -928,6 +943,14 @@ function computeReconciliationRows(
       // Amount Paid & Dispute Settled from HO data
       amountPaid: ho.amountPaid,
       disputeSettled: ho.disputeSettled,
+      // Dispute & Discrepancy fields from HO data
+      disputedAmount: ho.disputedAmount,
+      disputeAdjustedTotal: ho.disputeAdjustedTotal,
+      discrepancyAmount: ho.discrepancyAmount,
+      disputeAdjustment: ho.disputeAdjustment,
+      finalDiscrepancyTotal: ho.finalDiscrepancyTotal,
+      disputeStatus: ho.disputeStatus,
+      adjustedInTicketId: ho.adjustedInTicketId,
     });
   });
   
