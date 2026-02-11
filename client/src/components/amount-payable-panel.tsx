@@ -673,6 +673,15 @@ export function AmountPayablePanel({
 
   const baseAmount = reconciledTotal + discrepancyTotal + alreadyReconciledTotal + secondaryVendorTotal + Math.abs(cancellationsTotal);
 
+  const amountPaidNetPayableTotal = useMemo(() => {
+    return amountPaidBookings.reduce((sum, b) => {
+      const totalPayable = amountPaidTotals[b.bookingId] !== undefined
+        ? amountPaidTotals[b.bookingId]
+        : ((localSelections[b.bookingId] || "ho") === "ho" ? b.hoNet : b.spNet);
+      return sum + (totalPayable - (b.amountPaid || 0));
+    }, 0);
+  }, [amountPaidBookings, amountPaidTotals, localSelections]);
+
   const finalAmount = useMemo(() => {
     const adjustmentsResult = localAdjustments.reduce((total, adj) => {
       if (adj.type === "add") {
@@ -683,9 +692,10 @@ export function AmountPayablePanel({
     }, baseAmount);
     
     // Apply Already Reconciled adjustments (dispute amounts are informational only, not deducted)
-    const result = adjustmentsResult + alreadyReconciledAdjustment;
+    // Add net payable from Amount Paid & Dispute Settled section
+    const result = adjustmentsResult + alreadyReconciledAdjustment + amountPaidNetPayableTotal;
     return Math.round(result * 100) / 100;
-  }, [baseAmount, localAdjustments, spErrorClosedAdjustments, alreadyReconciledAdjustment]);
+  }, [baseAmount, localAdjustments, spErrorClosedAdjustments, alreadyReconciledAdjustment, amountPaidNetPayableTotal]);
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
@@ -3873,6 +3883,11 @@ export function AmountPayablePanel({
               {alreadyReconciledAdjustment !== 0 && (
                 <span className="text-muted-foreground">
                   {alreadyReconciledAdjustment > 0 ? " + " : " - "}Already Reconciled Adj ({formatCurrency(Math.abs(alreadyReconciledAdjustment))})
+                </span>
+              )}
+              {amountPaidNetPayableTotal !== 0 && (
+                <span className="text-muted-foreground">
+                  {amountPaidNetPayableTotal > 0 ? " + " : " - "}Amt Paid Net Payable ({formatCurrency(Math.abs(amountPaidNetPayableTotal))})
                 </span>
               )}
             </p>
