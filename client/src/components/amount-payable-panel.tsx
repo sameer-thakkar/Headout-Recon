@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -96,6 +96,8 @@ export function AmountPayablePanel({
   const [bulkDisputeAdj, setBulkDisputeAdj] = useState("");
   const [bulkDiscrepancyAdj, setBulkDiscrepancyAdj] = useState("");
   const [bulkTicketId, setBulkTicketId] = useState("");
+  const [modalSearchQuery, setModalSearchQuery] = useState("");
+  const [bulkActionsExpanded, setBulkActionsExpanded] = useState(false);
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
@@ -4130,7 +4132,7 @@ export function AmountPayablePanel({
       </Dialog>
 
       {/* Consolidated Manage Disputes Modal */}
-      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setBulkDisputeAdj(""); setBulkDiscrepancyAdj(""); setBulkTicketId(""); setIsAmountPaidModalOpen(false); } }}>
+      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setBulkDisputeAdj(""); setBulkDiscrepancyAdj(""); setBulkTicketId(""); setModalSearchQuery(""); setBulkActionsExpanded(false); setIsAmountPaidModalOpen(false); } }}>
         <DialogContent className="max-w-7xl max-h-[85vh] flex flex-col" data-testid="dialog-manage-disputes">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -4142,145 +4144,47 @@ export function AmountPayablePanel({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-wrap items-end gap-3 p-3 rounded-md bg-muted/30 border">
-            <div className="text-xs font-medium w-full mb-1">Bulk Actions</div>
-            <div className="flex-1 min-w-[140px]">
-              <div className="text-xs text-muted-foreground mb-1">Set All Dispute Status</div>
-              <Select
-                value=""
-                onValueChange={(v) => {
-                  const updates: Record<string, string> = {};
-                  amountPaidBookings.forEach(b => { updates[b.bookingId] = v; });
-                  setDisputeStatusEdits(prev => ({ ...prev, ...updates }));
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs" data-testid="bulk-select-dispute-status">
-                  <SelectValue placeholder="Apply to all..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="OPEN">OPEN</SelectItem>
-                  <SelectItem value="CLOSED">CLOSED</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1 min-w-[140px]">
-              <div className="text-xs text-muted-foreground mb-1">Set All Dispute Adj</div>
-              <div className="flex gap-1">
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Amount"
-                  value={bulkDisputeAdj}
-                  onChange={(e) => setBulkDisputeAdj(e.target.value)}
-                  className="h-8 text-xs font-mono text-right cursor-text"
-                  data-testid="bulk-input-dispute-adj"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const val = parseFloat(bulkDisputeAdj);
-                      if (!isNaN(val)) {
-                        const updates: Record<string, number> = {};
-                        amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
-                        setDisputeAdjEdits(prev => ({ ...prev, ...updates }));
-                        setBulkDisputeAdj("");
-                      }
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const val = parseFloat(bulkDisputeAdj);
-                    if (!isNaN(val)) {
-                      const updates: Record<string, number> = {};
-                      amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
-                      setDisputeAdjEdits(prev => ({ ...prev, ...updates }));
-                      setBulkDisputeAdj("");
-                    }
-                  }}
-                  data-testid="bulk-btn-apply-dispute-adj"
+          {/* Search & Bulk Actions Toolbar */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search by Booking ID..."
+                value={modalSearchQuery}
+                onChange={(e) => setModalSearchQuery(e.target.value)}
+                className="h-8 text-xs pl-8 cursor-text"
+                data-testid="modal-search-booking-id"
+              />
+              {modalSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setModalSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  data-testid="modal-search-clear"
                 >
-                  Apply
-                </Button>
-              </div>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            <div className="flex-1 min-w-[140px]">
-              <div className="text-xs text-muted-foreground mb-1">Set All Discrepancy Adj</div>
-              <div className="flex gap-1">
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Amount"
-                  value={bulkDiscrepancyAdj}
-                  onChange={(e) => setBulkDiscrepancyAdj(e.target.value)}
-                  className="h-8 text-xs font-mono text-right cursor-text"
-                  data-testid="bulk-input-discrepancy-adj"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const val = parseFloat(bulkDiscrepancyAdj);
-                      if (!isNaN(val)) {
-                        const updates: Record<string, number> = {};
-                        amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
-                        setDiscrepancyAdjEdits(prev => ({ ...prev, ...updates }));
-                        setBulkDiscrepancyAdj("");
-                      }
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const val = parseFloat(bulkDiscrepancyAdj);
-                    if (!isNaN(val)) {
-                      const updates: Record<string, number> = {};
-                      amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
-                      setDiscrepancyAdjEdits(prev => ({ ...prev, ...updates }));
-                      setBulkDiscrepancyAdj("");
-                    }
-                  }}
-                  data-testid="bulk-btn-apply-discrepancy-adj"
-                >
-                  Apply
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 min-w-[140px]">
-              <div className="text-xs text-muted-foreground mb-1">Set All Ticket ID</div>
-              <div className="flex gap-1">
-                <Input
-                  type="text"
-                  placeholder="Ticket ID"
-                  value={bulkTicketId}
-                  onChange={(e) => setBulkTicketId(e.target.value)}
-                  className="h-8 text-xs font-mono cursor-text"
-                  data-testid="bulk-input-ticket-id"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && bulkTicketId) {
-                      const updates: Record<string, string> = {};
-                      amountPaidBookings.forEach(b => { updates[b.bookingId] = bulkTicketId; });
-                      setTicketIdEdits(prev => ({ ...prev, ...updates }));
-                      setBulkTicketId("");
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (bulkTicketId) {
-                      const updates: Record<string, string> = {};
-                      amountPaidBookings.forEach(b => { updates[b.bookingId] = bulkTicketId; });
-                      setTicketIdEdits(prev => ({ ...prev, ...updates }));
-                      setBulkTicketId("");
-                    }
-                  }}
-                  data-testid="bulk-btn-apply-ticket-id"
-                >
-                  Apply
-                </Button>
-              </div>
-            </div>
+            <span className="text-xs text-muted-foreground">
+              {(() => {
+                const filtered = modalSearchQuery
+                  ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                  : amountPaidBookings;
+                return `${filtered.length} of ${amountPaidBookings.length} bookings`;
+              })()}
+            </span>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setBulkActionsExpanded(!bulkActionsExpanded)}
+              data-testid="btn-toggle-bulk-actions"
+            >
+              {bulkActionsExpanded ? <ChevronDown className="h-3.5 w-3.5 mr-1" /> : <ChevronRight className="h-3.5 w-3.5 mr-1" />}
+              Bulk Actions
+            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -4289,6 +4193,7 @@ export function AmountPayablePanel({
                 setDiscrepancyAdjEdits({});
                 setTicketIdEdits({});
                 setDisputeStatusEdits({});
+                toast({ title: "All edits reset", description: "All fields have been reverted to their original values." });
               }}
               data-testid="bulk-btn-reset-all"
             >
@@ -4297,16 +4202,190 @@ export function AmountPayablePanel({
             </Button>
           </div>
 
+          {/* Collapsible Bulk Actions */}
+          {bulkActionsExpanded && (
+            <div className="flex flex-wrap items-end gap-3 p-3 rounded-md bg-muted/30 border animate-in slide-in-from-top-1 duration-200">
+              <div className="flex-1 min-w-[140px]">
+                <div className="text-xs text-muted-foreground mb-1">Set All Dispute Status</div>
+                <Select
+                  value=""
+                  onValueChange={(v) => {
+                    const updates: Record<string, string> = {};
+                    const filtered = modalSearchQuery
+                      ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                      : amountPaidBookings;
+                    filtered.forEach(b => { updates[b.bookingId] = v; });
+                    setDisputeStatusEdits(prev => ({ ...prev, ...updates }));
+                    toast({ title: "Status applied", description: `Set to ${v} for ${filtered.length} bookings.` });
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs" data-testid="bulk-select-dispute-status">
+                    <SelectValue placeholder="Apply to all..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="OPEN">OPEN</SelectItem>
+                    <SelectItem value="CLOSED">CLOSED</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <div className="text-xs text-muted-foreground mb-1">Set All Dispute Adj</div>
+                <div className="flex gap-1">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Amount"
+                    value={bulkDisputeAdj}
+                    onChange={(e) => setBulkDisputeAdj(e.target.value)}
+                    className="h-8 text-xs font-mono text-right cursor-text"
+                    data-testid="bulk-input-dispute-adj"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const val = parseFloat(bulkDisputeAdj);
+                        if (!isNaN(val)) {
+                          const filtered = modalSearchQuery
+                            ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                            : amountPaidBookings;
+                          const updates: Record<string, number> = {};
+                          filtered.forEach(b => { updates[b.bookingId] = val; });
+                          setDisputeAdjEdits(prev => ({ ...prev, ...updates }));
+                          setBulkDisputeAdj("");
+                          toast({ title: "Dispute Adj applied", description: `Set to ${val} for ${filtered.length} bookings.` });
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const val = parseFloat(bulkDisputeAdj);
+                      if (!isNaN(val)) {
+                        const filtered = modalSearchQuery
+                          ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                          : amountPaidBookings;
+                        const updates: Record<string, number> = {};
+                        filtered.forEach(b => { updates[b.bookingId] = val; });
+                        setDisputeAdjEdits(prev => ({ ...prev, ...updates }));
+                        setBulkDisputeAdj("");
+                        toast({ title: "Dispute Adj applied", description: `Set to ${val} for ${filtered.length} bookings.` });
+                      }
+                    }}
+                    data-testid="bulk-btn-apply-dispute-adj"
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <div className="text-xs text-muted-foreground mb-1">Set All Discrepancy Adj</div>
+                <div className="flex gap-1">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Amount"
+                    value={bulkDiscrepancyAdj}
+                    onChange={(e) => setBulkDiscrepancyAdj(e.target.value)}
+                    className="h-8 text-xs font-mono text-right cursor-text"
+                    data-testid="bulk-input-discrepancy-adj"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const val = parseFloat(bulkDiscrepancyAdj);
+                        if (!isNaN(val)) {
+                          const filtered = modalSearchQuery
+                            ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                            : amountPaidBookings;
+                          const updates: Record<string, number> = {};
+                          filtered.forEach(b => { updates[b.bookingId] = val; });
+                          setDiscrepancyAdjEdits(prev => ({ ...prev, ...updates }));
+                          setBulkDiscrepancyAdj("");
+                          toast({ title: "Discrepancy Adj applied", description: `Set to ${val} for ${filtered.length} bookings.` });
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const val = parseFloat(bulkDiscrepancyAdj);
+                      if (!isNaN(val)) {
+                        const filtered = modalSearchQuery
+                          ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                          : amountPaidBookings;
+                        const updates: Record<string, number> = {};
+                        filtered.forEach(b => { updates[b.bookingId] = val; });
+                        setDiscrepancyAdjEdits(prev => ({ ...prev, ...updates }));
+                        setBulkDiscrepancyAdj("");
+                        toast({ title: "Discrepancy Adj applied", description: `Set to ${val} for ${filtered.length} bookings.` });
+                      }
+                    }}
+                    data-testid="bulk-btn-apply-discrepancy-adj"
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <div className="text-xs text-muted-foreground mb-1">Set All Ticket ID</div>
+                <div className="flex gap-1">
+                  <Input
+                    type="text"
+                    placeholder="Ticket ID"
+                    value={bulkTicketId}
+                    onChange={(e) => setBulkTicketId(e.target.value)}
+                    className="h-8 text-xs font-mono cursor-text"
+                    data-testid="bulk-input-ticket-id"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && bulkTicketId) {
+                        const filtered = modalSearchQuery
+                          ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                          : amountPaidBookings;
+                        const updates: Record<string, string> = {};
+                        filtered.forEach(b => { updates[b.bookingId] = bulkTicketId; });
+                        setTicketIdEdits(prev => ({ ...prev, ...updates }));
+                        setBulkTicketId("");
+                        toast({ title: "Ticket ID applied", description: `Set to "${bulkTicketId}" for ${filtered.length} bookings.` });
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (bulkTicketId) {
+                        const filtered = modalSearchQuery
+                          ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                          : amountPaidBookings;
+                        const updates: Record<string, string> = {};
+                        filtered.forEach(b => { updates[b.bookingId] = bulkTicketId; });
+                        setTicketIdEdits(prev => ({ ...prev, ...updates }));
+                        const appliedId = bulkTicketId;
+                        setBulkTicketId("");
+                        toast({ title: "Ticket ID applied", description: `Set to "${appliedId}" for ${filtered.length} bookings.` });
+                      }
+                    }}
+                    data-testid="bulk-btn-apply-ticket-id"
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Data Grid */}
           <div className="flex-1 overflow-auto border rounded-md">
-            <div className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_90px_80px_80px_90px] gap-1.5 px-2 py-1.5 bg-muted/30 text-[11px] font-medium text-muted-foreground sticky top-0 z-10 border-b">
-              <div>Booking ID</div>
+            {/* Column headers */}
+            <div className="grid grid-cols-[140px_70px_70px_90px_80px_80px_85px_85px_80px_85px_90px_80px_80px_90px] gap-1.5 px-2 py-1.5 bg-muted/30 text-[11px] font-medium text-muted-foreground sticky top-0 z-20 border-b">
+              <div className="sticky left-0 bg-muted/30 z-10">Booking ID</div>
               <div className="text-right">HO Net</div>
               <div className="text-right">SP Net</div>
               <div className="text-right">Total Payable</div>
               <div className="text-right">Amt Paid</div>
               <div className="text-right">Disputed Amt</div>
-              <div className="text-right">Dispute Adjusted Total</div>
-              <div className="text-right">Discrepancy Adjusted Total</div>
+              <div className="text-right">Disp. Adj Total</div>
+              <div className="text-right">Disc. Adj Total</div>
               <div className="text-right">Dispute Adj</div>
               <div className="text-right">Discrepancy Adj</div>
               <div className="text-right">Final Dispute Amt</div>
@@ -4314,116 +4393,155 @@ export function AmountPayablePanel({
               <div className="text-right">Ticket ID</div>
               <div className="text-right">Net Payable</div>
             </div>
-            {amountPaidBookings.map((booking) => {
-              const totalPayable = getAmountPaidTotal(booking);
-              const effectiveDisputedAmount = booking.disputedAmount;
-              const adjVal = booking.disputeAdjustment ?? 0;
-              const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
-              return (
-                <div
-                  key={booking.bookingId}
-                  className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_90px_80px_80px_90px] gap-1.5 px-2 py-1 text-xs border-t items-center"
-                  data-testid={`modal-row-${booking.bookingId}`}
-                >
-                  <div className="font-mono truncate" title={booking.bookingId}>
-                    {booking.bookingId}
+            {/* Data rows */}
+            {(() => {
+              const filteredBookings = modalSearchQuery
+                ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
+                : amountPaidBookings;
+              return filteredBookings.map((booking) => {
+                const totalPayable = getAmountPaidTotal(booking);
+                const effectiveDisputedAmount = booking.disputedAmount;
+                const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
+                const currentDisputeAdj = disputeAdjEdits[booking.bookingId] !== undefined ? disputeAdjEdits[booking.bookingId] : (booking.disputeAdjustment ?? 0);
+                const currentDiscrepancyAdj = discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.discrepancyAmount ?? 0);
+                const finalDisputeAmt = (booking.disputedAmount ?? 0) - currentDisputeAdj - currentDiscrepancyAdj;
+                const hasDisputeAdjEdit = disputeAdjEdits[booking.bookingId] !== undefined;
+                const hasDiscrepancyAdjEdit = discrepancyAdjEdits[booking.bookingId] !== undefined;
+                const hasTicketIdEdit = ticketIdEdits[booking.bookingId] !== undefined;
+                return (
+                  <div
+                    key={booking.bookingId}
+                    className="grid grid-cols-[140px_70px_70px_90px_80px_80px_85px_85px_80px_85px_90px_80px_80px_90px] gap-1.5 px-2 py-1 text-xs border-t items-center transition-colors hover:bg-muted/20"
+                    data-testid={`modal-row-${booking.bookingId}`}
+                  >
+                    <div className="font-mono truncate sticky left-0 bg-background z-10 pr-1" title={booking.bookingId}>
+                      {booking.bookingId}
+                    </div>
+                    <div className="text-right font-mono">{formatCurrency(booking.hoNet)}</div>
+                    <div className="text-right font-mono">{formatCurrency(booking.spNet)}</div>
+                    <div className="text-right font-mono">{formatCurrency(totalPayable)}</div>
+                    <div className="text-right font-mono text-blue-600 dark:text-blue-400">
+                      {booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"}
+                    </div>
+                    <div className="text-right font-mono" data-testid={`modal-disputed-amt-${booking.bookingId}`}>
+                      {effectiveDisputedAmount != null && effectiveDisputedAmount !== 0 ? formatCurrency(effectiveDisputedAmount) : "-"}
+                    </div>
+                    <div className="text-right font-mono bg-blue-50/50 dark:bg-blue-950/20 rounded-sm px-0.5" data-testid={`modal-dispute-adj-total-${booking.bookingId}`}>
+                      {booking.disputeAdjustedTotal != null && booking.disputeAdjustedTotal !== 0 ? formatCurrency(booking.disputeAdjustedTotal) : "-"}
+                    </div>
+                    <div className="text-right font-mono bg-blue-50/50 dark:bg-blue-950/20 rounded-sm px-0.5" data-testid={`modal-discrepancy-adj-${booking.bookingId}`}>
+                      {booking.finalDiscrepancyTotal != null && booking.finalDiscrepancyTotal !== 0 ? formatCurrency(booking.finalDiscrepancyTotal) : "-"}
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={disputeAdjEdits[booking.bookingId] !== undefined ? disputeAdjEdits[booking.bookingId] : (booking.disputeAdjustment ?? "")}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "") {
+                            setDisputeAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                          } else {
+                            const num = parseFloat(v);
+                            if (!isNaN(num)) setDisputeAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
+                          }
+                        }}
+                        placeholder="0"
+                        className="h-6 text-[10px] font-mono text-right cursor-text pr-5 bg-amber-50/50 dark:bg-amber-950/20"
+                        data-testid={`modal-input-dispute-adj-${booking.bookingId}`}
+                      />
+                      {hasDisputeAdjEdit && (
+                        <button
+                          type="button"
+                          onClick={() => setDisputeAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; })}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
+                          title="Undo edit"
+                          data-testid={`modal-undo-dispute-adj-${booking.bookingId}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.discrepancyAmount ?? "")}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "") {
+                            setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                          } else {
+                            const num = parseFloat(v);
+                            if (!isNaN(num)) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
+                          }
+                        }}
+                        placeholder="0"
+                        className="h-6 text-[10px] font-mono text-right cursor-text pr-5 bg-amber-50/50 dark:bg-amber-950/20"
+                        data-testid={`modal-input-discrepancy-adj-${booking.bookingId}`}
+                      />
+                      {hasDiscrepancyAdjEdit && (
+                        <button
+                          type="button"
+                          onClick={() => setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; })}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
+                          title="Undo edit"
+                          data-testid={`modal-undo-discrepancy-adj-${booking.bookingId}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className={`text-right font-mono font-semibold ${finalDisputeAmt < 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid={`modal-final-dispute-amt-${booking.bookingId}`}>
+                      {finalDisputeAmt !== 0 ? formatCurrency(finalDisputeAmt) : "-"}
+                    </div>
+                    <div>
+                      <Select
+                        value={statusVal}
+                        onValueChange={(v) => setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: v }))}
+                      >
+                        <SelectTrigger className="h-6 text-[10px]" data-testid={`modal-select-dispute-status-${booking.bookingId}`}>
+                          <SelectValue placeholder="-" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="OPEN">OPEN</SelectItem>
+                          <SelectItem value="CLOSED">CLOSED</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="text"
+                        value={ticketIdEdits[booking.bookingId] !== undefined ? ticketIdEdits[booking.bookingId] : (booking.adjustedInTicketId ?? "")}
+                        onChange={(e) => setTicketIdEdits(prev => ({ ...prev, [booking.bookingId]: e.target.value }))}
+                        placeholder="-"
+                        className="h-6 text-[10px] font-mono cursor-text pr-5"
+                        data-testid={`modal-input-ticket-id-${booking.bookingId}`}
+                      />
+                      {hasTicketIdEdit && (
+                        <button
+                          type="button"
+                          onClick={() => setTicketIdEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; })}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
+                          title="Undo edit"
+                          data-testid={`modal-undo-ticket-id-${booking.bookingId}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-right font-mono font-semibold" data-testid={`modal-net-payable-${booking.bookingId}`}>
+                      {formatCurrency(totalPayable - (booking.amountPaid || 0))}
+                    </div>
                   </div>
-                  <div className="text-right font-mono">{formatCurrency(booking.hoNet)}</div>
-                  <div className="text-right font-mono">{formatCurrency(booking.spNet)}</div>
-                  <div className="text-right font-mono">{formatCurrency(totalPayable)}</div>
-                  <div className="text-right font-mono text-blue-600 dark:text-blue-400">
-                    {booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"}
-                  </div>
-                  <div className="text-right font-mono" data-testid={`modal-disputed-amt-${booking.bookingId}`}>
-                    {effectiveDisputedAmount != null && effectiveDisputedAmount !== 0 ? formatCurrency(effectiveDisputedAmount) : "-"}
-                  </div>
-                  <div className="text-right font-mono" data-testid={`modal-dispute-adj-total-${booking.bookingId}`}>
-                    {booking.disputeAdjustedTotal != null && booking.disputeAdjustedTotal !== 0 ? formatCurrency(booking.disputeAdjustedTotal) : "-"}
-                  </div>
-                  <div className="text-right font-mono" data-testid={`modal-discrepancy-adj-${booking.bookingId}`}>
-                    {booking.finalDiscrepancyTotal != null && booking.finalDiscrepancyTotal !== 0 ? formatCurrency(booking.finalDiscrepancyTotal) : "-"}
-                  </div>
-                  <div>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={disputeAdjEdits[booking.bookingId] !== undefined ? disputeAdjEdits[booking.bookingId] : (booking.disputeAdjustment ?? "")}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "") {
-                          setDisputeAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                        } else {
-                          const num = parseFloat(v);
-                          if (!isNaN(num)) setDisputeAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
-                        }
-                      }}
-                      placeholder="0"
-                      className="h-6 text-[10px] font-mono text-right cursor-text"
-                      data-testid={`modal-input-dispute-adj-${booking.bookingId}`}
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.discrepancyAmount ?? "")}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "") {
-                          setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                        } else {
-                          const num = parseFloat(v);
-                          if (!isNaN(num)) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
-                        }
-                      }}
-                      placeholder="0"
-                      className="h-6 text-[10px] font-mono text-right cursor-text"
-                      data-testid={`modal-input-discrepancy-adj-${booking.bookingId}`}
-                    />
-                  </div>
-                  <div className="text-right font-mono font-semibold" data-testid={`modal-final-dispute-amt-${booking.bookingId}`}>
-                    {(() => {
-                      const disputed = booking.disputedAmount ?? 0;
-                      const dAdj = disputeAdjEdits[booking.bookingId] !== undefined ? disputeAdjEdits[booking.bookingId] : (booking.disputeAdjustment ?? 0);
-                      const discAdj = discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.discrepancyAmount ?? 0);
-                      const finalVal = disputed - dAdj - discAdj;
-                      return finalVal !== 0 ? formatCurrency(finalVal) : "-";
-                    })()}
-                  </div>
-                  <div>
-                    <Select
-                      value={statusVal}
-                      onValueChange={(v) => setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: v }))}
-                    >
-                      <SelectTrigger className="h-6 text-[10px]" data-testid={`modal-select-dispute-status-${booking.bookingId}`}>
-                        <SelectValue placeholder="-" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="OPEN">OPEN</SelectItem>
-                        <SelectItem value="CLOSED">CLOSED</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Input
-                      type="text"
-                      value={ticketIdEdits[booking.bookingId] !== undefined ? ticketIdEdits[booking.bookingId] : (booking.adjustedInTicketId ?? "")}
-                      onChange={(e) => setTicketIdEdits(prev => ({ ...prev, [booking.bookingId]: e.target.value }))}
-                      placeholder="-"
-                      className="h-6 text-[10px] font-mono cursor-text"
-                      data-testid={`modal-input-ticket-id-${booking.bookingId}`}
-                    />
-                  </div>
-                  <div className="text-right font-mono font-semibold" data-testid={`modal-net-payable-${booking.bookingId}`}>
-                    {formatCurrency(totalPayable - (booking.amountPaid || 0))}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
 
+          {/* Summary Footer */}
           <div className="flex items-center justify-between p-3 rounded-md bg-muted/30 border text-xs">
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <div>
                 <span className="text-muted-foreground">Total Payable: </span>
                 <span className="font-mono font-semibold">{formatCurrency(amountPaidBookings.reduce((s, b) => s + getAmountPaidTotal(b), 0))} {currency}</span>
@@ -4435,6 +4553,23 @@ export function AmountPayablePanel({
               <div>
                 <span className="text-muted-foreground">Net Payable: </span>
                 <span className="font-mono font-semibold">{formatCurrency(amountPaidBookings.reduce((s, b) => s + (getAmountPaidTotal(b) - (b.amountPaid || 0)), 0))} {currency}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Total Final Dispute Amt: </span>
+                <span className={`font-mono font-semibold ${(() => {
+                  const total = amountPaidBookings.reduce((s, b) => {
+                    const dAdj = disputeAdjEdits[b.bookingId] !== undefined ? disputeAdjEdits[b.bookingId] : (b.disputeAdjustment ?? 0);
+                    const discAdj = discrepancyAdjEdits[b.bookingId] !== undefined ? discrepancyAdjEdits[b.bookingId] : (b.discrepancyAmount ?? 0);
+                    return s + ((b.disputedAmount ?? 0) - dAdj - discAdj);
+                  }, 0);
+                  return total < 0 ? "text-red-600 dark:text-red-400" : "";
+                })()}`}>
+                  {formatCurrency(amountPaidBookings.reduce((s, b) => {
+                    const dAdj = disputeAdjEdits[b.bookingId] !== undefined ? disputeAdjEdits[b.bookingId] : (b.disputeAdjustment ?? 0);
+                    const discAdj = discrepancyAdjEdits[b.bookingId] !== undefined ? discrepancyAdjEdits[b.bookingId] : (b.discrepancyAmount ?? 0);
+                    return s + ((b.disputedAmount ?? 0) - dAdj - discAdj);
+                  }, 0))} {currency}
+                </span>
               </div>
             </div>
           </div>
