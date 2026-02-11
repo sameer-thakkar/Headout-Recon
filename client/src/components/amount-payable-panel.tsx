@@ -4217,7 +4217,7 @@ export function AmountPayablePanel({
               <div className="text-right">Total Payable</div>
               <div className="text-right">Amt Paid</div>
               <div className="text-right">Disputed Amt</div>
-              <div className="text-right">Dispute Adj Total</div>
+              <div className="text-right">Dispute Adjusted Total</div>
               <div className="text-right">Discrepancy Adjusted Total</div>
               <div className="text-right">Dispute Adj</div>
               <div>Status</div>
