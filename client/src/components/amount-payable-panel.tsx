@@ -92,6 +92,7 @@ export function AmountPayablePanel({
   const [discrepancyAdjEdits, setDiscrepancyAdjEdits] = useState<Record<string, number>>({});
   const [ticketIdEdits, setTicketIdEdits] = useState<Record<string, string>>({});
   const [disputeStatusEdits, setDisputeStatusEdits] = useState<Record<string, string>>({});
+  const [creatingDisputeFor, setCreatingDisputeFor] = useState<Record<string, number | null>>({});
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
@@ -3312,8 +3313,8 @@ export function AmountPayablePanel({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t overflow-x-auto overflow-y-hidden">
-                      <div className="min-w-[2020px]">
-                        <div className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                      <div className="min-w-[2120px]">
+                        <div className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                           <div>Booking ID</div>
                           <div>Reason</div>
                           <div className="text-right">HO Net</div>
@@ -3333,6 +3334,7 @@ export function AmountPayablePanel({
                           <div className="text-right">Final Dispute Amt</div>
                           <div>Dispute Status</div>
                           <div className="text-right">Net Price Payable</div>
+                          <div className="text-center">Action</div>
                         </div>
                         <div className="max-h-80 overflow-y-auto">
                           {amountPaidBookings.map((booking) => {
@@ -3341,7 +3343,7 @@ export function AmountPayablePanel({
                             return (
                               <div 
                                 key={booking.bookingId}
-                                className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px] gap-1 px-3 py-1.5 text-xs border-t items-center"
+                                className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
                                 data-testid={`amount-paid-row-${booking.bookingId}`}
                               >
                                 <div className="font-mono truncate" title={booking.bookingId}>
@@ -3473,6 +3475,69 @@ export function AmountPayablePanel({
                                 </div>
                                 <div className="text-right font-mono font-semibold" data-testid={`net-price-payable-${booking.bookingId}`}>
                                   {formatCurrency(totalPayable - (booking.amountPaid || 0))}
+                                </div>
+                                <div className="flex justify-center">
+                                  {(() => {
+                                    const hasExistingDispute = (booking.disputedAmount != null && booking.disputedAmount !== 0) || creatingDisputeFor[booking.bookingId] !== undefined;
+                                    if (creatingDisputeFor[booking.bookingId] !== undefined) {
+                                      return (
+                                        <div className="flex items-center gap-1">
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            autoFocus
+                                            placeholder="Amt"
+                                            className="h-6 w-16 text-xs font-mono text-right px-1"
+                                            onChange={(e) => {
+                                              const v = parseFloat(e.target.value);
+                                              setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: isNaN(v) ? null : v }));
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Escape") {
+                                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                                              }
+                                            }}
+                                            data-testid={`input-create-dispute-amt-${booking.bookingId}`}
+                                          />
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            onClick={() => {
+                                              const amt = creatingDisputeFor[booking.bookingId];
+                                              if (amt != null && amt !== 0) {
+                                                booking.disputedAmount = amt;
+                                                setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
+                                              }
+                                              setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                                            }}
+                                            data-testid={`btn-confirm-dispute-${booking.bookingId}`}
+                                          >
+                                            <Check className="h-3 w-3" />
+                                          </Button>
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            onClick={() => setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; })}
+                                            data-testid={`btn-cancel-dispute-${booking.bookingId}`}
+                                          >
+                                            <X className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={hasExistingDispute}
+                                        onClick={() => setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: null }))}
+                                        data-testid={`btn-create-dispute-${booking.bookingId}`}
+                                      >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        Dispute
+                                      </Button>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             );
