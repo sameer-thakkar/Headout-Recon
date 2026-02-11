@@ -1306,13 +1306,13 @@ export async function registerRoutes(
         
         // 3-6. Dispute-related columns
         const dispute = disputesByBooking.get(bookingId);
-        const disputedAmount = dispute?.disputeAmount ?? "";
+        const disputedAmount = dispute?.disputeAmount ?? reconRow?.disputedAmount ?? "";
         const adjustedInTicketId = dispute?.adjustedInTicketId || "";
         const closedByAmount = dispute?.closedByAdjustmentAmount ?? 0;
-        // 6. Dispute status - OPEN or CLOSED
+        // 6. Dispute status - OPEN or CLOSED (fall back to uploaded file values)
         const disputeStatus = dispute 
           ? (dispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
-          : "";
+          : (reconRow?.disputeStatus || "");
         
         // 7. Reconciled Net price - HO Net + Final Dispute when CLOSED
         const finalDisputeForRecon = dispute 
