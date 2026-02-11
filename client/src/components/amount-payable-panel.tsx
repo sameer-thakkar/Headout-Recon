@@ -506,7 +506,9 @@ export function AmountPayablePanel({
   }, [paymentMismatchBookings, secondaryVendorBookings]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
-    // Reconciled bookings always use SP Net
+    if (amountPaidTotals[booking.bookingId] !== undefined) {
+      return amountPaidTotals[booking.bookingId];
+    }
     if (booking.reason === "Reconciled" || booking.reason === "Unmapped") {
       const amtPaid = booking.amountPaid || 0;
       return booking.spNet - amtPaid;
@@ -516,7 +518,7 @@ export function AmountPayablePanel({
     const amtPaid = booking.amountPaid || 0;
     
     return pricePayable - amtPaid;
-  }, [localSelections, activeDisputes, disputeAmounts]);
+  }, [localSelections, activeDisputes, disputeAmounts, amountPaidTotals]);
 
   const getReasonTotal = useCallback((reason: string): number => {
     const reasonBookings = bookingsByReason[reason] || [];
@@ -657,6 +659,11 @@ export function AmountPayablePanel({
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      delete next[bookingId];
+      return next;
+    });
     if (value === "ho") {
       setActiveDisputes(prev => {
         const newSet = new Set(prev);
@@ -679,6 +686,13 @@ export function AmountPayablePanel({
         newSelections[b.bookingId] = value;
       }
       return newSelections;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of reasonBookings) {
+        delete next[b.bookingId];
+      }
+      return next;
     });
     if (value === "ho") {
       setActiveDisputes(prev => {
@@ -706,6 +720,13 @@ export function AmountPayablePanel({
         newSelections[b.bookingId] = value;
       }
       return newSelections;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of tidBookings) {
+        delete next[b.bookingId];
+      }
+      return next;
     });
     if (value === "ho") {
       setActiveDisputes(prev => {
@@ -735,6 +756,13 @@ export function AmountPayablePanel({
       }
       return newSelections;
     });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of reasonBookings) {
+        delete next[b.bookingId];
+      }
+      return next;
+    });
     if (value === "ho") {
       setActiveDisputes(prev => {
         const newSet = new Set(prev);
@@ -761,6 +789,13 @@ export function AmountPayablePanel({
         newSelections[b.bookingId] = value;
       }
       return newSelections;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of tidBookings) {
+        delete next[b.bookingId];
+      }
+      return next;
     });
     if (value === "ho") {
       setActiveDisputes(prev => {
@@ -883,6 +918,13 @@ export function AmountPayablePanel({
         newSelections[b.bookingId] = value;
       }
       return newSelections;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of reasonBookings) {
+        delete next[b.bookingId];
+      }
+      return next;
     });
     if (value === "ho") {
       setActiveDisputes(prev => {
@@ -2371,24 +2413,7 @@ export function AmountPayablePanel({
                                                   <Select
                                                     value={netType}
                                                     onValueChange={(v) => {
-                                                      const newValue = v as "ho" | "sp";
-                                                      setLocalSelections((prev) => ({
-                                                        ...prev,
-                                                        [booking.bookingId]: newValue,
-                                                      }));
-                                                      // Clear dispute when switching to HO
-                                                      if (newValue === "ho") {
-                                                        setActiveDisputes((prev) => {
-                                                          const newSet = new Set(prev);
-                                                          newSet.delete(booking.bookingId);
-                                                          return newSet;
-                                                        });
-                                                        setDisputeAmounts((prev) => {
-                                                          const updated = new Map(prev);
-                                                          updated.delete(booking.bookingId);
-                                                          return updated;
-                                                        });
-                                                      }
+                                                      updateSelection(booking.bookingId, v as "ho" | "sp", booking);
                                                     }}
                                                   >
                                                     <SelectTrigger className="w-16 h-6 text-xs">
