@@ -4207,7 +4207,28 @@ export function AmountPayablePanel({
       </Dialog>
 
       {/* Consolidated Manage Disputes Modal */}
-      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setBulkDisputeAdj(""); setBulkDiscrepancyAdj(""); setBulkTicketId(""); setModalSearchQuery(""); setBulkActionsExpanded(false); setIsAmountPaidModalOpen(false); } }}>
+      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { 
+        if (runId) {
+          const overrides: Record<string, { disputeAdj?: number; discrepancyAdj?: number; finalDispute?: number; ticketId?: string; status?: string }> = {};
+          for (const b of amountPaidBookings) {
+            const hasAnyData = (b.disputedAmount != null && b.disputedAmount !== 0) || 
+              (b.disputeAdjustment != null) || (b.discrepancyAmount != null) || 
+              (b.disputeStatus != null && b.disputeStatus !== "") ||
+              disputeAdjEdits[b.bookingId] !== undefined || discrepancyAdjEdits[b.bookingId] !== undefined ||
+              ticketIdEdits[b.bookingId] !== undefined || disputeStatusEdits[b.bookingId] !== undefined;
+            if (!hasAnyData) continue;
+            const dAdj = disputeAdjEdits[b.bookingId] !== undefined ? disputeAdjEdits[b.bookingId] : (b.disputeAdjustment ?? 0);
+            const discAdj = discrepancyAdjEdits[b.bookingId] !== undefined ? discrepancyAdjEdits[b.bookingId] : (b.discrepancyAmount ?? 0);
+            const finalD = (b.disputedAmount ?? 0) - dAdj - discAdj;
+            const tId = ticketIdEdits[b.bookingId] !== undefined ? ticketIdEdits[b.bookingId] : (b.adjustedInTicketId ?? "");
+            const st = disputeStatusEdits[b.bookingId] ?? b.disputeStatus ?? "";
+            overrides[b.bookingId] = { disputeAdj: dAdj, discrepancyAdj: discAdj, finalDispute: finalD, ticketId: tId, status: st };
+          }
+          if (Object.keys(overrides).length > 0) {
+            apiRequest("POST", "/api/dispute-overrides", { runId, overrides }).catch(console.error);
+          }
+        }
+        setBulkDisputeAdj(""); setBulkDiscrepancyAdj(""); setBulkTicketId(""); setModalSearchQuery(""); setBulkActionsExpanded(false); setIsAmountPaidModalOpen(false); } }}>
         <DialogContent className="max-w-7xl max-h-[85vh] flex flex-col" data-testid="dialog-manage-disputes">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

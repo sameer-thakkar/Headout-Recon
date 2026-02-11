@@ -621,12 +621,14 @@ export async function registerRoutes(
       const originalHoData = upload?.hoData?.rows || [];
       const originalSpData = upload?.spData?.rows || [];
 
-      // Get disputes and vendor corrections for populating HO Report columns
+      // Get disputes, dispute overrides, and vendor corrections for populating HO Report columns
       const allDisputes = await storage.getDisputes(runId);
       const disputesByBooking = new Map<string, typeof allDisputes[0]>();
       for (const d of allDisputes) {
         disputesByBooking.set(d.bookingId, d);
       }
+      
+      const disputeOverrides = await storage.getDisputeOverrides(runId);
       
       const vendorCorrections = await storage.getVendorCorrections(runId);
       const vendorCorrectionsByBooking = new Map<string, string>();
@@ -1306,13 +1308,19 @@ export async function registerRoutes(
         
         // 3-6. Dispute-related columns
         const dispute = disputesByBooking.get(bookingId);
-        const disputedAmount = dispute?.disputeAmount ?? reconRow?.disputedAmount ?? "";
-        const adjustedInTicketId = dispute?.adjustedInTicketId || "";
+        const override = disputeOverrides[bookingId];
+        
+        // Use override values if present, otherwise fall back to dispute DB / reconRow
+        const disputeAdjAmount = override?.disputeAdj ?? "";
+        const discrepancyAdjAmount = override?.discrepancyAdj ?? "";
+        const disputedAmount = override?.finalDispute ?? dispute?.disputeAmount ?? reconRow?.disputedAmount ?? "";
+        const adjustedInTicketId = override?.ticketId ?? dispute?.adjustedInTicketId ?? "";
         const closedByAmount = dispute?.closedByAdjustmentAmount ?? 0;
-        // 6. Dispute status - OPEN or CLOSED (fall back to uploaded file values)
-        const disputeStatus = dispute 
-          ? (dispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
-          : (reconRow?.disputeStatus || "");
+        // 6. Dispute status - override > dispute DB > uploaded file
+        const disputeStatus = override?.status 
+          ?? (dispute 
+            ? (dispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
+            : (reconRow?.disputeStatus || ""));
         
         // 7. Reconciled Net price - HO Net + Final Dispute when CLOSED
         const finalDisputeForRecon = dispute 
@@ -1466,6 +1474,12 @@ export async function registerRoutes(
           } else if (keyLower === "ticketid" || keyLower === "ticket id" || keyLower === "ticket_id") {
             newRow[key] = ticketIdValue;
             hasAnyReconCol = true;
+          } else if (keyLower === "disputeadjustment" || keyLower === "dispute adjustment" || keyLower === "dispute_adjustment") {
+            newRow[key] = disputeAdjAmount;
+            hasAnyReconCol = true;
+          } else if (keyLower === "discrepancyamount" || keyLower === "discrepancy amount" || keyLower === "discrepancy_amount") {
+            newRow[key] = discrepancyAdjAmount;
+            hasAnyReconCol = true;
           } else if (keyLower === "disputedamount" || keyLower === "disputed amount" || keyLower === "disputed_amount") {
             newRow[key] = disputedAmount;
             hasAnyReconCol = true;
@@ -1508,6 +1522,8 @@ export async function registerRoutes(
         if (!hasAnyReconCol) {
           newRow["finalVendorId"] = finalVendorIdValue;
           newRow["Ticket ID"] = ticketIdValue;
+          newRow["Dispute adjustment"] = disputeAdjAmount;
+          newRow["Discrepancy amount"] = discrepancyAdjAmount;
           newRow["Disputed amount"] = disputedAmount;
           newRow["Adjusted in Ticket ID"] = adjustedInTicketId;
           newRow["Dispute status"] = disputeStatus;
@@ -1534,7 +1550,8 @@ export async function registerRoutes(
       const appendCols = [
         "SP Net", "Difference", "Difference %",
         "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss",
-        "finalVendorId", "Ticket ID", "Disputed amount", "Adjusted in Ticket ID",
+        "finalVendorId", "Ticket ID", "Dispute adjustment", "Discrepancy amount",
+        "Disputed amount", "Adjusted in Ticket ID",
         "Dispute status", "Reconciled Net price"
       ];
       for (const col of appendCols) {
@@ -2208,6 +2225,14 @@ export async function registerRoutes(
       }
       const spFxMap = new Map(result.spFxDebugRows.map(r => [r.bookingId, r]));
 
+      // Get disputes and dispute overrides for HO Report columns
+      const gsAllDisputes = await storage.getDisputes(runId);
+      const gsDisputesByBooking = new Map<string, typeof gsAllDisputes[0]>();
+      for (const d of gsAllDisputes) {
+        gsDisputesByBooking.set(d.bookingId, d);
+      }
+      const gsDisputeOverrides = await storage.getDisputeOverrides(runId);
+
       // Get Google Sheets client
       const sheets = await getUncachableGoogleSheetClient();
 
@@ -2591,6 +2616,25 @@ export async function registerRoutes(
         // Get the comment from reconciliation (for cancellation scenarios)
         const reconComment = reconRow?.comment || "";
         
+        // Dispute column values (matching Excel export logic)
+        const gsDispute = gsDisputesByBooking.get(bookingId);
+        const gsOverride = gsDisputeOverrides[bookingId];
+        const gsDisputeAdjAmount = gsOverride?.disputeAdj ?? "";
+        const gsDiscrepancyAdjAmount = gsOverride?.discrepancyAdj ?? "";
+        const gsDisputedAmount = gsOverride?.finalDispute ?? gsDispute?.disputeAmount ?? reconRow?.disputedAmount ?? "";
+        const gsAdjustedInTicketId = gsOverride?.ticketId ?? gsDispute?.adjustedInTicketId ?? "";
+        const gsDisputeStatus = gsOverride?.status 
+          ?? (gsDispute 
+            ? (gsDispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
+            : (reconRow?.disputeStatus || ""));
+        const gsClosedByAmount = gsDispute?.closedByAdjustmentAmount ?? 0;
+        const gsFinalDisputeForRecon = gsDispute 
+          ? (gsDispute.disputeAmount - gsClosedByAmount)
+          : null;
+        const gsReconciledNetPrice = gsDispute && gsDispute.closureStatus === "closed" && typeof gsFinalDisputeForRecon === "number"
+          ? hoNet + gsFinalDisputeForRecon
+          : "";
+        
         if (isSecondary) {
           finalNetPrice = 0;
           comments = "Duplicate Fulfillment";
@@ -2684,6 +2728,18 @@ export async function registerRoutes(
             value = String(comments);
           } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
             value = String(chargedLoss);
+          } else if (keyNorm === "disputeadjustment" || keyLower === "dispute adjustment") {
+            value = typeof gsDisputeAdjAmount === "number" ? formatIndianNumber(gsDisputeAdjAmount) : gsDisputeAdjAmount;
+          } else if (keyNorm === "discrepancyamount" || keyLower === "discrepancy amount") {
+            value = typeof gsDiscrepancyAdjAmount === "number" ? formatIndianNumber(gsDiscrepancyAdjAmount) : gsDiscrepancyAdjAmount;
+          } else if (keyNorm === "disputedamount" || keyLower === "disputed amount") {
+            value = typeof gsDisputedAmount === "number" ? formatIndianNumber(gsDisputedAmount) : gsDisputedAmount;
+          } else if (keyNorm === "adjustedinticketid" || keyLower === "adjusted in ticket id") {
+            value = String(gsAdjustedInTicketId || "");
+          } else if (keyNorm === "disputestatus" || keyLower === "dispute status") {
+            value = String(gsDisputeStatus || "");
+          } else if (keyNorm === "reconcilednetprice" || keyLower === "reconciled net price") {
+            value = typeof gsReconciledNetPrice === "number" ? formatIndianNumber(gsReconciledNetPrice) : gsReconciledNetPrice;
           } else if (keyLower === "honet" || keyLower === "ho net" || keyLower === "ho_net") {
             value = typeof value === "number" ? formatIndianNumber(value) : value;
           } else if (keyLower.includes("date") && value) {
@@ -3494,6 +3550,20 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Get disputes error:", error);
       res.status(500).json({ error: "Failed to fetch disputes" });
+    }
+  });
+
+  app.post("/api/dispute-overrides", async (req, res) => {
+    try {
+      const { runId, overrides } = req.body;
+      if (!runId || !overrides || typeof overrides !== "object") {
+        return res.status(400).json({ error: "runId and overrides required" });
+      }
+      await storage.setDisputeOverrides(runId, overrides);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Set dispute overrides error:", error);
+      res.status(500).json({ error: "Failed to save dispute overrides" });
     }
   });
 

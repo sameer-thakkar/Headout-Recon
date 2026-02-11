@@ -78,6 +78,18 @@ export interface IStorage {
   bulkCreatePaxTypes(names: string[]): Promise<PaxType[]>;
   deletePaxType(id: number): Promise<boolean>;
   deleteAllPaxTypes(): Promise<boolean>;
+
+  // Dispute Overrides (per-run, per-booking edits from Manage Disputes modal)
+  setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void>;
+  getDisputeOverrides(runId: string): Promise<Record<string, DisputeOverride>>;
+}
+
+export interface DisputeOverride {
+  disputeAdj?: number;
+  discrepancyAdj?: number;
+  finalDispute?: number;
+  ticketId?: string;
+  status?: string;
 }
 
 export class MemStorage implements IStorage {
@@ -94,6 +106,7 @@ export class MemStorage implements IStorage {
   private vendorBalances: Map<string, VendorBalance> = new Map(); // key: beId
   private paxTypesList: PaxType[] = [];
   private paxTypeCounter: number = 0;
+  private disputeOverrides: Map<string, Record<string, DisputeOverride>> = new Map();
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -412,6 +425,15 @@ export class MemStorage implements IStorage {
   async deleteAllPaxTypes(): Promise<boolean> {
     this.paxTypesList = [];
     return true;
+  }
+
+  async setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void> {
+    const existing = this.disputeOverrides.get(runId) || {};
+    this.disputeOverrides.set(runId, { ...existing, ...overrides });
+  }
+
+  async getDisputeOverrides(runId: string): Promise<Record<string, DisputeOverride>> {
+    return this.disputeOverrides.get(runId) || {};
   }
 }
 
@@ -1112,6 +1134,17 @@ export class DatabaseStorage implements ISessionStorage {
   async deleteAllPaxTypes(): Promise<boolean> {
     await db.delete(paxTypesTable);
     return true;
+  }
+
+  private disputeOverridesCache: Map<string, Record<string, DisputeOverride>> = new Map();
+
+  async setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void> {
+    const existing = this.disputeOverridesCache.get(runId) || {};
+    this.disputeOverridesCache.set(runId, { ...existing, ...overrides });
+  }
+
+  async getDisputeOverrides(runId: string): Promise<Record<string, DisputeOverride>> {
+    return this.disputeOverridesCache.get(runId) || {};
   }
 }
 
