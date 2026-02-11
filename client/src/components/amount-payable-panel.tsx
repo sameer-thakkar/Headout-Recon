@@ -3311,8 +3311,8 @@ export function AmountPayablePanel({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t overflow-x-auto overflow-y-hidden">
-                      <div className="min-w-[1900px]">
-                        <div className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                      <div className="min-w-[2020px]">
+                        <div className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                           <div>Booking ID</div>
                           <div>Reason</div>
                           <div className="text-right">HO Net</div>
@@ -3331,6 +3331,7 @@ export function AmountPayablePanel({
                           <div className="bg-border/60 mx-1" />
                           <div className="text-right">Final Dispute Amt</div>
                           <div>Dispute Status</div>
+                          <div className="text-right">Net Price Payable</div>
                         </div>
                         <div className="max-h-80 overflow-y-auto">
                           {amountPaidBookings.map((booking) => {
@@ -3339,7 +3340,7 @@ export function AmountPayablePanel({
                             return (
                               <div 
                                 key={booking.bookingId}
-                                className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
+                                className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px] gap-1 px-3 py-1.5 text-xs border-t items-center"
                                 data-testid={`amount-paid-row-${booking.bookingId}`}
                               >
                                 <div className="font-mono truncate" title={booking.bookingId}>
@@ -3461,6 +3462,9 @@ export function AmountPayablePanel({
                                       {booking.disputeStatus}
                                     </Badge>
                                   ) : "-"}
+                                </div>
+                                <div className="text-right font-mono font-semibold" data-testid={`net-price-payable-${booking.bookingId}`}>
+                                  {formatCurrency(totalPayable - (booking.amountPaid || 0))}
                                 </div>
                               </div>
                             );
