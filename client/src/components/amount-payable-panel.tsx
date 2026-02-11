@@ -89,10 +89,12 @@ export function AmountPayablePanel({
   const [amountPaidTotals, setAmountPaidTotals] = useState<Record<string, number>>({});
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const [disputeAdjEdits, setDisputeAdjEdits] = useState<Record<string, number>>({});
+  const [discrepancyAdjEdits, setDiscrepancyAdjEdits] = useState<Record<string, number>>({});
   const [ticketIdEdits, setTicketIdEdits] = useState<Record<string, string>>({});
   const [disputeStatusEdits, setDisputeStatusEdits] = useState<Record<string, string>>({});
   const [isAmountPaidModalOpen, setIsAmountPaidModalOpen] = useState(false);
   const [bulkDisputeAdj, setBulkDisputeAdj] = useState("");
+  const [bulkDiscrepancyAdj, setBulkDiscrepancyAdj] = useState("");
   const [bulkTicketId, setBulkTicketId] = useState("");
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
@@ -4128,7 +4130,7 @@ export function AmountPayablePanel({
       </Dialog>
 
       {/* Consolidated Manage Disputes Modal */}
-      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setBulkDisputeAdj(""); setBulkTicketId(""); setIsAmountPaidModalOpen(false); } }}>
+      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setBulkDisputeAdj(""); setBulkDiscrepancyAdj(""); setBulkTicketId(""); setIsAmountPaidModalOpen(false); } }}>
         <DialogContent className="max-w-7xl max-h-[85vh] flex flex-col" data-testid="dialog-manage-disputes">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -4203,6 +4205,47 @@ export function AmountPayablePanel({
               </div>
             </div>
             <div className="flex-1 min-w-[140px]">
+              <div className="text-xs text-muted-foreground mb-1">Set All Discrepancy Adj</div>
+              <div className="flex gap-1">
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Amount"
+                  value={bulkDiscrepancyAdj}
+                  onChange={(e) => setBulkDiscrepancyAdj(e.target.value)}
+                  className="h-8 text-xs font-mono text-right cursor-text"
+                  data-testid="bulk-input-discrepancy-adj"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const val = parseFloat(bulkDiscrepancyAdj);
+                      if (!isNaN(val)) {
+                        const updates: Record<string, number> = {};
+                        amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
+                        setDiscrepancyAdjEdits(prev => ({ ...prev, ...updates }));
+                        setBulkDiscrepancyAdj("");
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const val = parseFloat(bulkDiscrepancyAdj);
+                    if (!isNaN(val)) {
+                      const updates: Record<string, number> = {};
+                      amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
+                      setDiscrepancyAdjEdits(prev => ({ ...prev, ...updates }));
+                      setBulkDiscrepancyAdj("");
+                    }
+                  }}
+                  data-testid="bulk-btn-apply-discrepancy-adj"
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 min-w-[140px]">
               <div className="text-xs text-muted-foreground mb-1">Set All Ticket ID</div>
               <div className="flex gap-1">
                 <Input
@@ -4243,6 +4286,7 @@ export function AmountPayablePanel({
               variant="outline"
               onClick={() => {
                 setDisputeAdjEdits({});
+                setDiscrepancyAdjEdits({});
                 setTicketIdEdits({});
                 setDisputeStatusEdits({});
               }}
@@ -4254,7 +4298,7 @@ export function AmountPayablePanel({
           </div>
 
           <div className="flex-1 overflow-auto border rounded-md">
-            <div className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_80px_80px_90px] gap-1.5 px-2 py-1.5 bg-muted/30 text-[11px] font-medium text-muted-foreground sticky top-0 z-10 border-b">
+            <div className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_80px_80px_90px] gap-1.5 px-2 py-1.5 bg-muted/30 text-[11px] font-medium text-muted-foreground sticky top-0 z-10 border-b">
               <div>Booking ID</div>
               <div className="text-right">HO Net</div>
               <div className="text-right">SP Net</div>
@@ -4264,6 +4308,7 @@ export function AmountPayablePanel({
               <div className="text-right">Dispute Adjusted Total</div>
               <div className="text-right">Discrepancy Adjusted Total</div>
               <div className="text-right">Dispute Adj</div>
+              <div className="text-right">Discrepancy Adj</div>
               <div>Status</div>
               <div className="text-right">Ticket ID</div>
               <div className="text-right">Net Payable</div>
@@ -4276,7 +4321,7 @@ export function AmountPayablePanel({
               return (
                 <div
                   key={booking.bookingId}
-                  className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_80px_80px_90px] gap-1.5 px-2 py-1 text-xs border-t items-center"
+                  className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_80px_80px_90px] gap-1.5 px-2 py-1 text-xs border-t items-center"
                   data-testid={`modal-row-${booking.bookingId}`}
                 >
                   <div className="font-mono truncate" title={booking.bookingId}>
@@ -4314,6 +4359,25 @@ export function AmountPayablePanel({
                       placeholder="0"
                       className="h-6 text-[10px] font-mono text-right cursor-text"
                       data-testid={`modal-input-dispute-adj-${booking.bookingId}`}
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.discrepancyAmount ?? "")}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "") {
+                          setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                        } else {
+                          const num = parseFloat(v);
+                          if (!isNaN(num)) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
+                        }
+                      }}
+                      placeholder="0"
+                      className="h-6 text-[10px] font-mono text-right cursor-text"
+                      data-testid={`modal-input-discrepancy-adj-${booking.bookingId}`}
                     />
                   </div>
                   <div>
