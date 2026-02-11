@@ -238,7 +238,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       experienceDate: convertedExpDate,
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
       amountPaid: (() => {
-        const rawVal = getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid", "Amount Paid Till Date", "Amount paid till date", "amount_paid_till_date", "AmountPaidTillDate");
+        const rawVal = getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid", "Amount Paid Till Date", "Amount paid till date", "amount_paid_till_date", "AmountPaidTillDate", "Amount paid tll date");
         const bookingIdVal = getRowValue(row, "bookingId", "Booking ID", "booking_id", "BookingID", "bookingID", "booking id", "BID", "bid");
         if (rawVal) console.log(`[DEBUG] Booking ${bookingIdVal}: amountPaid raw="${rawVal}" parsed=${Number(rawVal)}`);
         return Number(rawVal) || undefined;
