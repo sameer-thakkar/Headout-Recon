@@ -1176,7 +1176,8 @@ export async function registerRoutes(
       // SHEET 4: HO Report Updated
       // =====================================================
       // Original HO data with SP Net, Difference, Difference % inserted before finalNetPrice
-      // Update finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
+      // Update Total Amount Payable, errorTeamAttribution, errorBucket, comments based on reason
+      // finalNetPrice column is preserved as-is from original data
       
       // Parse date value safely - same logic as reconciliation.ts
       // Handles ISO dates, Excel serial numbers, and DD/MM/YYYY format
@@ -1417,7 +1418,6 @@ export async function registerRoutes(
         const newRow: Record<string, unknown> = {};
         
         // Track which columns exist in original so we know what to append
-        let hasFinNetCol = false;
         let hasErrorTeamCol = false;
         let hasErrorBucketCol = false;
         let hasCommentsCol = false;
@@ -1437,8 +1437,7 @@ export async function registerRoutes(
           if (isTotalAmountPayableCol(key)) {
             newRow[key] = totalAmountPayable;
           } else if (isFinalNetCol(key)) {
-            newRow[key] = finalNetPrice;
-            hasFinNetCol = true;
+            newRow[key] = row[key];
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
             newRow[key] = errorTeamAttribution;
             hasErrorTeamCol = true;
@@ -1485,9 +1484,6 @@ export async function registerRoutes(
         newRow["Difference"] = difference;
         newRow["Difference %"] = differencePercent;
         
-        if (!hasFinNetCol) {
-          newRow["finalNetPrice"] = finalNetPrice;
-        }
         if (!hasErrorTeamCol) {
           newRow["errorTeamAttribution"] = errorTeamAttribution;
         }
@@ -2482,7 +2478,8 @@ export async function registerRoutes(
 
       // ===== Sheet 4: HO Report Updated (enriched) - matching Excel format =====
       // Uses original HO data with SP Net, Difference, Difference % inserted before finalNetPrice
-      // Updates finalNetPrice, errorTeamAttribution, errorBucket, comments based on reason
+      // Updates Total Amount Payable, errorTeamAttribution, errorBucket, comments based on reason
+      // finalNetPrice column is preserved as-is from original data
       
       // Parse date value safely - same logic as Excel export
       const gsParseDate = (dateValue: string | number | null | undefined): number => {
@@ -2553,7 +2550,7 @@ export async function registerRoutes(
         gsHeaderRow.push(key);
       }
       if (!gsInsertedNewCols) {
-        gsHeaderRow.push("SP Net", "Difference", "Difference %", "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss");
+        gsHeaderRow.push("SP Net", "Difference", "Difference %", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss");
       }
       
       const hoReportData: (string | number | null)[][] = [gsHeaderRow];
@@ -2673,8 +2670,6 @@ export async function registerRoutes(
           if (keyNorm === "totalamountpayable") {
             const gsTotalAmountPayable = reason === "Reconciled" ? spNet : finalNetPrice;
             value = typeof gsTotalAmountPayable === "number" ? formatIndianNumber(gsTotalAmountPayable) : gsTotalAmountPayable;
-          } else if (gsIsFinalNetCol(key)) {
-            value = typeof finalNetPrice === "number" ? formatIndianNumber(finalNetPrice) : finalNetPrice;
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
             value = String(errorTeamAttribution);
           } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
@@ -2697,7 +2692,6 @@ export async function registerRoutes(
           dataRow.push(typeof spNet === "number" ? formatIndianNumber(spNet) : spNet);
           dataRow.push(typeof difference === "number" ? formatIndianNumber(difference) : difference);
           dataRow.push(differencePercent);
-          dataRow.push(typeof finalNetPrice === "number" ? formatIndianNumber(finalNetPrice) : finalNetPrice);
           dataRow.push(String(errorTeamAttribution));
           dataRow.push(String(errorBucket));
           dataRow.push(String(comments));
