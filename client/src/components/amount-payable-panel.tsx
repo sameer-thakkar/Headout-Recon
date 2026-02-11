@@ -3362,8 +3362,16 @@ export function AmountPayablePanel({
                               <div className="text-right font-mono">
                                 {formatCurrency(booking.spNet)}
                               </div>
-                              <div className="text-right font-mono">
-                                {formatCurrency(totalPayable)}
+                              <div className="text-right">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : totalPayable)}
+                                  onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                                  onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                                  className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
+                                  data-testid={`input-total-payable-${booking.bookingId}`}
+                                />
                               </div>
                               <div className="text-right font-mono text-blue-600 dark:text-blue-400">
                                 {booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"}
