@@ -236,7 +236,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
       experienceDate: convertedExpDate,
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
-      amountPaid: Number(getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid")) || undefined,
+      amountPaid: Number(getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid", "Amount Paid Till Date", "Amount paid till date", "amount_paid_till_date", "AmountPaidTillDate")) || undefined,
       disputeSettled: Number(getRowValue(row, "disputeSettled", "Dispute Settled", "dispute_settled", "DisputeSettled", "Dispute Amount Settled", "dispute_amount_settled")) || undefined,
     };
   });
