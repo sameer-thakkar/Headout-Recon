@@ -141,6 +141,7 @@ function getRowValue(row: Record<string, unknown>, ...columnNames: string[]): un
  */
 function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
   const rowKeys = sheet.rows.length > 0 ? Object.keys(sheet.rows[0]) : sheet.headers;
+  console.log("[DEBUG] HO Data column headers:", JSON.stringify(rowKeys));
   const normalizedKeys = rowKeys.map(k => k.toLowerCase().replace(/\s+/g, "_"));
   
   const detectedPaxColumns: { paxType: string; countKey: string | null; unitPriceKey: string | null; priceNetKey: string | null }[] = [];
@@ -236,7 +237,12 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       vid: getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id") ? String(getRowValue(row, "vid", "VID", "vendorId", "Vendor ID", "vendor_id")) : undefined,
       experienceDate: convertedExpDate,
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
-      amountPaid: Number(getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid", "Amount Paid Till Date", "Amount paid till date", "amount_paid_till_date", "AmountPaidTillDate")) || undefined,
+      amountPaid: (() => {
+        const rawVal = getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid", "Amount Paid Till Date", "Amount paid till date", "amount_paid_till_date", "AmountPaidTillDate");
+        const bookingIdVal = getRowValue(row, "bookingId", "Booking ID", "booking_id", "BookingID", "bookingID", "booking id", "BID", "bid");
+        if (rawVal) console.log(`[DEBUG] Booking ${bookingIdVal}: amountPaid raw="${rawVal}" parsed=${Number(rawVal)}`);
+        return Number(rawVal) || undefined;
+      })(),
       disputeSettled: Number(getRowValue(row, "disputeSettled", "Dispute Settled", "dispute_settled", "DisputeSettled", "Dispute Amount Settled", "dispute_amount_settled")) || undefined,
     };
   });
