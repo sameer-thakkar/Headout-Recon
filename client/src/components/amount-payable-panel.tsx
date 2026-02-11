@@ -4133,7 +4133,7 @@ export function AmountPayablePanel({
 
       {/* Consolidated Manage Disputes Modal */}
       <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setBulkDisputeAdj(""); setBulkDiscrepancyAdj(""); setBulkTicketId(""); setModalSearchQuery(""); setBulkActionsExpanded(false); setIsAmountPaidModalOpen(false); } }}>
-        <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col" data-testid="dialog-manage-disputes">
+        <DialogContent className="max-w-7xl max-h-[85vh] flex flex-col" data-testid="dialog-manage-disputes">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
