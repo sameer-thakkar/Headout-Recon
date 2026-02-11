@@ -3307,7 +3307,7 @@ export function AmountPayablePanel({
                   <CollapsibleContent>
                     <div className="border-t overflow-x-auto overflow-y-hidden">
                       <div className="min-w-[1600px]">
-                        <div className="grid grid-cols-[110px_100px_90px_90px_130px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                        <div className="grid grid-cols-[110px_100px_90px_130px_130px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                           <div>Booking ID</div>
                           <div>Reason</div>
                           <div className="text-right">HO Net</div>
@@ -3329,7 +3329,7 @@ export function AmountPayablePanel({
                             return (
                               <div 
                                 key={booking.bookingId}
-                                className="grid grid-cols-[110px_100px_90px_90px_130px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
+                                className="grid grid-cols-[110px_100px_90px_130px_130px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
                                 data-testid={`amount-paid-row-${booking.bookingId}`}
                               >
                                 <div className="font-mono truncate" title={booking.bookingId}>
@@ -3343,8 +3343,29 @@ export function AmountPayablePanel({
                                 <div className="text-right font-mono">
                                   {formatCurrency(booking.hoNet)}
                                 </div>
-                                <div className="text-right font-mono">
-                                  {formatCurrency(booking.spNet)}
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="font-mono">{formatCurrency(booking.spNet)}</span>
+                                  {(() => {
+                                    const currentVal = amountPaidTotals[booking.bookingId];
+                                    const isSpSelected = currentVal === booking.spNet;
+                                    const isHoSelected = currentVal === booking.hoNet || currentVal === undefined;
+                                    const label = isSpSelected ? "SP" : "HO";
+                                    return (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={`h-6 px-1.5 text-[10px] font-semibold min-w-0 ${isSpSelected ? 'border-green-400 dark:border-green-600 text-green-700 dark:text-green-400' : 'border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-400'}`}
+                                        onClick={() => {
+                                          const nextVal = isSpSelected ? booking.hoNet : booking.spNet;
+                                          setAmountPaidTotals(prev => ({ ...prev, [booking.bookingId]: nextVal }));
+                                          setRawInputValues(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                                        }}
+                                        data-testid={`button-toggle-net-${booking.bookingId}`}
+                                      >
+                                        {label}
+                                      </Button>
+                                    );
+                                  })()}
                                 </div>
                                 <div>
                                   <Input
