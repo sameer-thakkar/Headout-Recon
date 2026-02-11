@@ -3333,8 +3333,9 @@ export function AmountPayablePanel({
                           return (
                             <div 
                               key={booking.bookingId}
-                              className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px_60px] gap-2 px-3 py-1.5 text-xs border-t items-center"
+                              className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px_60px] gap-2 px-3 py-1.5 text-xs border-t items-center cursor-pointer hover-elevate"
                               data-testid={`amount-paid-row-${booking.bookingId}`}
+                              onClick={() => setSelectedAmountPaidBooking(booking)}
                             >
                               <div className="font-mono truncate" title={booking.bookingId}>
                                 {booking.bookingId}
@@ -3372,7 +3373,7 @@ export function AmountPayablePanel({
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  onClick={() => setSelectedAmountPaidBooking(booking)}
+                                  onClick={(e) => { e.stopPropagation(); setSelectedAmountPaidBooking(booking); }}
                                   data-testid={`btn-detail-${booking.bookingId}`}
                                 >
                                   <Eye className="h-4 w-4" />
