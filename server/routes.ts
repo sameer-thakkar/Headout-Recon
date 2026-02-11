@@ -1424,10 +1424,19 @@ export async function registerRoutes(
         let hasChargedLossCol = false;
         let hasAnyReconCol = false;
         
+        const isTotalAmountPayableCol = (k: string) => {
+          const kLower = k.toLowerCase().replace(/[\s_]+/g, "");
+          return kLower === "totalamountpayable";
+        };
+        
+        const totalAmountPayable = reason === "Reconciled" ? spNet : finalNetPrice;
+        
         for (const key of originalKeys) {
           const keyLower = key.toLowerCase();
           
-          if (isFinalNetCol(key)) {
+          if (isTotalAmountPayableCol(key)) {
+            newRow[key] = totalAmountPayable;
+          } else if (isFinalNetCol(key)) {
             newRow[key] = finalNetPrice;
             hasFinNetCol = true;
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
@@ -2659,8 +2668,12 @@ export async function registerRoutes(
           
           // Format value based on column type
           let value: string | number | null = row[key] as string | number | null;
+          const keyNorm = keyLower.replace(/[\s_]+/g, "");
           
-          if (gsIsFinalNetCol(key)) {
+          if (keyNorm === "totalamountpayable") {
+            const gsTotalAmountPayable = reason === "Reconciled" ? spNet : finalNetPrice;
+            value = typeof gsTotalAmountPayable === "number" ? formatIndianNumber(gsTotalAmountPayable) : gsTotalAmountPayable;
+          } else if (gsIsFinalNetCol(key)) {
             value = typeof finalNetPrice === "number" ? formatIndianNumber(finalNetPrice) : finalNetPrice;
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
             value = String(errorTeamAttribution);
