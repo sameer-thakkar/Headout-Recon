@@ -92,8 +92,6 @@ export function AmountPayablePanel({
   const [discrepancyAdjEdits, setDiscrepancyAdjEdits] = useState<Record<string, number>>({});
   const [ticketIdEdits, setTicketIdEdits] = useState<Record<string, string>>({});
   const [disputeStatusEdits, setDisputeStatusEdits] = useState<Record<string, string>>({});
-  const [creatingDisputeFor, setCreatingDisputeFor] = useState<Record<string, number | null>>({});
-  const [createdDisputes, setCreatedDisputes] = useState<Record<string, number>>({});
   const [isAmountPaidModalOpen, setIsAmountPaidModalOpen] = useState(false);
   const [bulkDisputeAdj, setBulkDisputeAdj] = useState("");
   const [bulkTicketId, setBulkTicketId] = useState("");
@@ -4131,7 +4129,7 @@ export function AmountPayablePanel({
       </Dialog>
 
       {/* Consolidated Manage Disputes Modal */}
-      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setCreatingDisputeFor({}); setBulkDisputeAdj(""); setBulkTicketId(""); setIsAmountPaidModalOpen(false); } }}>
+      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setBulkDisputeAdj(""); setBulkTicketId(""); setIsAmountPaidModalOpen(false); } }}>
         <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col" data-testid="dialog-manage-disputes">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -4272,10 +4270,9 @@ export function AmountPayablePanel({
             </div>
             {amountPaidBookings.map((booking) => {
               const totalPayable = getAmountPaidTotal(booking);
-              const effectiveDisputedAmount = createdDisputes[booking.bookingId] ?? booking.disputedAmount;
+              const effectiveDisputedAmount = booking.disputedAmount;
               const adjVal = disputeAdjEdits[booking.bookingId] ?? booking.disputeAdjustment ?? 0;
               const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
-              const hasExistingDispute = (effectiveDisputedAmount != null && effectiveDisputedAmount !== 0);
               return (
                 <div
                   key={booking.bookingId}
@@ -4291,55 +4288,8 @@ export function AmountPayablePanel({
                   <div className="text-right font-mono text-blue-600 dark:text-blue-400">
                     {booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"}
                   </div>
-                  <div className="text-right">
-                    {hasExistingDispute ? (
-                      <span className="font-mono">{formatCurrency(effectiveDisputedAmount!)}</span>
-                    ) : (
-                      creatingDisputeFor[booking.bookingId] !== undefined ? (
-                        <div className="flex items-center gap-0.5">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            autoFocus
-                            placeholder="Amt"
-                            className="h-6 text-[10px] font-mono text-right cursor-text w-16"
-                            onChange={(e) => {
-                              const v = parseFloat(e.target.value);
-                              setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: isNaN(v) ? null : v }));
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                const amt = creatingDisputeFor[booking.bookingId];
-                                if (amt != null && amt !== 0) {
-                                  setCreatedDisputes(prev => ({ ...prev, [booking.bookingId]: amt }));
-                                  setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
-                                }
-                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                              }
-                              if (e.key === "Escape") {
-                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                              }
-                            }}
-                            data-testid={`modal-input-create-dispute-amt-${booking.bookingId}`}
-                          />
-                          <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => {
-                            const amt = creatingDisputeFor[booking.bookingId];
-                            if (amt != null && amt !== 0) {
-                              setCreatedDisputes(prev => ({ ...prev, [booking.bookingId]: amt }));
-                              setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
-                            }
-                            setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                          }} data-testid={`modal-btn-confirm-dispute-${booking.bookingId}`}>
-                            <Check className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: null }))} data-testid={`modal-btn-create-dispute-${booking.bookingId}`}>
-                          <Plus className="h-3 w-3 mr-0.5" />
-                          Add
-                        </Button>
-                      )
-                    )}
+                  <div className="text-right font-mono" data-testid={`modal-disputed-amt-${booking.bookingId}`}>
+                    {effectiveDisputedAmount != null && effectiveDisputedAmount !== 0 ? formatCurrency(effectiveDisputedAmount) : "-"}
                   </div>
                   <div>
                     <Input
