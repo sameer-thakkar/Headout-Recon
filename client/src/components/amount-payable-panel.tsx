@@ -562,7 +562,7 @@ export function AmountPayablePanel({
     return booking.hoNet;
   }, [amountPaidTotals]);
 
-  const handleAmountPaidTotalChange = useCallback((bookingId: string, value: string, spNet: number) => {
+  const handleAmountPaidTotalChange = useCallback((bookingId: string, value: string, hoNet: number, spNet: number) => {
     const numVal = parseFloat(value);
     if (isNaN(numVal)) {
       setAmountPaidTotals(prev => {
@@ -572,7 +572,11 @@ export function AmountPayablePanel({
       });
       return;
     }
-    const capped = Math.min(numVal, spNet);
+    const lower = Math.min(hoNet, spNet);
+    const upper = Math.max(hoNet, spNet);
+    const minVal = lower * 0.9;
+    const maxVal = upper * 1.1;
+    const capped = Math.max(minVal, Math.min(numVal, maxVal));
     setAmountPaidTotals(prev => ({ ...prev, [bookingId]: capped }));
   }, []);
 
@@ -2459,9 +2463,9 @@ export function AmountPayablePanel({
                                                   <Input
                                                     type="number"
                                                     step="0.01"
-                                                    max={booking.spNet}
+                                                    max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                                     value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet)}
-                                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
                                                     className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
                                                     data-testid={`input-total-payable-${booking.bookingId}`}
                                                   />
@@ -2775,9 +2779,9 @@ export function AmountPayablePanel({
                                                 <Input
                                                   type="number"
                                                   step="0.01"
-                                                  max={booking.spNet}
+                                                  max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                                   value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable}
-                                                  onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                                  onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
                                                   className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
                                                   data-testid={`input-total-payable-${booking.bookingId}`}
                                                 />
@@ -3109,9 +3113,9 @@ export function AmountPayablePanel({
                                             <Input
                                               type="number"
                                               step="0.01"
-                                              max={booking.spNet}
+                                              max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                               value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable}
-                                              onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                              onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
                                               className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
                                               data-testid={`input-total-payable-${booking.bookingId}`}
                                             />
@@ -3331,9 +3335,9 @@ export function AmountPayablePanel({
                                   <Input
                                     type="number"
                                     step="0.01"
-                                    max={booking.spNet}
+                                    max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                     value={isEdited ? amountPaidTotals[booking.bookingId] : totalPayable}
-                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.spNet)}
+                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
                                     className={`h-6 text-xs font-mono text-right ${isEdited ? 'border-blue-400 dark:border-blue-600' : ''}`}
                                     data-testid={`input-total-payable-${booking.bookingId}`}
                                   />
