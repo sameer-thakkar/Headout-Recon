@@ -93,6 +93,8 @@ export function AmountPayablePanel({
   const [ticketIdEdits, setTicketIdEdits] = useState<Record<string, string>>({});
   const [disputeStatusEdits, setDisputeStatusEdits] = useState<Record<string, string>>({});
   const [creatingDisputeFor, setCreatingDisputeFor] = useState<Record<string, number | null>>({});
+  const [createdDisputes, setCreatedDisputes] = useState<Record<string, number>>({});
+  const [selectedAmountPaidBooking, setSelectedAmountPaidBooking] = useState<BookingForPayable | null>(null);
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
@@ -3312,237 +3314,73 @@ export function AmountPayablePanel({
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="border-t overflow-x-auto overflow-y-hidden">
-                      <div className="min-w-[2120px]">
-                        <div className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
-                          <div>Booking ID</div>
-                          <div>Reason</div>
-                          <div className="text-right">HO Net</div>
-                          <div className="text-right">SP Net</div>
-                          <div className="text-center">Use</div>
-                          <div className="text-right">Total Amt Payable</div>
-                          <div className="bg-border/60 mx-1" />
-                          <div className="text-right">Amt Paid</div>
-                          <div className="text-right">Dispute Amt</div>
-                          <div className="text-right">Dispute Adj Total</div>
-                          <div className="text-right">Discrepancy Till Date</div>
-                          <div className="bg-border/60 mx-1" />
-                          <div className="text-right">Dispute Adjustment</div>
-                          <div className="text-right">Discrepancy Adj</div>
-                          <div>Ticket ID</div>
-                          <div className="bg-border/60 mx-1" />
-                          <div className="text-right">Final Dispute Amt</div>
-                          <div>Dispute Status</div>
-                          <div className="text-right">Net Price Payable</div>
-                          <div className="text-center">Action</div>
-                        </div>
-                        <div className="max-h-80 overflow-y-auto">
-                          {amountPaidBookings.map((booking) => {
-                            const totalPayable = getAmountPaidTotal(booking);
-                            const isEdited = amountPaidTotals[booking.bookingId] !== undefined;
-                            return (
-                              <div 
-                                key={booking.bookingId}
-                                className="grid grid-cols-[100px_90px_80px_80px_55px_120px_1px_90px_85px_90px_90px_1px_110px_110px_90px_1px_90px_90px_100px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
-                                data-testid={`amount-paid-row-${booking.bookingId}`}
-                              >
-                                <div className="font-mono truncate" title={booking.bookingId}>
-                                  {booking.bookingId}
-                                </div>
-                                <div className="truncate" title={booking.reason}>
-                                  <Badge variant="outline" className="text-xs">
-                                    {booking.reason}
-                                  </Badge>
-                                </div>
-                                <div className="text-right font-mono">
-                                  {formatCurrency(booking.hoNet)}
-                                </div>
-                                <div className="text-right font-mono">
-                                  {formatCurrency(booking.spNet)}
-                                </div>
-                                <div className="flex justify-center">
-                                  <Select
-                                    value={amountPaidTotals[booking.bookingId] === booking.spNet ? "sp" : "ho"}
-                                    onValueChange={(v) => {
-                                      const nextVal = v === "sp" ? booking.spNet : booking.hoNet;
-                                      setAmountPaidTotals(prev => ({ ...prev, [booking.bookingId]: nextVal }));
-                                      setRawInputValues(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                                    }}
-                                  >
-                                    <SelectTrigger className="w-14 h-6 text-xs" data-testid={`select-net-${booking.bookingId}`}>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="ho">HO</SelectItem>
-                                      <SelectItem value="sp">SP</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (isEdited ? amountPaidTotals[booking.bookingId] : totalPayable)}
-                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                    onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                    className={`h-7 text-xs font-mono text-right px-1 cursor-text ${isEdited ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
-                                    data-testid={`input-total-payable-${booking.bookingId}`}
-                                  />
-                                </div>
-                                <div className="bg-border/40 mx-1 self-stretch" />
-                                <div className="text-right font-mono text-blue-600 dark:text-blue-400">
-                                  {booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"}
-                                </div>
-                                <div className="text-right font-mono">
-                                  {booking.disputedAmount != null ? formatCurrency(booking.disputedAmount) : "-"}
-                                </div>
-                                <div className="text-right font-mono">
-                                  {booking.disputeAdjustedTotal != null ? formatCurrency(booking.disputeAdjustedTotal) : "-"}
-                                </div>
-                                <div className="text-right font-mono">
-                                  {booking.discrepancyAmount != null ? formatCurrency(booking.discrepancyAmount) : "-"}
-                                </div>
-                                <div className="bg-border/40 mx-1 self-stretch" />
-                                <div>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={disputeAdjEdits[booking.bookingId] !== undefined ? disputeAdjEdits[booking.bookingId] : (booking.disputeAdjustment ?? "")}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      if (v === "") {
-                                        setDisputeAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                                      } else {
-                                        const num = parseFloat(v);
-                                        if (!isNaN(num)) setDisputeAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
-                                      }
-                                    }}
-                                    placeholder="0.00"
-                                    className="h-7 text-xs font-mono text-right px-1 border-dashed border-muted-foreground/40 cursor-text"
-                                    data-testid={`input-dispute-adj-${booking.bookingId}`}
-                                  />
-                                </div>
-                                <div>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.finalDiscrepancyTotal ?? "")}
-                                    onChange={(e) => {
-                                      const v = e.target.value;
-                                      if (v === "") {
-                                        setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                                      } else {
-                                        const num = parseFloat(v);
-                                        if (!isNaN(num)) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
-                                      }
-                                    }}
-                                    placeholder="0.00"
-                                    className="h-7 text-xs font-mono text-right px-1 border-dashed border-muted-foreground/40 cursor-text"
-                                    data-testid={`input-discrepancy-adj-${booking.bookingId}`}
-                                  />
-                                </div>
-                                <div>
-                                  <Input
-                                    type="text"
-                                    value={ticketIdEdits[booking.bookingId] !== undefined ? ticketIdEdits[booking.bookingId] : (booking.adjustedInTicketId ?? "")}
-                                    onChange={(e) => setTicketIdEdits(prev => ({ ...prev, [booking.bookingId]: e.target.value }))}
-                                    placeholder="Ticket ID"
-                                    className="h-7 text-xs font-mono px-1 border-dashed border-muted-foreground/40 cursor-text"
-                                    data-testid={`input-ticket-id-${booking.bookingId}`}
-                                  />
-                                </div>
-                                <div className="bg-border/40 mx-1 self-stretch" />
-                                <div className="text-right font-mono font-medium">
-                                  {(() => {
-                                    const adjVal = disputeAdjEdits[booking.bookingId] ?? booking.disputeAdjustment ?? 0;
-                                    const baseVal = booking.disputedAmount ?? 0;
-                                    return (baseVal !== 0 || adjVal !== 0) ? formatCurrency(baseVal + adjVal) : "-";
-                                  })()}
-                                </div>
-                                <div>
-                                  <Select
-                                    value={disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? ""}
-                                    onValueChange={(v) => setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: v }))}
-                                  >
-                                    <SelectTrigger className="h-7 text-xs px-1" data-testid={`select-dispute-status-${booking.bookingId}`}>
-                                      <SelectValue placeholder="Select" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="OPEN">OPEN</SelectItem>
-                                      <SelectItem value="CLOSED">CLOSED</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="text-right font-mono font-semibold" data-testid={`net-price-payable-${booking.bookingId}`}>
-                                  {formatCurrency(totalPayable - (booking.amountPaid || 0))}
-                                </div>
-                                <div className="flex justify-center">
-                                  {(() => {
-                                    const hasExistingDispute = (booking.disputedAmount != null && booking.disputedAmount !== 0) || creatingDisputeFor[booking.bookingId] !== undefined;
-                                    if (creatingDisputeFor[booking.bookingId] !== undefined) {
-                                      return (
-                                        <div className="flex items-center gap-1">
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            autoFocus
-                                            placeholder="Amt"
-                                            className="h-6 w-16 text-xs font-mono text-right px-1"
-                                            onChange={(e) => {
-                                              const v = parseFloat(e.target.value);
-                                              setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: isNaN(v) ? null : v }));
-                                            }}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Escape") {
-                                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                                              }
-                                            }}
-                                            data-testid={`input-create-dispute-amt-${booking.bookingId}`}
-                                          />
-                                          <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            onClick={() => {
-                                              const amt = creatingDisputeFor[booking.bookingId];
-                                              if (amt != null && amt !== 0) {
-                                                booking.disputedAmount = amt;
-                                                setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
-                                              }
-                                              setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                                            }}
-                                            data-testid={`btn-confirm-dispute-${booking.bookingId}`}
-                                          >
-                                            <Check className="h-3 w-3" />
-                                          </Button>
-                                          <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            onClick={() => setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; })}
-                                            data-testid={`btn-cancel-dispute-${booking.bookingId}`}
-                                          >
-                                            <X className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      );
-                                    }
-                                    return (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={hasExistingDispute}
-                                        onClick={() => setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: null }))}
-                                        data-testid={`btn-create-dispute-${booking.bookingId}`}
-                                      >
-                                        <Plus className="h-3 w-3 mr-1" />
-                                        Dispute
-                                      </Button>
-                                    );
-                                  })()}
-                                </div>
+                    <div className="border-t">
+                      <div className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px_60px] gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                        <div>Booking ID</div>
+                        <div>Reason</div>
+                        <div className="text-right">HO Net</div>
+                        <div className="text-right">SP Net</div>
+                        <div className="text-right">Total Payable</div>
+                        <div className="text-right">Amt Paid</div>
+                        <div>Dispute Status</div>
+                        <div className="text-right">Net Payable</div>
+                        <div className="text-center">Detail</div>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {amountPaidBookings.map((booking) => {
+                          const totalPayable = getAmountPaidTotal(booking);
+                          const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
+                          return (
+                            <div 
+                              key={booking.bookingId}
+                              className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px_60px] gap-2 px-3 py-1.5 text-xs border-t items-center"
+                              data-testid={`amount-paid-row-${booking.bookingId}`}
+                            >
+                              <div className="font-mono truncate" title={booking.bookingId}>
+                                {booking.bookingId}
                               </div>
-                            );
-                          })}
-                        </div>
+                              <div className="truncate" title={booking.reason}>
+                                <Badge variant="outline" className="text-xs">
+                                  {booking.reason}
+                                </Badge>
+                              </div>
+                              <div className="text-right font-mono">
+                                {formatCurrency(booking.hoNet)}
+                              </div>
+                              <div className="text-right font-mono">
+                                {formatCurrency(booking.spNet)}
+                              </div>
+                              <div className="text-right font-mono">
+                                {formatCurrency(totalPayable)}
+                              </div>
+                              <div className="text-right font-mono text-blue-600 dark:text-blue-400">
+                                {booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"}
+                              </div>
+                              <div>
+                                {statusVal ? (
+                                  <Badge variant={statusVal === "OPEN" ? "destructive" : "secondary"} className="text-xs">
+                                    {statusVal}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">-</span>
+                                )}
+                              </div>
+                              <div className="text-right font-mono font-semibold" data-testid={`net-price-payable-${booking.bookingId}`}>
+                                {formatCurrency(totalPayable - (booking.amountPaid || 0))}
+                              </div>
+                              <div className="flex justify-center">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => setSelectedAmountPaidBooking(booking)}
+                                  data-testid={`btn-detail-${booking.bookingId}`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </CollapsibleContent>
@@ -4279,6 +4117,247 @@ export function AmountPayablePanel({
               Close
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Amount Paid Booking Detail Modal */}
+      <Dialog open={selectedAmountPaidBooking !== null} onOpenChange={(open) => { if (!open) { if (selectedAmountPaidBooking) { setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[selectedAmountPaidBooking.bookingId]; return n; }); } setSelectedAmountPaidBooking(null); } }}>
+        <DialogContent className="max-w-lg" data-testid="dialog-amount-paid-detail">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Booking Detail
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAmountPaidBooking?.bookingId} - {selectedAmountPaidBooking?.reason}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedAmountPaidBooking && (() => {
+            const booking = selectedAmountPaidBooking;
+            const totalPayable = getAmountPaidTotal(booking);
+            const isEdited = amountPaidTotals[booking.bookingId] !== undefined;
+            const effectiveDisputedAmount = createdDisputes[booking.bookingId] ?? booking.disputedAmount;
+            const adjVal = disputeAdjEdits[booking.bookingId] ?? booking.disputeAdjustment ?? 0;
+            const baseDisputeVal = effectiveDisputedAmount ?? 0;
+            const finalDisputeAmt = (baseDisputeVal !== 0 || adjVal !== 0) ? baseDisputeVal + adjVal : null;
+            const hasExistingDispute = (effectiveDisputedAmount != null && effectiveDisputedAmount !== 0);
+
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-muted/30 border">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">HO Net</div>
+                    <div className="font-mono text-sm font-medium">{formatCurrency(booking.hoNet)} {currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">SP Net</div>
+                    <div className="font-mono text-sm font-medium">{formatCurrency(booking.spNet)} {currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Use</div>
+                    <Select
+                      value={amountPaidTotals[booking.bookingId] === booking.spNet ? "sp" : "ho"}
+                      onValueChange={(v) => {
+                        const nextVal = v === "sp" ? booking.spNet : booking.hoNet;
+                        setAmountPaidTotals(prev => ({ ...prev, [booking.bookingId]: nextVal }));
+                        setRawInputValues(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs" data-testid={`modal-select-net-${booking.bookingId}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ho">HO</SelectItem>
+                        <SelectItem value="sp">SP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Total Amt Payable</div>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (isEdited ? amountPaidTotals[booking.bookingId] : totalPayable)}
+                      onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                      onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                      className={`h-8 text-xs font-mono text-right cursor-text ${isEdited ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
+                      data-testid={`modal-input-total-payable-${booking.bookingId}`}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                  <div className="text-xs font-medium text-blue-700 dark:text-blue-300 col-span-2 mb-1">HO Data Inputs</div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Amt Paid</div>
+                    <div className="font-mono text-sm text-blue-600 dark:text-blue-400">{booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"} {currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Dispute Settled</div>
+                    <div className="font-mono text-sm">{booking.disputeSettled != null ? formatCurrency(booking.disputeSettled) : "-"} {currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Disputed Amount</div>
+                    <div className="font-mono text-sm">{effectiveDisputedAmount != null ? formatCurrency(effectiveDisputedAmount) : "-"} {currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Dispute Adj Total</div>
+                    <div className="font-mono text-sm">{booking.disputeAdjustedTotal != null ? formatCurrency(booking.disputeAdjustedTotal) : "-"} {currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Discrepancy Till Date</div>
+                    <div className="font-mono text-sm">{booking.discrepancyAmount != null ? formatCurrency(booking.discrepancyAmount) : "-"} {currency}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-muted/30 border">
+                  <div className="text-xs font-medium col-span-2 mb-1">Actions</div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Dispute Adjustment</div>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={disputeAdjEdits[booking.bookingId] !== undefined ? disputeAdjEdits[booking.bookingId] : (booking.disputeAdjustment ?? "")}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "") {
+                          setDisputeAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                        } else {
+                          const num = parseFloat(v);
+                          if (!isNaN(num)) setDisputeAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
+                        }
+                      }}
+                      placeholder="0.00"
+                      className="h-8 text-xs font-mono text-right cursor-text"
+                      data-testid={`modal-input-dispute-adj-${booking.bookingId}`}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Discrepancy Adj</div>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.finalDiscrepancyTotal ?? "")}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "") {
+                          setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                        } else {
+                          const num = parseFloat(v);
+                          if (!isNaN(num)) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
+                        }
+                      }}
+                      placeholder="0.00"
+                      className="h-8 text-xs font-mono text-right cursor-text"
+                      data-testid={`modal-input-discrepancy-adj-${booking.bookingId}`}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Ticket ID</div>
+                    <Input
+                      type="text"
+                      value={ticketIdEdits[booking.bookingId] !== undefined ? ticketIdEdits[booking.bookingId] : (booking.adjustedInTicketId ?? "")}
+                      onChange={(e) => setTicketIdEdits(prev => ({ ...prev, [booking.bookingId]: e.target.value }))}
+                      placeholder="Enter Ticket ID"
+                      className="h-8 text-xs font-mono cursor-text"
+                      data-testid={`modal-input-ticket-id-${booking.bookingId}`}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Dispute Status</div>
+                    <Select
+                      value={disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? ""}
+                      onValueChange={(v) => setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: v }))}
+                    >
+                      <SelectTrigger className="h-8 text-xs" data-testid={`modal-select-dispute-status-${booking.bookingId}`}>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="OPEN">OPEN</SelectItem>
+                        <SelectItem value="CLOSED">CLOSED</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-muted/30 border">
+                  <div className="text-xs font-medium col-span-2 mb-1">Results</div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Final Dispute Amt</div>
+                    <div className="font-mono text-sm font-medium">{finalDisputeAmt != null ? formatCurrency(finalDisputeAmt) : "-"} {currency}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Net Price Payable</div>
+                    <div className="font-mono text-sm font-semibold text-primary">{formatCurrency(totalPayable - (booking.amountPaid || 0))} {currency}</div>
+                  </div>
+                </div>
+
+                {!hasExistingDispute && (
+                  <div className="p-3 rounded-md border border-dashed">
+                    {creatingDisputeFor[booking.bookingId] !== undefined ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="text-xs text-muted-foreground mb-1">Dispute Amount</div>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            autoFocus
+                            placeholder="Enter dispute amount"
+                            className="h-8 text-xs font-mono text-right cursor-text"
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value);
+                              setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: isNaN(v) ? null : v }));
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                              }
+                            }}
+                            data-testid={`modal-input-create-dispute-amt-${booking.bookingId}`}
+                          />
+                        </div>
+                        <div className="flex gap-1 mt-4">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              const amt = creatingDisputeFor[booking.bookingId];
+                              if (amt != null && amt !== 0) {
+                                setCreatedDisputes(prev => ({ ...prev, [booking.bookingId]: amt }));
+                                setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
+                              }
+                              setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                            }}
+                            data-testid={`modal-btn-confirm-dispute-${booking.bookingId}`}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; })}
+                            data-testid={`modal-btn-cancel-dispute-${booking.bookingId}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: null }))}
+                        data-testid={`modal-btn-create-dispute-${booking.bookingId}`}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Dispute
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
