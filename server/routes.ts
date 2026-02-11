@@ -1309,24 +1309,18 @@ export async function registerRoutes(
         const disputedAmount = dispute?.disputeAmount ?? "";
         const adjustedInTicketId = dispute?.adjustedInTicketId || "";
         const closedByAmount = dispute?.closedByAdjustmentAmount ?? 0;
-        const finalDisputeAmount = dispute 
-          ? (dispute.disputeAmount - closedByAmount)
-          : "";
-        
         // 6. Dispute status - OPEN or CLOSED
         const disputeStatus = dispute 
           ? (dispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
           : "";
         
         // 7. Reconciled Net price - HO Net + Final Dispute when CLOSED
-        // If dispute is closed, reconciled net = hoNet + finalDisputeAmount
-        // If no dispute or dispute is open, leave blank
-        const reconciledNetPrice = dispute && dispute.closureStatus === "closed" && typeof finalDisputeAmount === "number"
-          ? hoNet + finalDisputeAmount
+        const finalDisputeForRecon = dispute 
+          ? (dispute.disputeAmount - closedByAmount)
+          : null;
+        const reconciledNetPrice = dispute && dispute.closureStatus === "closed" && typeof finalDisputeForRecon === "number"
+          ? hoNet + finalDisputeForRecon
           : "";
-        
-        // 8. UTR number - blank for now (manual entry later)
-        const utrNumber = "";
         
         if (isSecondary) {
           // Secondary rows: finalNetPrice = 0, comments = "Duplicate Fulfillment"
@@ -1457,7 +1451,6 @@ export async function registerRoutes(
             newRow[key] = adjustedInTicketId;
             hasAnyReconCol = true;
           } else if (keyLower === "finaldisputeamount" || keyLower === "final dispute amount" || keyLower === "final_dispute_amount") {
-            newRow[key] = finalDisputeAmount;
             hasAnyReconCol = true;
           } else if (keyLower === "disputestatus" || keyLower === "dispute status" || keyLower === "dispute_status") {
             newRow[key] = disputeStatus;
@@ -1466,7 +1459,6 @@ export async function registerRoutes(
             newRow[key] = reconciledNetPrice;
             hasAnyReconCol = true;
           } else if (keyLower === "utrnumber" || keyLower === "utr number" || keyLower === "utr_number" || keyLower === "utr") {
-            newRow[key] = utrNumber;
             hasAnyReconCol = true;
           } else {
             newRow[key] = row[key];
@@ -1496,10 +1488,8 @@ export async function registerRoutes(
           newRow["Ticket ID"] = ticketIdValue;
           newRow["Disputed amount"] = disputedAmount;
           newRow["Adjusted in Ticket ID"] = adjustedInTicketId;
-          newRow["Final Dispute amount"] = finalDisputeAmount;
           newRow["Dispute status"] = disputeStatus;
           newRow["Reconciled Net price"] = reconciledNetPrice;
-          newRow["UTR number"] = utrNumber;
         }
         
         return newRow;
@@ -1523,7 +1513,7 @@ export async function registerRoutes(
         "SP Net", "Difference", "Difference %",
         "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss",
         "finalVendorId", "Ticket ID", "Disputed amount", "Adjusted in Ticket ID",
-        "Final Dispute amount", "Dispute status", "Reconciled Net price", "UTR number"
+        "Dispute status", "Reconciled Net price"
       ];
       for (const col of appendCols) {
         if (!headerExists(col)) {
