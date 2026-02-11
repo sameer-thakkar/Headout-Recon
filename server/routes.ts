@@ -1417,13 +1417,25 @@ export async function registerRoutes(
           return kLower === "totalamountpayable";
         };
         
+        const isNetPricePayableCol = (k: string) => {
+          const kLower = k.toLowerCase().replace(/[\s_]+/g, "");
+          return kLower === "netpricepayable" || kLower === "netpayable";
+        };
+        
         const totalAmountPayable = reason === "Reconciled" ? spNet : finalNetPrice;
+        
+        const amountPaidValue = reconRow?.amountPaid || 0;
+        const netPricePayable = typeof totalAmountPayable === "number"
+          ? totalAmountPayable - amountPaidValue
+          : totalAmountPayable;
         
         for (const key of originalKeys) {
           const keyLower = key.toLowerCase();
           
           if (isTotalAmountPayableCol(key)) {
             newRow[key] = totalAmountPayable;
+          } else if (isNetPricePayableCol(key)) {
+            newRow[key] = netPricePayable;
           } else if (isFinalNetCol(key)) {
             newRow[key] = row[key];
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
