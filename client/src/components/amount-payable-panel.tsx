@@ -4298,7 +4298,7 @@ export function AmountPayablePanel({
           </div>
 
           <div className="flex-1 overflow-auto border rounded-md">
-            <div className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_80px_80px_90px] gap-1.5 px-2 py-1.5 bg-muted/30 text-[11px] font-medium text-muted-foreground sticky top-0 z-10 border-b">
+            <div className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_90px_80px_80px_90px] gap-1.5 px-2 py-1.5 bg-muted/30 text-[11px] font-medium text-muted-foreground sticky top-0 z-10 border-b">
               <div>Booking ID</div>
               <div className="text-right">HO Net</div>
               <div className="text-right">SP Net</div>
@@ -4309,6 +4309,7 @@ export function AmountPayablePanel({
               <div className="text-right">Discrepancy Adjusted Total</div>
               <div className="text-right">Dispute Adj</div>
               <div className="text-right">Discrepancy Adj</div>
+              <div className="text-right">Final Dispute Amt</div>
               <div>Status</div>
               <div className="text-right">Ticket ID</div>
               <div className="text-right">Net Payable</div>
@@ -4321,7 +4322,7 @@ export function AmountPayablePanel({
               return (
                 <div
                   key={booking.bookingId}
-                  className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_80px_80px_90px] gap-1.5 px-2 py-1 text-xs border-t items-center"
+                  className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_80px_85px_85px_80px_85px_90px_80px_80px_90px] gap-1.5 px-2 py-1 text-xs border-t items-center"
                   data-testid={`modal-row-${booking.bookingId}`}
                 >
                   <div className="font-mono truncate" title={booking.bookingId}>
@@ -4379,6 +4380,15 @@ export function AmountPayablePanel({
                       className="h-6 text-[10px] font-mono text-right cursor-text"
                       data-testid={`modal-input-discrepancy-adj-${booking.bookingId}`}
                     />
+                  </div>
+                  <div className="text-right font-mono font-semibold" data-testid={`modal-final-dispute-amt-${booking.bookingId}`}>
+                    {(() => {
+                      const disputed = booking.disputedAmount ?? 0;
+                      const dAdj = disputeAdjEdits[booking.bookingId] !== undefined ? disputeAdjEdits[booking.bookingId] : (booking.disputeAdjustment ?? 0);
+                      const discAdj = discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.discrepancyAmount ?? 0);
+                      const finalVal = disputed - dAdj - discAdj;
+                      return finalVal !== 0 ? formatCurrency(finalVal) : "-";
+                    })()}
                   </div>
                   <div>
                     <Select
