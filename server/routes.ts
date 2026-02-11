@@ -1418,8 +1418,8 @@ export async function registerRoutes(
         };
         
         const isNetPricePayableCol = (k: string) => {
-          const kLower = k.toLowerCase().replace(/[\s_]+/g, "");
-          return kLower === "netpricepayable" || kLower === "netpayable";
+          const kLower = k.trim().toLowerCase().replace(/[\s_\u00A0]+/g, "");
+          return kLower === "netpricepayable" || kLower === "netpayable" || kLower === "netpriceamountpayable";
         };
         
         const totalAmountPayable = reason === "Reconciled" ? spNet : finalNetPrice;
@@ -1428,6 +1428,16 @@ export async function registerRoutes(
         const netPricePayable = typeof totalAmountPayable === "number"
           ? totalAmountPayable - amountPaidValue
           : totalAmountPayable;
+        
+        if (rowIndex === 0) {
+          console.log(`[EXPORT DEBUG] originalKeys: ${JSON.stringify(originalKeys)}`);
+          console.log(`[EXPORT DEBUG] Row keys: ${JSON.stringify(Object.keys(row))}`);
+          console.log(`[EXPORT DEBUG] Net price payable match test:`, originalKeys.filter(k => isNetPricePayableCol(k)));
+          console.log(`[EXPORT DEBUG] Total amt payable match test:`, originalKeys.filter(k => isTotalAmountPayableCol(k)));
+          console.log(`[EXPORT DEBUG] FinalNet match test:`, originalKeys.filter(k => isFinalNetCol(k)));
+          console.log(`[EXPORT DEBUG] totalAmountPayable=${totalAmountPayable}, amountPaidValue=${amountPaidValue}, netPricePayable=${netPricePayable}`);
+          console.log(`[EXPORT DEBUG] Payable-related keys:`, originalKeys.filter(k => k.toLowerCase().includes('payable') || k.toLowerCase().includes('net price') || k.toLowerCase().includes('net_price')));
+        }
         
         for (const key of originalKeys) {
           const keyLower = key.toLowerCase();
