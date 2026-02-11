@@ -510,14 +510,12 @@ export function AmountPayablePanel({
       return amountPaidTotals[booking.bookingId];
     }
     if (booking.reason === "Reconciled" || booking.reason === "Unmapped") {
-      const amtPaid = booking.amountPaid || 0;
-      return booking.spNet - amtPaid;
+      return booking.spNet;
     }
     const selection = localSelections[booking.bookingId] || "sp";
     const pricePayable = selection === "ho" ? booking.hoNet : booking.spNet;
-    const amtPaid = booking.amountPaid || 0;
     
-    return pricePayable - amtPaid;
+    return pricePayable;
   }, [localSelections, activeDisputes, disputeAmounts, amountPaidTotals]);
 
   const getReasonTotal = useCallback((reason: string): number => {
@@ -561,8 +559,8 @@ export function AmountPayablePanel({
     if (amountPaidTotals[booking.bookingId] !== undefined) {
       return amountPaidTotals[booking.bookingId];
     }
-    return getFinalNetPrice(booking);
-  }, [amountPaidTotals, getFinalNetPrice]);
+    return booking.hoNet;
+  }, [amountPaidTotals]);
 
   const handleAmountPaidTotalChange = useCallback((bookingId: string, value: string, spNet: number) => {
     const numVal = parseFloat(value);

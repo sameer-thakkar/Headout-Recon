@@ -1400,12 +1400,6 @@ export async function registerRoutes(
           finalNetPrice = spNet;
         }
         
-        // Deduct amountPaid from finalNetPrice (Amount Payable)
-        const amountPaid = reconRow?.amountPaid || 0;
-        if (typeof finalNetPrice === "number" && amountPaid > 0) {
-          finalNetPrice = finalNetPrice - amountPaid;
-        }
-        
         // Helper to check if a key is the finalNetPrice column
         const isFinalNetCol = (k: string) => {
           const kLower = k.toLowerCase();
