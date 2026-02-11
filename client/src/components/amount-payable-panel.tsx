@@ -572,8 +572,9 @@ export function AmountPayablePanel({
     if (amountPaidTotals[booking.bookingId] !== undefined) {
       return amountPaidTotals[booking.bookingId];
     }
-    return booking.hoNet;
-  }, [amountPaidTotals]);
+    const sel = localSelections[booking.bookingId] || "ho";
+    return sel === "ho" ? booking.hoNet : booking.spNet;
+  }, [amountPaidTotals, localSelections]);
 
   const handleAmountPaidTotalChange = useCallback((bookingId: string, value: string) => {
     setRawInputValues(prev => ({ ...prev, [bookingId]: value }));
@@ -693,6 +694,11 @@ export function AmountPayablePanel({
       delete next[bookingId];
       return next;
     });
+    setRawInputValues(prev => {
+      const next = { ...prev };
+      delete next[bookingId];
+      return next;
+    });
     if (value === "ho") {
       setActiveDisputes(prev => {
         const newSet = new Set(prev);
@@ -706,6 +712,30 @@ export function AmountPayablePanel({
       });
     }
   }, []);
+
+  const updateAmountPaidBulkSelection = useCallback((value: "ho" | "sp") => {
+    setLocalSelections(prev => {
+      const newSelections = { ...prev };
+      for (const b of amountPaidBookings) {
+        newSelections[b.bookingId] = value;
+      }
+      return newSelections;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of amountPaidBookings) {
+        delete next[b.bookingId];
+      }
+      return next;
+    });
+    setRawInputValues(prev => {
+      const next = { ...prev };
+      for (const b of amountPaidBookings) {
+        delete next[b.bookingId];
+      }
+      return next;
+    });
+  }, [amountPaidBookings]);
 
   const updateReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
     const reasonBookings = bookingsByReason[reason] || [];
@@ -3318,7 +3348,19 @@ export function AmountPayablePanel({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t">
-                      <div className="flex items-center justify-end px-3 py-1.5 border-b">
+                      <div className="flex items-center justify-between px-3 py-1.5 border-b">
+                        <Select
+                          value=""
+                          onValueChange={(v) => updateAmountPaidBulkSelection(v as "ho" | "sp")}
+                        >
+                          <SelectTrigger className="w-28 h-7 text-xs" data-testid="select-amount-paid-bulk-net">
+                            <SelectValue placeholder="Bulk Net" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ho">All HO Net</SelectItem>
+                            <SelectItem value="sp">All SP Net</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button
                           variant="outline"
                           size="sm"
@@ -3329,11 +3371,12 @@ export function AmountPayablePanel({
                           Manage Disputes
                         </Button>
                       </div>
-                      <div className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px] gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                      <div className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_70px_100px_90px_90px_100px] gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                         <div>Booking ID</div>
                         <div>Reason</div>
                         <div className="text-right">HO Net</div>
                         <div className="text-right">SP Net</div>
+                        <div className="text-center">Net</div>
                         <div className="text-right">Total Payable</div>
                         <div className="text-right">Amt Paid</div>
                         <div>Dispute Status</div>
@@ -3342,11 +3385,12 @@ export function AmountPayablePanel({
                       <div className="max-h-80 overflow-y-auto">
                         {amountPaidBookings.map((booking) => {
                           const totalPayable = getAmountPaidTotal(booking);
+                          const netType = localSelections[booking.bookingId] || "ho";
                           const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
                           return (
                             <div 
                               key={booking.bookingId}
-                              className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px] gap-2 px-3 py-1.5 text-xs border-t items-center"
+                              className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_70px_100px_90px_90px_100px] gap-2 px-3 py-1.5 text-xs border-t items-center"
                               data-testid={`amount-paid-row-${booking.bookingId}`}
                             >
                               <div className="font-mono truncate" title={booking.bookingId}>
@@ -3362,6 +3406,22 @@ export function AmountPayablePanel({
                               </div>
                               <div className="text-right font-mono">
                                 {formatCurrency(booking.spNet)}
+                              </div>
+                              <div className="flex justify-center">
+                                <Select
+                                  value={netType}
+                                  onValueChange={(v) => {
+                                    updateSelection(booking.bookingId, v as "ho" | "sp", booking);
+                                  }}
+                                >
+                                  <SelectTrigger className="w-16 h-6 text-xs" data-testid={`select-net-type-amtpaid-${booking.bookingId}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="ho">HO</SelectItem>
+                                    <SelectItem value="sp">SP</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
                               <div className="text-right">
                                 <Input
