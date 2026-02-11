@@ -91,6 +91,7 @@ export function AmountPayablePanel({
   const [disputeAdjEdits, setDisputeAdjEdits] = useState<Record<string, number>>({});
   const [discrepancyAdjEdits, setDiscrepancyAdjEdits] = useState<Record<string, number>>({});
   const [ticketIdEdits, setTicketIdEdits] = useState<Record<string, string>>({});
+  const [disputeStatusEdits, setDisputeStatusEdits] = useState<Record<string, string>>({});
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
@@ -3456,12 +3457,19 @@ export function AmountPayablePanel({
                                     return (baseVal !== 0 || adjVal !== 0) ? formatCurrency(baseVal + adjVal) : "-";
                                   })()}
                                 </div>
-                                <div className="truncate">
-                                  {booking.disputeStatus ? (
-                                    <Badge variant="outline" className="text-xs">
-                                      {booking.disputeStatus}
-                                    </Badge>
-                                  ) : "-"}
+                                <div>
+                                  <Select
+                                    value={disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? ""}
+                                    onValueChange={(v) => setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: v }))}
+                                  >
+                                    <SelectTrigger className="h-7 text-xs px-1" data-testid={`select-dispute-status-${booking.bookingId}`}>
+                                      <SelectValue placeholder="Select" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="OPEN">OPEN</SelectItem>
+                                      <SelectItem value="CLOSED">CLOSED</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                                 <div className="text-right font-mono font-semibold" data-testid={`net-price-payable-${booking.bookingId}`}>
                                   {formatCurrency(totalPayable - (booking.amountPaid || 0))}
