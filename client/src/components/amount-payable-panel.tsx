@@ -94,7 +94,9 @@ export function AmountPayablePanel({
   const [disputeStatusEdits, setDisputeStatusEdits] = useState<Record<string, string>>({});
   const [creatingDisputeFor, setCreatingDisputeFor] = useState<Record<string, number | null>>({});
   const [createdDisputes, setCreatedDisputes] = useState<Record<string, number>>({});
-  const [selectedAmountPaidBooking, setSelectedAmountPaidBooking] = useState<BookingForPayable | null>(null);
+  const [isAmountPaidModalOpen, setIsAmountPaidModalOpen] = useState(false);
+  const [bulkDisputeAdj, setBulkDisputeAdj] = useState("");
+  const [bulkTicketId, setBulkTicketId] = useState("");
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const [bulkVendorId, setBulkVendorId] = useState<string>("");
@@ -561,7 +563,7 @@ export function AmountPayablePanel({
   );
 
   const amountPaidBookings = useMemo(() => 
-    bookings.filter(b => (b.amountPaid && b.amountPaid > 0) || (b.disputeSettled && b.disputeSettled > 0)),
+    bookings.filter(hasAmountPaidOrSettled),
     [bookings]
   );
 
@@ -3315,7 +3317,18 @@ export function AmountPayablePanel({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t">
-                      <div className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px_60px] gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                      <div className="flex items-center justify-end px-3 py-1.5 border-b">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => { e.stopPropagation(); setIsAmountPaidModalOpen(true); }}
+                          data-testid="btn-manage-disputes"
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          Manage Disputes
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px] gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                         <div>Booking ID</div>
                         <div>Reason</div>
                         <div className="text-right">HO Net</div>
@@ -3324,7 +3337,6 @@ export function AmountPayablePanel({
                         <div className="text-right">Amt Paid</div>
                         <div>Dispute Status</div>
                         <div className="text-right">Net Payable</div>
-                        <div className="text-center">Detail</div>
                       </div>
                       <div className="max-h-80 overflow-y-auto">
                         {amountPaidBookings.map((booking) => {
@@ -3333,9 +3345,8 @@ export function AmountPayablePanel({
                           return (
                             <div 
                               key={booking.bookingId}
-                              className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px_60px] gap-2 px-3 py-1.5 text-xs border-t items-center cursor-pointer hover-elevate"
+                              className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_100px_90px_90px_100px] gap-2 px-3 py-1.5 text-xs border-t items-center"
                               data-testid={`amount-paid-row-${booking.bookingId}`}
-                              onClick={() => setSelectedAmountPaidBooking(booking)}
                             >
                               <div className="font-mono truncate" title={booking.bookingId}>
                                 {booking.bookingId}
@@ -3368,16 +3379,6 @@ export function AmountPayablePanel({
                               </div>
                               <div className="text-right font-mono font-semibold" data-testid={`net-price-payable-${booking.bookingId}`}>
                                 {formatCurrency(totalPayable - (booking.amountPaid || 0))}
-                              </div>
-                              <div className="flex justify-center">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={(e) => { e.stopPropagation(); setSelectedAmountPaidBooking(booking); }}
-                                  data-testid={`btn-detail-${booking.bookingId}`}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
                               </div>
                             </div>
                           );
@@ -4121,100 +4122,218 @@ export function AmountPayablePanel({
         </DialogContent>
       </Dialog>
 
-      {/* Amount Paid Booking Detail Modal */}
-      <Dialog open={selectedAmountPaidBooking !== null} onOpenChange={(open) => { if (!open) { if (selectedAmountPaidBooking) { setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[selectedAmountPaidBooking.bookingId]; return n; }); } setSelectedAmountPaidBooking(null); } }}>
-        <DialogContent className="max-w-lg" data-testid="dialog-amount-paid-detail">
+      {/* Consolidated Manage Disputes Modal */}
+      <Dialog open={isAmountPaidModalOpen} onOpenChange={(open) => { if (!open) { setCreatingDisputeFor({}); setBulkDisputeAdj(""); setBulkTicketId(""); setIsAmountPaidModalOpen(false); } }}>
+        <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col" data-testid="dialog-manage-disputes">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
-              Booking Detail
+              Manage Disputes & Adjustments
             </DialogTitle>
             <DialogDescription>
-              {selectedAmountPaidBooking?.bookingId} - {selectedAmountPaidBooking?.reason}
+              {amountPaidBookings.length} bookings with Amount Paid or Dispute data
             </DialogDescription>
           </DialogHeader>
-          {selectedAmountPaidBooking && (() => {
-            const booking = selectedAmountPaidBooking;
-            const totalPayable = getAmountPaidTotal(booking);
-            const isEdited = amountPaidTotals[booking.bookingId] !== undefined;
-            const effectiveDisputedAmount = createdDisputes[booking.bookingId] ?? booking.disputedAmount;
-            const adjVal = disputeAdjEdits[booking.bookingId] ?? booking.disputeAdjustment ?? 0;
-            const baseDisputeVal = effectiveDisputedAmount ?? 0;
-            const finalDisputeAmt = (baseDisputeVal !== 0 || adjVal !== 0) ? baseDisputeVal + adjVal : null;
-            const hasExistingDispute = (effectiveDisputedAmount != null && effectiveDisputedAmount !== 0);
 
-            return (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-muted/30 border">
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">HO Net</div>
-                    <div className="font-mono text-sm font-medium">{formatCurrency(booking.hoNet)} {currency}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">SP Net</div>
-                    <div className="font-mono text-sm font-medium">{formatCurrency(booking.spNet)} {currency}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Use</div>
-                    <Select
-                      value={amountPaidTotals[booking.bookingId] === booking.spNet ? "sp" : "ho"}
-                      onValueChange={(v) => {
-                        const nextVal = v === "sp" ? booking.spNet : booking.hoNet;
-                        setAmountPaidTotals(prev => ({ ...prev, [booking.bookingId]: nextVal }));
-                        setRawInputValues(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs" data-testid={`modal-select-net-${booking.bookingId}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ho">HO</SelectItem>
-                        <SelectItem value="sp">SP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Total Amt Payable</div>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (isEdited ? amountPaidTotals[booking.bookingId] : totalPayable)}
-                      onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                      onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                      className={`h-8 text-xs font-mono text-right cursor-text ${isEdited ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : ''}`}
-                      data-testid={`modal-input-total-payable-${booking.bookingId}`}
-                    />
-                  </div>
-                </div>
+          <div className="flex flex-wrap items-end gap-3 p-3 rounded-md bg-muted/30 border">
+            <div className="text-xs font-medium w-full mb-1">Bulk Actions</div>
+            <div className="flex-1 min-w-[140px]">
+              <div className="text-xs text-muted-foreground mb-1">Set All Dispute Status</div>
+              <Select
+                value=""
+                onValueChange={(v) => {
+                  const updates: Record<string, string> = {};
+                  amountPaidBookings.forEach(b => { updates[b.bookingId] = v; });
+                  setDisputeStatusEdits(prev => ({ ...prev, ...updates }));
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="bulk-select-dispute-status">
+                  <SelectValue placeholder="Apply to all..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OPEN">OPEN</SelectItem>
+                  <SelectItem value="CLOSED">CLOSED</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <div className="text-xs text-muted-foreground mb-1">Set All Dispute Adjustment</div>
+              <div className="flex gap-1">
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Amount"
+                  value={bulkDisputeAdj}
+                  onChange={(e) => setBulkDisputeAdj(e.target.value)}
+                  className="h-8 text-xs font-mono text-right cursor-text"
+                  data-testid="bulk-input-dispute-adj"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const val = parseFloat(bulkDisputeAdj);
+                      if (!isNaN(val)) {
+                        const updates: Record<string, number> = {};
+                        amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
+                        setDisputeAdjEdits(prev => ({ ...prev, ...updates }));
+                        setBulkDisputeAdj("");
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const val = parseFloat(bulkDisputeAdj);
+                    if (!isNaN(val)) {
+                      const updates: Record<string, number> = {};
+                      amountPaidBookings.forEach(b => { updates[b.bookingId] = val; });
+                      setDisputeAdjEdits(prev => ({ ...prev, ...updates }));
+                      setBulkDisputeAdj("");
+                    }
+                  }}
+                  data-testid="bulk-btn-apply-dispute-adj"
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <div className="text-xs text-muted-foreground mb-1">Set All Ticket ID</div>
+              <div className="flex gap-1">
+                <Input
+                  type="text"
+                  placeholder="Ticket ID"
+                  value={bulkTicketId}
+                  onChange={(e) => setBulkTicketId(e.target.value)}
+                  className="h-8 text-xs font-mono cursor-text"
+                  data-testid="bulk-input-ticket-id"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && bulkTicketId) {
+                      const updates: Record<string, string> = {};
+                      amountPaidBookings.forEach(b => { updates[b.bookingId] = bulkTicketId; });
+                      setTicketIdEdits(prev => ({ ...prev, ...updates }));
+                      setBulkTicketId("");
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (bulkTicketId) {
+                      const updates: Record<string, string> = {};
+                      amountPaidBookings.forEach(b => { updates[b.bookingId] = bulkTicketId; });
+                      setTicketIdEdits(prev => ({ ...prev, ...updates }));
+                      setBulkTicketId("");
+                    }
+                  }}
+                  data-testid="bulk-btn-apply-ticket-id"
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDisputeAdjEdits({});
+                setDiscrepancyAdjEdits({});
+                setTicketIdEdits({});
+                setDisputeStatusEdits({});
+              }}
+              data-testid="bulk-btn-reset-all"
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-1" />
+              Reset All
+            </Button>
+          </div>
 
-                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
-                  <div className="text-xs font-medium text-blue-700 dark:text-blue-300 col-span-2 mb-1">HO Data Inputs</div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Amt Paid</div>
-                    <div className="font-mono text-sm text-blue-600 dark:text-blue-400">{booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"} {currency}</div>
+          <div className="flex-1 overflow-auto border rounded-md">
+            <div className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_90px_80px_80px_80px_90px] gap-1.5 px-2 py-1.5 bg-muted/30 text-[11px] font-medium text-muted-foreground sticky top-0 z-10 border-b">
+              <div>Booking ID</div>
+              <div className="text-right">HO Net</div>
+              <div className="text-right">SP Net</div>
+              <div className="text-right">Total Payable</div>
+              <div className="text-right">Amt Paid</div>
+              <div className="text-right">Disputed Amt</div>
+              <div className="text-right">Dispute Adj</div>
+              <div>Status</div>
+              <div className="text-right">Ticket ID</div>
+              <div className="text-right">Net Payable</div>
+            </div>
+            {amountPaidBookings.map((booking) => {
+              const totalPayable = getAmountPaidTotal(booking);
+              const effectiveDisputedAmount = createdDisputes[booking.bookingId] ?? booking.disputedAmount;
+              const adjVal = disputeAdjEdits[booking.bookingId] ?? booking.disputeAdjustment ?? 0;
+              const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
+              const hasExistingDispute = (effectiveDisputedAmount != null && effectiveDisputedAmount !== 0);
+              return (
+                <div
+                  key={booking.bookingId}
+                  className="grid grid-cols-[minmax(90px,1fr)_70px_70px_90px_80px_90px_80px_80px_80px_90px] gap-1.5 px-2 py-1 text-xs border-t items-center"
+                  data-testid={`modal-row-${booking.bookingId}`}
+                >
+                  <div className="font-mono truncate" title={booking.bookingId}>
+                    {booking.bookingId}
+                  </div>
+                  <div className="text-right font-mono">{formatCurrency(booking.hoNet)}</div>
+                  <div className="text-right font-mono">{formatCurrency(booking.spNet)}</div>
+                  <div className="text-right font-mono">{formatCurrency(totalPayable)}</div>
+                  <div className="text-right font-mono text-blue-600 dark:text-blue-400">
+                    {booking.amountPaid != null ? formatCurrency(booking.amountPaid) : "-"}
+                  </div>
+                  <div className="text-right">
+                    {hasExistingDispute ? (
+                      <span className="font-mono">{formatCurrency(effectiveDisputedAmount!)}</span>
+                    ) : (
+                      creatingDisputeFor[booking.bookingId] !== undefined ? (
+                        <div className="flex items-center gap-0.5">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            autoFocus
+                            placeholder="Amt"
+                            className="h-6 text-[10px] font-mono text-right cursor-text w-16"
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value);
+                              setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: isNaN(v) ? null : v }));
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const amt = creatingDisputeFor[booking.bookingId];
+                                if (amt != null && amt !== 0) {
+                                  setCreatedDisputes(prev => ({ ...prev, [booking.bookingId]: amt }));
+                                  setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
+                                }
+                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                              }
+                              if (e.key === "Escape") {
+                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                              }
+                            }}
+                            data-testid={`modal-input-create-dispute-amt-${booking.bookingId}`}
+                          />
+                          <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => {
+                            const amt = creatingDisputeFor[booking.bookingId];
+                            if (amt != null && amt !== 0) {
+                              setCreatedDisputes(prev => ({ ...prev, [booking.bookingId]: amt }));
+                              setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
+                            }
+                            setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
+                          }} data-testid={`modal-btn-confirm-dispute-${booking.bookingId}`}>
+                            <Check className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1" onClick={() => setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: null }))} data-testid={`modal-btn-create-dispute-${booking.bookingId}`}>
+                          <Plus className="h-3 w-3 mr-0.5" />
+                          Add
+                        </Button>
+                      )
+                    )}
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">Dispute Settled</div>
-                    <div className="font-mono text-sm">{booking.disputeSettled != null ? formatCurrency(booking.disputeSettled) : "-"} {currency}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Disputed Amount</div>
-                    <div className="font-mono text-sm">{effectiveDisputedAmount != null ? formatCurrency(effectiveDisputedAmount) : "-"} {currency}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Dispute Adj Total</div>
-                    <div className="font-mono text-sm">{booking.disputeAdjustedTotal != null ? formatCurrency(booking.disputeAdjustedTotal) : "-"} {currency}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Discrepancy Till Date</div>
-                    <div className="font-mono text-sm">{booking.discrepancyAmount != null ? formatCurrency(booking.discrepancyAmount) : "-"} {currency}</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-muted/30 border">
-                  <div className="text-xs font-medium col-span-2 mb-1">Actions</div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Dispute Adjustment</div>
                     <Input
                       type="number"
                       step="0.01"
@@ -4228,50 +4347,18 @@ export function AmountPayablePanel({
                           if (!isNaN(num)) setDisputeAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
                         }
                       }}
-                      placeholder="0.00"
-                      className="h-8 text-xs font-mono text-right cursor-text"
+                      placeholder="0"
+                      className="h-6 text-[10px] font-mono text-right cursor-text"
                       data-testid={`modal-input-dispute-adj-${booking.bookingId}`}
                     />
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">Discrepancy Adj</div>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={discrepancyAdjEdits[booking.bookingId] !== undefined ? discrepancyAdjEdits[booking.bookingId] : (booking.finalDiscrepancyTotal ?? "")}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "") {
-                          setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                        } else {
-                          const num = parseFloat(v);
-                          if (!isNaN(num)) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
-                        }
-                      }}
-                      placeholder="0.00"
-                      className="h-8 text-xs font-mono text-right cursor-text"
-                      data-testid={`modal-input-discrepancy-adj-${booking.bookingId}`}
-                    />
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Ticket ID</div>
-                    <Input
-                      type="text"
-                      value={ticketIdEdits[booking.bookingId] !== undefined ? ticketIdEdits[booking.bookingId] : (booking.adjustedInTicketId ?? "")}
-                      onChange={(e) => setTicketIdEdits(prev => ({ ...prev, [booking.bookingId]: e.target.value }))}
-                      placeholder="Enter Ticket ID"
-                      className="h-8 text-xs font-mono cursor-text"
-                      data-testid={`modal-input-ticket-id-${booking.bookingId}`}
-                    />
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Dispute Status</div>
                     <Select
-                      value={disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? ""}
+                      value={statusVal}
                       onValueChange={(v) => setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: v }))}
                     >
-                      <SelectTrigger className="h-8 text-xs" data-testid={`modal-select-dispute-status-${booking.bookingId}`}>
-                        <SelectValue placeholder="Select" />
+                      <SelectTrigger className="h-6 text-[10px]" data-testid={`modal-select-dispute-status-${booking.bookingId}`}>
+                        <SelectValue placeholder="-" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="OPEN">OPEN</SelectItem>
@@ -4279,86 +4366,40 @@ export function AmountPayablePanel({
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-muted/30 border">
-                  <div className="text-xs font-medium col-span-2 mb-1">Results</div>
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">Final Dispute Amt</div>
-                    <div className="font-mono text-sm font-medium">{finalDisputeAmt != null ? formatCurrency(finalDisputeAmt) : "-"} {currency}</div>
+                    <Input
+                      type="text"
+                      value={ticketIdEdits[booking.bookingId] !== undefined ? ticketIdEdits[booking.bookingId] : (booking.adjustedInTicketId ?? "")}
+                      onChange={(e) => setTicketIdEdits(prev => ({ ...prev, [booking.bookingId]: e.target.value }))}
+                      placeholder="-"
+                      className="h-6 text-[10px] font-mono cursor-text"
+                      data-testid={`modal-input-ticket-id-${booking.bookingId}`}
+                    />
                   </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Net Price Payable</div>
-                    <div className="font-mono text-sm font-semibold text-primary">{formatCurrency(totalPayable - (booking.amountPaid || 0))} {currency}</div>
+                  <div className="text-right font-mono font-semibold" data-testid={`modal-net-payable-${booking.bookingId}`}>
+                    {formatCurrency(totalPayable - (booking.amountPaid || 0))}
                   </div>
                 </div>
+              );
+            })}
+          </div>
 
-                {!hasExistingDispute && (
-                  <div className="p-3 rounded-md border border-dashed">
-                    {creatingDisputeFor[booking.bookingId] !== undefined ? (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <div className="text-xs text-muted-foreground mb-1">Dispute Amount</div>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            autoFocus
-                            placeholder="Enter dispute amount"
-                            className="h-8 text-xs font-mono text-right cursor-text"
-                            onChange={(e) => {
-                              const v = parseFloat(e.target.value);
-                              setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: isNaN(v) ? null : v }));
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") {
-                                setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                              }
-                            }}
-                            data-testid={`modal-input-create-dispute-amt-${booking.bookingId}`}
-                          />
-                        </div>
-                        <div className="flex gap-1 mt-4">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => {
-                              const amt = creatingDisputeFor[booking.bookingId];
-                              if (amt != null && amt !== 0) {
-                                setCreatedDisputes(prev => ({ ...prev, [booking.bookingId]: amt }));
-                                setDisputeStatusEdits(prev => ({ ...prev, [booking.bookingId]: "OPEN" }));
-                              }
-                              setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
-                            }}
-                            data-testid={`modal-btn-confirm-dispute-${booking.bookingId}`}
-                          >
-                            <Check className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setCreatingDisputeFor(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; })}
-                            data-testid={`modal-btn-cancel-dispute-${booking.bookingId}`}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => setCreatingDisputeFor(prev => ({ ...prev, [booking.bookingId]: null }))}
-                        data-testid={`modal-btn-create-dispute-${booking.bookingId}`}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Dispute
-                      </Button>
-                    )}
-                  </div>
-                )}
+          <div className="flex items-center justify-between p-3 rounded-md bg-muted/30 border text-xs">
+            <div className="flex gap-4">
+              <div>
+                <span className="text-muted-foreground">Total Payable: </span>
+                <span className="font-mono font-semibold">{formatCurrency(amountPaidBookings.reduce((s, b) => s + getAmountPaidTotal(b), 0))} {currency}</span>
               </div>
-            );
-          })()}
+              <div>
+                <span className="text-muted-foreground">Total Paid: </span>
+                <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(amountPaidBookings.reduce((s, b) => s + (b.amountPaid || 0), 0))} {currency}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Net Payable: </span>
+                <span className="font-mono font-semibold">{formatCurrency(amountPaidBookings.reduce((s, b) => s + (getAmountPaidTotal(b) - (b.amountPaid || 0)), 0))} {currency}</span>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
