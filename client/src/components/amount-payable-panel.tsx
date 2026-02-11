@@ -2466,7 +2466,7 @@ export function AmountPayablePanel({
                                                     max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                                     value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet)}
                                                     onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
-                                                    className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                                    className={`h-8 text-sm font-mono text-right px-2 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
                                                     data-testid={`input-total-payable-${booking.bookingId}`}
                                                   />
                                                 </div>
@@ -2782,7 +2782,7 @@ export function AmountPayablePanel({
                                                   max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                                   value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable}
                                                   onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
-                                                  className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                                  className={`h-8 text-sm font-mono text-right px-2 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
                                                   data-testid={`input-total-payable-${booking.bookingId}`}
                                                 />
                                               </div>
@@ -3116,7 +3116,7 @@ export function AmountPayablePanel({
                                               max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                               value={amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable}
                                               onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
-                                              className={`h-6 text-xs font-mono text-right ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                              className={`h-8 text-sm font-mono text-right px-2 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
                                               data-testid={`input-total-payable-${booking.bookingId}`}
                                             />
                                           </div>
@@ -3292,7 +3292,7 @@ export function AmountPayablePanel({
                   <CollapsibleContent>
                     <div className="border-t overflow-x-auto overflow-y-hidden">
                       <div className="min-w-[1600px]">
-                        <div className="grid grid-cols-[110px_100px_90px_90px_100px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
+                        <div className="grid grid-cols-[110px_100px_90px_90px_130px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground sticky top-0 z-50 border-b">
                           <div>Booking ID</div>
                           <div>Reason</div>
                           <div className="text-right">HO Net</div>
@@ -3314,7 +3314,7 @@ export function AmountPayablePanel({
                             return (
                               <div 
                                 key={booking.bookingId}
-                                className="grid grid-cols-[110px_100px_90px_90px_100px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
+                                className="grid grid-cols-[110px_100px_90px_90px_130px_90px_100px_100px_100px_100px_100px_110px_90px] gap-1 px-3 py-1.5 text-xs border-t items-center"
                                 data-testid={`amount-paid-row-${booking.bookingId}`}
                               >
                                 <div className="font-mono truncate" title={booking.bookingId}>
@@ -3335,10 +3335,11 @@ export function AmountPayablePanel({
                                   <Input
                                     type="number"
                                     step="0.01"
+                                    min={Math.min(booking.hoNet, booking.spNet) * 0.9}
                                     max={Math.max(booking.hoNet, booking.spNet) * 1.1}
                                     value={isEdited ? amountPaidTotals[booking.bookingId] : totalPayable}
                                     onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value, booking.hoNet, booking.spNet)}
-                                    className={`h-6 text-xs font-mono text-right ${isEdited ? 'border-blue-400 dark:border-blue-600' : ''}`}
+                                    className={`h-8 text-sm font-mono text-right px-2 cursor-text ${isEdited ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
                                     data-testid={`input-total-payable-${booking.bookingId}`}
                                   />
                                 </div>
