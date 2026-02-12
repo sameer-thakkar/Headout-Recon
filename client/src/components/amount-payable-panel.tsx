@@ -368,7 +368,7 @@ export function AmountPayablePanel({
   }, [runId, amountPaidTotals, localSelections, bookings]);
 
   const reconciledBookings = useMemo(() => 
-    (bookings || []).filter(b => b.reason === "Reconciled"), 
+    (bookings || []).filter(b => b.reason === "Reconciled" && !(b.amountPaid != null && b.amountPaid > 0)), 
     [bookings]
   );
 
