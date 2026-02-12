@@ -4138,6 +4138,30 @@ export async function registerRoutes(
     }
   });
 
+  // Bulk delete disputes by runId and bookingIds
+  app.delete("/api/disputes/:runId/bulk", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const { bookingIds } = req.body;
+      
+      if (!Array.isArray(bookingIds)) {
+        return res.status(400).json({ error: "bookingIds must be an array" });
+      }
+      
+      for (const bookingId of bookingIds) {
+        const existing = await storage.getDisputeByBooking(runId, bookingId);
+        if (existing) {
+          await storage.deleteDispute(existing.disputeId);
+        }
+      }
+      
+      res.json({ success: true, deletedCount: bookingIds.length });
+    } catch (error) {
+      console.error("Bulk delete disputes error:", error);
+      res.status(500).json({ error: "Failed to bulk delete disputes" });
+    }
+  });
+
   // Delete dispute by runId and bookingId
   app.delete("/api/disputes/:runId/:bookingId", async (req, res) => {
     try {

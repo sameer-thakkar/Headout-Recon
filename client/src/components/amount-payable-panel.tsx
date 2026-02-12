@@ -1271,12 +1271,19 @@ export function AmountPayablePanel({
       }
       
       if (removedDisputes.length > 0) {
-        await apiRequest("DELETE", `/api/disputes/${runId}`, { bookingIds: removedDisputes });
+        await apiRequest("DELETE", `/api/disputes/${runId}/bulk`, { bookingIds: removedDisputes });
       }
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
       
       setOriginalDisputes(new Map(disputeAmounts));
+    } catch (error) {
+      console.error("Failed to log disputes:", error);
+      toast({
+        title: "Error",
+        description: "Failed to log disputes. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoggingDisputes(false);
     }
