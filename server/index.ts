@@ -14,6 +14,7 @@ declare module "http" {
 
 app.use(
   express.json({
+    limit: "50mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -39,8 +40,11 @@ app.use((req, res, next) => {
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
+  const skipCapture = path.includes("/runs/from-upload") || path.includes("/export") || path.includes("/runs/") && req.method === "GET";
   res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
+    if (!skipCapture) {
+      capturedJsonResponse = bodyJson;
+    }
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
@@ -49,7 +53,12 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        const responseStr = JSON.stringify(capturedJsonResponse);
+        if (responseStr.length > 2000) {
+          logLine += ` :: [response truncated, ${responseStr.length} chars]`;
+        } else {
+          logLine += ` :: ${responseStr}`;
+        }
       }
 
       log(logLine);
