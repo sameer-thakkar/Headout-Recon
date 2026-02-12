@@ -349,13 +349,16 @@ export function AmountPayablePanel({
     const timer = setTimeout(() => {
       const overrides: Record<string, { totalAmountPayable: number; selection?: "ho" | "sp" }> = {};
       for (const b of bookings) {
+        let pricePayable: number;
+        const sel = (localSelections[b.bookingId] || "sp") as "ho" | "sp";
         if (amountPaidTotals[b.bookingId] !== undefined) {
-          overrides[b.bookingId] = { totalAmountPayable: amountPaidTotals[b.bookingId], selection: localSelections[b.bookingId] as "ho" | "sp" || "sp" };
-        } else if (localSelections[b.bookingId] && localSelections[b.bookingId] !== "sp") {
-          const sel = localSelections[b.bookingId] as "ho" | "sp";
-          const price = sel === "ho" ? b.hoNet : b.spNet;
-          overrides[b.bookingId] = { totalAmountPayable: price, selection: sel };
+          pricePayable = amountPaidTotals[b.bookingId];
+        } else if (b.reason === "Reconciled" || b.reason === "Unmapped") {
+          pricePayable = b.spNet;
+        } else {
+          pricePayable = sel === "ho" ? b.hoNet : b.spNet;
         }
+        overrides[b.bookingId] = { totalAmountPayable: pricePayable, selection: sel };
       }
       if (Object.keys(overrides).length > 0) {
         apiRequest("POST", "/api/price-overrides", { runId, overrides }).catch(console.error);
