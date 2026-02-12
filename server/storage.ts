@@ -82,6 +82,10 @@ export interface IStorage {
   // Dispute Overrides (per-run, per-booking edits from Manage Disputes modal)
   setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void>;
   getDisputeOverrides(runId: string): Promise<Record<string, DisputeOverride>>;
+
+  // Price Overrides (per-run, per-booking edits from Amount Payable panel)
+  setPriceOverrides(runId: string, overrides: Record<string, PriceOverride>): Promise<void>;
+  getPriceOverrides(runId: string): Promise<Record<string, PriceOverride>>;
 }
 
 export interface DisputeOverride {
@@ -90,6 +94,11 @@ export interface DisputeOverride {
   finalDispute?: number;
   ticketId?: string;
   status?: string;
+}
+
+export interface PriceOverride {
+  totalAmountPayable: number;
+  selection?: "ho" | "sp";
 }
 
 export class MemStorage implements IStorage {
@@ -107,6 +116,7 @@ export class MemStorage implements IStorage {
   private paxTypesList: PaxType[] = [];
   private paxTypeCounter: number = 0;
   private disputeOverrides: Map<string, Record<string, DisputeOverride>> = new Map();
+  private priceOverrides: Map<string, Record<string, PriceOverride>> = new Map();
 
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
     const id = randomUUID();
@@ -434,6 +444,15 @@ export class MemStorage implements IStorage {
 
   async getDisputeOverrides(runId: string): Promise<Record<string, DisputeOverride>> {
     return this.disputeOverrides.get(runId) || {};
+  }
+
+  async setPriceOverrides(runId: string, overrides: Record<string, PriceOverride>): Promise<void> {
+    const existing = this.priceOverrides.get(runId) || {};
+    this.priceOverrides.set(runId, { ...existing, ...overrides });
+  }
+
+  async getPriceOverrides(runId: string): Promise<Record<string, PriceOverride>> {
+    return this.priceOverrides.get(runId) || {};
   }
 }
 
@@ -1145,6 +1164,17 @@ export class DatabaseStorage implements ISessionStorage {
 
   async getDisputeOverrides(runId: string): Promise<Record<string, DisputeOverride>> {
     return this.disputeOverridesCache.get(runId) || {};
+  }
+
+  private priceOverridesCache: Map<string, Record<string, PriceOverride>> = new Map();
+
+  async setPriceOverrides(runId: string, overrides: Record<string, PriceOverride>): Promise<void> {
+    const existing = this.priceOverridesCache.get(runId) || {};
+    this.priceOverridesCache.set(runId, { ...existing, ...overrides });
+  }
+
+  async getPriceOverrides(runId: string): Promise<Record<string, PriceOverride>> {
+    return this.priceOverridesCache.get(runId) || {};
   }
 }
 

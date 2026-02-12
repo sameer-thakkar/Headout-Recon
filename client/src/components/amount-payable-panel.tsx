@@ -344,6 +344,26 @@ export function AmountPayablePanel({
     }
   }, [runId]);
 
+  useEffect(() => {
+    if (!runId) return;
+    const timer = setTimeout(() => {
+      const overrides: Record<string, { totalAmountPayable: number; selection?: "ho" | "sp" }> = {};
+      for (const b of bookings) {
+        if (amountPaidTotals[b.bookingId] !== undefined) {
+          overrides[b.bookingId] = { totalAmountPayable: amountPaidTotals[b.bookingId], selection: localSelections[b.bookingId] as "ho" | "sp" || "sp" };
+        } else if (localSelections[b.bookingId] && localSelections[b.bookingId] !== "sp") {
+          const sel = localSelections[b.bookingId] as "ho" | "sp";
+          const price = sel === "ho" ? b.hoNet : b.spNet;
+          overrides[b.bookingId] = { totalAmountPayable: price, selection: sel };
+        }
+      }
+      if (Object.keys(overrides).length > 0) {
+        apiRequest("POST", "/api/price-overrides", { runId, overrides }).catch(console.error);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [runId, amountPaidTotals, localSelections, bookings]);
+
   const reconciledBookings = useMemo(() => 
     (bookings || []).filter(b => b.reason === "Reconciled"), 
     [bookings]

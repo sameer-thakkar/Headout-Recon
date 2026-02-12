@@ -629,6 +629,7 @@ export async function registerRoutes(
       }
       
       const disputeOverrides = await storage.getDisputeOverrides(runId);
+      const priceOverrides = await storage.getPriceOverrides(runId);
       
       const vendorCorrections = await storage.getVendorCorrections(runId);
       const vendorCorrectionsByBooking = new Map<string, string>();
@@ -1430,7 +1431,10 @@ export async function registerRoutes(
           return kLower === "netpricepayable" || kLower === "netpayable" || kLower === "netpriceamountpayable";
         };
         
-        const totalAmountPayable = reason === "Reconciled" ? spNet : finalNetPrice;
+        const priceOverride = priceOverrides[bookingId];
+        const totalAmountPayable = priceOverride 
+          ? priceOverride.totalAmountPayable 
+          : (reason === "Reconciled" ? spNet : finalNetPrice);
         
         const amountPaidValue = reconRow?.amountPaid || 0;
         const netPricePayable = typeof totalAmountPayable === "number"
@@ -2232,6 +2236,7 @@ export async function registerRoutes(
         gsDisputesByBooking.set(d.bookingId, d);
       }
       const gsDisputeOverrides = await storage.getDisputeOverrides(runId);
+      const gsPriceOverrides = await storage.getPriceOverrides(runId);
 
       // Get Google Sheets client
       const sheets = await getUncachableGoogleSheetClient();
@@ -2718,7 +2723,10 @@ export async function registerRoutes(
           const keyNorm = keyLower.replace(/[\s_]+/g, "");
           
           if (keyNorm === "totalamountpayable") {
-            const gsTotalAmountPayable = reason === "Reconciled" ? spNet : finalNetPrice;
+            const gsPriceOverride = gsPriceOverrides[bookingId];
+            const gsTotalAmountPayable = gsPriceOverride 
+              ? gsPriceOverride.totalAmountPayable 
+              : (reason === "Reconciled" ? spNet : finalNetPrice);
             value = typeof gsTotalAmountPayable === "number" ? formatIndianNumber(gsTotalAmountPayable) : gsTotalAmountPayable;
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
             value = String(errorTeamAttribution);
@@ -3564,6 +3572,20 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Set dispute overrides error:", error);
       res.status(500).json({ error: "Failed to save dispute overrides" });
+    }
+  });
+
+  app.post("/api/price-overrides", async (req, res) => {
+    try {
+      const { runId, overrides } = req.body;
+      if (!runId || !overrides || typeof overrides !== "object") {
+        return res.status(400).json({ error: "runId and overrides required" });
+      }
+      await storage.setPriceOverrides(runId, overrides);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Set price overrides error:", error);
+      res.status(500).json({ error: "Failed to save price overrides" });
     }
   });
 
