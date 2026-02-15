@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle, useRef, Fragment } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, TrendingUp, TrendingDown, ArrowRight, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, TrendingUp, TrendingDown, ArrowRight, ArrowLeft, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -50,6 +50,7 @@ import {
   createPresetAdjustments 
 } from "./amount-payable-modal";
 import type { PrimaryRow } from "@shared/schema";
+import { ReasonLevelModal, type ReasonLevelModalHandle } from "./reason-level-modal";
 
 function normalizeDate(d: string): Date | null {
   const num = Number(d);
@@ -1015,6 +1016,7 @@ export function AmountPayablePanel({
   }, [runId]);
 
   const unifiedTidModalRef = useRef<UnifiedTidActionModalHandle>(null);
+  const reasonModalRef = useRef<ReasonLevelModalHandle>(null);
 
   const handleBulkSpNet = useCallback((bulkBookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     setLocalSelections(prev => {
@@ -1109,6 +1111,108 @@ export function AmountPayablePanel({
     setActionedBookings(prev => { const next = new Set(prev); for (const id of bookingIds) next.add(id); return next; });
     toast({ title: "Vendor ID Updated", description: `Set vendor ID for ${bookingIds.length} bookings.` });
   }, [saveBulkVendorCorrections, toast]);
+
+  const handleReasonBulkSelection = useCallback((bookingIds: string[], value: "ho" | "sp") => {
+    setLocalSelections(prev => {
+      const updated = { ...prev };
+      for (const id of bookingIds) updated[id] = value;
+      return updated;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const id of bookingIds) delete next[id];
+      return next;
+    });
+    setRawInputValues(prev => {
+      const next = { ...prev };
+      for (const id of bookingIds) delete next[id];
+      return next;
+    });
+    if (value === "ho") {
+      setActiveDisputes(prev => {
+        const newSet = new Set(prev);
+        for (const id of bookingIds) newSet.delete(id);
+        return newSet;
+      });
+      setDisputeAmounts(prev => {
+        const newMap = new Map(prev);
+        for (const id of bookingIds) newMap.delete(id);
+        return newMap;
+      });
+    }
+    setActionedBookings(prev => { const next = new Set(prev); for (const id of bookingIds) next.add(id); return next; });
+    toast({ title: "Bulk Update Applied", description: `Set ${bookingIds.length} bookings to ${value.toUpperCase()} Net.` });
+  }, [toast]);
+
+  const handleReasonFlatAdjustment = useCallback((bookingIds: string[], adjustment: number) => {
+    const adjusted = Math.round(adjustment * 100) / 100;
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const id of bookingIds) {
+        const booking = bookings.find(b => b.bookingId === id);
+        if (booking) {
+          const current = next[id] ?? booking.spNet;
+          next[id] = Math.round((adjusted === 0 ? 0 : current + adjusted) * 100) / 100;
+        }
+      }
+      return next;
+    });
+    setRawInputValues(prev => {
+      const next = { ...prev };
+      for (const id of bookingIds) delete next[id];
+      return next;
+    });
+    setActionedBookings(prev => { const next = new Set(prev); for (const id of bookingIds) next.add(id); return next; });
+    toast({ title: "Flat Adjustment Applied", description: adjusted === 0 ? `Set ${bookingIds.length} bookings to 0.` : `Adjusted ${bookingIds.length} bookings by ${adjusted > 0 ? "+" : ""}${adjusted}.` });
+  }, [bookings, toast]);
+
+  const handleReasonClearDisputes = useCallback((bookingIds: string[]) => {
+    setActiveDisputes(prev => {
+      const newSet = new Set(prev);
+      for (const id of bookingIds) newSet.delete(id);
+      return newSet;
+    });
+    setDisputeAmounts(prev => {
+      const newMap = new Map(prev);
+      for (const id of bookingIds) newMap.delete(id);
+      return newMap;
+    });
+    setActionedBookings(prev => { const next = new Set(prev); for (const id of bookingIds) next.add(id); return next; });
+    toast({ title: "Disputes Cleared", description: `Cleared disputes for ${bookingIds.length} bookings.` });
+  }, [toast]);
+
+  const handleReasonLogIssue = useCallback(async (reason: string, description: string, priority: "low" | "medium" | "high", driTeam: string, bookingIds: string[]) => {
+    if (!runId || bookingIds.length === 0) return;
+    try {
+      const relevantBookings = bookings.filter(b => bookingIds.includes(b.bookingId));
+      const firstBooking = relevantBookings[0];
+      const discrepancyLocal = relevantBookings.reduce((sum, b) => sum + Math.abs(b.hoNet - b.spNet), 0);
+      const discrepancyUsd = relevantBookings.reduce((sum, b) => {
+        const matchingRow = allRows.find(r => r.bookingId === b.bookingId);
+        return sum + Math.abs(matchingRow?.differenceUsd || 0);
+      }, 0);
+
+      await apiRequest("POST", "/api/issues", {
+        runId,
+        billingEntityId: firstBooking?.beId || "",
+        billingEntityName: firstBooking?.billingEntityName || firstBooking?.beId || "",
+        currency,
+        discrepancyLocal,
+        discrepancyUsd,
+        reason,
+        driTeam,
+        bookingIds,
+        description,
+        priority,
+      });
+
+      toast({ title: "Issue Flagged", description: `Issue flagged for ${reason} (${bookingIds.length} bookings) — assigned to ${driTeam}.` });
+      await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+    } catch (error) {
+      console.error("Failed to flag issue:", error);
+      toast({ title: "Error", description: "Failed to flag issue. Please try again.", variant: "destructive" });
+    }
+  }, [runId, bookings, allRows, currency, toast]);
 
   useEffect(() => {
     if (!runId) return;
@@ -3270,6 +3374,16 @@ export function AmountPayablePanel({
                                 <Badge variant="secondary" className="text-xs">
                                   {reasonBookings.length}
                                 </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={(e) => { e.stopPropagation(); reasonModalRef.current?.open(reason, "cancellation"); }}
+                                  data-testid={`button-manage-cancellation-${reason}`}
+                                >
+                                  <Settings className="h-3 w-3 mr-1" />
+                                  Manage
+                                </Button>
                               </div>
                               <div className="col-span-2 flex justify-center">
                                 <Select
@@ -3533,6 +3647,16 @@ export function AmountPayablePanel({
                             <Badge variant="secondary" className="text-xs">
                               {reasonBookings.length}
                             </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs"
+                              onClick={(e) => { e.stopPropagation(); reasonModalRef.current?.open(reason, "discrepancy"); }}
+                              data-testid={`button-manage-reason-${reason}`}
+                            >
+                              <Settings className="h-3 w-3 mr-1" />
+                              Manage
+                            </Button>
                           </div>
                           <div className="col-span-2 flex justify-center">
                             {reason === "Unmapped" ? (
@@ -3817,6 +3941,16 @@ export function AmountPayablePanel({
                           <Badge variant="secondary" className="text-xs">
                             {reasonBookings.length}
                           </Badge>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-xs"
+                            onClick={(e) => { e.stopPropagation(); reasonModalRef.current?.open(reason, "secondary_vendor"); }}
+                            data-testid={`button-manage-sv-${reason}`}
+                          >
+                            <Settings className="h-3 w-3 mr-1" />
+                            Manage
+                          </Button>
                         </div>
                         <div className="col-span-2 flex justify-center">
                           {reason !== "Reconciled" && reason !== "Unmapped" && (
@@ -5473,6 +5607,23 @@ export function AmountPayablePanel({
         runId={runId}
         allRows={allRows}
         onLogIssue={handleLogSingleIssue}
+      />
+      <ReasonLevelModal
+        ref={reasonModalRef}
+        currency={currency}
+        runId={runId}
+        allRows={allRows}
+        bookingsByReason={bookingsByReason}
+        cancellationsByReason={cancellationsByReason}
+        secondaryVendorByReason={secondaryVendorByReason}
+        localSelections={localSelections}
+        activeDisputes={activeDisputes}
+        disputeAmounts={disputeAmounts}
+        onApplyBulkSelection={handleReasonBulkSelection}
+        onApplyFlatAdjustment={handleReasonFlatAdjustment}
+        onRaiseDispute={handleRaiseDisputeFromModal}
+        onClearDisputes={handleReasonClearDisputes}
+        onLogIssue={handleReasonLogIssue}
       />
     </div>
   );
