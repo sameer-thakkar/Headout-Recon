@@ -1142,7 +1142,7 @@ export function AmountPayablePanel({
         return next;
       });
     } else {
-      setAmountPaidTotals(prev => ({ ...prev, [bookingId]: numVal }));
+      setAmountPaidTotals(prev => ({ ...prev, [bookingId]: Math.round(numVal * 100) / 100 }));
     }
   }, []);
 
@@ -1154,7 +1154,7 @@ export function AmountPayablePanel({
       const upper = Math.max(hoNet, spNet);
       const minVal = lower * 0.9;
       const maxVal = upper * 1.1;
-      const capped = Math.max(minVal, Math.min(val, maxVal));
+      const capped = Math.round(Math.max(minVal, Math.min(val, maxVal)) * 100) / 100;
       return { ...prev, [bookingId]: capped };
     });
     setRawInputValues(prev => {
@@ -1504,7 +1504,7 @@ export function AmountPayablePanel({
       newMap.delete(bookingId);
       return newMap;
     });
-    setDisputeAmounts(prev => new Map(prev).set(bookingId, amount));
+    setDisputeAmounts(prev => new Map(prev).set(bookingId, Math.round(amount * 100) / 100));
   }, [getMaxDisputeAmount]);
 
   const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
@@ -1722,10 +1722,11 @@ export function AmountPayablePanel({
   }, []);
 
   const updateAdjustment = useCallback((id: string, field: keyof Adjustment, value: string | number | string[]) => {
+    const roundedValue = field === "amount" && typeof value === "number" ? Math.round(value * 100) / 100 : value;
     setLocalAdjustments((prev) =>
       prev.map((a) => {
         if (a.id !== id) return a;
-        return { ...a, [field]: value };
+        return { ...a, [field]: roundedValue };
       })
     );
     setValidationError("");
@@ -2768,10 +2769,11 @@ export function AmountPayablePanel({
                               <div className="flex items-center gap-1">
                                 <Input
                                   type="number"
+                                  step="0.01"
                                   className="h-6 text-[10px] px-1 w-14 text-right font-mono"
                                   value={disputeAmount || ""}
                                   onChange={(e) => {
-                                    const val = parseFloat(e.target.value) || 0;
+                                    const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
                                     setDisputeAmounts(prev => {
                                       const newMap = new Map(prev);
                                       newMap.set(booking.bookingId, val);
@@ -2825,6 +2827,7 @@ export function AmountPayablePanel({
                             {isPay || !decision ? (
                               <Input
                                 type="number"
+                                step="0.01"
                                 className="h-6 text-[10px] px-1 text-right font-mono"
                                 value={currentFinalAmount}
                                 onChange={(e) => {
@@ -2833,7 +2836,7 @@ export function AmountPayablePanel({
                                     decision: decision?.decision || "pay",
                                     reason: decision?.reason || "",
                                     customReason: decision?.customReason || "",
-                                    finalAmount: parseFloat(e.target.value) || 0,
+                                    finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100,
                                   });
                                   setAlreadyReconciledDecisions(newDecisions);
                                 }}
@@ -3098,10 +3101,11 @@ export function AmountPayablePanel({
                                                     {isDisputed && (
                                                       <Input
                                                         type="number"
+                                                        step="0.01"
                                                         className="w-full h-6 text-xs text-right font-mono"
                                                         value={disputeAmt || ""}
                                                         onChange={(e) => {
-                                                          const val = parseFloat(e.target.value) || 0;
+                                                          const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
                                                           setDisputeAmounts((prev) => {
                                                             const updated = new Map(prev);
                                                             updated.set(booking.bookingId, val);
@@ -3382,6 +3386,7 @@ export function AmountPayablePanel({
                                                     <div className="flex flex-col items-end">
                                                       <Input
                                                         type="number"
+                                                        step="0.01"
                                                         value={currentDisputeAmt}
                                                         onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
                                                         className={`w-20 h-5 text-xs font-mono px-1 text-right ${disputeErrors.has(booking.bookingId) ? 'border-red-500' : ''}`}
@@ -3686,6 +3691,7 @@ export function AmountPayablePanel({
                                               {isDisputed ? (
                                                 <Input
                                                   type="number"
+                                                  step="0.01"
                                                   value={disputeAmt}
                                                   onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
                                                   className="h-6 w-20 text-xs font-mono text-right ml-auto"
@@ -4190,6 +4196,7 @@ export function AmountPayablePanel({
                       ) : (
                         <Input
                           type="number"
+                          step="0.01"
                           placeholder="0.00"
                           value={adj.amount || ""}
                           onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}
@@ -4294,7 +4301,7 @@ export function AmountPayablePanel({
                               <Input
                                 type="number"
                                 value={editClosedDisputeAmount}
-                                onChange={(e) => setEditClosedDisputeAmount(parseFloat(e.target.value) || 0)}
+                                onChange={(e) => setEditClosedDisputeAmount(Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
                                 className="h-6 w-24 text-xs font-mono"
                                 step="0.01"
                                 min="0"
@@ -4524,10 +4531,11 @@ export function AmountPayablePanel({
                                   <Label className="text-xs text-muted-foreground">Adjustment Amount</Label>
                                   <Input
                                     type="number"
+                                    step="0.01"
                                     value={closure.adjustmentAmount}
                                     onChange={(e) => 
                                       updateBookingClosure(closure.disputeId, { 
-                                        adjustmentAmount: parseFloat(e.target.value) || 0 
+                                        adjustmentAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 
                                       })
                                     }
                                     className="h-8 font-mono"
@@ -4837,8 +4845,8 @@ export function AmountPayablePanel({
                     data-testid="bulk-input-dispute-adj"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        const val = parseFloat(bulkDisputeAdj);
-                        if (!isNaN(val)) {
+                        const val = Math.round((parseFloat(bulkDisputeAdj) || 0) * 100) / 100;
+                        if (!isNaN(parseFloat(bulkDisputeAdj))) {
                           const filtered = modalSearchQuery
                             ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
                             : amountPaidBookings;
@@ -4855,8 +4863,8 @@ export function AmountPayablePanel({
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const val = parseFloat(bulkDisputeAdj);
-                      if (!isNaN(val)) {
+                      const val = Math.round((parseFloat(bulkDisputeAdj) || 0) * 100) / 100;
+                      if (!isNaN(parseFloat(bulkDisputeAdj))) {
                         const filtered = modalSearchQuery
                           ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
                           : amountPaidBookings;
@@ -4886,8 +4894,8 @@ export function AmountPayablePanel({
                     data-testid="bulk-input-discrepancy-adj"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        const val = parseFloat(bulkDiscrepancyAdj);
-                        if (!isNaN(val)) {
+                        const val = Math.round((parseFloat(bulkDiscrepancyAdj) || 0) * 100) / 100;
+                        if (!isNaN(parseFloat(bulkDiscrepancyAdj))) {
                           const filtered = modalSearchQuery
                             ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
                             : amountPaidBookings;
@@ -4904,8 +4912,8 @@ export function AmountPayablePanel({
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const val = parseFloat(bulkDiscrepancyAdj);
-                      if (!isNaN(val)) {
+                      const val = Math.round((parseFloat(bulkDiscrepancyAdj) || 0) * 100) / 100;
+                      if (!isNaN(parseFloat(bulkDiscrepancyAdj))) {
                         const filtered = modalSearchQuery
                           ? amountPaidBookings.filter(b => b.bookingId.toLowerCase().includes(modalSearchQuery.toLowerCase()))
                           : amountPaidBookings;
@@ -5038,8 +5046,8 @@ export function AmountPayablePanel({
                           if (v === "") {
                             setDisputeAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
                           } else {
-                            const num = parseFloat(v);
-                            if (!isNaN(num)) setDisputeAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
+                            const num = Math.round((parseFloat(v) || 0) * 100) / 100;
+                            if (!isNaN(parseFloat(v))) setDisputeAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
                           }
                         }}
                         placeholder="0"
@@ -5068,8 +5076,8 @@ export function AmountPayablePanel({
                           if (v === "") {
                             setDiscrepancyAdjEdits(prev => { const n = { ...prev }; delete n[booking.bookingId]; return n; });
                           } else {
-                            const num = parseFloat(v);
-                            if (!isNaN(num)) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
+                            const num = Math.round((parseFloat(v) || 0) * 100) / 100;
+                            if (!isNaN(parseFloat(v))) setDiscrepancyAdjEdits(prev => ({ ...prev, [booking.bookingId]: num }));
                           }
                         }}
                         placeholder="0"

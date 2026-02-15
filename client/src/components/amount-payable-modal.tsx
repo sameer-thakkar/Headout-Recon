@@ -433,12 +433,13 @@ export function AmountPayableModal({
   }, [disputeAmounts]);
 
   const setBookingDisputeAmount = useCallback((bookingId: string, amount: number, _booking?: BookingForPayable) => {
+    const rounded = Math.round(amount * 100) / 100;
     setDisputeAmounts(prev => {
       const next = new Map(prev);
-      if (amount <= 0) {
+      if (rounded <= 0) {
         next.delete(bookingId);
       } else {
-        next.set(bookingId, amount);
+        next.set(bookingId, rounded);
       }
       return next;
     });
@@ -554,13 +555,13 @@ export function AmountPayableModal({
   }, []);
 
   const updateAdjustment = useCallback((id: string, field: keyof Adjustment, value: string | number | string[]) => {
+    const roundedValue = field === "amount" && typeof value === "number" ? Math.round(value * 100) / 100 : value;
     setLocalAdjustments((prev) =>
       prev.map((a) => {
         if (a.id !== id) return a;
-        return { ...a, [field]: value };
+        return { ...a, [field]: roundedValue };
       })
     );
-    // Clear validation error when user starts filling in fields
     setValidationError("");
   }, []);
 
@@ -1271,6 +1272,7 @@ export function AmountPayableModal({
                           ) : (
                             <Input
                               type="number"
+                              step="0.01"
                               placeholder="0.00"
                               value={adj.amount || ""}
                               onChange={(e) => updateAdjustment(adj.id, "amount", parseFloat(e.target.value) || 0)}

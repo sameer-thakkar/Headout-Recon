@@ -127,7 +127,7 @@ const BookingRow = memo(function BookingRow({
   }, [fnpValue]);
 
   const commitFnp = useCallback(() => {
-    const parsed = parseFloat(localFnp) || 0;
+    const parsed = Math.round((parseFloat(localFnp) || 0) * 100) / 100;
     if (parsed !== fnpValue) {
       onUpdateFnp(booking.bookingId, parsed);
     }
@@ -673,8 +673,8 @@ const DisputeModal = forwardRef<DisputeModalHandle, {
 
   const handleSave = useCallback(async () => {
     if (!booking) return;
-    const amount = parseFloat(amountInput);
-    if (isNaN(amount) || amount <= 0) {
+    const amount = Math.round((parseFloat(amountInput) || 0) * 100) / 100;
+    if (isNaN(parseFloat(amountInput)) || amount <= 0) {
       toast({
         title: "Invalid Amount",
         description: "Please enter a valid dispute amount greater than zero.",
