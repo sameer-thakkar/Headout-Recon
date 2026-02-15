@@ -3276,22 +3276,6 @@ export function AmountPayablePanel({
                                       >
                                         <FileWarning className="h-3 w-3" />
                                       </Button>
-                                      {reason === "Unmapped" ? (
-                                        <span className="text-xs text-muted-foreground">SP</span>
-                                      ) : (
-                                        <Select
-                                          value=""
-                                          onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
-                                        >
-                                          <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-tid-${tid}`}>
-                                            <SelectValue placeholder="All" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="ho">HO</SelectItem>
-                                            <SelectItem value="sp">SP</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      )}
                                       {(() => {
                                         const { disputed, disputable } = getTidDisputeCount(reason, tid);
                                         if (disputable === 0) return null;
@@ -3585,20 +3569,6 @@ export function AmountPayablePanel({
                                       <Pencil className="h-3 w-3 mr-1" />
                                       {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
                                     </Button>
-                                    {reason !== "Reconciled" && reason !== "Unmapped" && (
-                                      <Select
-                                        value=""
-                                        onValueChange={(v) => updateSecondaryVendorTidSelection(reason, tid, v as "ho" | "sp")}
-                                      >
-                                        <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-sv-tid-${tid}`}>
-                                          <SelectValue placeholder="All" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="ho">HO</SelectItem>
-                                          <SelectItem value="sp">SP</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    )}
                                     {(() => {
                                       if (reason === "Reconciled") return null;
                                       const { disputed, disputable } = getSecondaryVendorTidDisputeCount(reason, tid);
