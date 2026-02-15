@@ -317,7 +317,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
-            Update Final Net Price
+            {vendorCorrectionBookings.length > 0 ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
           </DialogTitle>
           <DialogDescription>
             Choose how to update Final Net Price for {bookings.length} bookings in TID {tid}.
@@ -3026,7 +3026,7 @@ export function AmountPayablePanel({
                                               data-testid={`btn-update-fnp-${tid}`}
                                             >
                                               <Pencil className="h-3 w-3 mr-1" />
-                                              Update Final Net Price
+                                              {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
                                             </Button>
                                           </div>
                                         </div>
@@ -3062,7 +3062,7 @@ export function AmountPayablePanel({
                                                       updateSelection(booking.bookingId, v as "ho" | "sp", booking);
                                                     }}
                                                   >
-                                                    <SelectTrigger className="w-16 h-6 text-xs">
+                                                    <SelectTrigger className="w-16 h-6 text-xs border-dashed text-muted-foreground">
                                                       <SelectValue />
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -3110,7 +3110,7 @@ export function AmountPayablePanel({
                                                     value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet))}
                                                     onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                                     onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                    className={`h-8 text-sm font-mono text-right px-2 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
+                                                    className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
                                                     data-testid={`input-total-payable-${booking.bookingId}`}
                                                   />
                                                 </div>
@@ -3302,7 +3302,7 @@ export function AmountPayablePanel({
                                             finalNetPriceModalRef.current?.open(tidBookings, tid);
                                           }}
                                           data-testid={`btn-update-fnp-${tid}`}
-                                          title="Update Final Net Price"
+                                          title={tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
                                         >
                                           <Pencil className="h-3 w-3" />
                                         </Button>
@@ -3408,7 +3408,7 @@ export function AmountPayablePanel({
                                                     onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                   >
                                                     <SelectTrigger 
-                                                      className="w-12 h-5 text-xs" 
+                                                      className="w-12 h-5 text-xs border-dashed text-muted-foreground" 
                                                       data-testid={`select-booking-${booking.bookingId}`}
                                                     >
                                                       <SelectValue />
@@ -3439,7 +3439,7 @@ export function AmountPayablePanel({
                                                   value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
                                                   onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                                   onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                  className={`h-8 text-sm font-mono text-right px-2 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
+                                                  className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
                                                   data-testid={`input-total-payable-${booking.bookingId}`}
                                                 />
                                               </div>
@@ -3666,7 +3666,7 @@ export function AmountPayablePanel({
                                           finalNetPriceModalRef.current?.open(tidBookings, tid);
                                         }}
                                         data-testid={`btn-update-fnp-sv-${tid}`}
-                                        title="Update Final Net Price"
+                                        title={tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
                                       >
                                         <Pencil className="h-3 w-3" />
                                       </Button>
@@ -3757,7 +3757,7 @@ export function AmountPayablePanel({
                                                 value={selection}
                                                 onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                               >
-                                                <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-sv-booking-${booking.bookingId}`}>
+                                                <SelectTrigger className="w-12 h-6 text-xs border-dashed text-muted-foreground" data-testid={`select-sv-booking-${booking.bookingId}`}>
                                                   <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -3786,7 +3786,7 @@ export function AmountPayablePanel({
                                               value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
                                               onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                               onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                              className={`h-8 text-sm font-mono text-right px-2 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
+                                              className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
                                               data-testid={`input-total-payable-${booking.bookingId}`}
                                             />
                                           </div>
