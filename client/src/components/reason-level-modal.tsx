@@ -1,7 +1,6 @@
 import { useState, useCallback, useMemo, forwardRef, useImperativeHandle } from "react";
-import { TrendingUp, FileWarning, AlertTriangle, Filter, Check, X, ChevronDown, ChevronRight } from "lucide-react";
+import { TrendingUp, FileWarning, AlertTriangle, Check, X, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +16,280 @@ function formatNumberModal(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatSignedDisc(value: number): string {
+  const formatted = formatNumberModal(Math.abs(value));
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `-${formatted}`;
+  return formatted;
+}
+
+function discColor(value: number): string {
+  if (value > 0) return "text-green-700 dark:text-green-300";
+  if (value < 0) return "text-red-600 dark:text-red-400";
+  return "text-muted-foreground";
+}
+
+interface TidAggregate {
+  tid: string;
+  bookings: BookingForPayable[];
+  bookingCount: number;
+  totalSpNet: number;
+  totalHoNet: number;
+  discrepancy: number;
+  fulfillmentMethods: string[];
+  hasMixedFulfillment: boolean;
+}
+
+function buildTidAggregates(bookings: BookingForPayable[], allRows: PrimaryRow[]): TidAggregate[] {
+  const tidMap = new Map<string, BookingForPayable[]>();
+  for (const b of bookings) {
+    const tid = b.tid || "UNKNOWN";
+    if (!tidMap.has(tid)) tidMap.set(tid, []);
+    tidMap.get(tid)!.push(b);
+  }
+
+  const aggregates: TidAggregate[] = [];
+  Array.from(tidMap.entries()).forEach(([tid, tidBookings]) => {
+    const totalSpNet = Math.round(tidBookings.reduce((s: number, b: BookingForPayable) => s + b.spNet, 0) * 100) / 100;
+    const totalHoNet = Math.round(tidBookings.reduce((s: number, b: BookingForPayable) => s + b.hoNet, 0) * 100) / 100;
+    const disc = Math.round((totalHoNet - totalSpNet) * 100) / 100;
+
+    const fmSet = new Set<string>();
+    tidBookings.forEach((b) => {
+      const row = allRows.find(r => r.bookingId === b.bookingId);
+      if (row?.fulfillmentMethod) fmSet.add(row.fulfillmentMethod);
+    });
+    const fulfillmentMethods = Array.from(fmSet);
+
+    aggregates.push({
+      tid,
+      bookings: tidBookings,
+      bookingCount: tidBookings.length,
+      totalSpNet,
+      totalHoNet,
+      discrepancy: disc,
+      fulfillmentMethods,
+      hasMixedFulfillment: fulfillmentMethods.length > 1,
+    });
+  });
+
+  return aggregates.sort((a, b) => Math.abs(b.discrepancy) - Math.abs(a.discrepancy));
+}
+
+interface PredictiveInsight {
+  tid: string;
+  indicator: string;
+  detail: string;
+}
+
+function generatePredictiveInsights(topTids: TidAggregate[], allRows: PrimaryRow[]): PredictiveInsight[] {
+  const insights: PredictiveInsight[] = [];
+
+  for (const tidAgg of topTids) {
+    const tidRows = allRows.filter(r => r.tid === tidAgg.tid);
+    let bestIndicator = "";
+    let bestDetail = "";
+
+    const paxIssues = analyzePaxIssues(tidAgg.bookings, tidRows);
+    if (paxIssues) {
+      bestIndicator = paxIssues.indicator;
+      bestDetail = paxIssues.detail;
+    }
+
+    if (!bestIndicator) {
+      const priceChanges = analyzePriceChanges(tidAgg.bookings, tidRows);
+      if (priceChanges) {
+        bestIndicator = priceChanges.indicator;
+        bestDetail = priceChanges.detail;
+      }
+    }
+
+    if (!bestIndicator && tidAgg.hasMixedFulfillment) {
+      bestIndicator = "Mixed Fulfillment";
+      bestDetail = `Fulfillment methods differ across bookings: ${tidAgg.fulfillmentMethods.join(", ")}. This may explain the discrepancy.`;
+    }
+
+    if (!bestIndicator) {
+      const dateIssue = analyzeDateSpecificIssues(tidAgg.bookings, tidRows);
+      if (dateIssue) {
+        bestIndicator = dateIssue.indicator;
+        bestDetail = dateIssue.detail;
+      }
+    }
+
+    if (bestIndicator) {
+      insights.push({ tid: tidAgg.tid, indicator: bestIndicator, detail: bestDetail });
+    }
+  }
+
+  return insights;
+}
+
+function analyzePaxIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): { indicator: string; detail: string } | null {
+  const paxProblems: string[] = [];
+  let missingPaxCount = 0;
+  let mismatchedPaxCount = 0;
+
+  for (const b of bookings) {
+    const row = rows.find(r => r.bookingId === b.bookingId);
+    if (!b.paxBreakdown || b.paxBreakdown.length === 0) {
+      missingPaxCount++;
+      continue;
+    }
+
+    const paxTotal = Math.round(b.paxBreakdown.reduce((s, p) => s + p.priceNet, 0) * 100) / 100;
+    const hoNet = Math.round(b.hoNet * 100) / 100;
+    if (Math.abs(paxTotal - hoNet) > 1) {
+      mismatchedPaxCount++;
+    }
+  }
+
+  if (missingPaxCount > 0 && missingPaxCount === bookings.length) {
+    return { indicator: "Missing Pax Data", detail: `All ${bookings.length} bookings lack pax type breakdown. Unable to verify unit pricing.` };
+  }
+
+  if (mismatchedPaxCount > 0) {
+    return { indicator: "Pax Price Mismatch", detail: `${mismatchedPaxCount} of ${bookings.length} bookings have pax breakdown totals that don't match HO Net — possible unit price issue.` };
+  }
+
+  const paxPricesByTypeAndDate = new Map<string, { unitPrice: number; date: string }[]>();
+  for (const b of bookings) {
+    if (!b.paxBreakdown) continue;
+    const row = rows.find(r => r.bookingId === b.bookingId);
+    const dateStr = b.experienceDate || row?.experienceDate || b.bookingCreationDate || row?.bookingCreationDate || "";
+    for (const p of b.paxBreakdown) {
+      if (!paxPricesByTypeAndDate.has(p.paxType)) paxPricesByTypeAndDate.set(p.paxType, []);
+      paxPricesByTypeAndDate.get(p.paxType)!.push({ unitPrice: p.unitPrice, date: dateStr });
+    }
+  }
+
+  const paxEntries = Array.from(paxPricesByTypeAndDate.entries());
+  for (let i = 0; i < paxEntries.length; i++) {
+    const [paxType, entries] = paxEntries[i];
+    const uniquePrices = Array.from(new Set(entries.map(e => e.unitPrice)));
+    if (uniquePrices.length > 1) {
+      const sorted = uniquePrices.sort((a: number, b: number) => a - b);
+      const datedEntries = entries.filter(e => e.date).sort((a, b) => a.date.localeCompare(b.date));
+      let changeDate = "";
+      if (datedEntries.length >= 2) {
+        for (let j = 1; j < datedEntries.length; j++) {
+          if (datedEntries[j].unitPrice !== datedEntries[j - 1].unitPrice) {
+            changeDate = datedEntries[j].date;
+            break;
+          }
+        }
+      }
+      let formattedChangeDate = "";
+      if (changeDate) {
+        try {
+          const d = new Date(changeDate);
+          if (!isNaN(d.getTime())) {
+            formattedChangeDate = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+          } else {
+            formattedChangeDate = changeDate;
+          }
+        } catch { formattedChangeDate = changeDate; }
+      }
+      const datePart = formattedChangeDate ? ` Rate changed around ${formattedChangeDate}.` : " Rate changed during the period.";
+      return {
+        indicator: "Pax Price Changed",
+        detail: `${paxType} unit price varies: ${sorted.map((p: number) => formatNumberModal(p)).join(" → ")}.${datePart}`
+      };
+    }
+  }
+
+  return null;
+}
+
+function analyzePriceChanges(bookings: BookingForPayable[], rows: PrimaryRow[]): { indicator: string; detail: string } | null {
+  const dated: { date: string; hoNet: number; spNet: number; bookingId: string }[] = [];
+
+  for (const b of bookings) {
+    const row = rows.find(r => r.bookingId === b.bookingId);
+    const dateStr = b.experienceDate || row?.experienceDate || b.bookingCreationDate || row?.bookingCreationDate;
+    if (dateStr) {
+      dated.push({ date: dateStr, hoNet: b.hoNet, spNet: b.spNet, bookingId: b.bookingId });
+    }
+  }
+
+  if (dated.length < 2) return null;
+
+  dated.sort((a, b) => a.date.localeCompare(b.date));
+
+  let maxShift = 0;
+  let shiftDate = "";
+  for (let i = 1; i < dated.length; i++) {
+    const prevDisc = dated[i - 1].hoNet - dated[i - 1].spNet;
+    const currDisc = dated[i].hoNet - dated[i].spNet;
+    const shift = Math.abs(currDisc - prevDisc);
+    if (shift > maxShift) {
+      maxShift = shift;
+      shiftDate = dated[i].date;
+    }
+  }
+
+  if (maxShift > 1 && shiftDate) {
+    let formattedDate = shiftDate;
+    try {
+      const d = new Date(shiftDate);
+      if (!isNaN(d.getTime())) {
+        formattedDate = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+      }
+    } catch {}
+    return {
+      indicator: "Rate Shift Detected",
+      detail: `Largest discrepancy change of ${formatNumberModal(maxShift)} observed around ${formattedDate}. Rates may have changed on this date.`
+    };
+  }
+
+  return null;
+}
+
+function analyzeDateSpecificIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): { indicator: string; detail: string } | null {
+  const discByDate = new Map<string, { total: number; count: number }>();
+
+  for (const b of bookings) {
+    const row = rows.find(r => r.bookingId === b.bookingId);
+    const dateStr = b.experienceDate || row?.experienceDate || b.bookingCreationDate || row?.bookingCreationDate;
+    if (!dateStr) continue;
+
+    const disc = b.hoNet - b.spNet;
+    const entry = discByDate.get(dateStr) || { total: 0, count: 0 };
+    entry.total += disc;
+    entry.count++;
+    discByDate.set(dateStr, entry);
+  }
+
+  if (discByDate.size < 2) return null;
+
+  let worstDate = "";
+  let worstAvg = 0;
+  Array.from(discByDate.entries()).forEach(([date, entry]) => {
+    const avg = Math.abs(entry.total / entry.count);
+    if (avg > worstAvg) {
+      worstAvg = avg;
+      worstDate = date;
+    }
+  });
+
+  if (worstDate && worstAvg > 1) {
+    const entry = discByDate.get(worstDate)!;
+    let formattedDate = worstDate;
+    try {
+      const d = new Date(worstDate);
+      if (!isNaN(d.getTime())) {
+        formattedDate = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+      }
+    } catch {}
+    return {
+      indicator: "Date-Specific Issue",
+      detail: `${formattedDate} has the highest average discrepancy (${formatSignedDisc(entry.total / entry.count)}) across ${entry.count} bookings.`
+    };
+  }
+
+  return null;
 }
 
 export interface ReasonLevelModalHandle {
@@ -61,25 +334,23 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
     const [isOpen, setIsOpen] = useState(false);
     const [reason, setReason] = useState("");
     const [section, setSection] = useState<"discrepancy" | "cancellation" | "secondary_vendor">("discrepancy");
-    const [threshold, setThreshold] = useState(0);
-    const [flatAdj, setFlatAdj] = useState(0);
     const [issueOpen, setIssueOpen] = useState(false);
     const [disputeOpen, setDisputeOpen] = useState(false);
     const [issuePriority, setIssuePriority] = useState<"low" | "medium" | "high">("medium");
     const [issueDescription, setIssueDescription] = useState("");
     const [driTeamOverride, setDriTeamOverride] = useState<string>("");
+    const [showAllTids, setShowAllTids] = useState(false);
 
     useImperativeHandle(ref, () => ({
       open: (r: string, s: "discrepancy" | "cancellation" | "secondary_vendor") => {
         setReason(r);
         setSection(s);
-        setThreshold(0);
-        setFlatAdj(0);
         setIssueOpen(false);
         setDisputeOpen(false);
         setIssuePriority("medium");
         setIssueDescription("");
         setDriTeamOverride("");
+        setShowAllTids(false);
         setIsOpen(true);
       },
     }));
@@ -94,14 +365,9 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
       return source[reason] || [];
     }, [reason, section, bookingsByReason, cancellationsByReason, secondaryVendorByReason]);
 
-    const filteredBookings = useMemo(() => {
-      const filtered = bookings.filter(
-        (b) => Math.abs(b.spNet - b.hoNet) > threshold
-      );
-      return filtered.sort(
-        (a, b) => Math.abs(b.spNet - b.hoNet) - Math.abs(a.spNet - a.hoNet)
-      );
-    }, [bookings, threshold]);
+    const tidAggregates = useMemo(() => {
+      return buildTidAggregates(bookings, allRows);
+    }, [bookings, allRows]);
 
     const totalSpNet = useMemo(
       () => Math.round(bookings.reduce((s, b) => s + b.spNet, 0) * 100) / 100,
@@ -114,11 +380,8 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
     );
 
     const totalDiscrepancy = useMemo(
-      () =>
-        Math.round(
-          bookings.reduce((s, b) => s + Math.abs(b.spNet - b.hoNet), 0) * 100
-        ) / 100,
-      [bookings]
+      () => Math.round((totalHoNet - totalSpNet) * 100) / 100,
+      [totalHoNet, totalSpNet]
     );
 
     const detectedDriTeam = useMemo(() => {
@@ -128,43 +391,32 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
 
     const effectiveDriTeam = driTeamOverride || detectedDriTeam || "Tech";
 
-    const uniqueTids = useMemo(() => {
-      const tids = new Set<string>();
-      bookings.forEach((b) => {
-        if (b.tid) tids.add(b.tid);
-      });
-      return tids;
-    }, [bookings]);
+    const topPositiveTid = useMemo(() => {
+      return tidAggregates.find(t => t.discrepancy > 0) || null;
+    }, [tidAggregates]);
 
-    const getSelection = useCallback(
-      (bookingId: string): "ho" | "sp" => {
-        return localSelections[bookingId] || "sp";
-      },
-      [localSelections]
-    );
+    const topNegativeTid = useMemo(() => {
+      return tidAggregates.find(t => t.discrepancy < 0) || null;
+    }, [tidAggregates]);
 
-    const getFinalNet = useCallback(
-      (b: BookingForPayable): number => {
-        const sel = getSelection(b.bookingId);
-        return sel === "ho" ? b.hoNet : b.spNet;
-      },
-      [getSelection]
-    );
+    const pinnedTidIds = useMemo(() => {
+      const ids = new Set<string>();
+      if (topPositiveTid) ids.add(topPositiveTid.tid);
+      if (topNegativeTid) ids.add(topNegativeTid.tid);
+      return ids;
+    }, [topPositiveTid, topNegativeTid]);
 
-    const disputableBookings = useMemo(() => {
-      return filteredBookings.filter(
-        (b) => getSelection(b.bookingId) === "sp" || reason === "Unmapped"
-      );
-    }, [filteredBookings, getSelection, reason]);
+    const pinnedTids = useMemo(() => {
+      return tidAggregates.filter(t => pinnedTidIds.has(t.tid));
+    }, [tidAggregates, pinnedTidIds]);
 
-    const totalDisputeAmount = useMemo(() => {
-      return Math.round(
-        disputableBookings.reduce(
-          (s, b) => s + Math.abs(b.spNet - b.hoNet),
-          0
-        ) * 100
-      ) / 100;
-    }, [disputableBookings]);
+    const collapsedTids = useMemo(() => {
+      return tidAggregates.filter(t => !pinnedTidIds.has(t.tid));
+    }, [tidAggregates, pinnedTidIds]);
+
+    const predictiveInsights = useMemo(() => {
+      return generatePredictiveInsights(pinnedTids, allRows);
+    }, [pinnedTids, allRows]);
 
     const isCancellationType = reason.toLowerCase().includes("cancel");
     const isReconciled = reason === "Reconciled";
@@ -172,33 +424,16 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
     const isNegativeSp = reason.toLowerCase().includes("negative sp");
 
     const handleUseHoAll = useCallback(() => {
-      onApplyBulkSelection(
-        filteredBookings.map((b) => b.bookingId),
-        "ho"
-      );
-    }, [filteredBookings, onApplyBulkSelection]);
+      onApplyBulkSelection(bookings.map((b) => b.bookingId), "ho");
+    }, [bookings, onApplyBulkSelection]);
 
     const handleUseSpAll = useCallback(() => {
-      onApplyBulkSelection(
-        filteredBookings.map((b) => b.bookingId),
-        "sp"
-      );
-    }, [filteredBookings, onApplyBulkSelection]);
+      onApplyBulkSelection(bookings.map((b) => b.bookingId), "sp");
+    }, [bookings, onApplyBulkSelection]);
 
     const handleSetZeroAll = useCallback(() => {
-      onApplyFlatAdjustment(
-        filteredBookings.map((b) => b.bookingId),
-        0
-      );
-    }, [filteredBookings, onApplyFlatAdjustment]);
-
-    const handleApplyFlat = useCallback(() => {
-      if (flatAdj === 0) return;
-      onApplyFlatAdjustment(
-        filteredBookings.map((b) => b.bookingId),
-        Math.round(flatAdj * 100) / 100
-      );
-    }, [filteredBookings, flatAdj, onApplyFlatAdjustment]);
+      onApplyFlatAdjustment(bookings.map((b) => b.bookingId), 0);
+    }, [bookings, onApplyFlatAdjustment]);
 
     const handleFlagIssue = useCallback(() => {
       onLogIssue(
@@ -212,6 +447,32 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
       setIssueDescription("");
     }, [reason, issueDescription, issuePriority, effectiveDriTeam, bookings, onLogIssue]);
 
+    const handleGeneratePredictiveText = useCallback(() => {
+      if (predictiveInsights.length === 0) return;
+      const lines = predictiveInsights.map(
+        (ins) => `TID ${ins.tid} [${ins.indicator}]: ${ins.detail}`
+      );
+      setIssueDescription((prev) => {
+        if (prev.trim()) return prev + "\n\n" + lines.join("\n");
+        return lines.join("\n");
+      });
+    }, [predictiveInsights]);
+
+    const disputableBookings = useMemo(() => {
+      return bookings.filter(
+        (b) => {
+          const sel = localSelections[b.bookingId] || "sp";
+          return sel === "sp" || reason === "Unmapped";
+        }
+      );
+    }, [bookings, localSelections, reason]);
+
+    const totalDisputeAmount = useMemo(() => {
+      return Math.round(
+        disputableBookings.reduce((s, b) => s + Math.abs(b.spNet - b.hoNet), 0) * 100
+      ) / 100;
+    }, [disputableBookings]);
+
     const handleDisputeAllFiltered = useCallback(() => {
       onRaiseDispute(disputableBookings);
     }, [disputableBookings, onRaiseDispute]);
@@ -219,15 +480,6 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
     const handleClearAllDisputes = useCallback(() => {
       onClearDisputes(bookings.map((b) => b.bookingId));
     }, [bookings, onClearDisputes]);
-
-    const handleApplyDisputes = useCallback(() => {
-      const disputedBookings = bookings.filter(
-        (b) => activeDisputes.has(b.bookingId)
-      );
-      if (disputedBookings.length > 0) {
-        onRaiseDispute(disputedBookings);
-      }
-    }, [bookings, activeDisputes, onRaiseDispute]);
 
     const activeDisputeCount = useMemo(() => {
       return bookings.filter((b) => activeDisputes.has(b.bookingId)).length;
@@ -242,6 +494,56 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
       return Math.round(total * 100) / 100;
     }, [bookings, disputeAmounts]);
 
+    const getTidSelectionSummary = useCallback((tidAgg: TidAggregate): { label: string; variant: "default" | "secondary" | "outline" } => {
+      let hoCount = 0;
+      let spCount = 0;
+      tidAgg.bookings.forEach((b) => {
+        const sel = localSelections[b.bookingId] || "sp";
+        if (sel === "ho") hoCount++;
+        else spCount++;
+      });
+      if (hoCount === tidAgg.bookingCount) return { label: "HO", variant: "secondary" };
+      if (spCount === tidAgg.bookingCount) return { label: "SP", variant: "default" };
+      return { label: `${hoCount}HO/${spCount}SP`, variant: "outline" };
+    }, [localSelections]);
+
+    const renderTidRow = useCallback((tidAgg: TidAggregate, isPinned: boolean) => {
+      const selSummary = getTidSelectionSummary(tidAgg);
+      return (
+        <TableRow
+          key={tidAgg.tid}
+          className={isPinned ? "bg-muted/20" : ""}
+          data-testid={`row-tid-${tidAgg.tid}`}
+        >
+          <TableCell className="text-xs font-mono font-medium">{tidAgg.tid}</TableCell>
+          <TableCell className="text-xs font-mono text-center">{tidAgg.bookingCount}</TableCell>
+          <TableCell className="text-xs font-mono text-right text-blue-700 dark:text-blue-300">
+            {formatNumberModal(tidAgg.totalSpNet)}
+          </TableCell>
+          <TableCell className="text-xs font-mono text-right text-green-700 dark:text-green-300">
+            {formatNumberModal(tidAgg.totalHoNet)}
+          </TableCell>
+          <TableCell className={`text-xs font-mono text-right font-semibold ${discColor(tidAgg.discrepancy)}`}>
+            {formatSignedDisc(tidAgg.discrepancy)}
+          </TableCell>
+          <TableCell className="text-xs text-center">
+            <Badge variant={selSummary.variant} className="text-xs no-default-active-elevate">
+              {selSummary.label}
+            </Badge>
+          </TableCell>
+          <TableCell className="text-xs">
+            {tidAgg.hasMixedFulfillment ? (
+              <Badge variant="outline" className="text-xs no-default-active-elevate">Mixed</Badge>
+            ) : tidAgg.fulfillmentMethods[0] ? (
+              <span className="text-muted-foreground">{tidAgg.fulfillmentMethods[0]}</span>
+            ) : (
+              <span className="text-muted-foreground">-</span>
+            )}
+          </TableCell>
+        </TableRow>
+      );
+    }, [getTidSelectionSummary]);
+
     return (
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
@@ -251,7 +553,7 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
               Manage Reason: {reason}
             </DialogTitle>
             <DialogDescription>
-              {bookings.length} bookings in {section === "discrepancy" ? "discrepancy" : section === "cancellation" ? "cancellation" : "secondary vendor"} section
+              {tidAggregates.length} TIDs, {bookings.length} bookings in {section === "discrepancy" ? "discrepancy" : section === "cancellation" ? "cancellation" : "secondary vendor"} section
             </DialogDescription>
           </DialogHeader>
 
@@ -268,9 +570,9 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
               <div className="p-4 space-y-3">
                 <div className="grid grid-cols-4 gap-2">
                   <div className="rounded-md border p-2 bg-muted/30">
-                    <div className="text-xs text-muted-foreground">Bookings</div>
-                    <div className="text-sm font-semibold font-mono" data-testid="stat-booking-count">
-                      {bookings.length}
+                    <div className="text-xs text-muted-foreground">TIDs / Bookings</div>
+                    <div className="text-sm font-semibold font-mono" data-testid="stat-tid-count">
+                      {tidAggregates.length} / {bookings.length}
                     </div>
                   </div>
                   <div className="rounded-md border p-2 bg-blue-50/50 dark:bg-blue-900/10">
@@ -286,9 +588,9 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                     </div>
                   </div>
                   <div className="rounded-md border p-2 bg-amber-50/50 dark:bg-amber-900/10">
-                    <div className="text-xs text-muted-foreground">Discrepancy</div>
-                    <div className="text-sm font-semibold font-mono text-amber-700 dark:text-amber-300" data-testid="stat-discrepancy">
-                      {formatNumberModal(totalDiscrepancy)}
+                    <div className="text-xs text-muted-foreground">Discrepancy (HO-SP)</div>
+                    <div className={`text-sm font-semibold font-mono ${discColor(totalDiscrepancy)}`} data-testid="stat-discrepancy">
+                      {formatSignedDisc(totalDiscrepancy)}
                     </div>
                   </div>
                 </div>
@@ -354,110 +656,82 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Filter by discrepancy &gt;</span>
-                  </div>
-                  <Input
-                    type="number"
-                    step={1}
-                    value={threshold}
-                    onChange={(e) => setThreshold(Number(e.target.value) || 0)}
-                    className="w-24"
-                    data-testid="input-threshold"
-                  />
-                  <Badge variant="secondary" className="no-default-active-elevate">
-                    {filteredBookings.length} / {bookings.length}
-                  </Badge>
-                  {threshold > 0 && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setThreshold(0)}
-                      data-testid="btn-clear-threshold"
-                    >
-                      <X className="h-3.5 w-3.5 mr-1" />
-                      Clear
-                    </Button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-muted-foreground">Flat adjustment</span>
-                  <Input
-                    type="number"
-                    step={0.01}
-                    value={flatAdj}
-                    onChange={(e) => setFlatAdj(Number(e.target.value) || 0)}
-                    className="w-28"
-                    data-testid="input-flat-adjustment"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleApplyFlat}
-                    disabled={flatAdj === 0}
-                    data-testid="btn-apply-flat"
-                  >
-                    Apply to filtered
-                  </Button>
-                </div>
-
-                <div className="max-h-64 overflow-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Booking ID</TableHead>
-                        <TableHead className="text-xs text-right">HO Net</TableHead>
-                        <TableHead className="text-xs text-right">SP Net</TableHead>
-                        <TableHead className="text-xs text-right">Discrepancy</TableHead>
-                        <TableHead className="text-xs">Selection</TableHead>
-                        <TableHead className="text-xs text-right">Final Net</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredBookings.map((b) => {
-                        const disc = Math.round(Math.abs(b.spNet - b.hoNet) * 100) / 100;
-                        const sel = getSelection(b.bookingId);
-                        const finalNet = getFinalNet(b);
-                        return (
-                          <TableRow key={b.bookingId} data-testid={`row-booking-${b.bookingId}`}>
-                            <TableCell className="text-xs font-mono">{b.bookingId}</TableCell>
-                            <TableCell className="text-xs font-mono text-right text-green-700 dark:text-green-300">
-                              {formatNumberModal(b.hoNet)}
-                            </TableCell>
-                            <TableCell className="text-xs font-mono text-right text-blue-700 dark:text-blue-300">
-                              {formatNumberModal(b.spNet)}
-                            </TableCell>
-                            <TableCell className="text-xs font-mono text-right text-amber-700 dark:text-amber-300">
-                              {formatNumberModal(disc)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={sel === "sp" ? "default" : "secondary"}
-                                className="text-xs no-default-active-elevate"
-                                data-testid={`badge-selection-${b.bookingId}`}
-                              >
-                                {sel.toUpperCase()}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-xs font-mono text-right font-semibold">
-                              {formatNumberModal(finalNet)}
-                            </TableCell>
+                {pinnedTids.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-xs text-muted-foreground font-medium">
+                      Top Discrepancies
+                    </div>
+                    <div className="overflow-auto rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">TID</TableHead>
+                            <TableHead className="text-xs text-center">Bookings</TableHead>
+                            <TableHead className="text-xs text-right">SP Net</TableHead>
+                            <TableHead className="text-xs text-right">HO Net</TableHead>
+                            <TableHead className="text-xs text-right">Discrepancy</TableHead>
+                            <TableHead className="text-xs text-center">Selection</TableHead>
+                            <TableHead className="text-xs">Fulfillment</TableHead>
                           </TableRow>
-                        );
-                      })}
-                      {filteredBookings.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-xs text-muted-foreground py-4">
-                            No bookings match the current filter
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                        </TableHeader>
+                        <TableBody>
+                          {pinnedTids.map((t) => renderTidRow(t, true))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+
+                {collapsedTids.length > 0 && (
+                  <Collapsible open={showAllTids} onOpenChange={setShowAllTids}>
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-center text-xs text-muted-foreground"
+                        data-testid="btn-show-all-tids"
+                      >
+                        {showAllTids ? (
+                          <>
+                            <ChevronDown className="h-3.5 w-3.5 mr-1" />
+                            Hide {collapsedTids.length} more TIDs
+                          </>
+                        ) : (
+                          <>
+                            <ChevronRight className="h-3.5 w-3.5 mr-1" />
+                            Show {collapsedTids.length} more TIDs
+                          </>
+                        )}
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="overflow-auto max-h-48 rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs">TID</TableHead>
+                              <TableHead className="text-xs text-center">Bookings</TableHead>
+                              <TableHead className="text-xs text-right">SP Net</TableHead>
+                              <TableHead className="text-xs text-right">HO Net</TableHead>
+                              <TableHead className="text-xs text-right">Discrepancy</TableHead>
+                              <TableHead className="text-xs text-center">Selection</TableHead>
+                              <TableHead className="text-xs">Fulfillment</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {collapsedTids.map((t) => renderTidRow(t, false))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
+                {tidAggregates.length === 0 && (
+                  <div className="text-center text-xs text-muted-foreground py-4">
+                    No TIDs found for this reason
+                  </div>
+                )}
               </div>
             </div>
 
@@ -522,18 +796,35 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                       ))}
                     </div>
 
-                    <Textarea
-                      placeholder="Describe the issue..."
-                      value={issueDescription}
-                      onChange={(e) => setIssueDescription(e.target.value)}
-                      className="text-xs"
-                      data-testid="textarea-issue-description"
-                    />
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Description</span>
+                        {predictiveInsights.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleGeneratePredictiveText}
+                            data-testid="btn-generate-predictive"
+                          >
+                            <Sparkles className="h-3.5 w-3.5 mr-1.5 text-amber-500" />
+                            Auto-analyze top TIDs
+                          </Button>
+                        )}
+                      </div>
+                      <Textarea
+                        placeholder="Describe the issue... Use 'Auto-analyze' to generate insights from booking data."
+                        value={issueDescription}
+                        onChange={(e) => setIssueDescription(e.target.value)}
+                        className="text-xs min-h-[80px]"
+                        rows={4}
+                        data-testid="textarea-issue-description"
+                      />
+                    </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-muted-foreground">Affected:</span>
                       <Badge variant="secondary" className="no-default-active-elevate" data-testid="badge-tid-count">
-                        {uniqueTids.size} TIDs
+                        {tidAggregates.length} TIDs
                       </Badge>
                       <Badge variant="secondary" className="no-default-active-elevate" data-testid="badge-booking-count">
                         {bookings.length} Bookings
@@ -583,8 +874,8 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                         {disputableBookings.length}
                       </Badge>
                       <span className="text-xs text-muted-foreground">Total dispute amount:</span>
-                      <Badge variant="secondary" className="font-mono no-default-active-elevate" data-testid="badge-dispute-total">
-                        {formatNumberModal(totalDisputeAmount)} {currency}
+                      <Badge variant="secondary" className={`font-mono no-default-active-elevate ${discColor(totalDisputeAmount)}`} data-testid="badge-dispute-total">
+                        {formatSignedDisc(totalDisputeAmount)} {currency}
                       </Badge>
                     </div>
 
@@ -594,8 +885,8 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                         <Badge variant="default" className="no-default-active-elevate" data-testid="badge-active-dispute-count">
                           {activeDisputeCount}
                         </Badge>
-                        <span className="text-xs font-mono text-amber-600 dark:text-amber-400" data-testid="text-active-dispute-total">
-                          {formatNumberModal(activeDisputeTotal)} {currency}
+                        <span className={`text-xs font-mono ${discColor(activeDisputeTotal)}`} data-testid="text-active-dispute-total">
+                          {formatSignedDisc(activeDisputeTotal)} {currency}
                         </span>
                       </div>
                     )}
@@ -609,7 +900,7 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                         data-testid="btn-dispute-all-filtered"
                       >
                         <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
-                        Dispute All Filtered
+                        Dispute All
                       </Button>
                       <Button
                         size="sm"
@@ -621,17 +912,6 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                         Clear All Disputes
                       </Button>
                     </div>
-
-                    <Button
-                      size="sm"
-                      className="bg-amber-600 text-white"
-                      onClick={handleApplyDisputes}
-                      disabled={activeDisputeCount === 0}
-                      data-testid="btn-apply-disputes"
-                    >
-                      <Check className="h-3.5 w-3.5 mr-1.5" />
-                      Apply Disputes ({activeDisputeCount})
-                    </Button>
                   </div>
                 </CollapsibleContent>
               </div>
