@@ -3016,9 +3016,9 @@ export function AmountPayablePanel({
                                               <TableHead className="w-[18%]">Booking ID</TableHead>
                                               <TableHead className="text-right w-[12%]">HO Net</TableHead>
                                               <TableHead className="text-right w-[12%]">SP Net</TableHead>
-                                              <TableHead className="text-center w-[8%]">Net</TableHead>
-                                              <TableHead className="text-center w-[7%]">Dispute</TableHead>
-                                              <TableHead className="text-right w-[15%]">Amt Payable</TableHead>
+                                              <TableHead className="text-center w-[12%]">Net</TableHead>
+                                              <TableHead className="text-center w-[12%]">Dispute</TableHead>
+                                              <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
                                               <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
                                               <TableHead className="text-right w-[15%]">Price Payable</TableHead>
                                             </TableRow>
@@ -3301,9 +3301,9 @@ export function AmountPayablePanel({
                                           <TableHead className="w-[18%]">Booking ID</TableHead>
                                           <TableHead className="text-right w-[12%]">HO Net</TableHead>
                                           <TableHead className="text-right w-[12%]">SP Net</TableHead>
-                                          <TableHead className="text-center w-[8%]">Net</TableHead>
-                                          <TableHead className="text-center w-[7%]">Dispute</TableHead>
-                                          <TableHead className="text-right w-[15%]">Amt Payable</TableHead>
+                                          <TableHead className="text-center w-[12%]">Net</TableHead>
+                                          <TableHead className="text-center w-[12%]">Dispute</TableHead>
+                                          <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
                                           <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
                                           <TableHead className="text-right w-[15%]">Price Payable</TableHead>
                                         </TableRow>
@@ -3595,9 +3595,9 @@ export function AmountPayablePanel({
                                         <TableHead className="w-[18%]">Booking ID</TableHead>
                                         <TableHead className="text-right w-[12%]">HO Net</TableHead>
                                         <TableHead className="text-right w-[12%]">SP Net</TableHead>
-                                        <TableHead className="text-center w-[8%]">Net</TableHead>
-                                        <TableHead className="text-center w-[7%]">Dispute</TableHead>
-                                        <TableHead className="text-right w-[15%]">Amt Payable</TableHead>
+                                        <TableHead className="text-center w-[12%]">Net</TableHead>
+                                        <TableHead className="text-center w-[12%]">Dispute</TableHead>
+                                        <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
                                         <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
                                         <TableHead className="text-right w-[15%]">Price Payable</TableHead>
                                       </TableRow>
