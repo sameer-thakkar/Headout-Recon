@@ -3045,7 +3045,7 @@ export function AmountPayablePanel({
                                                         updateSelection(booking.bookingId, v as "ho" | "sp", booking);
                                                       }}
                                                     >
-                                                      <SelectTrigger className="w-16 h-6 text-xs border-dashed text-muted-foreground mx-auto">
+                                                      <SelectTrigger className="w-[4.5rem] h-7 text-sm border-dashed text-muted-foreground mx-auto">
                                                         <SelectValue />
                                                       </SelectTrigger>
                                                       <SelectContent>
@@ -3333,7 +3333,7 @@ export function AmountPayablePanel({
                                                       onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                     >
                                                       <SelectTrigger 
-                                                        className="w-12 h-5 text-xs border-dashed text-muted-foreground mx-auto" 
+                                                        className="w-[4.5rem] h-7 text-sm border-dashed text-muted-foreground mx-auto" 
                                                         data-testid={`select-booking-${booking.bookingId}`}
                                                       >
                                                         <SelectValue />
@@ -3629,7 +3629,7 @@ export function AmountPayablePanel({
                                                   value={selection}
                                                   onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                 >
-                                                  <SelectTrigger className="w-12 h-6 text-xs border-dashed text-muted-foreground mx-auto" data-testid={`select-sv-booking-${booking.bookingId}`}>
+                                                  <SelectTrigger className="w-[4.5rem] h-7 text-sm border-dashed text-muted-foreground mx-auto" data-testid={`select-sv-booking-${booking.bookingId}`}>
                                                     <SelectValue />
                                                   </SelectTrigger>
                                                   <SelectContent>
@@ -3907,7 +3907,7 @@ export function AmountPayablePanel({
                                     updateSelection(booking.bookingId, v as "ho" | "sp", booking);
                                   }}
                                 >
-                                  <SelectTrigger className="w-16 h-6 text-xs" data-testid={`select-net-type-amtpaid-${booking.bookingId}`}>
+                                  <SelectTrigger className="w-[4.5rem] h-7 text-sm" data-testid={`select-net-type-amtpaid-${booking.bookingId}`}>
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
