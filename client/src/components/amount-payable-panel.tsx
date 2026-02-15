@@ -3338,6 +3338,7 @@ export function AmountPayablePanel({
                                               <TableHead className="text-right w-[12%]">HO Net</TableHead>
                                               <TableHead className="text-right w-[12%]">SP Net</TableHead>
                                               <TableHead className="text-center w-[12%]">Net</TableHead>
+                                              <TableHead className="text-center w-[12%]">Dispute</TableHead>
                                               <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
                                               <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
                                               <TableHead className="text-right w-[15%]">Price Payable</TableHead>
@@ -3373,6 +3374,35 @@ export function AmountPayablePanel({
                                                         <SelectItem value="sp">SP</SelectItem>
                                                       </SelectContent>
                                                     </Select>
+                                                  </TableCell>
+                                                  <TableCell className="text-center">
+                                                    {canDispute ? (
+                                                      <Checkbox
+                                                        checked={isDisputed}
+                                                        onCheckedChange={(checked) => {
+                                                          const newActive = new Set(activeDisputes);
+                                                          if (checked) {
+                                                            newActive.add(booking.bookingId);
+                                                            setDisputeAmounts((prev) => {
+                                                              const updated = new Map(prev);
+                                                              updated.set(booking.bookingId, Math.abs(booking.hoNet - booking.spNet));
+                                                              return updated;
+                                                            });
+                                                          } else {
+                                                            newActive.delete(booking.bookingId);
+                                                            setDisputeAmounts((prev) => {
+                                                              const updated = new Map(prev);
+                                                              updated.delete(booking.bookingId);
+                                                              return updated;
+                                                            });
+                                                          }
+                                                          setActiveDisputes(newActive);
+                                                        }}
+                                                        data-testid={`checkbox-dispute-${booking.bookingId}`}
+                                                      />
+                                                    ) : (
+                                                      <span className="text-xs text-muted-foreground">-</span>
+                                                    )}
                                                   </TableCell>
                                                   <TableCell className="text-center">
                                                     <div className="flex justify-center">
@@ -3557,18 +3587,6 @@ export function AmountPayablePanel({
                                         <Pencil className="h-3 w-3 mr-1" />
                                         Manage TID
                                       </Button>
-                                      {(() => {
-                                        const { disputed, disputable } = getTidDisputeCount(reason, tid);
-                                        if (disputable === 0) return null;
-                                        return (
-                                          <Checkbox
-                                            checked={disputed === disputable}
-                                            onCheckedChange={() => toggleTidDispute(reason, tid)}
-                                            className="h-4 w-4"
-                                            data-testid={`checkbox-dispute-tid-${tid}`}
-                                          />
-                                        );
-                                      })()}
                                       <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
                                         {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
                                       </span>
@@ -3582,6 +3600,7 @@ export function AmountPayablePanel({
                                           <TableHead className="text-right w-[12%]">HO Net</TableHead>
                                           <TableHead className="text-right w-[12%]">SP Net</TableHead>
                                           <TableHead className="text-center w-[12%]">Net</TableHead>
+                                          <TableHead className="text-center w-[12%]">Dispute</TableHead>
                                           <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
                                           <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
                                           <TableHead className="text-right w-[15%]">Price Payable</TableHead>
@@ -3620,6 +3639,18 @@ export function AmountPayablePanel({
                                                         <SelectItem value="sp">SP</SelectItem>
                                                       </SelectContent>
                                                     </Select>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                  {canDispute ? (
+                                                    <Checkbox
+                                                      checked={isDisputed}
+                                                      onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
+                                                      className="h-4 w-4"
+                                                      data-testid={`checkbox-dispute-${booking.bookingId}`}
+                                                    />
+                                                  ) : (
+                                                    <span className="text-xs text-muted-foreground">-</span>
                                                   )}
                                                 </TableCell>
                                                 <TableCell className="text-center">
@@ -3839,19 +3870,6 @@ export function AmountPayablePanel({
                                       <Pencil className="h-3 w-3 mr-1" />
                                       Manage TID
                                     </Button>
-                                    {(() => {
-                                      if (reason === "Reconciled") return null;
-                                      const { disputed, disputable } = getSecondaryVendorTidDisputeCount(reason, tid);
-                                      if (disputable === 0) return null;
-                                      return (
-                                        <Checkbox
-                                          checked={disputed === disputable}
-                                          onCheckedChange={() => toggleSecondaryVendorTidDispute(reason, tid)}
-                                          className="h-4 w-4"
-                                          data-testid={`checkbox-sv-dispute-tid-${tid}`}
-                                        />
-                                      );
-                                    })()}
                                     <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
                                       {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
                                     </span>
@@ -3865,6 +3883,7 @@ export function AmountPayablePanel({
                                         <TableHead className="text-right w-[12%]">HO Net</TableHead>
                                         <TableHead className="text-right w-[12%]">SP Net</TableHead>
                                         <TableHead className="text-center w-[12%]">Net</TableHead>
+                                        <TableHead className="text-center w-[12%]">Dispute</TableHead>
                                         <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
                                         <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
                                         <TableHead className="text-right w-[15%]">Price Payable</TableHead>
@@ -3901,6 +3920,18 @@ export function AmountPayablePanel({
                                                     <SelectItem value="sp">SP</SelectItem>
                                                   </SelectContent>
                                                 </Select>
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {canDispute ? (
+                                                <Checkbox
+                                                  checked={isDisputed}
+                                                  onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
+                                                  className="h-4 w-4"
+                                                  data-testid={`checkbox-sv-dispute-${booking.bookingId}`}
+                                                />
+                                              ) : (
+                                                <span className="text-xs text-muted-foreground">-</span>
                                               )}
                                             </TableCell>
                                             <TableCell className="text-center">
