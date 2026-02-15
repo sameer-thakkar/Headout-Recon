@@ -3440,7 +3440,7 @@ export function AmountPayablePanel({
                                                     )}
                                                   </TableCell>
                                                   <TableCell className="text-right font-mono font-semibold">
-                                                    {formatCurrency(finalNet)} {currency}
+                                                    {formatCurrency(finalNet)}
                                                   </TableCell>
                                                 </TableRow>
                                                 {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
@@ -3701,7 +3701,7 @@ export function AmountPayablePanel({
                                                   )}
                                                 </TableCell>
                                                 <TableCell className="text-right font-mono font-semibold">
-                                                  {formatCurrency(getFinalNetPrice(booking))} {currency}
+                                                  {formatCurrency(getFinalNetPrice(booking))}
                                                 </TableCell>
                                               </TableRow>
                                               {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
@@ -3990,7 +3990,7 @@ export function AmountPayablePanel({
                                               )}
                                             </TableCell>
                                             <TableCell className="text-right font-mono font-semibold">
-                                              {formatCurrency(finalNet)} {currency}
+                                              {formatCurrency(finalNet)}
                                             </TableCell>
                                           </TableRow>
                                           {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
