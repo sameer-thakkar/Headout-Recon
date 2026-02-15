@@ -386,7 +386,7 @@ export function AmountPayableModal({
   }, [bookingsByReasonAndTid]);
 
   const activateDispute = useCallback((bookingId: string, booking: BookingForPayable) => {
-    const maxDispute = Math.abs(booking.hoNet - booking.spNet);
+    const maxDispute = Math.round(Math.abs(booking.hoNet - booking.spNet) * 100) / 100;
     setActiveDisputes(prev => {
       const next = new Set(prev);
       next.add(bookingId);
@@ -425,7 +425,7 @@ export function AmountPayableModal({
   }, []);
 
   const getMaxDisputeAmount = useCallback((booking: BookingForPayable): number => {
-    return Math.abs(booking.hoNet - booking.spNet);
+    return Math.round(Math.abs(booking.hoNet - booking.spNet) * 100) / 100;
   }, []);
 
   const getDisputeAmount = useCallback((bookingId: string): number => {

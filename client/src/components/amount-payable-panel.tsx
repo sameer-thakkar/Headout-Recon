@@ -1711,7 +1711,7 @@ export function AmountPayablePanel({
 
   const getMaxDisputeAmount = useCallback((booking: BookingForPayable): number => {
     const finalNet = getFinalNetPrice(booking);
-    return Math.abs(booking.hoNet - finalNet);
+    return Math.round(Math.abs(booking.hoNet - finalNet) * 100) / 100;
   }, [getFinalNetPrice]);
 
   const toggleDispute = useCallback((bookingId: string, booking: BookingForPayable) => {
