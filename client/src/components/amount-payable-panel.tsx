@@ -317,7 +317,7 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
-            {vendorCorrectionBookings.length > 0 ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+            {vendorCorrectionBookings.length > 0 ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
           </DialogTitle>
           <DialogDescription>
             Choose how to update Final Net Price for {bookings.length} bookings in TID {tid}.
@@ -3002,7 +3002,7 @@ export function AmountPayablePanel({
                                             data-testid={`btn-update-fnp-${tid}`}
                                           >
                                             <Pencil className="h-3 w-3 mr-1" />
-                                            {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+                                            {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
                                           </Button>
                                           <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
                                             {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
@@ -3013,14 +3013,14 @@ export function AmountPayablePanel({
                                         <Table className="text-xs">
                                           <TableHeader>
                                             <TableRow className="h-7">
-                                              <TableHead>Booking ID</TableHead>
-                                              <TableHead className="text-right">HO Net</TableHead>
-                                              <TableHead className="text-right">SP Net</TableHead>
-                                              <TableHead className="text-center">Net</TableHead>
-                                              <TableHead className="text-center">Dispute</TableHead>
-                                              <TableHead className="text-right">Total Amount Payable</TableHead>
-                                              <TableHead className="text-right">Dispute Amt</TableHead>
-                                              <TableHead className="text-right">Price Payable</TableHead>
+                                              <TableHead className="w-[18%]">Booking ID</TableHead>
+                                              <TableHead className="text-right w-[12%]">HO Net</TableHead>
+                                              <TableHead className="text-right w-[12%]">SP Net</TableHead>
+                                              <TableHead className="text-center w-[8%]">Net</TableHead>
+                                              <TableHead className="text-center w-[7%]">Dispute</TableHead>
+                                              <TableHead className="text-right w-[15%]">Amt Payable</TableHead>
+                                              <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
+                                              <TableHead className="text-right w-[15%]">Price Payable</TableHead>
                                             </TableRow>
                                           </TableHeader>
                                           <TableBody>
@@ -3265,16 +3265,17 @@ export function AmountPayablePanel({
                                         data-testid={`btn-update-fnp-${tid}`}
                                       >
                                         <Pencil className="h-3 w-3 mr-1" />
-                                        {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+                                        {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
                                       </Button>
                                       <Button
                                         size="sm"
-                                        variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "ghost"}
+                                        variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "outline"}
                                         className={`text-xs ${selectedIssues.has(`${reason}:${tid}`) ? "bg-muted" : ""}`}
                                         onClick={() => toggleIssueSelection(reason, tid)}
                                         data-testid={`button-select-issue-tid-${tid}`}
                                       >
-                                        <FileWarning className="h-3 w-3" />
+                                        <FileWarning className="h-3 w-3 mr-1" />
+                                        Issue
                                       </Button>
                                       {(() => {
                                         const { disputed, disputable } = getTidDisputeCount(reason, tid);
@@ -3297,14 +3298,14 @@ export function AmountPayablePanel({
                                     <Table className="text-xs">
                                       <TableHeader>
                                         <TableRow className="h-7">
-                                          <TableHead>Booking ID</TableHead>
-                                          <TableHead className="text-right">HO Net</TableHead>
-                                          <TableHead className="text-right">SP Net</TableHead>
-                                          <TableHead className="text-center">Net</TableHead>
-                                          <TableHead className="text-center">Dispute</TableHead>
-                                          <TableHead className="text-right">Total Amount Payable</TableHead>
-                                          <TableHead className="text-right">Dispute Amt</TableHead>
-                                          <TableHead className="text-right">Price Payable</TableHead>
+                                          <TableHead className="w-[18%]">Booking ID</TableHead>
+                                          <TableHead className="text-right w-[12%]">HO Net</TableHead>
+                                          <TableHead className="text-right w-[12%]">SP Net</TableHead>
+                                          <TableHead className="text-center w-[8%]">Net</TableHead>
+                                          <TableHead className="text-center w-[7%]">Dispute</TableHead>
+                                          <TableHead className="text-right w-[15%]">Amt Payable</TableHead>
+                                          <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
+                                          <TableHead className="text-right w-[15%]">Price Payable</TableHead>
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
@@ -3567,7 +3568,7 @@ export function AmountPayablePanel({
                                       data-testid={`btn-update-fnp-sv-${tid}`}
                                     >
                                       <Pencil className="h-3 w-3 mr-1" />
-                                      {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+                                      {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
                                     </Button>
                                     {(() => {
                                       if (reason === "Reconciled") return null;
@@ -3591,14 +3592,14 @@ export function AmountPayablePanel({
                                   <Table className="text-xs">
                                     <TableHeader>
                                       <TableRow className="h-7">
-                                        <TableHead>Booking ID</TableHead>
-                                        <TableHead className="text-right">HO Net</TableHead>
-                                        <TableHead className="text-right">SP Net</TableHead>
-                                        <TableHead className="text-center">Net</TableHead>
-                                        <TableHead className="text-center">Dispute</TableHead>
-                                        <TableHead className="text-right">Total Amount Payable</TableHead>
-                                        <TableHead className="text-right">Dispute Amt</TableHead>
-                                        <TableHead className="text-right">Price Payable</TableHead>
+                                        <TableHead className="w-[18%]">Booking ID</TableHead>
+                                        <TableHead className="text-right w-[12%]">HO Net</TableHead>
+                                        <TableHead className="text-right w-[12%]">SP Net</TableHead>
+                                        <TableHead className="text-center w-[8%]">Net</TableHead>
+                                        <TableHead className="text-center w-[7%]">Dispute</TableHead>
+                                        <TableHead className="text-right w-[15%]">Amt Payable</TableHead>
+                                        <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
+                                        <TableHead className="text-right w-[15%]">Price Payable</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
