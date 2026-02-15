@@ -90,7 +90,19 @@ interface ScoredInsight {
   confidence: number;
 }
 
-function analyzeTakeRate(bookings: BookingForPayable[], rows: PrimaryRow[]): ScoredInsight | null {
+const TAKE_RATE_SKIP_REASONS = new Set([
+  "multiple tickets booked", "mtb", "cancellation", "cancelled", "cancel",
+  "unmapped", "already reconciled", "negative sp",
+]);
+
+function shouldSkipTakeRate(reason: string): boolean {
+  const lower = reason.toLowerCase();
+  return Array.from(TAKE_RATE_SKIP_REASONS).some(skip => lower.includes(skip));
+}
+
+function analyzeTakeRate(bookings: BookingForPayable[], rows: PrimaryRow[], reason?: string): ScoredInsight | null {
+  if (reason && shouldSkipTakeRate(reason)) return null;
+
   const takeRateData: { bookingId: string; hsp: number; hoTake: number; actualTake: number; gap: number }[] = [];
 
   for (const b of bookings) {
@@ -169,7 +181,7 @@ function analyzeTakeRate(bookings: BookingForPayable[], rows: PrimaryRow[]): Sco
   };
 }
 
-function generatePredictiveInsights(topTids: TidAggregate[], allRows: PrimaryRow[]): PredictiveInsight[] {
+function generatePredictiveInsights(topTids: TidAggregate[], allRows: PrimaryRow[], reason?: string): PredictiveInsight[] {
   const insights: PredictiveInsight[] = [];
 
   for (const tidAgg of topTids) {
@@ -182,7 +194,7 @@ function generatePredictiveInsights(topTids: TidAggregate[], allRows: PrimaryRow
     const priceResult = analyzePriceChanges(tidAgg.bookings, tidRows);
     if (priceResult) candidates.push(priceResult);
 
-    const takeRateResult = analyzeTakeRate(tidAgg.bookings, tidRows);
+    const takeRateResult = analyzeTakeRate(tidAgg.bookings, tidRows, reason);
     if (takeRateResult) candidates.push(takeRateResult);
 
     if (tidAgg.hasMixedFulfillment) {
@@ -518,8 +530,8 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
     }, [tidAggregates, pinnedTidIds]);
 
     const predictiveInsights = useMemo(() => {
-      return generatePredictiveInsights(pinnedTids, allRows);
-    }, [pinnedTids, allRows]);
+      return generatePredictiveInsights(pinnedTids, allRows, reason);
+    }, [pinnedTids, allRows, reason]);
 
     const isCancellationType = reason.toLowerCase().includes("cancel");
     const isReconciled = reason === "Reconciled";
