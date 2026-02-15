@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle, useRef, Fragment } from "react";
 import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -2974,64 +2974,53 @@ export function AmountPayablePanel({
                             </div>
 
                             <CollapsibleContent>
-                              <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
-                                <div className="col-span-2">TID / Booking ID</div>
-                                <div className="col-span-2 text-right">HO Net</div>
-                                <div className="col-span-2 text-right">SP Net</div>
-                                <div className="col-span-2 text-center">Net</div>
-                                <div className="col-span-1 text-center">Dispute</div>
-                                <div className="col-span-2 text-right">Total Amount Payable</div>
-                                <div className="col-span-3 text-right">Dispute Amt</div>
-                                <div className="col-span-4 text-right">Price Payable</div>
-                              </div>
-
-                              <div className="max-h-80 overflow-y-auto">
+                              <div className="max-h-80 overflow-y-auto space-y-1.5 p-1.5">
                                 {Object.entries(tidGroups).map(([tid, tidBookings]) => {
                                   const tidKeyStr = `${reason}:${tid}`;
                                   const isTidExpanded = expandedTids.has(tidKeyStr);
 
                                   return (
-                                    <div key={tid} className="border-t">
-                                      <Collapsible
-                                        open={isTidExpanded}
-                                        onOpenChange={() => toggleTid(tidKeyStr)}
+                                    <div key={tid} className="rounded-md border bg-background overflow-hidden">
+                                      <div
+                                        className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                        onClick={() => toggleTid(tidKeyStr)}
                                       >
-                                        <div className="grid grid-cols-18 gap-1 px-3 py-2 items-center hover:bg-muted/20">
-                                          <div className="col-span-2 flex items-center gap-1">
-                                            <CollapsibleTrigger asChild>
-                                              <Button variant="ghost" size="icon" className="h-5 w-5">
-                                                {isTidExpanded ? (
-                                                  <ChevronDown className="h-3 w-3" />
-                                                ) : (
-                                                  <ChevronRight className="h-3 w-3" />
-                                                )}
-                                              </Button>
-                                            </CollapsibleTrigger>
-                                            <span className="font-mono text-xs truncate" title={tid}>
-                                              {tid}
-                                            </span>
-                                            <Badge variant="outline" className="text-xs ml-1">
-                                              {tidBookings.length}
-                                            </Badge>
-                                          </div>
-                                          <div className="col-span-16 flex items-center justify-end gap-1">
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-6 text-xs"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                finalNetPriceModalRef.current?.open(tidBookings, tid);
-                                              }}
-                                              data-testid={`btn-update-fnp-${tid}`}
-                                            >
-                                              <Pencil className="h-3 w-3 mr-1" />
-                                              {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
-                                            </Button>
-                                          </div>
+                                        <div className="flex items-center gap-2">
+                                          {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                                          <span className="font-mono text-xs font-medium">TID: {tid}</span>
+                                          <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
                                         </div>
-
-                                        <CollapsibleContent>
+                                        <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-xs"
+                                            onClick={() => finalNetPriceModalRef.current?.open(tidBookings, tid)}
+                                            data-testid={`btn-update-fnp-${tid}`}
+                                          >
+                                            <Pencil className="h-3 w-3 mr-1" />
+                                            {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+                                          </Button>
+                                          <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
+                                            {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {isTidExpanded && (
+                                        <Table className="text-xs">
+                                          <TableHeader>
+                                            <TableRow className="h-7">
+                                              <TableHead>Booking ID</TableHead>
+                                              <TableHead className="text-right">HO Net</TableHead>
+                                              <TableHead className="text-right">SP Net</TableHead>
+                                              <TableHead className="text-center">Net</TableHead>
+                                              <TableHead className="text-center">Dispute</TableHead>
+                                              <TableHead className="text-right">Total Amount Payable</TableHead>
+                                              <TableHead className="text-right">Dispute Amt</TableHead>
+                                              <TableHead className="text-right">Price Payable</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
                                           {tidBookings.map((booking) => {
                                             const netType = localSelections[booking.bookingId] || "sp";
                                             const pricePayable = netType === "ho" ? booking.hoNet : booking.spNet;
@@ -3041,117 +3030,113 @@ export function AmountPayablePanel({
                                             const canDispute = isBookingDisputable(booking);
 
                                             return (
-                                              <div key={booking.bookingId}>
-                                              <div
-                                                className="grid grid-cols-18 gap-1 px-3 py-1.5 items-center text-xs border-t bg-muted/10"
-                                                data-testid={`booking-row-${booking.bookingId}`}
-                                              >
-                                                <div className="col-span-2 pl-6 font-mono truncate" title={booking.bookingId}>
-                                                  {booking.bookingId}
-                                                </div>
-                                                <div className="col-span-2 text-right font-mono">
-                                                  {formatCurrency(booking.hoNet)}
-                                                </div>
-                                                <div className="col-span-2 text-right font-mono">
-                                                  {formatCurrency(booking.spNet)}
-                                                </div>
-                                                <div className="col-span-2 flex justify-center">
-                                                  <Select
-                                                    value={netType}
-                                                    onValueChange={(v) => {
-                                                      updateSelection(booking.bookingId, v as "ho" | "sp", booking);
-                                                    }}
-                                                  >
-                                                    <SelectTrigger className="w-16 h-6 text-xs border-dashed text-muted-foreground">
-                                                      <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      <SelectItem value="ho">HO</SelectItem>
-                                                      <SelectItem value="sp">SP</SelectItem>
-                                                    </SelectContent>
-                                                  </Select>
-                                                </div>
-                                                <div className="col-span-1 flex justify-center">
-                                                  {canDispute ? (
-                                                    <Checkbox
-                                                      checked={isDisputed}
-                                                      onCheckedChange={(checked) => {
-                                                        const newActive = new Set(activeDisputes);
-                                                        if (checked) {
-                                                          newActive.add(booking.bookingId);
-                                                          setDisputeAmounts((prev) => {
-                                                            const updated = new Map(prev);
-                                                            updated.set(
-                                                              booking.bookingId,
-                                                              Math.abs(booking.hoNet - booking.spNet)
-                                                            );
-                                                            return updated;
-                                                          });
-                                                        } else {
-                                                          newActive.delete(booking.bookingId);
-                                                          setDisputeAmounts((prev) => {
-                                                            const updated = new Map(prev);
-                                                            updated.delete(booking.bookingId);
-                                                            return updated;
-                                                          });
-                                                        }
-                                                        setActiveDisputes(newActive);
+                                              <Fragment key={booking.bookingId}>
+                                                <TableRow data-testid={`booking-row-${booking.bookingId}`}>
+                                                  <TableCell className="font-mono">{booking.bookingId}</TableCell>
+                                                  <TableCell className="text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
+                                                  <TableCell className="text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
+                                                  <TableCell className="text-center">
+                                                    <Select
+                                                      value={netType}
+                                                      onValueChange={(v) => {
+                                                        updateSelection(booking.bookingId, v as "ho" | "sp", booking);
                                                       }}
-                                                      data-testid={`checkbox-dispute-${booking.bookingId}`}
-                                                    />
-                                                  ) : (
-                                                    <span className="text-xs text-muted-foreground">-</span>
-                                                  )}
-                                                </div>
-                                                <div className="col-span-2">
-                                                  <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet))}
-                                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                                    onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                    className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
-                                                    data-testid={`input-total-payable-${booking.bookingId}`}
-                                                  />
-                                                </div>
-                                                <div className="col-span-3 text-right">
-                                                  {isDisputed && (
+                                                    >
+                                                      <SelectTrigger className="w-16 h-6 text-xs border-dashed text-muted-foreground">
+                                                        <SelectValue />
+                                                      </SelectTrigger>
+                                                      <SelectContent>
+                                                        <SelectItem value="ho">HO</SelectItem>
+                                                        <SelectItem value="sp">SP</SelectItem>
+                                                      </SelectContent>
+                                                    </Select>
+                                                  </TableCell>
+                                                  <TableCell className="text-center">
+                                                    {canDispute ? (
+                                                      <Checkbox
+                                                        checked={isDisputed}
+                                                        onCheckedChange={(checked) => {
+                                                          const newActive = new Set(activeDisputes);
+                                                          if (checked) {
+                                                            newActive.add(booking.bookingId);
+                                                            setDisputeAmounts((prev) => {
+                                                              const updated = new Map(prev);
+                                                              updated.set(
+                                                                booking.bookingId,
+                                                                Math.abs(booking.hoNet - booking.spNet)
+                                                              );
+                                                              return updated;
+                                                            });
+                                                          } else {
+                                                            newActive.delete(booking.bookingId);
+                                                            setDisputeAmounts((prev) => {
+                                                              const updated = new Map(prev);
+                                                              updated.delete(booking.bookingId);
+                                                              return updated;
+                                                            });
+                                                          }
+                                                          setActiveDisputes(newActive);
+                                                        }}
+                                                        data-testid={`checkbox-dispute-${booking.bookingId}`}
+                                                      />
+                                                    ) : (
+                                                      <span className="text-xs text-muted-foreground">-</span>
+                                                    )}
+                                                  </TableCell>
+                                                  <TableCell>
                                                     <Input
                                                       type="number"
-                                                      className="w-full h-6 text-xs text-right font-mono"
-                                                      value={disputeAmt || ""}
-                                                      onChange={(e) => {
-                                                        const val = parseFloat(e.target.value) || 0;
-                                                        setDisputeAmounts((prev) => {
-                                                          const updated = new Map(prev);
-                                                          updated.set(booking.bookingId, val);
-                                                          return updated;
-                                                        });
-                                                      }}
-                                                      data-testid={`input-dispute-${booking.bookingId}`}
+                                                      step="0.01"
+                                                      value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet))}
+                                                      onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                                                      onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                                                      className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                      data-testid={`input-total-payable-${booking.bookingId}`}
                                                     />
-                                                  )}
-                                                </div>
-                                                <div className="col-span-4 text-right font-mono font-semibold">
-                                                  {formatCurrency(finalNet)} {currency}
-                                                </div>
-                                              </div>
-                                              {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
-                                                <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-t border-violet-200/50 dark:border-violet-800/30">
-                                                  <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
-                                                    {booking.paxBreakdown.map((pax, pi) => (
-                                                      <span key={pi} className="font-mono">
-                                                        {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              )}
-                                              </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-right">
+                                                    {isDisputed && (
+                                                      <Input
+                                                        type="number"
+                                                        className="w-full h-6 text-xs text-right font-mono"
+                                                        value={disputeAmt || ""}
+                                                        onChange={(e) => {
+                                                          const val = parseFloat(e.target.value) || 0;
+                                                          setDisputeAmounts((prev) => {
+                                                            const updated = new Map(prev);
+                                                            updated.set(booking.bookingId, val);
+                                                            return updated;
+                                                          });
+                                                        }}
+                                                        data-testid={`input-dispute-${booking.bookingId}`}
+                                                      />
+                                                    )}
+                                                  </TableCell>
+                                                  <TableCell className="text-right font-mono font-semibold">
+                                                    {formatCurrency(finalNet)} {currency}
+                                                  </TableCell>
+                                                </TableRow>
+                                                {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
+                                                  <TableRow>
+                                                    <TableCell colSpan={8} className="p-0">
+                                                      <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/30">
+                                                        <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
+                                                          {booking.paxBreakdown.map((pax, pi) => (
+                                                            <span key={pi} className="font-mono">
+                                                              {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
+                                                            </span>
+                                                          ))}
+                                                        </div>
+                                                      </div>
+                                                    </TableCell>
+                                                  </TableRow>
+                                                )}
+                                              </Fragment>
                                             );
                                           })}
-                                        </CollapsibleContent>
-                                      </Collapsible>
+                                          </TableBody>
+                                        </Table>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -3252,130 +3237,89 @@ export function AmountPayablePanel({
                         </div>
 
                         <CollapsibleContent>
-                          <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
-                            <div className="col-span-2">TID / Booking ID</div>
-                            <div className="col-span-2 text-right">HO Net</div>
-                            <div className="col-span-2 text-right">SP Net</div>
-                            <div className="col-span-1 text-center">Net</div>
-                            <div className="col-span-1 text-center">Dispute</div>
-                            <div className="col-span-2 text-right">Total Amount Payable</div>
-                            <div className="col-span-3 text-right">Dispute Amt</div>
-                            <div className="col-span-5 text-right">Price Payable</div>
-                          </div>
-
-                          <div className="max-h-80 overflow-y-auto">
+                          <div className="max-h-80 overflow-y-auto space-y-1.5 p-1.5">
                             {Object.entries(tidGroups).map(([tid, tidBookings]) => {
                               const tidKeyStr = `${reason}:${tid}`;
                               const isTidExpanded = expandedTids.has(tidKeyStr);
                               return (
-                                <Collapsible
-                                  key={tid}
-                                  open={isTidExpanded}
-                                  onOpenChange={() => toggleTid(tidKeyStr)}
-                                >
-                                  <div className="border-t">
-                                    <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-background items-center">
-                                      <div className="col-span-2 flex items-center gap-1">
-                                        <CollapsibleTrigger asChild>
-                                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
-                                            {isTidExpanded ? (
-                                              <ChevronDown className="h-3 w-3" />
-                                            ) : (
-                                              <ChevronRight className="h-3 w-3" />
-                                            )}
-                                          </Button>
-                                        </CollapsibleTrigger>
-                                        <div className="min-w-0 flex-1">
-                                          <span className="font-medium text-xs truncate block" title={tid}>
-                                            {tid}
-                                          </span>
-                                          <span className="text-xs text-muted-foreground">
-                                            {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
-                                          </span>
-                                        </div>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-5 w-5 shrink-0"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            finalNetPriceModalRef.current?.open(tidBookings, tid);
-                                          }}
-                                          data-testid={`btn-update-fnp-${tid}`}
-                                          title={tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
-                                        >
-                                          <Pencil className="h-3 w-3" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "ghost"}
-                                          className={`h-5 px-1.5 text-xs shrink-0 ${selectedIssues.has(`${reason}:${tid}`) ? "bg-muted" : ""}`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            toggleIssueSelection(reason, tid);
-                                          }}
-                                          data-testid={`button-select-issue-tid-${tid}`}
-                                        >
-                                          <FileWarning className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                      <div className="col-span-2 text-right font-mono text-xs">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
-                                      </div>
-                                      <div className="col-span-2 text-right font-mono text-xs">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
-                                      </div>
-                                      <div className="col-span-1 flex justify-center">
-                                        {reason === "Unmapped" ? (
-                                          <span className="text-xs text-muted-foreground">SP</span>
-                                        ) : (
-                                          <Select
-                                            value=""
-                                            onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
-                                          >
-                                            <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-tid-${tid}`}>
-                                              <SelectValue placeholder="All" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="ho">HO</SelectItem>
-                                              <SelectItem value="sp">SP</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                        )}
-                                      </div>
-                                      <div className="col-span-1 flex justify-center items-center">
-                                        {(() => {
-                                          const { disputed, disputable } = getTidDisputeCount(reason, tid);
-                                          if (disputable === 0) return <span className="text-xs text-muted-foreground">-</span>;
-                                          return (
-                                            <Checkbox
-                                              checked={disputed === disputable}
-                                              onCheckedChange={() => toggleTidDispute(reason, tid)}
-                                              className="h-4 w-4"
-                                              data-testid={`checkbox-dispute-tid-${tid}`}
-                                            />
-                                          );
-                                        })()}
-                                      </div>
-                                      <div className="col-span-2 text-right font-mono text-xs">
-                                        {formatCurrency(tidBookings.reduce((s, b) => {
-                                          const sel = localSelections[b.bookingId] || "sp";
-                                          return s + (sel === "ho" ? b.hoNet : b.spNet);
-                                        }, 0))}
-                                      </div>
-                                      <div className="col-span-3 text-right font-mono text-xs">
-                                        {formatCurrency(tidBookings.reduce((s, b) => {
-                                          if (!activeDisputes.has(b.bookingId)) return s;
-                                          return s + (disputeAmounts.get(b.bookingId) || 0);
-                                        }, 0))}
-                                      </div>
-                                      <div className="col-span-5 text-right font-mono text-xs font-semibold">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
-                                      </div>
+                                <div key={tid} className="rounded-md border bg-background overflow-hidden">
+                                  <div
+                                    className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                    onClick={() => toggleTid(tidKeyStr)}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                                      <span className="font-mono text-xs font-medium">TID: {tid}</span>
+                                      <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
                                     </div>
-                                    
-                                    <CollapsibleContent>
-                                      <div className="bg-muted/20">
+                                    <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-xs"
+                                        onClick={() => finalNetPriceModalRef.current?.open(tidBookings, tid)}
+                                        data-testid={`btn-update-fnp-${tid}`}
+                                      >
+                                        <Pencil className="h-3 w-3 mr-1" />
+                                        {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "ghost"}
+                                        className={`text-xs ${selectedIssues.has(`${reason}:${tid}`) ? "bg-muted" : ""}`}
+                                        onClick={() => toggleIssueSelection(reason, tid)}
+                                        data-testid={`button-select-issue-tid-${tid}`}
+                                      >
+                                        <FileWarning className="h-3 w-3" />
+                                      </Button>
+                                      {reason === "Unmapped" ? (
+                                        <span className="text-xs text-muted-foreground">SP</span>
+                                      ) : (
+                                        <Select
+                                          value=""
+                                          onValueChange={(v) => updateTidSelection(reason, tid, v as "ho" | "sp")}
+                                        >
+                                          <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-tid-${tid}`}>
+                                            <SelectValue placeholder="All" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="ho">HO</SelectItem>
+                                            <SelectItem value="sp">SP</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      )}
+                                      {(() => {
+                                        const { disputed, disputable } = getTidDisputeCount(reason, tid);
+                                        if (disputable === 0) return null;
+                                        return (
+                                          <Checkbox
+                                            checked={disputed === disputable}
+                                            onCheckedChange={() => toggleTidDispute(reason, tid)}
+                                            className="h-4 w-4"
+                                            data-testid={`checkbox-dispute-tid-${tid}`}
+                                          />
+                                        );
+                                      })()}
+                                      <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {isTidExpanded && (
+                                    <Table className="text-xs">
+                                      <TableHeader>
+                                        <TableRow className="h-7">
+                                          <TableHead>Booking ID</TableHead>
+                                          <TableHead className="text-right">HO Net</TableHead>
+                                          <TableHead className="text-right">SP Net</TableHead>
+                                          <TableHead className="text-center">Net</TableHead>
+                                          <TableHead className="text-center">Dispute</TableHead>
+                                          <TableHead className="text-right">Total Amount Payable</TableHead>
+                                          <TableHead className="text-right">Dispute Amt</TableHead>
+                                          <TableHead className="text-right">Price Payable</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
                                         {tidBookings.map((booking) => {
                                           const currentSelection = localSelections[booking.bookingId] || "sp";
                                           const canDispute = isBookingDisputable(booking);
@@ -3384,105 +3328,99 @@ export function AmountPayablePanel({
                                           const currentDisputeAmt = disputeAmounts.get(booking.bookingId) ?? maxDispute;
                                           const pricePayable = currentSelection === "ho" ? booking.hoNet : booking.spNet;
                                           return (
-                                            <div key={booking.bookingId}>
-                                            <div 
-                                              className="grid grid-cols-18 gap-1 px-3 py-1.5 border-t border-dashed items-center"
-                                            >
-                                              <div className="col-span-2 pl-6">
-                                                <span className="text-xs text-muted-foreground truncate block" title={booking.bookingId}>
-                                                  {booking.bookingId}
-                                                </span>
-                                              </div>
-                                              <div className="col-span-2 text-right font-mono text-xs text-muted-foreground">
-                                                {formatCurrency(booking.hoNet)}
-                                              </div>
-                                              <div className="col-span-2 text-right font-mono text-xs text-muted-foreground">
-                                                {formatCurrency(booking.spNet)}
-                                              </div>
-                                              <div className="col-span-1 flex justify-center">
-                                                {reason === "Unmapped" ? (
-                                                  <span className="text-xs text-muted-foreground">SP</span>
-                                                ) : (
-                                                  <Select
-                                                    value={currentSelection}
-                                                    onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
-                                                  >
-                                                    <SelectTrigger 
-                                                      className="w-12 h-5 text-xs border-dashed text-muted-foreground" 
-                                                      data-testid={`select-booking-${booking.bookingId}`}
+                                            <Fragment key={booking.bookingId}>
+                                              <TableRow>
+                                                <TableCell className="font-mono text-muted-foreground">{booking.bookingId}</TableCell>
+                                                <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(booking.hoNet)}</TableCell>
+                                                <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(booking.spNet)}</TableCell>
+                                                <TableCell className="text-center">
+                                                  {reason === "Unmapped" ? (
+                                                    <span className="text-xs text-muted-foreground">SP</span>
+                                                  ) : (
+                                                    <Select
+                                                      value={currentSelection}
+                                                      onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                     >
-                                                      <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                      <SelectItem value="ho">HO</SelectItem>
-                                                      <SelectItem value="sp">SP</SelectItem>
-                                                    </SelectContent>
-                                                  </Select>
-                                                )}
-                                              </div>
-                                              <div className="col-span-1 flex justify-center items-center">
-                                                {canDispute ? (
-                                                  <Checkbox
-                                                    checked={isDisputed}
-                                                    onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
-                                                    className="h-4 w-4"
-                                                    data-testid={`checkbox-dispute-${booking.bookingId}`}
-                                                  />
-                                                ) : (
-                                                  <span className="text-xs text-muted-foreground">-</span>
-                                                )}
-                                              </div>
-                                              <div className="col-span-2">
-                                                <Input
-                                                  type="number"
-                                                  step="0.01"
-                                                  value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
-                                                  onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                                  onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                  className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
-                                                  data-testid={`input-total-payable-${booking.bookingId}`}
-                                                />
-                                              </div>
-                                              <div className="col-span-3 text-right">
-                                                {canDispute && isDisputed ? (
-                                                  <div className="flex flex-col items-end">
-                                                    <Input
-                                                      type="number"
-                                                      value={currentDisputeAmt}
-                                                      onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
-                                                      className={`w-20 h-5 text-xs font-mono px-1 text-right ${disputeErrors.has(booking.bookingId) ? 'border-red-500' : ''}`}
-                                                      data-testid={`input-dispute-amount-${booking.bookingId}`}
+                                                      <SelectTrigger 
+                                                        className="w-12 h-5 text-xs border-dashed text-muted-foreground" 
+                                                        data-testid={`select-booking-${booking.bookingId}`}
+                                                      >
+                                                        <SelectValue />
+                                                      </SelectTrigger>
+                                                      <SelectContent>
+                                                        <SelectItem value="ho">HO</SelectItem>
+                                                        <SelectItem value="sp">SP</SelectItem>
+                                                      </SelectContent>
+                                                    </Select>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                  {canDispute ? (
+                                                    <Checkbox
+                                                      checked={isDisputed}
+                                                      onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
+                                                      className="h-4 w-4"
+                                                      data-testid={`checkbox-dispute-${booking.bookingId}`}
                                                     />
-                                                    {disputeErrors.has(booking.bookingId) && (
-                                                      <span className="text-[10px] text-red-500">{disputeErrors.get(booking.bookingId)}</span>
-                                                    )}
-                                                  </div>
-                                                ) : (
-                                                  <span className="text-xs text-muted-foreground font-mono">-</span>
-                                                )}
-                                              </div>
-                                              <div className="col-span-5 text-right font-mono text-xs">
-                                                {formatCurrency(getFinalNetPrice(booking))}
-                                              </div>
-                                            </div>
-                                            {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
-                                              <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-t border-violet-200/50 dark:border-violet-800/30">
-                                                <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
-                                                  {booking.paxBreakdown.map((pax, pi) => (
-                                                    <span key={pi} className="font-mono">
-                                                      {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
-                                                    </span>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                            )}
-                                            </div>
+                                                  ) : (
+                                                    <span className="text-xs text-muted-foreground">-</span>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell>
+                                                  <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
+                                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                                                    onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                                                    className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                    data-testid={`input-total-payable-${booking.bookingId}`}
+                                                  />
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                  {canDispute && isDisputed ? (
+                                                    <div className="flex flex-col items-end">
+                                                      <Input
+                                                        type="number"
+                                                        value={currentDisputeAmt}
+                                                        onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
+                                                        className={`w-20 h-5 text-xs font-mono px-1 text-right ${disputeErrors.has(booking.bookingId) ? 'border-red-500' : ''}`}
+                                                        data-testid={`input-dispute-amount-${booking.bookingId}`}
+                                                      />
+                                                      {disputeErrors.has(booking.bookingId) && (
+                                                        <span className="text-[10px] text-red-500">{disputeErrors.get(booking.bookingId)}</span>
+                                                      )}
+                                                    </div>
+                                                  ) : (
+                                                    <span className="text-xs text-muted-foreground font-mono">-</span>
+                                                  )}
+                                                </TableCell>
+                                                <TableCell className="text-right font-mono font-semibold">
+                                                  {formatCurrency(getFinalNetPrice(booking))} {currency}
+                                                </TableCell>
+                                              </TableRow>
+                                              {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
+                                                <TableRow>
+                                                  <TableCell colSpan={8} className="p-0">
+                                                    <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/30">
+                                                      <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
+                                                        {booking.paxBreakdown.map((pax, pi) => (
+                                                          <span key={pi} className="font-mono">
+                                                            {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
+                                                          </span>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  </TableCell>
+                                                </TableRow>
+                                              )}
+                                            </Fragment>
                                           );
                                         })}
-                                      </div>
-                                    </CollapsibleContent>
-                                  </div>
-                                </Collapsible>
+                                      </TableBody>
+                                    </Table>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
@@ -3616,117 +3554,79 @@ export function AmountPayablePanel({
                       </div>
 
                       <CollapsibleContent>
-                        <div className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t">
-                          <div className="col-span-2">TID / Booking ID</div>
-                          <div className="col-span-2 text-right">HO Net</div>
-                          <div className="col-span-2 text-right">SP Net</div>
-                          <div className="col-span-1 text-center">Net</div>
-                          <div className="col-span-1 text-center">Dispute</div>
-                          <div className="col-span-2 text-right">Total Amount Payable</div>
-                          <div className="col-span-3 text-right">Dispute Amt</div>
-                          <div className="col-span-5 text-right">Price Payable</div>
-                        </div>
-
-                        <div className="max-h-80 overflow-y-auto">
+                        <div className="max-h-80 overflow-y-auto space-y-1.5 p-1.5">
                           {Object.entries(tidGroups).map(([tid, tidBookings]) => {
                             const tidKeyStr = svTidKey(tid);
                             const isTidExpanded = expandedTids.has(tidKeyStr);
                             return (
-                              <Collapsible
-                                key={tid}
-                                open={isTidExpanded}
-                                onOpenChange={() => toggleTid(tidKeyStr)}
-                              >
-                                <div className="border-t">
-                                  <div className="grid grid-cols-18 gap-1 px-3 py-2 bg-muted/20 items-center">
-                                    <div className="col-span-2 flex items-center gap-1">
-                                      <CollapsibleTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
-                                          {isTidExpanded ? (
-                                            <ChevronDown className="h-3 w-3" />
-                                          ) : (
-                                            <ChevronRight className="h-3 w-3" />
-                                          )}
-                                        </Button>
-                                      </CollapsibleTrigger>
-                                      <div className="min-w-0 flex-1">
-                                        <span className="font-medium text-xs truncate block" title={tid}>
-                                          {tid}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
-                                        </span>
-                                      </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-5 w-5 shrink-0"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          finalNetPriceModalRef.current?.open(tidBookings, tid);
-                                        }}
-                                        data-testid={`btn-update-fnp-sv-${tid}`}
-                                        title={tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                    <div className="col-span-2 text-right font-mono text-xs">
-                                      {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
-                                    </div>
-                                    <div className="col-span-2 text-right font-mono text-xs">
-                                      {formatCurrency(tidBookings.reduce((s, b) => s + b.spNet, 0))}
-                                    </div>
-                                    <div className="col-span-1 flex justify-center">
-                                      {reason !== "Reconciled" && reason !== "Unmapped" && (
-                                        <Select
-                                          value=""
-                                          onValueChange={(v) => updateSecondaryVendorTidSelection(reason, tid, v as "ho" | "sp")}
-                                        >
-                                          <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-sv-tid-${tid}`}>
-                                            <SelectValue placeholder="All" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="ho">HO</SelectItem>
-                                            <SelectItem value="sp">SP</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      )}
-                                    </div>
-                                    <div className="col-span-1 flex justify-center items-center">
-                                      {(() => {
-                                        if (reason === "Reconciled") return <span className="text-xs text-muted-foreground">-</span>;
-                                        const { disputed, disputable } = getSecondaryVendorTidDisputeCount(reason, tid);
-                                        if (disputable === 0) return <span className="text-xs text-muted-foreground">-</span>;
-                                        return (
-                                          <Checkbox
-                                            checked={disputed === disputable}
-                                            onCheckedChange={() => toggleSecondaryVendorTidDispute(reason, tid)}
-                                            className="h-4 w-4"
-                                            data-testid={`checkbox-sv-dispute-tid-${tid}`}
-                                          />
-                                        );
-                                      })()}
-                                    </div>
-                                    <div className="col-span-2 text-right font-mono text-xs">
-                                      {formatCurrency(tidBookings.reduce((s, b) => {
-                                        if (reason === "Reconciled") return s + b.spNet;
-                                        const sel = localSelections[b.bookingId] || "sp";
-                                        return s + (sel === "ho" ? b.hoNet : b.spNet);
-                                      }, 0))}
-                                    </div>
-                                    <div className="col-span-3 text-right font-mono text-xs">
-                                      {formatCurrency(tidBookings.reduce((s, b) => {
-                                        if (!activeDisputes.has(b.bookingId)) return s;
-                                        return s + (disputeAmounts.get(b.bookingId) || 0);
-                                      }, 0))}
-                                    </div>
-                                    <div className="col-span-5 text-right font-mono text-xs font-semibold">
-                                      {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
-                                    </div>
+                              <div key={tid} className="rounded-md border bg-background overflow-hidden">
+                                <div
+                                  className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                  onClick={() => toggleTid(tidKeyStr)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                                    <span className="font-mono text-xs font-medium">TID: {tid}</span>
+                                    <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
                                   </div>
-
-                                  <CollapsibleContent>
+                                  <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-xs"
+                                      onClick={() => finalNetPriceModalRef.current?.open(tidBookings, tid)}
+                                      data-testid={`btn-update-fnp-sv-${tid}`}
+                                    >
+                                      <Pencil className="h-3 w-3 mr-1" />
+                                      {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+                                    </Button>
+                                    {reason !== "Reconciled" && reason !== "Unmapped" && (
+                                      <Select
+                                        value=""
+                                        onValueChange={(v) => updateSecondaryVendorTidSelection(reason, tid, v as "ho" | "sp")}
+                                      >
+                                        <SelectTrigger className="w-12 h-6 text-xs" data-testid={`select-sv-tid-${tid}`}>
+                                          <SelectValue placeholder="All" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="ho">HO</SelectItem>
+                                          <SelectItem value="sp">SP</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                    {(() => {
+                                      if (reason === "Reconciled") return null;
+                                      const { disputed, disputable } = getSecondaryVendorTidDisputeCount(reason, tid);
+                                      if (disputable === 0) return null;
+                                      return (
+                                        <Checkbox
+                                          checked={disputed === disputable}
+                                          onCheckedChange={() => toggleSecondaryVendorTidDispute(reason, tid)}
+                                          className="h-4 w-4"
+                                          data-testid={`checkbox-sv-dispute-tid-${tid}`}
+                                        />
+                                      );
+                                    })()}
+                                    <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
+                                      {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isTidExpanded && (
+                                  <Table className="text-xs">
+                                    <TableHeader>
+                                      <TableRow className="h-7">
+                                        <TableHead>Booking ID</TableHead>
+                                        <TableHead className="text-right">HO Net</TableHead>
+                                        <TableHead className="text-right">SP Net</TableHead>
+                                        <TableHead className="text-center">Net</TableHead>
+                                        <TableHead className="text-center">Dispute</TableHead>
+                                        <TableHead className="text-right">Total Amount Payable</TableHead>
+                                        <TableHead className="text-right">Dispute Amt</TableHead>
+                                        <TableHead className="text-right">Price Payable</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
                                     {tidBookings.map((booking) => {
                                       const selection = localSelections[booking.bookingId] || "sp";
                                       const isDisputed = activeDisputes.has(booking.bookingId);
@@ -3736,94 +3636,91 @@ export function AmountPayablePanel({
                                       const canDispute = reason !== "Reconciled" && isBookingDisputable(booking);
 
                                       return (
-                                        <div key={booking.bookingId}>
-                                        <div
-                                          className="grid grid-cols-18 gap-1 px-3 py-1.5 bg-muted/10 items-center border-t"
-                                        >
-                                          <div className="col-span-2 pl-6">
-                                            <span className="text-xs font-mono">{booking.bookingId}</span>
-                                          </div>
-                                          <div className="col-span-2 text-right font-mono text-xs">
-                                            {formatCurrency(booking.hoNet)}
-                                          </div>
-                                          <div className="col-span-2 text-right font-mono text-xs">
-                                            {formatCurrency(booking.spNet)}
-                                          </div>
-                                          <div className="col-span-1 flex justify-center">
-                                            {reason === "Reconciled" ? (
-                                              <span className="text-xs text-muted-foreground">SP</span>
-                                            ) : (
-                                              <Select
-                                                value={selection}
-                                                onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
-                                              >
-                                                <SelectTrigger className="w-12 h-6 text-xs border-dashed text-muted-foreground" data-testid={`select-sv-booking-${booking.bookingId}`}>
-                                                  <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  <SelectItem value="ho">HO</SelectItem>
-                                                  <SelectItem value="sp">SP</SelectItem>
-                                                </SelectContent>
-                                              </Select>
-                                            )}
-                                          </div>
-                                          <div className="col-span-1 flex justify-center">
-                                            {canDispute ? (
-                                              <Checkbox
-                                                checked={isDisputed}
-                                                onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
-                                                className="h-4 w-4"
-                                                data-testid={`checkbox-sv-dispute-${booking.bookingId}`}
-                                              />
-                                            ) : (
-                                              <span className="text-xs text-muted-foreground">-</span>
-                                            )}
-                                          </div>
-                                          <div className="col-span-2">
-                                            <Input
-                                              type="number"
-                                              step="0.01"
-                                              value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
-                                              onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                              onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                              className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
-                                              data-testid={`input-total-payable-${booking.bookingId}`}
-                                            />
-                                          </div>
-                                          <div className="col-span-3 text-right">
-                                            {isDisputed ? (
+                                        <Fragment key={booking.bookingId}>
+                                          <TableRow>
+                                            <TableCell className="font-mono">{booking.bookingId}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
+                                            <TableCell className="text-center">
+                                              {reason === "Reconciled" ? (
+                                                <span className="text-xs text-muted-foreground">SP</span>
+                                              ) : (
+                                                <Select
+                                                  value={selection}
+                                                  onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
+                                                >
+                                                  <SelectTrigger className="w-12 h-6 text-xs border-dashed text-muted-foreground" data-testid={`select-sv-booking-${booking.bookingId}`}>
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    <SelectItem value="ho">HO</SelectItem>
+                                                    <SelectItem value="sp">SP</SelectItem>
+                                                  </SelectContent>
+                                                </Select>
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                              {canDispute ? (
+                                                <Checkbox
+                                                  checked={isDisputed}
+                                                  onCheckedChange={() => toggleDispute(booking.bookingId, booking)}
+                                                  className="h-4 w-4"
+                                                  data-testid={`checkbox-sv-dispute-${booking.bookingId}`}
+                                                />
+                                              ) : (
+                                                <span className="text-xs text-muted-foreground">-</span>
+                                              )}
+                                            </TableCell>
+                                            <TableCell>
                                               <Input
                                                 type="number"
-                                                value={disputeAmt}
-                                                onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
-                                                className="h-6 w-20 text-xs font-mono text-right ml-auto"
-                                                data-testid={`input-sv-dispute-${booking.bookingId}`}
+                                                step="0.01"
+                                                value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
+                                                onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                                                onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                                                className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                data-testid={`input-total-payable-${booking.bookingId}`}
                                               />
-                                            ) : (
-                                              <span className="text-xs text-muted-foreground">-</span>
-                                            )}
-                                          </div>
-                                          <div className="col-span-5 text-right font-mono text-xs font-semibold">
-                                            {formatCurrency(finalNet)} {currency}
-                                          </div>
-                                        </div>
-                                        {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
-                                          <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-t border-violet-200/50 dark:border-violet-800/30">
-                                            <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
-                                              {booking.paxBreakdown.map((pax, pi) => (
-                                                <span key={pi} className="font-mono">
-                                                  {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-                                        </div>
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                              {isDisputed ? (
+                                                <Input
+                                                  type="number"
+                                                  value={disputeAmt}
+                                                  onChange={(e) => updateDisputeAmount(booking.bookingId, parseFloat(e.target.value) || 0, booking)}
+                                                  className="h-6 w-20 text-xs font-mono text-right ml-auto"
+                                                  data-testid={`input-sv-dispute-${booking.bookingId}`}
+                                                />
+                                              ) : (
+                                                <span className="text-xs text-muted-foreground">-</span>
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono font-semibold">
+                                              {formatCurrency(finalNet)} {currency}
+                                            </TableCell>
+                                          </TableRow>
+                                          {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
+                                            <TableRow>
+                                              <TableCell colSpan={8} className="p-0">
+                                                <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/30">
+                                                  <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
+                                                    {booking.paxBreakdown.map((pax, pi) => (
+                                                      <span key={pi} className="font-mono">
+                                                        {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              </TableCell>
+                                            </TableRow>
+                                          )}
+                                        </Fragment>
                                       );
                                     })}
-                                  </CollapsibleContent>
-                                </div>
-                              </Collapsible>
+                                    </TableBody>
+                                  </Table>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
