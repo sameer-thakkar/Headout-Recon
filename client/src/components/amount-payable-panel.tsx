@@ -755,6 +755,7 @@ export function AmountPayablePanel({
   const [isAmountPaidExpanded, setIsAmountPaidExpanded] = useState(false);
   const [amountPaidTotals, setAmountPaidTotals] = useState<Record<string, number>>({});
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
+  const [actionedBookings, setActionedBookings] = useState<Set<string>>(new Set());
   const [disputeAdjEdits, setDisputeAdjEdits] = useState<Record<string, number>>({});
   const [discrepancyAdjEdits, setDiscrepancyAdjEdits] = useState<Record<string, number>>({});
   const [ticketIdEdits, setTicketIdEdits] = useState<Record<string, string>>({});
@@ -848,6 +849,7 @@ export function AmountPayablePanel({
     if (prevRunIdRef.current !== runId) {
       setLocalSelections(finalNetSelections);
       setDisputesLoaded(false);
+      setActionedBookings(new Set());
       prevRunIdRef.current = runId;
     }
     
@@ -1030,6 +1032,7 @@ export function AmountPayablePanel({
       for (const b of bulkBookings) delete next[b.bookingId];
       return next;
     });
+    setActionedBookings(prev => { const next = new Set(prev); for (const b of bulkBookings) next.add(b.bookingId); return next; });
     toast({ title: "Bulk Update Applied", description: `Set ${bulkBookings.length} bookings to SP Net.` });
   }, [toast]);
 
@@ -1054,6 +1057,7 @@ export function AmountPayablePanel({
       for (const b of bulkBookings) newSet.delete(b.bookingId);
       return newSet;
     });
+    setActionedBookings(prev => { const next = new Set(prev); for (const b of bulkBookings) next.add(b.bookingId); return next; });
     setDisputeAmounts(prev => {
       const newMap = new Map(prev);
       for (const b of bulkBookings) newMap.delete(b.bookingId);
@@ -1091,6 +1095,7 @@ export function AmountPayablePanel({
       for (const id of Object.keys(newTotals)) delete next[id];
       return next;
     });
+    setActionedBookings(prev => { const next = new Set(prev); for (const b of paxBookings) next.add(b.bookingId); return next; });
     toast({ title: "Pax prices updated", description: `Final Net Price recalculated for ${paxBookings.length} bookings in TID ${paxTid}.` });
   }, [toast]);
 
@@ -1101,6 +1106,7 @@ export function AmountPayablePanel({
       return newMap;
     });
     saveBulkVendorCorrections(bookingIds.map(id => ({ bookingId: id, finalVendorId: bulkVendorId })));
+    setActionedBookings(prev => { const next = new Set(prev); for (const id of bookingIds) next.add(id); return next; });
     toast({ title: "Vendor ID Updated", description: `Set vendor ID for ${bookingIds.length} bookings.` });
   }, [saveBulkVendorCorrections, toast]);
 
@@ -1359,8 +1365,13 @@ export function AmountPayablePanel({
     return sel === "ho" ? booking.hoNet : booking.spNet;
   }, [amountPaidTotals, localSelections]);
 
+  const isTidFullyActioned = useCallback((tidBookings: BookingForPayable[]) => {
+    return tidBookings.length > 0 && tidBookings.every(b => actionedBookings.has(b.bookingId));
+  }, [actionedBookings]);
+
   const handleAmountPaidTotalChange = useCallback((bookingId: string, value: string) => {
     setRawInputValues(prev => ({ ...prev, [bookingId]: value }));
+    setActionedBookings(prev => { const next = new Set(prev); next.add(bookingId); return next; });
     const numVal = parseFloat(value);
     if (isNaN(numVal)) {
       setAmountPaidTotals(prev => {
@@ -1482,6 +1493,7 @@ export function AmountPayablePanel({
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
+    setActionedBookings(prev => { const next = new Set(prev); next.add(bookingId); return next; });
     setAmountPaidTotals(prev => {
       const next = { ...prev };
       delete next[bookingId];
@@ -1704,7 +1716,7 @@ export function AmountPayablePanel({
 
   const toggleDispute = useCallback((bookingId: string, booking: BookingForPayable) => {
     if (!isBookingDisputable(booking)) return;
-    
+    setActionedBookings(prev => { const next = new Set(prev); next.add(bookingId); return next; });
     setActiveDisputes(prev => {
       const newSet = new Set(prev);
       if (newSet.has(bookingId)) {
@@ -2505,6 +2517,7 @@ export function AmountPayablePanel({
   }, [runId, allRows, currency, toast]);
 
   const handleRaiseDisputeFromModal = useCallback(async (tidBookings: BookingForPayable[]) => {
+    setActionedBookings(prev => { const next = new Set(prev); for (const b of tidBookings) next.add(b.bookingId); return next; });
     setActiveDisputes(prev => {
       const newSet = new Set(prev);
       for (const b of tidBookings) {
@@ -3313,6 +3326,9 @@ export function AmountPayablePanel({
                                           {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
                                           <span className="font-mono text-xs font-medium">TID: {tid}</span>
                                           <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+                                          {isTidFullyActioned(tidBookings) && (
+                                            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" data-testid={`tid-actioned-${tid}`} />
+                                          )}
                                         </div>
                                         <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
                                           <Button
@@ -3397,6 +3413,7 @@ export function AmountPayablePanel({
                                                             });
                                                           }
                                                           setActiveDisputes(newActive);
+                                                          setActionedBookings(prev => { const next = new Set(prev); next.add(booking.bookingId); return next; });
                                                         }}
                                                         data-testid={`checkbox-dispute-${booking.bookingId}`}
                                                       />
@@ -3575,6 +3592,9 @@ export function AmountPayablePanel({
                                       {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
                                       <span className="font-mono text-xs font-medium">TID: {tid}</span>
                                       <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+                                      {isTidFullyActioned(tidBookings) && (
+                                        <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" data-testid={`tid-actioned-canc-${tid}`} />
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
                                       <Button
@@ -3858,6 +3878,9 @@ export function AmountPayablePanel({
                                     {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
                                     <span className="font-mono text-xs font-medium">TID: {tid}</span>
                                     <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+                                    {isTidFullyActioned(tidBookings) && (
+                                      <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" data-testid={`tid-actioned-sv-${tid}`} />
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
                                     <Button
