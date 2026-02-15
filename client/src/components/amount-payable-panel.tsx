@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle, useRef, Fragment } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, TrendingUp, TrendingDown, ArrowRight, ArrowLeft } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -88,10 +89,11 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
   onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyPax: (bookings: BookingForPayable[], newPrices: Record<string, string>, dateToRowKeyMap: Map<string, string>, tid: string) => void;
   onApplyVendorId: (bookingIds: string[], vendorId: string) => void;
+  onRaiseDispute?: (bookings: BookingForPayable[]) => void;
   runId?: string | null;
   allRows?: PrimaryRow[];
   onLogIssue?: (reason: string, tid: string, bookings: BookingForPayable[]) => void;
-}>(function UnifiedTidActionModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId, runId, allRows, onLogIssue }, ref) {
+}>(function UnifiedTidActionModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId, onRaiseDispute, runId, allRows, onLogIssue }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [bookings, setBookings] = useState<BookingForPayable[]>([]);
   const [tid, setTid] = useState("");
@@ -99,6 +101,8 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
   const [vendorId, setVendorId] = useState("");
   const [reason, setReason] = useState("");
   const [issueChecked, setIssueChecked] = useState(false);
+  const [step, setStep] = useState<"main" | "spnet-confirm">("main");
+  const [disputeChecked, setDisputeChecked] = useState(false);
   const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
   const paymentBasis = useMemo(() => {
@@ -277,6 +281,8 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
       setTid(tidVal);
       setReason(reasonVal);
       setIssueChecked(false);
+      setStep("main");
+      setDisputeChecked(false);
       setIsOpen(true);
     }
   }));
@@ -302,9 +308,12 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
     if (issueChecked && onLogIssue) {
       onLogIssue(reason, tid, bookings);
     }
+    if (disputeChecked && onRaiseDispute) {
+      onRaiseDispute(bookings);
+    }
     setIsOpen(false);
     onApplySpNet(bookings);
-  }, [bookings, onApplySpNet, applyVendorIdIfSet, issueChecked, onLogIssue, reason, tid]);
+  }, [bookings, onApplySpNet, applyVendorIdIfSet, issueChecked, onLogIssue, reason, tid, disputeChecked, onRaiseDispute]);
 
   const handleApplyHoNet = useCallback(() => {
     applyVendorIdIfSet();
@@ -350,10 +359,128 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="payable-modal-scroll-area">
+          {step === "spnet-confirm" ? (
+            <>
+              <div className="rounded-md border bg-background overflow-hidden">
+                <div className="px-4 py-3 border-b bg-blue-50 dark:bg-blue-900/20">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                      <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">Confirm: Update to SP Net</div>
+                      <div className="text-xs text-muted-foreground">
+                        Set Final Net Price = SP Net for all {bookings.length} bookings
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-md border p-3 bg-blue-50/50 dark:bg-blue-900/10">
+                      <div className="text-xs text-muted-foreground mb-1">SP Net Total (Paying)</div>
+                      <div className="text-lg font-mono font-semibold text-blue-700 dark:text-blue-300">
+                        {formatNumberModal(spTotal)} {currency}
+                      </div>
+                    </div>
+                    <div className="rounded-md border p-3 bg-green-50/50 dark:bg-green-900/10">
+                      <div className="text-xs text-muted-foreground mb-1">HO Net Total</div>
+                      <div className="text-lg font-mono font-semibold text-green-700 dark:text-green-300">
+                        {formatNumberModal(hoTotal)} {currency}
+                      </div>
+                    </div>
+                  </div>
+                  {Math.abs(spTotal - hoTotal) > 0.01 && (
+                    <div className="rounded-md border p-3 bg-muted/30">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs text-muted-foreground">Difference (SP - HO)</span>
+                        <span className="text-sm font-mono font-semibold text-amber-600 dark:text-amber-400">
+                          {spTotal - hoTotal > 0 ? "+" : ""}{formatNumberModal(spTotal - hoTotal)} {currency}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div
+                className={`rounded-md border-2 overflow-hidden transition-colors ${disputeChecked ? "border-amber-500 dark:border-amber-400 bg-amber-50/50 dark:bg-amber-900/15" : "border-border bg-background"}`}
+                data-testid={`dispute-card-${tid}`}
+              >
+                <div className="px-4 py-4">
+                  <div className="flex items-start gap-4">
+                    <div className={`flex items-center justify-center h-10 w-10 rounded-md flex-shrink-0 ${disputeChecked ? "bg-amber-100 dark:bg-amber-900/40" : "bg-muted"}`}>
+                      <AlertTriangle className={`h-5 w-5 ${disputeChecked ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-3 mb-1">
+                        <div className="text-sm font-semibold">Raise Dispute</div>
+                        <Switch
+                          checked={disputeChecked}
+                          onCheckedChange={setDisputeChecked}
+                          data-testid={`switch-dispute-${tid}`}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Paying SP Net now. The difference of{" "}
+                        <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
+                          {formatNumberModal(Math.abs(spTotal - hoTotal))} {currency}
+                        </span>
+                        {" "}will be tracked as a dispute for future settlement — either adjusted against a future invoice or absorbed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-md border bg-background overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-orange-100 dark:bg-orange-900/30">
+                      <FileWarning className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">Flag Issue</div>
+                      <div className="text-xs text-muted-foreground">
+                        Log this TID as an issue for the {reason} team to review
+                      </div>
+                    </div>
+                  </div>
+                  <Checkbox
+                    checked={issueChecked}
+                    onCheckedChange={(checked) => setIssueChecked(!!checked)}
+                    className="h-5 w-5"
+                    data-testid={`checkbox-issue-confirm-${tid}`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setStep("main"); setDisputeChecked(false); }}
+                  data-testid={`btn-back-${tid}`}
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 mr-1.5" />
+                  Back
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleApplySpNet}
+                  data-testid={`btn-confirm-spnet-${tid}`}
+                >
+                  <Check className="h-3.5 w-3.5 mr-1.5" />
+                  Confirm &amp; Apply SP Net
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
           <div className="rounded-md border bg-background overflow-hidden">
             <div
               className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
-              onClick={handleApplySpNet}
+              onClick={() => setStep("spnet-confirm")}
               data-testid={`payable-modal-btn-spnet-${tid}`}
             >
               <div className="flex items-center gap-3">
@@ -582,6 +709,8 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
               Applies to <span className="font-semibold">{bookings.length}</span> bookings in TID <span className="font-mono font-medium">{tid}</span>
             </p>
           </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -2373,6 +2502,56 @@ export function AmountPayablePanel({
       });
     }
   }, [runId, allRows, currency, toast]);
+
+  const handleRaiseDisputeFromModal = useCallback(async (tidBookings: BookingForPayable[]) => {
+    setActiveDisputes(prev => {
+      const newSet = new Set(prev);
+      for (const b of tidBookings) {
+        if (isBookingDisputable(b)) {
+          newSet.add(b.bookingId);
+          if (!disputeAmounts.has(b.bookingId)) {
+            const maxAmt = getMaxDisputeAmount(b);
+            setDisputeAmounts(prevMap => new Map(prevMap).set(b.bookingId, maxAmt));
+          }
+        }
+      }
+      return newSet;
+    });
+
+    if (runId) {
+      try {
+        let posted = 0;
+        for (const b of tidBookings) {
+          if (isBookingDisputable(b)) {
+            const maxAmt = getMaxDisputeAmount(b);
+            await apiRequest("POST", "/api/disputes", {
+              runId,
+              bookingId: b.bookingId,
+              billingEntityId: b.beId || "",
+              billingEntityName: b.billingEntityName || b.beId || "",
+              ticketId: b.ticketId || "",
+              tid: b.tid || "",
+              currency,
+              disputeAmount: maxAmt,
+              maxDisputeAmount: maxAmt,
+              reconciledNet: b.spNet,
+            });
+            posted++;
+          }
+        }
+        if (posted > 0) {
+          await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+        }
+      } catch (error) {
+        console.error("Failed to POST disputes:", error);
+      }
+    }
+
+    toast({
+      title: "Dispute Raised",
+      description: `Dispute raised for ${tidBookings.length} bookings.`,
+    });
+  }, [isBookingDisputable, disputeAmounts, getMaxDisputeAmount, toast, runId, currency]);
 
   const handleLogIssues = useCallback(async () => {
     if (!runId || selectedIssues.size === 0) return;
@@ -5294,6 +5473,7 @@ export function AmountPayablePanel({
         onApplyHoNet={handleBulkHoNet}
         onApplyPax={handleBulkPaxApply}
         onApplyVendorId={handleBulkVendorId}
+        onRaiseDispute={handleRaiseDisputeFromModal}
         runId={runId}
         allRows={allRows}
         onLogIssue={handleLogSingleIssue}
