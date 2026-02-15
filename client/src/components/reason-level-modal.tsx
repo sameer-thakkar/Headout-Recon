@@ -90,6 +90,85 @@ interface ScoredInsight {
   confidence: number;
 }
 
+function analyzeTakeRate(bookings: BookingForPayable[], rows: PrimaryRow[]): ScoredInsight | null {
+  const takeRateData: { bookingId: string; hsp: number; hoTake: number; actualTake: number; gap: number }[] = [];
+
+  for (const b of bookings) {
+    const row = rows.find(r => r.bookingId === b.bookingId);
+    const hsp = row?.headoutSellingPrice;
+    if (!hsp || hsp <= 0) continue;
+
+    const hoTake = ((hsp - b.hoNet) / hsp) * 100;
+    const actualTake = ((hsp - b.spNet) / hsp) * 100;
+    const gap = hoTake - actualTake;
+    takeRateData.push({ bookingId: b.bookingId, hsp, hoTake, actualTake, gap });
+  }
+
+  if (takeRateData.length === 0) return null;
+  const coverageRatio = takeRateData.length / bookings.length;
+  if (coverageRatio < 0.3) return null;
+
+  const avgHoTake = takeRateData.reduce((s, d) => s + d.hoTake, 0) / takeRateData.length;
+  const avgActualTake = takeRateData.reduce((s, d) => s + d.actualTake, 0) / takeRateData.length;
+  const avgGap = avgHoTake - avgActualTake;
+  const absGap = Math.abs(avgGap);
+
+  if (absGap < 0.5) return null;
+
+  const gaps = takeRateData.map(d => d.gap);
+  const meanGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+  const variance = gaps.reduce((s, g) => s + Math.pow(g - meanGap, 2), 0) / gaps.length;
+  const stdDev = Math.sqrt(variance);
+  const isConsistent = stdDev < absGap * 0.5;
+
+  const negativeActualCount = takeRateData.filter(d => d.actualTake < 0).length;
+  const soldAtLoss = negativeActualCount > 0;
+
+  let detail: string;
+  const hoStr = avgHoTake.toFixed(1);
+  const actualStr = avgActualTake.toFixed(1);
+  const gapStr = absGap.toFixed(1);
+
+  if (soldAtLoss) {
+    const lossRatio = negativeActualCount / takeRateData.length;
+    detail = `Margin erosion: HO expected ${hoStr}% take rate but actual is ${actualStr}% — a ${gapStr}pp shortfall. ` +
+      `${negativeActualCount} of ${takeRateData.length} bookings have negative actual take rate (SP cost exceeds selling price). ` +
+      `${lossRatio >= 0.5 ? "Systematic loss on this TID — likely a rate configuration issue." : "Selective loss on some bookings — check for rate overrides or special pricing."}`;
+  } else if (avgGap > 0 && isConsistent) {
+    detail = `Consistent margin gap: HO expected ${hoStr}% take rate but actual is ${actualStr}%, ` +
+      `resulting in a uniform ${gapStr}pp shortfall across ${takeRateData.length} bookings. ` +
+      `SP is charging more than HO's agreed rate — likely a systematic rate mismatch that needs correction.`;
+  } else if (avgGap > 0) {
+    detail = `Variable margin gap: HO expected ${hoStr}% take rate vs ${actualStr}% actual (${gapStr}pp avg shortfall). ` +
+      `Gap varies across bookings (std dev: ${stdDev.toFixed(1)}pp) — suggests rate changed during the period or mixed pricing applies.`;
+  } else if (avgGap < 0 && isConsistent) {
+    detail = `SP charging below agreed rate: HO expected ${hoStr}% take rate but actual is ${actualStr}% ` +
+      `(${gapStr}pp higher margin than expected across ${takeRateData.length} bookings). ` +
+      `SP may have applied a lower rate — verify if this is intentional before reconciling.`;
+  } else {
+    detail = `Take rate variance: HO expected ${hoStr}% vs ${actualStr}% actual. ` +
+      `${gapStr}pp average gap with high variability (std dev: ${stdDev.toFixed(1)}pp) — multiple rate tiers may be in play.`;
+  }
+
+  let confidence: number;
+  if (soldAtLoss) {
+    confidence = 0.9 + (coverageRatio * 0.05);
+  } else if (isConsistent && absGap >= 2) {
+    confidence = 0.8 + (coverageRatio * 0.1);
+  } else if (absGap >= 2) {
+    confidence = 0.65 + (coverageRatio * 0.1);
+  } else {
+    confidence = 0.45 + (absGap / 10) + (coverageRatio * 0.05);
+  }
+  confidence = Math.min(confidence, 0.95);
+
+  return {
+    indicator: soldAtLoss ? "Sold at Loss" : (avgGap > 0 ? "Take Rate Compressed" : "Take Rate Surplus"),
+    detail,
+    confidence,
+  };
+}
+
 function generatePredictiveInsights(topTids: TidAggregate[], allRows: PrimaryRow[]): PredictiveInsight[] {
   const insights: PredictiveInsight[] = [];
 
@@ -103,10 +182,14 @@ function generatePredictiveInsights(topTids: TidAggregate[], allRows: PrimaryRow
     const priceResult = analyzePriceChanges(tidAgg.bookings, tidRows);
     if (priceResult) candidates.push(priceResult);
 
+    const takeRateResult = analyzeTakeRate(tidAgg.bookings, tidRows);
+    if (takeRateResult) candidates.push(takeRateResult);
+
     if (tidAgg.hasMixedFulfillment) {
       candidates.push({
         indicator: "Mixed Fulfillment",
-        detail: `Fulfillment methods differ across bookings: ${tidAgg.fulfillmentMethods.join(", ")}. This may explain the discrepancy.`,
+        detail: `Multiple fulfillment methods (${tidAgg.fulfillmentMethods.join(", ")}) within the same TID — ` +
+          `different methods may carry different cost structures, contributing to the price discrepancy.`,
         confidence: 0.5,
       });
     }
@@ -143,9 +226,11 @@ function analyzePaxIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): Sc
 
   if (mismatchedPaxCount > 0) {
     const ratio = mismatchedPaxCount / bookings.length;
+    const scope = ratio >= 0.8 ? "nearly all" : ratio >= 0.5 ? "most" : "some";
     return {
       indicator: "Pax Price Mismatch",
-      detail: `${mismatchedPaxCount} of ${bookings.length} bookings have pax breakdown totals that don't match HO Net — possible unit price issue.`,
+      detail: `Pax breakdown totals don't match HO Net in ${mismatchedPaxCount} of ${bookings.length} bookings (${scope}). ` +
+        `${ratio >= 0.5 ? "This points to a systematic unit price discrepancy — HO and SP are using different per-pax rates." : "Selective mismatch suggests rate overrides or mixed pricing on certain bookings."}`,
       confidence: 0.7 + (ratio * 0.2),
     };
   }
@@ -188,10 +273,12 @@ function analyzePaxIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): Sc
           }
         } catch { formattedChangeDate = changeDate; }
       }
-      const datePart = formattedChangeDate ? ` Rate changed around ${formattedChangeDate}.` : " Rate changed during the period.";
+      const datePart = formattedChangeDate ? ` around ${formattedChangeDate}` : " during the period";
       return {
         indicator: "Pax Price Changed",
-        detail: `${paxType} unit price varies: ${sorted.map((p: number) => formatNumberModal(p)).join(" → ")}.${datePart}`,
+        detail: `${paxType} unit price shifted from ${formatNumberModal(sorted[0])} to ${formatNumberModal(sorted[sorted.length - 1])}${datePart}. ` +
+          `This rate change${sorted.length > 2 ? ` (${sorted.length} distinct rates observed)` : ""} is likely the root cause — ` +
+          `HO and SP may be referencing different rate cards or the rate update wasn't applied consistently.`,
         confidence: 0.85,
       };
     }
@@ -247,7 +334,8 @@ function analyzePriceChanges(bookings: BookingForPayable[], rows: PrimaryRow[]):
     const shiftRatio = totalDisc > 0 ? Math.min(maxShift / totalDisc, 1) : 0.5;
     return {
       indicator: "Rate Shift Detected",
-      detail: `Largest discrepancy change of ${formatNumberModal(maxShift)} observed around ${formattedDate}. Rates may have changed on this date.`,
+      detail: `Discrepancy pattern changes sharply around ${formattedDate} (${formatNumberModal(maxShift)} swing). ` +
+        `${shiftRatio >= 0.5 ? "This single date explains most of the total discrepancy — a rate or configuration change likely took effect here." : "A rate adjustment or pricing update may have been applied on this date, partially explaining the discrepancy."}`,
       confidence: 0.55 + (shiftRatio * 0.25),
     };
   }
@@ -294,9 +382,12 @@ function analyzeDateSpecificIssues(bookings: BookingForPayable[], rows: PrimaryR
       }
     } catch {}
     const concentration = totalAbsDisc > 0 ? Math.abs(entry.total) / totalAbsDisc : 0;
+    const avgDisc = entry.total / entry.count;
+    const direction = avgDisc > 0 ? "underpaying" : "overpaying";
     return {
       indicator: "Date-Specific Issue",
-      detail: `${formattedDate} has the highest average discrepancy (${formatSignedDisc(entry.total / entry.count)}) across ${entry.count} bookings.`,
+      detail: `${formattedDate} stands out with avg ${formatSignedDisc(avgDisc)} discrepancy across ${entry.count} bookings — SP appears to be ${direction} on this date. ` +
+        `${concentration >= 0.5 ? "This date accounts for the majority of the total discrepancy — investigate if a one-off rate or pricing error occurred." : "Consider checking if a special rate or promotion was active on this date."}`,
       confidence: 0.4 + (concentration * 0.3),
     };
   }
