@@ -78,22 +78,27 @@ function formatNumberModal(value: number): string {
   }).format(value);
 }
 
-interface FinalNetPriceModalHandle {
-  open: (bookings: BookingForPayable[], tid: string) => void;
+interface UnifiedTidActionModalHandle {
+  open: (bookings: BookingForPayable[], tid: string, reason: string) => void;
 }
 
-const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
+const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
   currency: string;
   onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyPax: (bookings: BookingForPayable[], newPrices: Record<string, string>, dateToRowKeyMap: Map<string, string>, tid: string) => void;
   onApplyVendorId: (bookingIds: string[], vendorId: string) => void;
-}>(function FinalNetPriceModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId }, ref) {
+  runId?: string | null;
+  allRows?: PrimaryRow[];
+  onLogIssue?: (reason: string, tid: string, bookings: BookingForPayable[]) => void;
+}>(function UnifiedTidActionModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId, runId, allRows, onLogIssue }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [bookings, setBookings] = useState<BookingForPayable[]>([]);
   const [tid, setTid] = useState("");
   const [newPrices, setNewPrices] = useState<Record<string, string>>({});
   const [vendorId, setVendorId] = useState("");
+  const [reason, setReason] = useState("");
+  const [issueChecked, setIssueChecked] = useState(false);
   const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
   const paymentBasis = useMemo(() => {
@@ -265,14 +270,26 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const vendorCorrectionBookings = useMemo(() => bookings.filter(b => needsVendorCorrectionPayable(b)), [bookings]);
 
   useImperativeHandle(ref, () => ({
-    open: (tidBookings: BookingForPayable[], tidVal: string) => {
+    open: (tidBookings: BookingForPayable[], tidVal: string, reasonVal: string) => {
       setNewPrices({});
       setVendorId("");
       setBookings(tidBookings);
       setTid(tidVal);
+      setReason(reasonVal);
+      setIssueChecked(false);
       setIsOpen(true);
     }
   }));
+
+  useEffect(() => {
+    if (paxDateRows.length > 0 && Object.keys(newPrices).length === 0) {
+      const prefilled: Record<string, string> = {};
+      for (const row of paxDateRows) {
+        prefilled[row.rowKey] = String(row.spUnitPrice);
+      }
+      setNewPrices(prefilled);
+    }
+  }, [paxDateRows]);
 
   const applyVendorIdIfSet = useCallback(() => {
     if (vendorId.trim() && vendorCorrectionBookings.length > 0) {
@@ -282,15 +299,21 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
 
   const handleApplySpNet = useCallback(() => {
     applyVendorIdIfSet();
+    if (issueChecked && onLogIssue) {
+      onLogIssue(reason, tid, bookings);
+    }
     setIsOpen(false);
     onApplySpNet(bookings);
-  }, [bookings, onApplySpNet, applyVendorIdIfSet]);
+  }, [bookings, onApplySpNet, applyVendorIdIfSet, issueChecked, onLogIssue, reason, tid]);
 
   const handleApplyHoNet = useCallback(() => {
     applyVendorIdIfSet();
+    if (issueChecked && onLogIssue) {
+      onLogIssue(reason, tid, bookings);
+    }
     setIsOpen(false);
     onApplyHoNet(bookings);
-  }, [bookings, onApplyHoNet, applyVendorIdIfSet]);
+  }, [bookings, onApplyHoNet, applyVendorIdIfSet, issueChecked, onLogIssue, reason, tid]);
 
   const allPaxFilled = useMemo(() => {
     if (!hasPax || paxDateRows.length === 0) return false;
@@ -304,9 +327,12 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const handleApplyPax = useCallback(() => {
     if (!allPaxFilled) return;
     applyVendorIdIfSet();
+    if (issueChecked && onLogIssue) {
+      onLogIssue(reason, tid, bookings);
+    }
     setIsOpen(false);
     onApplyPax(bookings, newPrices, dateToRowKeyMap, tid);
-  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled, applyVendorIdIfSet]);
+  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled, applyVendorIdIfSet, issueChecked, onLogIssue, reason]);
 
   const formatDisplayName = (paxType: string) =>
     paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -317,10 +343,10 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
-            {vendorCorrectionBookings.length > 0 ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
+            Update TID {tid}
           </DialogTitle>
           <DialogDescription>
-            Choose how to update Final Net Price for {bookings.length} bookings in TID {tid}.
+            Manage pricing, disputes, issues, and vendor ID for {bookings.length} bookings in TID {tid}.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="payable-modal-scroll-area">
@@ -396,6 +422,37 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                     <span className="ml-1">(Payment Basis: {paymentBasis})</span>
                   </div>
                 )}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs text-muted-foreground">Quick fill all:</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      const filled: Record<string, string> = {};
+                      for (const row of paxDateRows) {
+                        filled[row.rowKey] = String(row.spUnitPrice);
+                      }
+                      setNewPrices(filled);
+                    }}
+                  >
+                    All SP
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-xs"
+                    onClick={() => {
+                      const filled: Record<string, string> = {};
+                      for (const row of paxDateRows) {
+                        filled[row.rowKey] = String(row.hoUnitPrice);
+                      }
+                      setNewPrices(filled);
+                    }}
+                  >
+                    All HO
+                  </Button>
+                </div>
                 <div className="rounded-md border overflow-hidden">
                   <Table>
                     <TableHeader>
@@ -421,15 +478,33 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
                             {formatNumberModal(row.hoUnitPrice)}
                           </TableCell>
                           <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              placeholder="Enter price"
-                              value={newPrices[row.rowKey] ?? ""}
-                              onChange={(e) => setNewPrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                              className="w-28 text-xs font-mono text-right ml-auto"
-                              data-testid={`input-payable-pax-price-${row.rowKey}`}
-                            />
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 px-1.5 text-[10px] text-blue-600"
+                                onClick={() => setNewPrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))}
+                              >
+                                SP
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 px-1.5 text-[10px] text-green-600"
+                                onClick={() => setNewPrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))}
+                              >
+                                HO
+                              </Button>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                placeholder="Enter price"
+                                value={newPrices[row.rowKey] ?? ""}
+                                onChange={(e) => setNewPrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                                className="w-24 text-xs font-mono text-right ml-auto"
+                                data-testid={`input-payable-pax-price-${row.rowKey}`}
+                              />
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -479,6 +554,28 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
               </div>
             </div>
           )}
+
+          <div className="rounded-md border bg-background overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-orange-100 dark:bg-orange-900/30">
+                  <FileWarning className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Flag Issue</div>
+                  <div className="text-xs text-muted-foreground">
+                    Log this TID as an issue for the {reason} team to review
+                  </div>
+                </div>
+              </div>
+              <Checkbox
+                checked={issueChecked}
+                onCheckedChange={(checked) => setIssueChecked(!!checked)}
+                className="h-5 w-5"
+                data-testid={`checkbox-issue-${tid}`}
+              />
+            </div>
+          </div>
 
           <div className="rounded-md border p-3 bg-muted/50">
             <p className="text-xs text-muted-foreground">
@@ -785,7 +882,7 @@ export function AmountPayablePanel({
     }
   }, [runId]);
 
-  const finalNetPriceModalRef = useRef<FinalNetPriceModalHandle>(null);
+  const unifiedTidModalRef = useRef<UnifiedTidActionModalHandle>(null);
 
   const handleBulkSpNet = useCallback((bulkBookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     setLocalSelections(prev => {
@@ -2233,6 +2330,50 @@ export function AmountPayablePanel({
     });
   }, []);
 
+  const handleLogSingleIssue = useCallback(async (reason: string, tid: string, tidBookings: BookingForPayable[]) => {
+    if (!runId || tidBookings.length === 0) return;
+    
+    try {
+      const matchingRows = allRows.filter(r => r.reason === reason);
+      const driTeam = matchingRows.find(r => 
+        tidBookings.some(b => b.bookingId === r.bookingId)
+      )?.driTeam || matchingRows[0]?.driTeam || "Unknown";
+      
+      const firstBooking = tidBookings[0];
+      const discrepancyLocal = tidBookings.reduce((sum, b) => sum + Math.abs(b.hoNet - b.spNet), 0);
+      const discrepancyUsd = tidBookings.reduce((sum, b) => {
+        const matchingRow = allRows.find(r => r.bookingId === b.bookingId);
+        return sum + Math.abs(matchingRow?.differenceUsd || 0);
+      }, 0);
+
+      await apiRequest("POST", "/api/issues", {
+        runId,
+        billingEntityId: firstBooking.beId || "",
+        billingEntityName: firstBooking.billingEntityName || firstBooking.beId || "",
+        currency,
+        discrepancyLocal,
+        discrepancyUsd,
+        reason,
+        driTeam,
+        bookingIds: tidBookings.map(b => b.bookingId),
+      });
+
+      toast({
+        title: "Issue Logged",
+        description: `Issue logged for TID ${tid} (${reason}).`,
+      });
+
+      await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+    } catch (error) {
+      console.error("Failed to log issue:", error);
+      toast({
+        title: "Error",
+        description: "Failed to log issue. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [runId, allRows, currency, toast]);
+
   const handleLogIssues = useCallback(async () => {
     if (!runId || selectedIssues.size === 0) return;
     
@@ -2998,11 +3139,11 @@ export function AmountPayablePanel({
                                             variant="outline"
                                             size="sm"
                                             className="text-xs"
-                                            onClick={() => finalNetPriceModalRef.current?.open(tidBookings, tid)}
+                                            onClick={() => unifiedTidModalRef.current?.open(tidBookings, tid, reason)}
                                             data-testid={`btn-update-fnp-${tid}`}
                                           >
                                             <Pencil className="h-3 w-3 mr-1" />
-                                            {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
+                                            Manage TID
                                           </Button>
                                           <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
                                             {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
@@ -3263,21 +3404,11 @@ export function AmountPayablePanel({
                                         variant="outline"
                                         size="sm"
                                         className="text-xs"
-                                        onClick={() => finalNetPriceModalRef.current?.open(tidBookings, tid)}
+                                        onClick={() => unifiedTidModalRef.current?.open(tidBookings, tid, reason)}
                                         data-testid={`btn-update-fnp-${tid}`}
                                       >
                                         <Pencil className="h-3 w-3 mr-1" />
-                                        {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "outline"}
-                                        className={`text-xs ${selectedIssues.has(`${reason}:${tid}`) ? "bg-muted" : ""}`}
-                                        onClick={() => toggleIssueSelection(reason, tid)}
-                                        data-testid={`button-select-issue-tid-${tid}`}
-                                      >
-                                        <FileWarning className="h-3 w-3 mr-1" />
-                                        Issue
+                                        Manage TID
                                       </Button>
                                       {(() => {
                                         const { disputed, disputable } = getTidDisputeCount(reason, tid);
@@ -3568,11 +3699,11 @@ export function AmountPayablePanel({
                                       variant="outline"
                                       size="sm"
                                       className="text-xs"
-                                      onClick={() => finalNetPriceModalRef.current?.open(tidBookings, tid)}
+                                      onClick={() => unifiedTidModalRef.current?.open(tidBookings, tid, reason)}
                                       data-testid={`btn-update-fnp-sv-${tid}`}
                                     >
                                       <Pencil className="h-3 w-3 mr-1" />
-                                      {tidBookings.some(b => needsVendorCorrectionPayable(b)) ? "Update Amount Payable, Dispute & Vendor ID" : "Update Amount Payable & Dispute"}
+                                      Manage TID
                                     </Button>
                                     {(() => {
                                       if (reason === "Reconciled") return null;
@@ -5156,13 +5287,16 @@ export function AmountPayablePanel({
           </div>
         </DialogContent>
       </Dialog>
-      <FinalNetPriceModal
-        ref={finalNetPriceModalRef}
+      <UnifiedTidActionModal
+        ref={unifiedTidModalRef}
         currency={currency}
         onApplySpNet={handleBulkSpNet}
         onApplyHoNet={handleBulkHoNet}
         onApplyPax={handleBulkPaxApply}
         onApplyVendorId={handleBulkVendorId}
+        runId={runId}
+        allRows={allRows}
+        onLogIssue={handleLogSingleIssue}
       />
     </div>
   );
