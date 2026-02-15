@@ -3045,7 +3045,7 @@ export function AmountPayablePanel({
                                                         updateSelection(booking.bookingId, v as "ho" | "sp", booking);
                                                       }}
                                                     >
-                                                      <SelectTrigger className="w-16 h-6 text-xs border-dashed text-muted-foreground">
+                                                      <SelectTrigger className="w-16 h-6 text-xs border-dashed text-muted-foreground mx-auto">
                                                         <SelectValue />
                                                       </SelectTrigger>
                                                       <SelectContent>
@@ -3331,7 +3331,7 @@ export function AmountPayablePanel({
                                                       onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                     >
                                                       <SelectTrigger 
-                                                        className="w-12 h-5 text-xs border-dashed text-muted-foreground" 
+                                                        className="w-12 h-5 text-xs border-dashed text-muted-foreground mx-auto" 
                                                         data-testid={`select-booking-${booking.bookingId}`}
                                                       >
                                                         <SelectValue />
@@ -3625,7 +3625,7 @@ export function AmountPayablePanel({
                                                   value={selection}
                                                   onValueChange={(v) => updateSelection(booking.bookingId, v as "ho" | "sp", booking)}
                                                 >
-                                                  <SelectTrigger className="w-12 h-6 text-xs border-dashed text-muted-foreground" data-testid={`select-sv-booking-${booking.bookingId}`}>
+                                                  <SelectTrigger className="w-12 h-6 text-xs border-dashed text-muted-foreground mx-auto" data-testid={`select-sv-booking-${booking.bookingId}`}>
                                                     <SelectValue />
                                                   </SelectTrigger>
                                                   <SelectContent>
