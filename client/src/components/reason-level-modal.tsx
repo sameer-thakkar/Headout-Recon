@@ -84,56 +84,51 @@ interface PredictiveInsight {
   detail: string;
 }
 
+interface ScoredInsight {
+  indicator: string;
+  detail: string;
+  confidence: number;
+}
+
 function generatePredictiveInsights(topTids: TidAggregate[], allRows: PrimaryRow[]): PredictiveInsight[] {
   const insights: PredictiveInsight[] = [];
 
   for (const tidAgg of topTids) {
     const tidRows = allRows.filter(r => r.tid === tidAgg.tid);
-    let bestIndicator = "";
-    let bestDetail = "";
+    const candidates: ScoredInsight[] = [];
 
-    const paxIssues = analyzePaxIssues(tidAgg.bookings, tidRows);
-    if (paxIssues) {
-      bestIndicator = paxIssues.indicator;
-      bestDetail = paxIssues.detail;
+    const paxResult = analyzePaxIssues(tidAgg.bookings, tidRows);
+    if (paxResult) candidates.push(paxResult);
+
+    const priceResult = analyzePriceChanges(tidAgg.bookings, tidRows);
+    if (priceResult) candidates.push(priceResult);
+
+    if (tidAgg.hasMixedFulfillment) {
+      candidates.push({
+        indicator: "Mixed Fulfillment",
+        detail: `Fulfillment methods differ across bookings: ${tidAgg.fulfillmentMethods.join(", ")}. This may explain the discrepancy.`,
+        confidence: 0.5,
+      });
     }
 
-    if (!bestIndicator) {
-      const priceChanges = analyzePriceChanges(tidAgg.bookings, tidRows);
-      if (priceChanges) {
-        bestIndicator = priceChanges.indicator;
-        bestDetail = priceChanges.detail;
-      }
-    }
+    const dateResult = analyzeDateSpecificIssues(tidAgg.bookings, tidRows);
+    if (dateResult) candidates.push(dateResult);
 
-    if (!bestIndicator && tidAgg.hasMixedFulfillment) {
-      bestIndicator = "Mixed Fulfillment";
-      bestDetail = `Fulfillment methods differ across bookings: ${tidAgg.fulfillmentMethods.join(", ")}. This may explain the discrepancy.`;
-    }
-
-    if (!bestIndicator) {
-      const dateIssue = analyzeDateSpecificIssues(tidAgg.bookings, tidRows);
-      if (dateIssue) {
-        bestIndicator = dateIssue.indicator;
-        bestDetail = dateIssue.detail;
-      }
-    }
-
-    if (bestIndicator) {
-      insights.push({ tid: tidAgg.tid, indicator: bestIndicator, detail: bestDetail });
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.confidence - a.confidence);
+      const best = candidates[0];
+      insights.push({ tid: tidAgg.tid, indicator: best.indicator, detail: best.detail });
     }
   }
 
   return insights;
 }
 
-function analyzePaxIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): { indicator: string; detail: string } | null {
-  const paxProblems: string[] = [];
+function analyzePaxIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): ScoredInsight | null {
   let missingPaxCount = 0;
   let mismatchedPaxCount = 0;
 
   for (const b of bookings) {
-    const row = rows.find(r => r.bookingId === b.bookingId);
     if (!b.paxBreakdown || b.paxBreakdown.length === 0) {
       missingPaxCount++;
       continue;
@@ -146,12 +141,13 @@ function analyzePaxIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): { 
     }
   }
 
-  if (missingPaxCount > 0 && missingPaxCount === bookings.length) {
-    return { indicator: "Missing Pax Data", detail: `All ${bookings.length} bookings lack pax type breakdown. Unable to verify unit pricing.` };
-  }
-
   if (mismatchedPaxCount > 0) {
-    return { indicator: "Pax Price Mismatch", detail: `${mismatchedPaxCount} of ${bookings.length} bookings have pax breakdown totals that don't match HO Net — possible unit price issue.` };
+    const ratio = mismatchedPaxCount / bookings.length;
+    return {
+      indicator: "Pax Price Mismatch",
+      detail: `${mismatchedPaxCount} of ${bookings.length} bookings have pax breakdown totals that don't match HO Net — possible unit price issue.`,
+      confidence: 0.7 + (ratio * 0.2),
+    };
   }
 
   const paxPricesByTypeAndDate = new Map<string, { unitPrice: number; date: string }[]>();
@@ -195,15 +191,24 @@ function analyzePaxIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): { 
       const datePart = formattedChangeDate ? ` Rate changed around ${formattedChangeDate}.` : " Rate changed during the period.";
       return {
         indicator: "Pax Price Changed",
-        detail: `${paxType} unit price varies: ${sorted.map((p: number) => formatNumberModal(p)).join(" → ")}.${datePart}`
+        detail: `${paxType} unit price varies: ${sorted.map((p: number) => formatNumberModal(p)).join(" → ")}.${datePart}`,
+        confidence: 0.85,
       };
     }
+  }
+
+  if (missingPaxCount > 0 && missingPaxCount === bookings.length) {
+    return {
+      indicator: "Missing Pax Data",
+      detail: `All ${bookings.length} bookings lack pax type breakdown. Unable to verify unit pricing.`,
+      confidence: 0.15,
+    };
   }
 
   return null;
 }
 
-function analyzePriceChanges(bookings: BookingForPayable[], rows: PrimaryRow[]): { indicator: string; detail: string } | null {
+function analyzePriceChanges(bookings: BookingForPayable[], rows: PrimaryRow[]): ScoredInsight | null {
   const dated: { date: string; hoNet: number; spNet: number; bookingId: string }[] = [];
 
   for (const b of bookings) {
@@ -238,16 +243,19 @@ function analyzePriceChanges(bookings: BookingForPayable[], rows: PrimaryRow[]):
         formattedDate = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
       }
     } catch {}
+    const totalDisc = Math.abs(bookings.reduce((s, b) => s + (b.hoNet - b.spNet), 0));
+    const shiftRatio = totalDisc > 0 ? Math.min(maxShift / totalDisc, 1) : 0.5;
     return {
       indicator: "Rate Shift Detected",
-      detail: `Largest discrepancy change of ${formatNumberModal(maxShift)} observed around ${formattedDate}. Rates may have changed on this date.`
+      detail: `Largest discrepancy change of ${formatNumberModal(maxShift)} observed around ${formattedDate}. Rates may have changed on this date.`,
+      confidence: 0.55 + (shiftRatio * 0.25),
     };
   }
 
   return null;
 }
 
-function analyzeDateSpecificIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): { indicator: string; detail: string } | null {
+function analyzeDateSpecificIssues(bookings: BookingForPayable[], rows: PrimaryRow[]): ScoredInsight | null {
   const discByDate = new Map<string, { total: number; count: number }>();
 
   for (const b of bookings) {
@@ -266,8 +274,10 @@ function analyzeDateSpecificIssues(bookings: BookingForPayable[], rows: PrimaryR
 
   let worstDate = "";
   let worstAvg = 0;
+  let totalAbsDisc = 0;
   Array.from(discByDate.entries()).forEach(([date, entry]) => {
     const avg = Math.abs(entry.total / entry.count);
+    totalAbsDisc += Math.abs(entry.total);
     if (avg > worstAvg) {
       worstAvg = avg;
       worstDate = date;
@@ -283,9 +293,11 @@ function analyzeDateSpecificIssues(bookings: BookingForPayable[], rows: PrimaryR
         formattedDate = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
       }
     } catch {}
+    const concentration = totalAbsDisc > 0 ? Math.abs(entry.total) / totalAbsDisc : 0;
     return {
       indicator: "Date-Specific Issue",
-      detail: `${formattedDate} has the highest average discrepancy (${formatSignedDisc(entry.total / entry.count)}) across ${entry.count} bookings.`
+      detail: `${formattedDate} has the highest average discrepancy (${formatSignedDisc(entry.total / entry.count)}) across ${entry.count} bookings.`,
+      confidence: 0.4 + (concentration * 0.3),
     };
   }
 
