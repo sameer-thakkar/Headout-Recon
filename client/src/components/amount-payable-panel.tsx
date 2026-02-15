@@ -3086,16 +3086,18 @@ export function AmountPayablePanel({
                                                       <span className="text-xs text-muted-foreground">-</span>
                                                     )}
                                                   </TableCell>
-                                                  <TableCell>
-                                                    <Input
-                                                      type="number"
-                                                      step="0.01"
-                                                      value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet))}
-                                                      onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                                      onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                      className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
-                                                      data-testid={`input-total-payable-${booking.bookingId}`}
-                                                    />
+                                                  <TableCell className="text-center">
+                                                    <div className="flex justify-center">
+                                                      <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet))}
+                                                        onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                                                        onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                                                        className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                        data-testid={`input-total-payable-${booking.bookingId}`}
+                                                      />
+                                                    </div>
                                                   </TableCell>
                                                   <TableCell className="text-right">
                                                     {isDisputed && (
@@ -3355,16 +3357,18 @@ export function AmountPayablePanel({
                                                     <span className="text-xs text-muted-foreground">-</span>
                                                   )}
                                                 </TableCell>
-                                                <TableCell>
-                                                  <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
-                                                    onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                                    onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                    className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
-                                                    data-testid={`input-total-payable-${booking.bookingId}`}
-                                                  />
+                                                <TableCell className="text-center">
+                                                  <div className="flex justify-center">
+                                                    <Input
+                                                      type="number"
+                                                      step="0.01"
+                                                      value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
+                                                      onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                                                      onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                                                      className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                      data-testid={`input-total-payable-${booking.bookingId}`}
+                                                    />
+                                                  </div>
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                   {canDispute && isDisputed ? (
@@ -3647,16 +3651,18 @@ export function AmountPayablePanel({
                                                 <span className="text-xs text-muted-foreground">-</span>
                                               )}
                                             </TableCell>
-                                            <TableCell>
-                                              <Input
-                                                type="number"
-                                                step="0.01"
-                                                value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
-                                                onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                                onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
-                                                data-testid={`input-total-payable-${booking.bookingId}`}
-                                              />
+                                            <TableCell className="text-center">
+                                              <div className="flex justify-center">
+                                                <Input
+                                                  type="number"
+                                                  step="0.01"
+                                                  value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
+                                                  onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
+                                                  onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
+                                                  className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                  data-testid={`input-total-payable-${booking.bookingId}`}
+                                                />
+                                              </div>
                                             </TableCell>
                                             <TableCell className="text-right">
                                               {isDisputed ? (
@@ -3864,7 +3870,7 @@ export function AmountPayablePanel({
                         <div className="text-right">HO Net</div>
                         <div className="text-right">SP Net</div>
                         <div className="text-center">Net</div>
-                        <div className="text-right">Total Payable</div>
+                        <div className="text-center">Total Payable</div>
                         <div className="text-right">Amt Paid</div>
                         <div>Dispute Status</div>
                         <div className="text-right">Net Payable</div>
@@ -3910,7 +3916,7 @@ export function AmountPayablePanel({
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <div className="text-right">
+                              <div className="flex justify-center">
                                 <Input
                                   type="number"
                                   step="0.01"
