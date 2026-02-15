@@ -203,6 +203,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         vid: row.vid,
         // Pax breakdown data
         paxBreakdown: row.paxBreakdown,
+        experienceDate: row.experienceDate,
+        bookingCreationDate: row.bookingCreationDate,
         // Amount Paid & Dispute Settled from HO data
         amountPaid: row.amountPaid,
         disputeSettled: row.disputeSettled,

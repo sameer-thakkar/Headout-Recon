@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search } from "lucide-react";
+import { useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle, useRef } from "react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,447 @@ import {
   createPresetAdjustments 
 } from "./amount-payable-modal";
 import type { PrimaryRow } from "@shared/schema";
+
+function normalizeDate(d: string): Date | null {
+  const num = Number(d);
+  if (!isNaN(num) && num > 10000 && num < 100000) {
+    const epoch = new Date((num - 25569) * 86400000);
+    if (!isNaN(epoch.getTime())) return epoch;
+  }
+  const ts = Date.parse(d);
+  if (!isNaN(ts)) {
+    const dt = new Date(ts);
+    if (dt.getFullYear() > 1900 && dt.getFullYear() < 2200) return dt;
+  }
+  return null;
+}
+
+function needsVendorCorrectionPayable(booking: BookingForPayable): boolean {
+  if (booking.isSecondaryVendor) return true;
+  const hoP = (booking.paymentMethod || "").trim();
+  const spP = (booking.spPaymentMethod || "").trim();
+  return !!(hoP && spP && hoP.toLowerCase() !== spP.toLowerCase());
+}
+
+function formatNumberModal(value: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+interface FinalNetPriceModalHandle {
+  open: (bookings: BookingForPayable[], tid: string) => void;
+}
+
+const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
+  currency: string;
+  onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  onApplyPax: (bookings: BookingForPayable[], newPrices: Record<string, string>, dateToRowKeyMap: Map<string, string>, tid: string) => void;
+  onApplyVendorId: (bookingIds: string[], vendorId: string) => void;
+}>(function FinalNetPriceModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId }, ref) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [bookings, setBookings] = useState<BookingForPayable[]>([]);
+  const [tid, setTid] = useState("");
+  const [newPrices, setNewPrices] = useState<Record<string, string>>({});
+  const [vendorId, setVendorId] = useState("");
+  const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
+
+  const paymentBasis = useMemo(() => {
+    const first = bookings.find(b => b.paymentBasis);
+    return first?.paymentBasis || "";
+  }, [bookings]);
+
+  const dateField = useMemo<"experienceDate" | "bookingCreationDate">(() => {
+    if (paymentBasis.toUpperCase().includes("EXPERIENCE")) return "experienceDate";
+    return "bookingCreationDate";
+  }, [paymentBasis]);
+
+  type PaxDateRow = {
+    paxType: string;
+    dateRange: string;
+    dates: string[];
+    count: number;
+    spUnitPrice: number;
+    hoUnitPrice: number;
+    rowKey: string;
+  };
+
+  const formatDateShort = useCallback((d: string): string => {
+    const dt = normalizeDate(d);
+    if (!dt) return d;
+    return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+  }, []);
+
+  const { paxDateRows, dateToRowKeyMap } = useMemo(() => {
+    const dateGroupKey = (b: BookingForPayable) => {
+      const raw = dateField === "experienceDate" ? b.experienceDate : b.bookingCreationDate;
+      if (!raw) return "Unknown";
+      const dt = normalizeDate(raw);
+      return dt ? dt.toISOString() : "Unknown";
+    };
+
+    const byDateAndPax = new Map<string, {
+      paxType: string;
+      date: string;
+      count: number;
+      spTotal: number;
+      hoUnitPrice: number;
+    }>();
+
+    for (const b of bookings) {
+      if (!b.paxBreakdown) continue;
+      const date = dateGroupKey(b);
+      const bookingHoTotal = b.paxBreakdown.reduce((s, pb) => s + pb.priceNet, 0);
+      for (const pb of b.paxBreakdown) {
+        const spContribution = bookingHoTotal > 0 ? (pb.priceNet / bookingHoTotal) * b.spNet : 0;
+        const key = `${pb.paxType}||${date}`;
+        const existing = byDateAndPax.get(key);
+        if (existing) {
+          existing.count += pb.count;
+          existing.spTotal += spContribution;
+        } else {
+          byDateAndPax.set(key, {
+            paxType: pb.paxType,
+            date,
+            count: pb.count,
+            spTotal: spContribution,
+            hoUnitPrice: pb.unitPrice,
+          });
+        }
+      }
+    }
+
+    const dateEntries = Array.from(byDateAndPax.values()).map(e => ({
+      paxType: e.paxType,
+      date: e.date,
+      count: e.count,
+      spUnitPrice: e.count > 0 ? Math.round((e.spTotal / e.count) * 100) / 100 : 0,
+      hoUnitPrice: e.hoUnitPrice,
+    }));
+
+    type DateEntry = { paxType: string; date: string; count: number; spUnitPrice: number; hoUnitPrice: number };
+    const byPaxType = new Map<string, DateEntry[]>();
+    for (const entry of dateEntries) {
+      const arr = byPaxType.get(entry.paxType) || [];
+      arr.push(entry);
+      byPaxType.set(entry.paxType, arr);
+    }
+
+    const toDateOnly = (d: string): string => {
+      const dt = normalizeDate(d);
+      if (!dt) return "";
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    };
+
+    const rows: PaxDateRow[] = [];
+    const dtRowKeyMap = new Map<string, string>();
+
+    for (const [paxType, paxEntries] of Array.from(byPaxType.entries())) {
+      const unknowns = paxEntries.filter((e: DateEntry) => toDateOnly(e.date) === "");
+      const dated = paxEntries.filter((e: DateEntry) => toDateOnly(e.date) !== "");
+
+      dated.sort((a: DateEntry, b: DateEntry) => toDateOnly(a.date).localeCompare(toDateOnly(b.date)));
+
+      const runs: DateEntry[][] = [];
+      for (const entry of dated) {
+        const lastRun = runs[runs.length - 1];
+        if (lastRun) {
+          const lastEntry = lastRun[lastRun.length - 1];
+          const samePrice = lastEntry.spUnitPrice === entry.spUnitPrice && lastEntry.hoUnitPrice === entry.hoUnitPrice;
+          if (samePrice) {
+            lastRun.push(entry);
+            continue;
+          }
+        }
+        runs.push([entry]);
+      }
+
+      for (const run of runs) {
+        const totalCount = run.reduce((s: number, e: DateEntry) => s + e.count, 0);
+        const firstDate = run[0].date;
+        const lastDate = run[run.length - 1].date;
+        const dateRange = run.length === 1
+          ? formatDateShort(firstDate)
+          : `${formatDateShort(firstDate)} - ${formatDateShort(lastDate)}`;
+        const rowKey = `${paxType}__${dateRange}`;
+        rows.push({
+          paxType,
+          dateRange,
+          dates: run.map((e: DateEntry) => e.date),
+          count: totalCount,
+          spUnitPrice: run[0].spUnitPrice,
+          hoUnitPrice: run[0].hoUnitPrice,
+          rowKey,
+        });
+        for (const e of run) {
+          dtRowKeyMap.set(`${paxType}||${e.date}`, rowKey);
+        }
+      }
+
+      const unknownByPrice = new Map<string, DateEntry[]>();
+      for (const u of unknowns) {
+        const pk = `${u.spUnitPrice}||${u.hoUnitPrice}`;
+        const arr = unknownByPrice.get(pk) || [];
+        arr.push(u);
+        unknownByPrice.set(pk, arr);
+      }
+      let unknownIdx = 0;
+      for (const [, uGroup] of Array.from(unknownByPrice.entries())) {
+        const totalCount = uGroup.reduce((s: number, e: DateEntry) => s + e.count, 0);
+        const suffix = unknownByPrice.size > 1 ? `Unknown_${++unknownIdx}` : "Unknown";
+        const rowKey = `${paxType}__${suffix}`;
+        rows.push({
+          paxType,
+          dateRange: suffix,
+          dates: [suffix],
+          count: totalCount,
+          spUnitPrice: uGroup[0].spUnitPrice,
+          hoUnitPrice: uGroup[0].hoUnitPrice,
+          rowKey,
+        });
+        for (const e of uGroup) {
+          dtRowKeyMap.set(`${paxType}||${e.date}`, rowKey);
+        }
+      }
+    }
+
+    rows.sort((a, b) => a.paxType.localeCompare(b.paxType) || (a.dates[0] || "").localeCompare(b.dates[0] || ""));
+    return { paxDateRows: rows, dateToRowKeyMap: dtRowKeyMap };
+  }, [bookings, dateField, formatDateShort]);
+
+  const spTotal = useMemo(() => bookings.reduce((s, b) => s + b.spNet, 0), [bookings]);
+  const hoTotal = useMemo(() => bookings.reduce((s, b) => s + b.hoNet, 0), [bookings]);
+
+  const vendorCorrectionBookings = useMemo(() => bookings.filter(b => needsVendorCorrectionPayable(b)), [bookings]);
+
+  useImperativeHandle(ref, () => ({
+    open: (tidBookings: BookingForPayable[], tidVal: string) => {
+      setNewPrices({});
+      setVendorId("");
+      setBookings(tidBookings);
+      setTid(tidVal);
+      setIsOpen(true);
+    }
+  }));
+
+  const applyVendorIdIfSet = useCallback(() => {
+    if (vendorId.trim() && vendorCorrectionBookings.length > 0) {
+      onApplyVendorId(vendorCorrectionBookings.map(b => b.bookingId), vendorId.trim());
+    }
+  }, [vendorId, vendorCorrectionBookings, onApplyVendorId]);
+
+  const handleApplySpNet = useCallback(() => {
+    applyVendorIdIfSet();
+    setIsOpen(false);
+    onApplySpNet(bookings);
+  }, [bookings, onApplySpNet, applyVendorIdIfSet]);
+
+  const handleApplyHoNet = useCallback(() => {
+    applyVendorIdIfSet();
+    setIsOpen(false);
+    onApplyHoNet(bookings);
+  }, [bookings, onApplyHoNet, applyVendorIdIfSet]);
+
+  const allPaxFilled = useMemo(() => {
+    if (!hasPax || paxDateRows.length === 0) return false;
+    for (const row of paxDateRows) {
+      const val = newPrices[row.rowKey];
+      if (val === undefined || val === "") return false;
+    }
+    return true;
+  }, [hasPax, paxDateRows, newPrices]);
+
+  const handleApplyPax = useCallback(() => {
+    if (!allPaxFilled) return;
+    applyVendorIdIfSet();
+    setIsOpen(false);
+    onApplyPax(bookings, newPrices, dateToRowKeyMap, tid);
+  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled, applyVendorIdIfSet]);
+
+  const formatDisplayName = (paxType: string) =>
+    paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-5 w-5 text-primary" />
+            Update Final Net Price
+          </DialogTitle>
+          <DialogDescription>
+            Choose how to update Final Net Price for {bookings.length} bookings in TID {tid}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="payable-modal-scroll-area">
+          <div className="rounded-md border bg-background overflow-hidden">
+            <div
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
+              onClick={handleApplySpNet}
+              data-testid={`payable-modal-btn-spnet-${tid}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                  <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Update to SP Net</div>
+                  <div className="text-xs text-muted-foreground">
+                    Set Final Net Price = SP Net for all bookings (Total: {formatNumberModal(spTotal)} {currency})
+                  </div>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-background overflow-hidden">
+            <div
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
+              onClick={handleApplyHoNet}
+              data-testid={`payable-modal-btn-honet-${tid}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-green-100 dark:bg-green-900/30">
+                  <TrendingDown className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Update to HO Net</div>
+                  <div className="text-xs text-muted-foreground">
+                    Set Final Net Price = HO Net for all bookings (Total: {formatNumberModal(hoTotal)} {currency})
+                  </div>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </div>
+
+          {hasPax && (
+            <div className="rounded-md border bg-background overflow-hidden">
+              <div className="px-4 py-3 border-b bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-violet-100 dark:bg-violet-900/30">
+                    <Calculator className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Update based on Pax Type</div>
+                    <div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate Final Net Price</div>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3 text-xs mb-2">
+                  <div className="rounded-md border p-2 bg-blue-50 dark:bg-blue-900/20">
+                    <span className="text-muted-foreground">SP Net Total:</span>{" "}
+                    <span className="font-mono font-semibold text-blue-700 dark:text-blue-300">{formatNumberModal(spTotal)} {currency}</span>
+                  </div>
+                  <div className="rounded-md border p-2 bg-green-50 dark:bg-green-900/20">
+                    <span className="text-muted-foreground">HO Net Total:</span>{" "}
+                    <span className="font-mono font-semibold text-green-700 dark:text-green-300">{formatNumberModal(hoTotal)} {currency}</span>
+                  </div>
+                </div>
+                {paymentBasis && (
+                  <div className="text-xs text-muted-foreground mb-1">
+                    Grouped by: <span className="font-medium text-foreground">{dateField === "experienceDate" ? "Experience Date" : "Booking Creation Date"}</span>
+                    <span className="ml-1">(Payment Basis: {paymentBasis})</span>
+                  </div>
+                )}
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">Pax Type</TableHead>
+                        <TableHead className="text-xs">{dateField === "experienceDate" ? "Experience Date" : "Booking Date"}</TableHead>
+                        <TableHead className="text-xs text-right">Count</TableHead>
+                        <TableHead className="text-xs text-right">SP Unit ({currency})</TableHead>
+                        <TableHead className="text-xs text-right">HO Unit ({currency})</TableHead>
+                        <TableHead className="text-xs text-right">Final Price ({currency})</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paxDateRows.map((row) => (
+                        <TableRow key={row.rowKey}>
+                          <TableCell className="text-xs font-medium">{formatDisplayName(row.paxType)}</TableCell>
+                          <TableCell className="text-xs font-mono text-muted-foreground">{row.dateRange}</TableCell>
+                          <TableCell className="text-xs text-right font-mono">{row.count}</TableCell>
+                          <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                            {formatNumberModal(row.spUnitPrice)}
+                          </TableCell>
+                          <TableCell className="text-xs text-right font-mono text-muted-foreground">
+                            {formatNumberModal(row.hoUnitPrice)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="Enter price"
+                              value={newPrices[row.rowKey] ?? ""}
+                              onChange={(e) => setNewPrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                              className="w-28 text-xs font-mono text-right ml-auto"
+                              data-testid={`input-payable-pax-price-${row.rowKey}`}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs text-muted-foreground">
+                    New FNP = Sum of (Count x Final Price) per pax type
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={handleApplyPax}
+                    disabled={!allPaxFilled}
+                    data-testid="button-payable-apply-pax-update"
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1.5" />
+                    Apply Pax Prices
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {vendorCorrectionBookings.length > 0 && (
+            <div className="rounded-md border bg-background overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-violet-100 dark:bg-violet-900/30">
+                    <AlertTriangle className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Final Vendor ID</div>
+                    <div className="text-xs text-muted-foreground">
+                      {vendorCorrectionBookings.length} booking{vendorCorrectionBookings.length !== 1 ? "s" : ""} need vendor correction (secondary/mismatch)
+                    </div>
+                  </div>
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Enter Vendor ID"
+                  value={vendorId}
+                  onChange={(e) => setVendorId(e.target.value)}
+                  className="w-40 text-xs font-mono"
+                  data-testid={`input-payable-modal-vendor-id-${tid}`}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-md border p-3 bg-muted/50">
+            <p className="text-xs text-muted-foreground">
+              Applies to <span className="font-semibold">{bookings.length}</span> bookings in TID <span className="font-mono font-medium">{tid}</span>
+            </p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+});
 
 interface AmountPayablePanelProps {
   bookings: BookingForPayable[];
@@ -343,6 +784,98 @@ export function AmountPayablePanel({
       console.error("Failed to save bulk vendor corrections:", err);
     }
   }, [runId]);
+
+  const finalNetPriceModalRef = useRef<FinalNetPriceModalHandle>(null);
+
+  const handleBulkSpNet = useCallback((bulkBookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
+    setLocalSelections(prev => {
+      const updated = { ...prev };
+      for (const b of bulkBookings) updated[b.bookingId] = "sp";
+      return updated;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of bulkBookings) delete next[b.bookingId];
+      return next;
+    });
+    setRawInputValues(prev => {
+      const next = { ...prev };
+      for (const b of bulkBookings) delete next[b.bookingId];
+      return next;
+    });
+    toast({ title: "Bulk Update Applied", description: `Set ${bulkBookings.length} bookings to SP Net.` });
+  }, [toast]);
+
+  const handleBulkHoNet = useCallback((bulkBookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
+    setLocalSelections(prev => {
+      const updated = { ...prev };
+      for (const b of bulkBookings) updated[b.bookingId] = "ho";
+      return updated;
+    });
+    setAmountPaidTotals(prev => {
+      const next = { ...prev };
+      for (const b of bulkBookings) delete next[b.bookingId];
+      return next;
+    });
+    setRawInputValues(prev => {
+      const next = { ...prev };
+      for (const b of bulkBookings) delete next[b.bookingId];
+      return next;
+    });
+    setActiveDisputes(prev => {
+      const newSet = new Set(prev);
+      for (const b of bulkBookings) newSet.delete(b.bookingId);
+      return newSet;
+    });
+    setDisputeAmounts(prev => {
+      const newMap = new Map(prev);
+      for (const b of bulkBookings) newMap.delete(b.bookingId);
+      return newMap;
+    });
+    toast({ title: "Bulk Update Applied", description: `Set ${bulkBookings.length} bookings to HO Net.` });
+  }, [toast]);
+
+  const handleBulkPaxApply = useCallback((paxBookings: BookingForPayable[], newPrices: Record<string, string>, dtRowKeyMap: Map<string, string>, paxTid: string) => {
+    const paymentBasisVal = paxBookings.find(b => b.paymentBasis)?.paymentBasis || "";
+    const useDateField: "experienceDate" | "bookingCreationDate" =
+      paymentBasisVal.toUpperCase().includes("EXPERIENCE") ? "experienceDate" : "bookingCreationDate";
+
+    const newTotals: Record<string, number> = {};
+    for (const booking of paxBookings) {
+      if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
+      const rawDate = (useDateField === "experienceDate" ? booking.experienceDate : booking.bookingCreationDate) || "";
+      const dtObj = normalizeDate(rawDate);
+      const bookingDate = dtObj ? dtObj.toISOString() : "Unknown";
+      let newTotal = 0;
+      for (const pb of booking.paxBreakdown) {
+        const lookupKey = `${pb.paxType}||${bookingDate}`;
+        const rowKey = dtRowKeyMap.get(lookupKey);
+        const priceStr = rowKey ? newPrices[rowKey] : undefined;
+        const parsedPrice = priceStr ? parseFloat(priceStr) : NaN;
+        const finalPrice = !isNaN(parsedPrice) ? parsedPrice : pb.unitPrice;
+        newTotal += pb.count * finalPrice;
+      }
+      newTotals[booking.bookingId] = Math.round(newTotal * 100) / 100;
+    }
+
+    setAmountPaidTotals(prev => ({ ...prev, ...newTotals }));
+    setRawInputValues(prev => {
+      const next = { ...prev };
+      for (const id of Object.keys(newTotals)) delete next[id];
+      return next;
+    });
+    toast({ title: "Pax prices updated", description: `Final Net Price recalculated for ${paxBookings.length} bookings in TID ${paxTid}.` });
+  }, [toast]);
+
+  const handleBulkVendorId = useCallback((bookingIds: string[], bulkVendorId: string) => {
+    setFinalVendorIds(prev => {
+      const newMap = new Map(prev);
+      for (const id of bookingIds) newMap.set(id, bulkVendorId);
+      return newMap;
+    });
+    saveBulkVendorCorrections(bookingIds.map(id => ({ bookingId: id, finalVendorId: bulkVendorId })));
+    toast({ title: "Vendor ID Updated", description: `Set vendor ID for ${bookingIds.length} bookings.` });
+  }, [saveBulkVendorCorrections, toast]);
 
   useEffect(() => {
     if (!runId) return;
@@ -2481,7 +3014,21 @@ export function AmountPayablePanel({
                                               {tidBookings.length}
                                             </Badge>
                                           </div>
-                                          <div className="col-span-16" />
+                                          <div className="col-span-16 flex items-center justify-end gap-1">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-6 text-xs"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                finalNetPriceModalRef.current?.open(tidBookings, tid);
+                                              }}
+                                              data-testid={`btn-update-fnp-${tid}`}
+                                            >
+                                              <Pencil className="h-3 w-3 mr-1" />
+                                              Update Final Net Price
+                                            </Button>
+                                          </div>
                                         </div>
 
                                         <CollapsibleContent>
@@ -2746,6 +3293,19 @@ export function AmountPayablePanel({
                                             {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
                                           </span>
                                         </div>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-5 w-5 shrink-0"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            finalNetPriceModalRef.current?.open(tidBookings, tid);
+                                          }}
+                                          data-testid={`btn-update-fnp-${tid}`}
+                                          title="Update Final Net Price"
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </Button>
                                         <Button
                                           size="sm"
                                           variant={selectedIssues.has(`${reason}:${tid}`) ? "secondary" : "ghost"}
@@ -3097,6 +3657,19 @@ export function AmountPayablePanel({
                                           {tidBookings.length} booking{tidBookings.length > 1 ? "s" : ""}
                                         </span>
                                       </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          finalNetPriceModalRef.current?.open(tidBookings, tid);
+                                        }}
+                                        data-testid={`btn-update-fnp-sv-${tid}`}
+                                        title="Update Final Net Price"
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
                                     </div>
                                     <div className="col-span-2 text-right font-mono text-xs">
                                       {formatCurrency(tidBookings.reduce((s, b) => s + b.hoNet, 0))}
@@ -4701,6 +5274,14 @@ export function AmountPayablePanel({
           </div>
         </DialogContent>
       </Dialog>
+      <FinalNetPriceModal
+        ref={finalNetPriceModalRef}
+        currency={currency}
+        onApplySpNet={handleBulkSpNet}
+        onApplyHoNet={handleBulkHoNet}
+        onApplyPax={handleBulkPaxApply}
+        onApplyVendorId={handleBulkVendorId}
+      />
     </div>
   );
 }
