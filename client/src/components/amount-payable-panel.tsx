@@ -3093,7 +3093,7 @@ export function AmountPayablePanel({
                                                       value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet))}
                                                       onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                                       onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                      className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                      className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
                                                       data-testid={`input-total-payable-${booking.bookingId}`}
                                                     />
                                                   </TableCell>
@@ -3362,7 +3362,7 @@ export function AmountPayablePanel({
                                                     value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
                                                     onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                                     onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                    className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                    className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
                                                     data-testid={`input-total-payable-${booking.bookingId}`}
                                                   />
                                                 </TableCell>
@@ -3654,7 +3654,7 @@ export function AmountPayablePanel({
                                                 value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
                                                 onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                                 onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
                                                 data-testid={`input-total-payable-${booking.bookingId}`}
                                               />
                                             </TableCell>
@@ -3917,7 +3917,7 @@ export function AmountPayablePanel({
                                   value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : totalPayable)}
                                   onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                   onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                  className={`h-7 text-xs font-mono text-right px-1.5 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
+                                  className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
                                   data-testid={`input-total-payable-${booking.bookingId}`}
                                 />
                               </div>
