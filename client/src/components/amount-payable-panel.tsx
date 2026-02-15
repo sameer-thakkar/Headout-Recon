@@ -1645,40 +1645,6 @@ export function AmountPayablePanel({
     });
   }, [amountPaidBookings]);
 
-  const updateReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
-    const reasonBookings = bookingsByReason[reason] || [];
-    setLocalSelections(prev => {
-      const newSelections = { ...prev };
-      for (const b of reasonBookings) {
-        newSelections[b.bookingId] = value;
-      }
-      return newSelections;
-    });
-    setAmountPaidTotals(prev => {
-      const next = { ...prev };
-      for (const b of reasonBookings) {
-        delete next[b.bookingId];
-      }
-      return next;
-    });
-    if (value === "ho") {
-      setActiveDisputes(prev => {
-        const newSet = new Set(prev);
-        for (const b of reasonBookings) {
-          newSet.delete(b.bookingId);
-        }
-        return newSet;
-      });
-      setDisputeAmounts(prev => {
-        const newMap = new Map(prev);
-        for (const b of reasonBookings) {
-          newMap.delete(b.bookingId);
-        }
-        return newMap;
-      });
-    }
-  }, [bookingsByReason]);
-
   const updateTidSelection = useCallback((reason: string, tid: string, value: "ho" | "sp") => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
     setLocalSelections(prev => {
@@ -1712,41 +1678,6 @@ export function AmountPayablePanel({
       });
     }
   }, [bookingsByReasonAndTid]);
-
-  // Secondary Vendor bulk selection functions
-  const updateSecondaryVendorReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
-    const reasonBookings = secondaryVendorByReason[reason] || [];
-    setLocalSelections(prev => {
-      const newSelections = { ...prev };
-      for (const b of reasonBookings) {
-        newSelections[b.bookingId] = value;
-      }
-      return newSelections;
-    });
-    setAmountPaidTotals(prev => {
-      const next = { ...prev };
-      for (const b of reasonBookings) {
-        delete next[b.bookingId];
-      }
-      return next;
-    });
-    if (value === "ho") {
-      setActiveDisputes(prev => {
-        const newSet = new Set(prev);
-        for (const b of reasonBookings) {
-          newSet.delete(b.bookingId);
-        }
-        return newSet;
-      });
-      setDisputeAmounts(prev => {
-        const newMap = new Map(prev);
-        for (const b of reasonBookings) {
-          newMap.delete(b.bookingId);
-        }
-        return newMap;
-      });
-    }
-  }, [secondaryVendorByReason]);
 
   const updateSecondaryVendorTidSelection = useCallback((reason: string, tid: string, value: "ho" | "sp") => {
     const tidBookings = secondaryVendorByReasonAndTid[reason]?.[tid] || [];
@@ -1849,95 +1780,6 @@ export function AmountPayablePanel({
     setDisputeAmounts(prev => new Map(prev).set(bookingId, Math.round(amount * 100) / 100));
   }, [getMaxDisputeAmount]);
 
-  const updateReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
-    const reasonBookings = bookingsByReason[reason] || [];
-    if (action === "all") {
-      setActiveDisputes(prev => {
-        const newSet = new Set(prev);
-        for (const b of reasonBookings) {
-          if (isBookingDisputable(b)) {
-            newSet.add(b.bookingId);
-            if (!disputeAmounts.has(b.bookingId)) {
-              const maxAmt = getMaxDisputeAmount(b);
-              setDisputeAmounts(prevMap => new Map(prevMap).set(b.bookingId, maxAmt));
-            }
-          }
-        }
-        return newSet;
-      });
-    } else {
-      setActiveDisputes(prev => {
-        const newSet = new Set(prev);
-        for (const b of reasonBookings) {
-          newSet.delete(b.bookingId);
-        }
-        return newSet;
-      });
-    }
-  }, [bookingsByReason, isBookingDisputable, disputeAmounts, getMaxDisputeAmount]);
-
-  // Cancellation-specific bulk handlers
-  const updateCancellationReasonSelection = useCallback((reason: string, value: "ho" | "sp") => {
-    const reasonBookings = cancellationsByReason[reason] || [];
-    setLocalSelections(prev => {
-      const newSelections = { ...prev };
-      for (const b of reasonBookings) {
-        newSelections[b.bookingId] = value;
-      }
-      return newSelections;
-    });
-    setAmountPaidTotals(prev => {
-      const next = { ...prev };
-      for (const b of reasonBookings) {
-        delete next[b.bookingId];
-      }
-      return next;
-    });
-    if (value === "ho") {
-      setActiveDisputes(prev => {
-        const newSet = new Set(prev);
-        for (const b of reasonBookings) {
-          newSet.delete(b.bookingId);
-        }
-        return newSet;
-      });
-      setDisputeAmounts(prev => {
-        const newMap = new Map(prev);
-        for (const b of reasonBookings) {
-          newMap.delete(b.bookingId);
-        }
-        return newMap;
-      });
-    }
-  }, [cancellationsByReason]);
-
-  const updateCancellationReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
-    const reasonBookings = cancellationsByReason[reason] || [];
-    if (action === "all") {
-      setActiveDisputes(prev => {
-        const newSet = new Set(prev);
-        for (const b of reasonBookings) {
-          if (isBookingDisputable(b)) {
-            newSet.add(b.bookingId);
-            if (!disputeAmounts.has(b.bookingId)) {
-              const maxAmt = getMaxDisputeAmount(b);
-              setDisputeAmounts(prevMap => new Map(prevMap).set(b.bookingId, maxAmt));
-            }
-          }
-        }
-        return newSet;
-      });
-    } else {
-      setActiveDisputes(prev => {
-        const newSet = new Set(prev);
-        for (const b of reasonBookings) {
-          newSet.delete(b.bookingId);
-        }
-        return newSet;
-      });
-    }
-  }, [cancellationsByReason, isBookingDisputable, disputeAmounts, getMaxDisputeAmount]);
-
   const getTidDisputeCount = useCallback((reason: string, tid: string) => {
     const tidBookings = bookingsByReasonAndTid[reason]?.[tid] || [];
     let disputed = 0;
@@ -1981,34 +1823,6 @@ export function AmountPayablePanel({
       });
     }
   }, [bookingsByReasonAndTid, getTidDisputeCount, isBookingDisputable, disputeAmounts, getMaxDisputeAmount]);
-
-  // Secondary Vendor dispute functions
-  const updateSecondaryVendorReasonDispute = useCallback((reason: string, action: "all" | "clear") => {
-    const reasonBookings = secondaryVendorByReason[reason] || [];
-    if (action === "all") {
-      const newDisputes = new Set(activeDisputes);
-      const newAmounts = new Map(disputeAmounts);
-      for (const b of reasonBookings) {
-        if (isBookingDisputable(b)) {
-          newDisputes.add(b.bookingId);
-          if (!newAmounts.has(b.bookingId)) {
-            newAmounts.set(b.bookingId, getMaxDisputeAmount(b));
-          }
-        }
-      }
-      setActiveDisputes(newDisputes);
-      setDisputeAmounts(newAmounts);
-    } else {
-      const newDisputes = new Set(activeDisputes);
-      const newAmounts = new Map(disputeAmounts);
-      for (const b of reasonBookings) {
-        newDisputes.delete(b.bookingId);
-        newAmounts.delete(b.bookingId);
-      }
-      setActiveDisputes(newDisputes);
-      setDisputeAmounts(newAmounts);
-    }
-  }, [secondaryVendorByReason, activeDisputes, disputeAmounts, isBookingDisputable, getMaxDisputeAmount]);
 
   const toggleSecondaryVendorTidDispute = useCallback((reason: string, tid: string) => {
     const tidBookings = secondaryVendorByReasonAndTid[reason]?.[tid] || [];
@@ -3384,41 +3198,7 @@ export function AmountPayablePanel({
                                   Manage
                                 </Button>
                               </div>
-                              <div className="col-span-2 flex justify-center">
-                                <Select
-                                  value=""
-                                  onValueChange={(v) => updateCancellationReasonSelection(reason, v as "ho" | "sp")}
-                                >
-                                  <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-cancellation-reason-${reason}`}>
-                                    <SelectValue placeholder="Bulk Net" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="ho">All HO Net</SelectItem>
-                                    <SelectItem value="sp">All SP Net</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="col-span-2 flex justify-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-xs"
-                                  onClick={() => updateCancellationReasonDispute(reason, "all")}
-                                  data-testid={`button-dispute-all-cancellation-${reason}`}
-                                >
-                                  Dispute All
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 px-2 text-xs text-muted-foreground"
-                                  onClick={() => updateCancellationReasonDispute(reason, "clear")}
-                                  data-testid={`button-clear-cancellation-${reason}`}
-                                >
-                                  Clear
-                                </Button>
-                              </div>
-                              <div className="col-span-4 text-right font-mono text-sm font-semibold">
+                              <div className="col-span-8 text-right font-mono text-sm font-semibold">
                                 {formatCurrency(reasonTotal)} {currency}
                               </div>
                             </div>
@@ -3657,45 +3437,7 @@ export function AmountPayablePanel({
                               Manage
                             </Button>
                           </div>
-                          <div className="col-span-2 flex justify-center">
-                            {reason === "Unmapped" ? (
-                              <span className="text-xs text-muted-foreground">SP Net only</span>
-                            ) : (
-                              <Select
-                                value=""
-                                onValueChange={(v) => updateReasonSelection(reason, v as "ho" | "sp")}
-                              >
-                                <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-reason-${reason}`}>
-                                  <SelectValue placeholder="Bulk Net" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="ho">All HO Net</SelectItem>
-                                  <SelectItem value="sp">All SP Net</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            )}
-                          </div>
-                          <div className="col-span-2 flex justify-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-xs"
-                              onClick={() => updateReasonDispute(reason, "all")}
-                              data-testid={`button-dispute-all-${reason}`}
-                            >
-                              Dispute All
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 px-2 text-xs text-muted-foreground"
-                              onClick={() => updateReasonDispute(reason, "clear")}
-                              data-testid={`button-clear-${reason}`}
-                            >
-                              Clear
-                            </Button>
-                          </div>
-                          <div className="col-span-4 text-right font-mono text-sm font-semibold">
+                          <div className="col-span-8 text-right font-mono text-sm font-semibold">
                             {formatCurrency(reasonTotal)} {currency}
                           </div>
                         </div>
@@ -3951,47 +3693,7 @@ export function AmountPayablePanel({
                             Manage
                           </Button>
                         </div>
-                        <div className="col-span-2 flex justify-center">
-                          {reason !== "Reconciled" && reason !== "Unmapped" && (
-                            <Select
-                              value=""
-                              onValueChange={(v) => updateSecondaryVendorReasonSelection(reason, v as "ho" | "sp")}
-                            >
-                              <SelectTrigger className="w-24 h-7 text-xs" data-testid={`select-sv-reason-${reason}`}>
-                                <SelectValue placeholder="Bulk Net" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="ho">All HO Net</SelectItem>
-                                <SelectItem value="sp">All SP Net</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                        <div className="col-span-2 flex justify-center gap-1">
-                          {reason !== "Reconciled" && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-6 px-2 text-xs"
-                                onClick={() => updateSecondaryVendorReasonDispute(reason, "all")}
-                                data-testid={`button-sv-dispute-all-${reason}`}
-                              >
-                                Dispute All
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 px-2 text-xs text-muted-foreground"
-                                onClick={() => updateSecondaryVendorReasonDispute(reason, "clear")}
-                                data-testid={`button-sv-clear-${reason}`}
-                              >
-                                Clear
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                        <div className="col-span-4 text-right font-mono text-sm font-semibold">
+                        <div className="col-span-8 text-right font-mono text-sm font-semibold">
                           {formatCurrency(reasonTotal)} {currency}
                         </div>
                       </div>
