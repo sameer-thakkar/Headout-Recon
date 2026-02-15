@@ -841,9 +841,18 @@ export function AmountPayablePanel({
     const presets = createPresetAdjustments();
     const customAdjustments = adjustments.filter(a => !a.isPreset);
     setLocalAdjustments([...presets, ...customAdjustments]);
-    setLocalSelections(finalNetSelections);
+  }, [adjustments]);
+
+  const prevRunIdRef = useRef(runId);
+  useEffect(() => {
+    if (prevRunIdRef.current !== runId) {
+      setLocalSelections(finalNetSelections);
+      setDisputesLoaded(false);
+      prevRunIdRef.current = runId;
+    }
     
     if (runId && !disputesLoaded) {
+      setLocalSelections(finalNetSelections);
       fetch(`/api/disputes/${runId}`)
         .then(res => res.json())
         .then(data => {
@@ -851,7 +860,6 @@ export function AmountPayablePanel({
           const newDisputeAmounts = new Map<string, number>();
           const newActiveDisputes = new Set<string>();
           
-          // Only include OPEN disputes in active disputes (not closed ones)
           const openOnlyDisputes = disputes.filter((d: { closureStatus?: string }) => d.closureStatus === "open");
           for (const dispute of openOnlyDisputes) {
             newDisputeAmounts.set(dispute.bookingId, dispute.disputeAmount);
@@ -862,7 +870,6 @@ export function AmountPayablePanel({
           setActiveDisputes(newActiveDisputes);
           setOriginalDisputes(new Map(newDisputeAmounts));
           
-          // Group ALL disputes by billing entity first (for consistent display ID mapping)
           const allGroupedByBillingEntity = new Map<string, Array<{ id: string; billingEntityId: string; billingEntityName: string; disputeAmount: number; closureStatus: string }>>();
           for (const dispute of disputes) {
             const key = `${dispute.billingEntityId}-${dispute.currency}`;
@@ -878,7 +885,6 @@ export function AmountPayablePanel({
             });
           }
           
-          // Build display ID mapping from ALL disputes and create aggregated open disputes
           const disputeIdToDisplayIdMap = new Map<string, string>();
           const aggregatedDisputes: Array<{ displayId: string; billingEntityId: string; billingEntityName: string; totalDisputeAmount: number; bookingCount: number; actualDisputeIds: string[] }> = [];
           let counter = 1;
@@ -887,12 +893,10 @@ export function AmountPayablePanel({
             const first = group[0];
             const displayId = `DID-#${counter}`;
             
-            // Map ALL dispute IDs in this group to the display ID
             for (const d of group) {
               disputeIdToDisplayIdMap.set(d.id, displayId);
             }
             
-            // Only include OPEN disputes in the aggregated list for display
             const openInGroup = group.filter(d => d.closureStatus === "open");
             if (openInGroup.length > 0) {
               const totalAmount = openInGroup.reduce((sum, d) => sum + d.disputeAmount, 0);
@@ -911,12 +915,10 @@ export function AmountPayablePanel({
           setOpenDisputes(aggregatedDisputes);
           setDisputeIdMapping(disputeIdToDisplayIdMap);
           
-          // Calculate total SP Error closed adjustments and populate closed disputes for editing
           const allClosedDisputes = disputes.filter((d: { closureStatus?: string; closureType?: string }) => 
             d.closureStatus === "closed" && (d.closureType === "sp_error" || d.closureType === "accept_ho_error")
           );
           
-          // Map closed disputes for editing
           const closedDisputesForEdit = allClosedDisputes.map((d: { 
             disputeId: string; 
             bookingId: string; 
@@ -937,7 +939,6 @@ export function AmountPayablePanel({
           }));
           setClosedDisputes(closedDisputesForEdit);
           
-          // Calculate SP Error total from current closedAmount values
           const spErrorTotal = closedDisputesForEdit
             .filter((d: { closureType: string }) => d.closureType === "sp_error")
             .reduce((sum: number, d: { closedAmount: number }) => sum + d.closedAmount, 0);
@@ -952,7 +953,7 @@ export function AmountPayablePanel({
           setDisputesLoaded(true);
         });
     }
-  }, [runId, disputesLoaded, adjustments, finalNetSelections]);
+  }, [runId, disputesLoaded]);
 
   // Load vendor corrections on mount
   useEffect(() => {
