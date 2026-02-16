@@ -56,6 +56,9 @@ function AppContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastExportTimestamp, setLastExportTimestamp] = useState<string | null>(null);
   const [isReconciliationFinalized, setIsReconciliationFinalized] = useState(false);
+  const [analysisGSheetUrl, setAnalysisGSheetUrl] = useState<string | null>(null);
+  const [financialGSheetUrl, setFinancialGSheetUrl] = useState<string | null>(null);
+  const [exportHistory, setExportHistory] = useState<Array<{ reportType: string; format: string; timestamp: string }>>([]);
   
   // Store current run result to pass directly to upload page (avoids React Query issues)
   const [currentRunResult, setCurrentRunResult] = useState<{
@@ -426,6 +429,12 @@ function AppContent() {
     setLastExportTimestamp(new Date().toISOString());
   }, []);
 
+  const addExportHistoryEntry = useCallback((reportType: string, format: string) => {
+    const entry = { reportType, format, timestamp: new Date().toISOString() };
+    setExportHistory(prev => [entry, ...prev].slice(0, 10));
+    setLastExportTimestamp(entry.timestamp);
+  }, []);
+
   const handleExportAnalysisXlsx = useCallback(async () => {
     if (!currentRunId) return;
     const response = await fetch(`/api/runs/${currentRunId}/export/analysis`);
@@ -437,8 +446,8 @@ function AppContent() {
     a.download = `discrepancy_analysis_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    setLastExportTimestamp(new Date().toISOString());
-  }, [currentRunId]);
+    addExportHistoryEntry("Discrepancy Analysis", "Excel");
+  }, [currentRunId, addExportHistoryEntry]);
 
   const handleExportFinancialXlsx = useCallback(async () => {
     if (!currentRunId) return;
@@ -451,29 +460,38 @@ function AppContent() {
     a.download = `reconciliation_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    setLastExportTimestamp(new Date().toISOString());
-  }, [currentRunId]);
+    addExportHistoryEntry("Reconciliation Report", "Excel");
+  }, [currentRunId, addExportHistoryEntry]);
 
   const handleExportAnalysisGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
     if (!currentRunId) return {};
     const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/analysis`, { method: "POST" });
     const data = await response.json();
-    if (data.spreadsheetUrl) setLastExportTimestamp(new Date().toISOString());
+    if (data.spreadsheetUrl) {
+      setAnalysisGSheetUrl(data.spreadsheetUrl);
+      addExportHistoryEntry("Discrepancy Analysis", "Google Sheets");
+    }
     return data;
-  }, [currentRunId]);
+  }, [currentRunId, addExportHistoryEntry]);
 
   const handleExportFinancialGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
     if (!currentRunId) return {};
     const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/financial`, { method: "POST" });
     const data = await response.json();
-    if (data.spreadsheetUrl) setLastExportTimestamp(new Date().toISOString());
+    if (data.spreadsheetUrl) {
+      setFinancialGSheetUrl(data.spreadsheetUrl);
+      addExportHistoryEntry("Reconciliation Report", "Google Sheets");
+    }
     return data;
-  }, [currentRunId]);
+  }, [currentRunId, addExportHistoryEntry]);
 
   // Run change handler
   const handleRunChange = useCallback((runId: string) => {
     setCurrentRunId(runId);
     setIsReconciliationFinalized(false);
+    setAnalysisGSheetUrl(null);
+    setFinancialGSheetUrl(null);
+    setExportHistory([]);
   }, []);
 
   const sidebarStyle = {
@@ -553,6 +571,10 @@ function AppContent() {
                   onExportFinancialGSheet={handleExportFinancialGSheet}
                   isReconciliationFinalized={isReconciliationFinalized}
                   lastExportTimestamp={lastExportTimestamp}
+                  analysisGSheetUrl={analysisGSheetUrl}
+                  financialGSheetUrl={financialGSheetUrl}
+                  exportHistory={exportHistory}
+                  currentRunId={currentRunId}
                 />
               </Route>
               <Route path="/dispute-tracker">
