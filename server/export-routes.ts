@@ -1858,11 +1858,11 @@ export function registerExportRoutes(app: Express) {
       };
 
       const addDataAlignment = (sheetId: number, dataStartRow: number, endRow: number, colCount: number) => {
-        if (colCount > 1 && endRow > dataStartRow) {
+        if (endRow > dataStartRow) {
           formatRequests.push({
             repeatCell: {
-              range: { sheetId, startRowIndex: dataStartRow, endRowIndex: endRow, startColumnIndex: 1, endColumnIndex: colCount },
-              cell: { userEnteredFormat: { horizontalAlignment: "CENTER" } },
+              range: { sheetId, startRowIndex: dataStartRow, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: colCount },
+              cell: { userEnteredFormat: { horizontalAlignment: "LEFT" } },
               fields: "userEnteredFormat.horizontalAlignment",
             },
           });
@@ -1945,18 +1945,28 @@ export function registerExportRoutes(app: Express) {
         }
         
         hideGridlines(discSheetId);
+
+        let discMaxCols = 1;
+        discrepancyData.forEach((row: any) => { discMaxCols = Math.max(discMaxCols, Array.isArray(row) ? row.length : 1); });
         
+        formatRequests.push({
+          repeatCell: {
+            range: { sheetId: discSheetId, startRowIndex: 0, endRowIndex: discrepancyData.length, startColumnIndex: 0, endColumnIndex: discMaxCols },
+            cell: { userEnteredFormat: { horizontalAlignment: "LEFT" } },
+            fields: "userEnteredFormat.horizontalAlignment",
+          },
+        });
+
         for (const table of tables) {
           addSectionTitle(discSheetId, table.sectionHeaderRow, table.colCount);
           addTableHeaderRow(discSheetId, table.tableHeaderRow, table.colCount);
           addTableBorders(discSheetId, table.tableHeaderRow, table.lastDataRow + 1, 0, table.colCount);
-          addDataAlignment(discSheetId, table.tableHeaderRow + 1, table.lastDataRow + 1, table.colCount);
-          formatRequests.push({
-            autoResizeDimensions: {
-              dimensions: { sheetId: discSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: table.colCount },
-            },
-          });
         }
+        formatRequests.push({
+          autoResizeDimensions: {
+            dimensions: { sheetId: discSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: discMaxCols },
+          },
+        });
       }
 
       // Draft Messages formatting
@@ -1996,6 +2006,14 @@ export function registerExportRoutes(app: Express) {
         draftMessagesData.forEach((row: any) => { maxCols = Math.max(maxCols, row.length); });
         
         hideGridlines(draftSheetId);
+
+        formatRequests.push({
+          repeatCell: {
+            range: { sheetId: draftSheetId, startRowIndex: 0, endRowIndex: draftMessagesData.length, startColumnIndex: 0, endColumnIndex: maxCols },
+            cell: { userEnteredFormat: { horizontalAlignment: "LEFT" } },
+            fields: "userEnteredFormat.horizontalAlignment",
+          },
+        });
         
         for (const sectionRow of sectionHeaders) {
           addSectionTitle(draftSheetId, sectionRow, maxCols);
@@ -2003,13 +2021,12 @@ export function registerExportRoutes(app: Express) {
         for (const table of draftTables) {
           addTableHeaderRow(draftSheetId, table.headerRow, table.colCount);
           addTableBorders(draftSheetId, table.headerRow, table.lastDataRow + 1, 0, table.colCount);
-          addDataAlignment(draftSheetId, table.headerRow + 1, table.lastDataRow + 1, table.colCount);
-          formatRequests.push({
-            autoResizeDimensions: {
-              dimensions: { sheetId: draftSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: table.colCount },
-            },
-          });
         }
+        formatRequests.push({
+          autoResizeDimensions: {
+            dimensions: { sheetId: draftSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: maxCols },
+          },
+        });
         formatRequests.push({
           repeatCell: {
             range: { sheetId: draftSheetId, startRowIndex: 0, endRowIndex: draftMessagesData.length, startColumnIndex: 1, endColumnIndex: 2 },
@@ -2444,11 +2461,11 @@ export function registerExportRoutes(app: Express) {
             innerHorizontal: thinBorder, innerVertical: thinBorder,
           },
         });
-        if (colCount > 1 && rowCount > 1) {
+        if (rowCount > 1) {
           formatRequests.push({
             repeatCell: {
-              range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: 1, endColumnIndex: colCount },
-              cell: { userEnteredFormat: { horizontalAlignment: "CENTER" } },
+              range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
+              cell: { userEnteredFormat: { horizontalAlignment: "LEFT" } },
               fields: "userEnteredFormat.horizontalAlignment",
             },
           });
