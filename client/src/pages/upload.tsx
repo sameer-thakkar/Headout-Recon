@@ -38,7 +38,7 @@ interface UploadPageProps {
   uploadedFiles: UploadedFile[];
   currentRunId: string | null;
   onExportAnalysisGSheet: () => Promise<{ spreadsheetUrl?: string }>;
-  onExportFinancialGSheet: () => Promise<{ spreadsheetUrl?: string }>;
+  onReconciliationFinalized: () => void;
   initialRunResult?: {
     overallSummary: OverallSummaryRow[];
     secondaryVendorSummary: OverallSummaryRow[];
@@ -108,7 +108,7 @@ function consolidateSummaryByReason(rows: OverallSummaryRow[]): OverallSummaryRo
   }));
 }
 
-export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportAnalysisGSheet, onExportFinancialGSheet, initialRunResult }: UploadPageProps) {
+export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportAnalysisGSheet, onReconciliationFinalized, initialRunResult }: UploadPageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -121,7 +121,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [finalNetSelectionsPerCurrency, setFinalNetSelectionsPerCurrency] = useState<Record<string, FinalNetSelection>>({});
   const [isExportingGSheet, setIsExportingGSheet] = useState(false);
   const [analysisGSheetUrl, setAnalysisGSheetUrl] = useState<string | null>(null);
-  const [financialGSheetUrl, setFinancialGSheetUrl] = useState<string | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(true);
   const [isComputeOpen, setIsComputeOpen] = useState(false);
   // Already Reconciled modal states
@@ -549,7 +548,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       ...prev,
       [selectedPayableCurrency]: selections,
     }));
-  }, [selectedPayableCurrency]);
+    
+    onReconciliationFinalized();
+  }, [selectedPayableCurrency, onReconciliationFinalized]);
 
   const handleExportExcel = useCallback(async () => {
     if (!currentRunId || primaryRows.length === 0) {
@@ -567,11 +568,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         description: "Please wait while the export file is being prepared",
       });
 
-      const [analysisResponse, financialResponse] = await Promise.all([
-        fetch(`/api/runs/${currentRunId}/export/analysis`),
-        fetch(`/api/runs/${currentRunId}/export/financial`),
-      ]);
-      if (!analysisResponse.ok || !financialResponse.ok) {
+      const analysisResponse = await fetch(`/api/runs/${currentRunId}/export/analysis`);
+      if (!analysisResponse.ok) {
         throw new Error("Failed to generate export");
       }
 
@@ -581,25 +579,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       const analysisUrl = window.URL.createObjectURL(analysisBlob);
       const a1 = document.createElement("a");
       a1.href = analysisUrl;
-      a1.download = `reconciliation_analysis_${timestamp}.xlsx`;
+      a1.download = `discrepancy_analysis_${timestamp}.xlsx`;
       document.body.appendChild(a1);
       a1.click();
       window.URL.revokeObjectURL(analysisUrl);
       document.body.removeChild(a1);
 
-      const financialBlob = await financialResponse.blob();
-      const financialUrl = window.URL.createObjectURL(financialBlob);
-      const a2 = document.createElement("a");
-      a2.href = financialUrl;
-      a2.download = `financial_report_${timestamp}.xlsx`;
-      document.body.appendChild(a2);
-      a2.click();
-      window.URL.revokeObjectURL(financialUrl);
-      document.body.removeChild(a2);
-
       toast({
         title: "Export complete",
-        description: "Your reconciliation report has been downloaded",
+        description: "Discrepancy Analysis has been downloaded",
       });
     } catch (error) {
       console.error("Export error:", error);
@@ -631,25 +619,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
   }, [currentRunId, onExportAnalysisGSheet, toast]);
 
-  const handleExportFinancialGSheet = useCallback(async () => {
-    if (!currentRunId) {
-      toast({ title: "No data to export", description: "Please run a reconciliation first", variant: "destructive" });
-      return;
-    }
-    setIsExportingGSheet(true);
-    setFinancialGSheetUrl(null);
-    try {
-      const result = await onExportFinancialGSheet();
-      if (result.spreadsheetUrl) {
-        setFinancialGSheetUrl(result.spreadsheetUrl);
-        toast({ title: "Export complete", description: "Financial Google Sheet created" });
-      }
-    } catch (error) {
-      toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
-    } finally {
-      setIsExportingGSheet(false);
-    }
-  }, [currentRunId, onExportFinancialGSheet, toast]);
 
   const hasResults = currentRunId && overallSummary.length > 0;
   const isMTBReason = selectedReason === "Multiple Tickets Booked";
@@ -836,11 +805,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={handleExportAnalysisGSheet} data-testid="menu-export-analysis-gsheet">
                               <SiGooglesheets className="h-4 w-4 mr-2" />
-                              Analysis (Google Sheets)
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleExportFinancialGSheet} data-testid="menu-export-financial-gsheet">
-                              <SiGooglesheets className="h-4 w-4 mr-2" />
-                              Financial (Google Sheets)
+                              Discrepancy Analysis (Google Sheets)
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -853,19 +818,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                             data-testid="link-analysis-gsheet"
                           >
                             <ExternalLink className="h-3 w-3" />
-                            Analysis Sheet
-                          </a>
-                        )}
-                        {financialGSheetUrl && (
-                          <a
-                            href={financialGSheetUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-sm text-green-600 hover:underline"
-                            data-testid="link-financial-gsheet"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            Financial Sheet
+                            Discrepancy Analysis Sheet
                           </a>
                         )}
                       </div>

@@ -805,7 +805,7 @@ export function registerExportRoutes(app: Express) {
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-      const filename = `reconciliation_analysis_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      const filename = `discrepancy_analysis_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
@@ -1339,7 +1339,7 @@ export function registerExportRoutes(app: Express) {
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-      const filename = `financial_report_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      const filename = `reconciliation_report_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
@@ -1769,7 +1769,7 @@ export function registerExportRoutes(app: Express) {
         sheetDefs.push({ properties: { title: name } });
       }
 
-      const spreadsheetTitle = `Reconciliation Analysis - ${new Date().toISOString().split("T")[0]}`;
+      const spreadsheetTitle = `Discrepancy Analysis - ${new Date().toISOString().split("T")[0]}`;
       const createResponse = await sheets.spreadsheets.create({
         requestBody: {
           properties: { title: spreadsheetTitle },
@@ -2357,7 +2357,7 @@ export function registerExportRoutes(app: Express) {
         { properties: { title: "HO Report Updated" } },
       ];
 
-      const spreadsheetTitle = `Financial Report - ${new Date().toISOString().split("T")[0]}`;
+      const spreadsheetTitle = `Reconciliation Report - ${new Date().toISOString().split("T")[0]}`;
       const createResponse = await sheets.spreadsheets.create({
         requestBody: {
           properties: { title: spreadsheetTitle },

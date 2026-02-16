@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, FileSpreadsheet, Clock, ExternalLink, ChevronDown, BarChart3, DollarSign } from "lucide-react";
+import { Download, FileSpreadsheet, Clock, ExternalLink, ChevronDown, BarChart3, DollarSign, Lock } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -19,6 +19,7 @@ interface ExportPageProps {
   onExportFinancialXlsx: () => Promise<void>;
   onExportAnalysisGSheet: () => Promise<{ spreadsheetUrl?: string }>;
   onExportFinancialGSheet: () => Promise<{ spreadsheetUrl?: string }>;
+  isReconciliationFinalized: boolean;
   lastExportTimestamp: string | null;
 }
 
@@ -29,6 +30,7 @@ export function ExportPage({
   onExportFinancialXlsx,
   onExportAnalysisGSheet,
   onExportFinancialGSheet,
+  isReconciliationFinalized,
   lastExportTimestamp,
 }: ExportPageProps) {
   const [isExportingAnalysis, setIsExportingAnalysis] = useState(false);
@@ -41,7 +43,7 @@ export function ExportPage({
     setIsExportingAnalysis(true);
     try {
       await onExportAnalysisXlsx();
-      toast({ title: "Export complete", description: "Reconciliation Analysis downloaded" });
+      toast({ title: "Export complete", description: "Discrepancy Analysis downloaded" });
     } catch (error) {
       toast({ title: "Export failed", variant: "destructive" });
     } finally {
@@ -56,7 +58,7 @@ export function ExportPage({
       const result = await onExportAnalysisGSheet();
       if (result.spreadsheetUrl) {
         setAnalysisGSheetUrl(result.spreadsheetUrl);
-        toast({ title: "Export complete", description: "Analysis Google Sheet created" });
+        toast({ title: "Export complete", description: "Discrepancy Analysis Google Sheet created" });
       }
     } catch (error) {
       toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
@@ -69,7 +71,7 @@ export function ExportPage({
     setIsExportingFinancial(true);
     try {
       await onExportFinancialXlsx();
-      toast({ title: "Export complete", description: "Financial Report downloaded" });
+      toast({ title: "Export complete", description: "Reconciliation Report downloaded" });
     } catch (error) {
       toast({ title: "Export failed", variant: "destructive" });
     } finally {
@@ -84,7 +86,7 @@ export function ExportPage({
       const result = await onExportFinancialGSheet();
       if (result.spreadsheetUrl) {
         setFinancialGSheetUrl(result.spreadsheetUrl);
-        toast({ title: "Export complete", description: "Financial Google Sheet created" });
+        toast({ title: "Export complete", description: "Reconciliation Report Google Sheet created" });
       }
     } catch (error) {
       toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
@@ -122,7 +124,7 @@ export function ExportPage({
                 <BarChart3 className="h-6 w-6 text-chart-2" />
               </div>
               <div>
-                <CardTitle className="text-lg" data-testid="text-analysis-card-title">Reconciliation Analysis</CardTitle>
+                <CardTitle className="text-lg" data-testid="text-analysis-card-title">Discrepancy Analysis</CardTitle>
                 <CardDescription>Discrepancy analysis, draft messages, and DRI views</CardDescription>
               </div>
             </div>
@@ -146,7 +148,7 @@ export function ExportPage({
                       ) : (
                         <>
                           <Download className="h-4 w-4 mr-2" />
-                          Export Analysis
+                          Export Discrepancy Analysis
                           <ChevronDown className="h-4 w-4 ml-2" />
                         </>
                       )}
@@ -179,7 +181,7 @@ export function ExportPage({
                     data-testid="link-analysis-gsheet"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    Open Analysis Sheet
+                    Open Discrepancy Analysis Sheet
                   </a>
                 )}
               </div>
@@ -187,15 +189,23 @@ export function ExportPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={!isReconciliationFinalized ? "opacity-60" : ""}>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-lg bg-chart-4/10 flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-chart-4" />
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${isReconciliationFinalized ? "bg-chart-4/10" : "bg-muted"}`}>
+                {isReconciliationFinalized ? (
+                  <DollarSign className="h-6 w-6 text-chart-4" />
+                ) : (
+                  <Lock className="h-6 w-6 text-muted-foreground" />
+                )}
               </div>
               <div>
-                <CardTitle className="text-lg" data-testid="text-financial-card-title">Financial Report</CardTitle>
-                <CardDescription>Amount payable, supplier invoice, and HO report</CardDescription>
+                <CardTitle className="text-lg" data-testid="text-financial-card-title">Reconciliation Report</CardTitle>
+                <CardDescription>
+                  {isReconciliationFinalized
+                    ? "Amount payable, supplier invoice, and HO report"
+                    : "Complete reconciliation (Apply & confirm) to unlock this export"}
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -210,37 +220,44 @@ export function ExportPage({
                 </ul>
               </div>
               <div className="flex flex-col items-end gap-3 ml-4">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button disabled={isExportingFinancial} data-testid="button-export-financial-dropdown">
-                      {isExportingFinancial ? (
-                        "Exporting..."
-                      ) : (
-                        <>
-                          <Download className="h-4 w-4 mr-2" />
-                          Export Financial
-                          <ChevronDown className="h-4 w-4 ml-2" />
-                        </>
-                      )}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={handleExportFinancialXlsx}
-                      data-testid="menu-export-financial-excel"
-                    >
-                      <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Excel (.xlsx)
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={handleExportFinancialGSheet}
-                      data-testid="menu-export-financial-gsheet"
-                    >
-                      <SiGooglesheets className="h-4 w-4 mr-2" />
-                      Google Sheets
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {isReconciliationFinalized ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button disabled={isExportingFinancial} data-testid="button-export-financial-dropdown">
+                        {isExportingFinancial ? (
+                          "Exporting..."
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-2" />
+                            Export Reconciliation Report
+                            <ChevronDown className="h-4 w-4 ml-2" />
+                          </>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={handleExportFinancialXlsx}
+                        data-testid="menu-export-financial-excel"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-2" />
+                        Excel (.xlsx)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={handleExportFinancialGSheet}
+                        data-testid="menu-export-financial-gsheet"
+                      >
+                        <SiGooglesheets className="h-4 w-4 mr-2" />
+                        Google Sheets
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <Button disabled data-testid="button-export-financial-locked">
+                    <Lock className="h-4 w-4 mr-2" />
+                    Locked
+                  </Button>
+                )}
 
                 {financialGSheetUrl && (
                   <a
@@ -251,7 +268,7 @@ export function ExportPage({
                     data-testid="link-financial-gsheet"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    Open Financial Sheet
+                    Open Reconciliation Report Sheet
                   </a>
                 )}
               </div>

@@ -55,6 +55,7 @@ function AppContent() {
   const [lastFxRefresh, setLastFxRefresh] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastExportTimestamp, setLastExportTimestamp] = useState<string | null>(null);
+  const [isReconciliationFinalized, setIsReconciliationFinalized] = useState(false);
   
   // Store current run result to pass directly to upload page (avoids React Query issues)
   const [currentRunResult, setCurrentRunResult] = useState<{
@@ -433,7 +434,7 @@ function AppContent() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `reconciliation_analysis_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `discrepancy_analysis_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
     setLastExportTimestamp(new Date().toISOString());
@@ -447,7 +448,7 @@ function AppContent() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `financial_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `reconciliation_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
     setLastExportTimestamp(new Date().toISOString());
@@ -472,7 +473,7 @@ function AppContent() {
   // Run change handler
   const handleRunChange = useCallback((runId: string) => {
     setCurrentRunId(runId);
-    // In a real app, we'd load the run data from the backend here
+    setIsReconciliationFinalized(false);
   }, []);
 
   const sidebarStyle = {
@@ -510,7 +511,7 @@ function AppContent() {
                   uploadedFiles={uploadedFiles}
                   currentRunId={currentRunId}
                   onExportAnalysisGSheet={handleExportAnalysisGSheet}
-                  onExportFinancialGSheet={handleExportFinancialGSheet}
+                  onReconciliationFinalized={() => setIsReconciliationFinalized(true)}
                   initialRunResult={currentRunResult}
                 />
               </Route>
@@ -550,6 +551,7 @@ function AppContent() {
                   onExportFinancialXlsx={handleExportFinancialXlsx}
                   onExportAnalysisGSheet={handleExportAnalysisGSheet}
                   onExportFinancialGSheet={handleExportFinancialGSheet}
+                  isReconciliationFinalized={isReconciliationFinalized}
                   lastExportTimestamp={lastExportTimestamp}
                 />
               </Route>
