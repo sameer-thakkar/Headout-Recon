@@ -467,6 +467,9 @@ function AppContent() {
     if (!currentRunId) return {};
     const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/analysis`, { method: "POST" });
     const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to export to Google Sheets");
+    }
     if (data.spreadsheetUrl) {
       setAnalysisGSheetUrl(data.spreadsheetUrl);
       addExportHistoryEntry("Discrepancy Analysis", "Google Sheets");
@@ -478,6 +481,9 @@ function AppContent() {
     if (!currentRunId) return {};
     const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/financial`, { method: "POST" });
     const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to export to Google Sheets");
+    }
     if (data.spreadsheetUrl) {
       setFinancialGSheetUrl(data.spreadsheetUrl);
       addExportHistoryEntry("Reconciliation Report", "Google Sheets");

@@ -1694,11 +1694,13 @@ export function registerExportRoutes(app: Express) {
         return "";
       };
 
+      const usedSheetNames = new Set<string>(["Discrepancy Analysis", "Draft Messages"]);
       const driSheetNames: string[] = [];
       for (const key of Array.from(driReasonRowGroups.keys())) {
         const [driTeam, reason] = key.split("_");
         const shortReason = reason === "Multiple Tickets Booked" ? "MTB" : reason === "Net Price Discrepancy" ? "NPD" : reason.substring(0, 10);
-        const sheetName = `${driTeam.substring(0, 20)}_${shortReason}`.substring(0, 31);
+        const rawName = `${driTeam.substring(0, 20)}_${shortReason}`;
+        const sheetName = getUniqueSheetName(rawName, usedSheetNames);
         driSheetNames.push(sheetName);
       }
 
