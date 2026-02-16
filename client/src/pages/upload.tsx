@@ -39,6 +39,7 @@ interface UploadPageProps {
   currentRunId: string | null;
   onExportAnalysisGSheet: () => Promise<{ spreadsheetUrl?: string }>;
   onReconciliationFinalized: () => void;
+  analysisGSheetUrl: string | null;
   initialRunResult?: {
     overallSummary: OverallSummaryRow[];
     secondaryVendorSummary: OverallSummaryRow[];
@@ -108,7 +109,7 @@ function consolidateSummaryByReason(rows: OverallSummaryRow[]): OverallSummaryRo
   }));
 }
 
-export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportAnalysisGSheet, onReconciliationFinalized, initialRunResult }: UploadPageProps) {
+export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, currentRunId, onExportAnalysisGSheet, onReconciliationFinalized, analysisGSheetUrl, initialRunResult }: UploadPageProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -120,7 +121,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [adjustmentsPerCurrency, setAdjustmentsPerCurrency] = useState<Record<string, Adjustment[]>>({});
   const [finalNetSelectionsPerCurrency, setFinalNetSelectionsPerCurrency] = useState<Record<string, FinalNetSelection>>({});
   const [isExportingGSheet, setIsExportingGSheet] = useState(false);
-  const [analysisGSheetUrl, setAnalysisGSheetUrl] = useState<string | null>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(true);
   const [isComputeOpen, setIsComputeOpen] = useState(false);
   // Already Reconciled modal states
@@ -605,12 +605,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       return;
     }
     setIsExportingGSheet(true);
-    setAnalysisGSheetUrl(null);
     try {
       const result = await onExportAnalysisGSheet();
       if (result.spreadsheetUrl) {
-        setAnalysisGSheetUrl(result.spreadsheetUrl);
-        toast({ title: "Export complete", description: "Analysis Google Sheet created" });
+        toast({ title: "Export complete", description: "Discrepancy Analysis Google Sheet created" });
       }
     } catch (error) {
       toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });

@@ -530,6 +530,7 @@ function AppContent() {
                   currentRunId={currentRunId}
                   onExportAnalysisGSheet={handleExportAnalysisGSheet}
                   onReconciliationFinalized={() => setIsReconciliationFinalized(true)}
+                  analysisGSheetUrl={analysisGSheetUrl}
                   initialRunResult={currentRunResult}
                 />
               </Route>
