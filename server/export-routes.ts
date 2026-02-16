@@ -1816,23 +1816,104 @@ export function registerExportRoutes(app: Express) {
 
       const formatRequests: any[] = [];
       
-      const headerStyle = {
-        textFormat: { bold: true },
-        horizontalAlignment: "CENTER",
-      };
-      const borderStyle = { style: "SOLID", color: { red: 0, green: 0, blue: 0 } };
+      const darkHeaderBg = { red: 0.16, green: 0.22, blue: 0.35 };
+      const whiteText = { red: 1, green: 1, blue: 1 };
+      const sectionTitleBg = { red: 0.24, green: 0.31, blue: 0.46 };
+      const altRowBg = { red: 0.94, green: 0.95, blue: 0.97 };
+      const borderStyle = { style: "SOLID", color: { red: 0.75, green: 0.75, blue: 0.75 } };
+      const thinBorder = { style: "SOLID", color: { red: 0.85, green: 0.85, blue: 0.85 } };
 
-      const addSheetFormatting = (sheetId: number, rowCount: number, colCount: number, headerRowIndices: number[] = [0]) => {
-        for (const rowIdx of headerRowIndices) {
-          formatRequests.push({
-            repeatCell: {
-              range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
-              cell: { userEnteredFormat: headerStyle },
-              fields: "userEnteredFormat(textFormat,horizontalAlignment)",
+      const addTableHeaderRow = (sheetId: number, rowIdx: number, colCount: number) => {
+        formatRequests.push({
+          repeatCell: {
+            range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
+            cell: {
+              userEnteredFormat: {
+                backgroundColor: darkHeaderBg,
+                textFormat: { bold: true, foregroundColor: whiteText, fontSize: 10 },
+                horizontalAlignment: "CENTER",
+                verticalAlignment: "MIDDLE",
+                padding: { top: 4, bottom: 4, left: 6, right: 6 },
+              },
             },
-          });
+            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,padding)",
+          },
+        });
+      };
+
+      const addSectionTitle = (sheetId: number, rowIdx: number, colCount: number) => {
+        formatRequests.push({
+          repeatCell: {
+            range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
+            cell: {
+              userEnteredFormat: {
+                backgroundColor: sectionTitleBg,
+                textFormat: { bold: true, foregroundColor: whiteText, fontSize: 12 },
+                horizontalAlignment: "LEFT",
+                verticalAlignment: "MIDDLE",
+                padding: { top: 6, bottom: 6, left: 8, right: 8 },
+              },
+            },
+            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,padding)",
+          },
+        });
+      };
+
+      const addAlternatingRows = (sheetId: number, startRow: number, endRow: number, colCount: number) => {
+        if (endRow <= startRow) return;
+        formatRequests.push({
+          addBanding: {
+            bandedRange: {
+              range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: colCount },
+              rowProperties: {
+                firstBandColor: { red: 1, green: 1, blue: 1 },
+                secondBandColor: altRowBg,
+              },
+            },
+          },
+        });
+      };
+
+      const addTableBorders = (sheetId: number, startRow: number, endRow: number, startCol: number, endCol: number) => {
+        formatRequests.push({
+          updateBorders: {
+            range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: startCol, endColumnIndex: endCol },
+            top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle,
+            innerHorizontal: thinBorder, innerVertical: thinBorder,
+          },
+        });
+      };
+
+      const addNumericAlignment = (sheetId: number, startRow: number, endRow: number, columns: (string | number)[], dataHeaders: (string | number)[]) => {
+        const numericKeywords = ["discrepancy", "net", "price", "amount", "loss", "usd", "lc", "ho sp", "bid count", "count"];
+        for (let c = 0; c < dataHeaders.length; c++) {
+          const colName = String(dataHeaders[c]).toLowerCase();
+          const isNumeric = numericKeywords.some(kw => colName.includes(kw)) && !colName.includes("%") && !colName.includes("range") && !colName.includes("pattern");
+          if (isNumeric) {
+            formatRequests.push({
+              repeatCell: {
+                range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: c, endColumnIndex: c + 1 },
+                cell: { userEnteredFormat: { horizontalAlignment: "RIGHT" } },
+                fields: "userEnteredFormat.horizontalAlignment",
+              },
+            });
+          }
         }
-        
+      };
+
+      const hideGridlines = (sheetId: number) => {
+        formatRequests.push({
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { hideGridlines: true } },
+            fields: "gridProperties.hideGridlines",
+          },
+        });
+      };
+
+      const addSheetFormatting = (sheetId: number, rowCount: number, colCount: number, headerRowIndices: number[] = [0], dataHeaders?: (string | number)[]) => {
+        for (const rowIdx of headerRowIndices) {
+          addTableHeaderRow(sheetId, rowIdx, colCount);
+        }
         if (headerRowIndices.includes(0)) {
           formatRequests.push({
             updateSheetProperties: {
@@ -1841,67 +1922,40 @@ export function registerExportRoutes(app: Express) {
             },
           });
         }
-        
+        addAlternatingRows(sheetId, (headerRowIndices[headerRowIndices.length - 1] || 0) + 1, rowCount, colCount);
+        addTableBorders(sheetId, 0, rowCount, 0, colCount);
+        if (dataHeaders) {
+          addNumericAlignment(sheetId, (headerRowIndices[headerRowIndices.length - 1] || 0) + 1, rowCount, [], dataHeaders);
+        }
         formatRequests.push({
           autoResizeDimensions: {
             dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: colCount },
           },
         });
-        
-        formatRequests.push({
-          updateBorders: {
-            range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
-            top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle,
-            innerHorizontal: borderStyle, innerVertical: borderStyle,
-          },
-        });
-      };
-      
-      const addTableBorders = (sheetId: number, startRow: number, endRow: number, startCol: number, endCol: number) => {
-        formatRequests.push({
-          updateBorders: {
-            range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: startCol, endColumnIndex: endCol },
-            top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle,
-            innerHorizontal: borderStyle, innerVertical: borderStyle,
-          },
-        });
-      };
-      
-      const addHeaderFormatting = (sheetId: number, rowIdx: number, colCount: number) => {
-        formatRequests.push({
-          repeatCell: {
-            range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
-            cell: { userEnteredFormat: headerStyle },
-            fields: "userEnteredFormat(textFormat,horizontalAlignment)",
-          },
-        });
+        hideGridlines(sheetId);
       };
 
       // Discrepancy Analysis formatting
       const discSheetId = sheetIdMap.get("Discrepancy Analysis");
       if (discSheetId !== undefined) {
-        type TableInfo = { sectionHeaderRow: number; tableHeaderRow: number; lastDataRow: number; colCount: number; };
+        type TableInfo = { sectionHeaderRow: number; tableHeaderRow: number; lastDataRow: number; colCount: number; headers: (string | number)[]; };
         const tables: TableInfo[] = [];
         
         for (let idx = 0; idx < discrepancyData.length; idx++) {
           const row = discrepancyData[idx];
           const firstCell = String(row[0] || "");
-          
           const isSectionHeader = row.length === 1 && (firstCell.includes("SUMMARY") || firstCell.includes("ANALYSIS"));
           
           if (isSectionHeader) {
             let tableHeaderRow = -1;
-            let scanLimit = Math.min(idx + 5, discrepancyData.length);
-            
+            const scanLimit = Math.min(idx + 5, discrepancyData.length);
             for (let k = idx + 1; k < scanLimit; k++) {
               const candidateRow = discrepancyData[k];
               const candidateFirstCell = String(candidateRow[0] || "");
-              
               if (candidateRow.length > 1 && (candidateFirstCell === "Reason" || candidateFirstCell === "TID")) {
                 tableHeaderRow = k;
                 break;
               }
-              
               const isAnotherSection = candidateRow.length === 1 && (candidateFirstCell.includes("SUMMARY") || candidateFirstCell.includes("ANALYSIS"));
               if (isAnotherSection) break;
             }
@@ -1910,32 +1964,24 @@ export function registerExportRoutes(app: Express) {
               const headerRow = discrepancyData[tableHeaderRow];
               let lastDataRow = tableHeaderRow;
               let colCount = headerRow.length;
-              
               for (let j = tableHeaderRow + 1; j < discrepancyData.length; j++) {
                 const dataRow = discrepancyData[j];
                 const dataFirstCell = String(dataRow[0] || "");
                 const isEmptyRow = dataRow.length === 0 || (dataRow.length === 1 && !dataFirstCell);
                 const isNextSection = dataRow.length === 1 && (dataFirstCell.includes("SUMMARY") || dataFirstCell.includes("ANALYSIS"));
-                
-                if (isEmptyRow || isNextSection) {
-                  break;
-                }
+                if (isEmptyRow || isNextSection) break;
                 lastDataRow = j;
                 colCount = Math.max(colCount, dataRow.length);
               }
-              
-              tables.push({
-                sectionHeaderRow: idx,
-                tableHeaderRow: tableHeaderRow,
-                lastDataRow: lastDataRow,
-                colCount: colCount,
-              });
+              tables.push({ sectionHeaderRow: idx, tableHeaderRow, lastDataRow, colCount, headers: headerRow });
             }
           }
         }
         
         let maxCols = 1;
         discrepancyData.forEach((row: any) => { maxCols = Math.max(maxCols, row.length); });
+        
+        hideGridlines(discSheetId);
         formatRequests.push({
           autoResizeDimensions: {
             dimensions: { sheetId: discSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: maxCols },
@@ -1943,59 +1989,51 @@ export function registerExportRoutes(app: Express) {
         });
         
         for (const table of tables) {
-          addHeaderFormatting(discSheetId, table.sectionHeaderRow, table.colCount);
-          addHeaderFormatting(discSheetId, table.tableHeaderRow, table.colCount);
+          addSectionTitle(discSheetId, table.sectionHeaderRow, table.colCount);
+          addTableHeaderRow(discSheetId, table.tableHeaderRow, table.colCount);
           addTableBorders(discSheetId, table.tableHeaderRow, table.lastDataRow + 1, 0, table.colCount);
+          addAlternatingRows(discSheetId, table.tableHeaderRow + 1, table.lastDataRow + 1, table.colCount);
+          addNumericAlignment(discSheetId, table.tableHeaderRow + 1, table.lastDataRow + 1, [], table.headers);
         }
       }
 
       // Draft Messages formatting
       const draftSheetId = sheetIdMap.get("Draft Messages");
       if (draftSheetId !== undefined) {
-        type DraftTableInfo = { headerRow: number; lastDataRow: number; colCount: number; };
+        type DraftTableInfo = { headerRow: number; lastDataRow: number; colCount: number; headers: (string | number)[]; };
         const draftTables: DraftTableInfo[] = [];
         const sectionHeaders: number[] = [];
         
         for (let idx = 0; idx < draftMessagesData.length; idx++) {
           const row = draftMessagesData[idx];
           const firstCell = String(row[0] || "");
-          
           if (firstCell.startsWith("Draft messages")) {
             sectionHeaders.push(idx);
             continue;
           }
-          
           const isTableHeader = row.length > 1 && (firstCell === "DRI Team" || firstCell === "TID");
-          
           if (isTableHeader) {
             const tableHeaderRow = idx;
             let lastDataRow = tableHeaderRow;
             let colCount = row.length;
-            
             for (let j = tableHeaderRow + 1; j < draftMessagesData.length; j++) {
               const dataRow = draftMessagesData[j];
               const dataFirstCell = String(dataRow[0] || "");
               const isEmptyRow = dataRow.length === 0 || (dataRow.length === 1 && !dataFirstCell);
               const isNextHeader = dataRow.length > 1 && (dataFirstCell === "DRI Team" || dataFirstCell === "TID");
               const isNextSection = dataFirstCell.startsWith("Draft messages");
-              
-              if (isEmptyRow || isNextHeader || isNextSection) {
-                break;
-              }
+              if (isEmptyRow || isNextHeader || isNextSection) break;
               lastDataRow = j;
               colCount = Math.max(colCount, dataRow.length);
             }
-            
-            draftTables.push({
-              headerRow: tableHeaderRow,
-              lastDataRow: lastDataRow,
-              colCount: colCount,
-            });
+            draftTables.push({ headerRow: tableHeaderRow, lastDataRow, colCount, headers: row });
           }
         }
         
         let maxCols = 1;
         draftMessagesData.forEach((row: any) => { maxCols = Math.max(maxCols, row.length); });
+        
+        hideGridlines(draftSheetId);
         formatRequests.push({
           autoResizeDimensions: {
             dimensions: { sheetId: draftSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: maxCols },
@@ -2003,12 +2041,13 @@ export function registerExportRoutes(app: Express) {
         });
         
         for (const sectionRow of sectionHeaders) {
-          addHeaderFormatting(draftSheetId, sectionRow, maxCols);
+          addSectionTitle(draftSheetId, sectionRow, maxCols);
         }
-        
         for (const table of draftTables) {
-          addHeaderFormatting(draftSheetId, table.headerRow, table.colCount);
+          addTableHeaderRow(draftSheetId, table.headerRow, table.colCount);
           addTableBorders(draftSheetId, table.headerRow, table.lastDataRow + 1, 0, table.colCount);
+          addAlternatingRows(draftSheetId, table.headerRow + 1, table.lastDataRow + 1, table.colCount);
+          addNumericAlignment(draftSheetId, table.headerRow + 1, table.lastDataRow + 1, [], table.headers);
         }
       }
 
@@ -2021,7 +2060,8 @@ export function registerExportRoutes(app: Express) {
         const driData = driSheetDataList[i]?.data || [];
         const rowCount = driData.length;
         const colCount = driData.length > 0 ? driData[0].length : 22;
-        addSheetFormatting(sheetId, rowCount, colCount, [0]);
+        const headers = driData.length > 0 ? driData[0] : [];
+        addSheetFormatting(sheetId, rowCount, colCount, [0], headers);
       }
       
       if (formatRequests.length > 0) {
@@ -2401,43 +2441,73 @@ export function registerExportRoutes(app: Express) {
 
       const formatRequests: any[] = [];
       
-      const headerStyle = {
-        textFormat: { bold: true },
-        horizontalAlignment: "CENTER",
-      };
-      const borderStyle = { style: "SOLID", color: { red: 0, green: 0, blue: 0 } };
+      const darkHeaderBg = { red: 0.16, green: 0.22, blue: 0.35 };
+      const whiteText = { red: 1, green: 1, blue: 1 };
+      const altRowBg = { red: 0.94, green: 0.95, blue: 0.97 };
+      const borderStyle = { style: "SOLID", color: { red: 0.75, green: 0.75, blue: 0.75 } };
+      const thinBorder = { style: "SOLID", color: { red: 0.85, green: 0.85, blue: 0.85 } };
 
-      const addSheetFormatting = (sheetId: number, rowCount: number, colCount: number, headerRowIndices: number[] = [0]) => {
-        for (const rowIdx of headerRowIndices) {
-          formatRequests.push({
-            repeatCell: {
-              range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
-              cell: { userEnteredFormat: headerStyle },
-              fields: "userEnteredFormat(textFormat,horizontalAlignment)",
-            },
-          });
-        }
-        
-        if (headerRowIndices.includes(0)) {
-          formatRequests.push({
-            updateSheetProperties: {
-              properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
-              fields: "gridProperties.frozenRowCount",
-            },
-          });
-        }
-        
+      const addFinancialSheetFormatting = (sheetId: number, rowCount: number, colCount: number, dataHeaders?: (string | number | null)[]) => {
         formatRequests.push({
-          autoResizeDimensions: {
-            dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: colCount },
+          repeatCell: {
+            range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: colCount },
+            cell: {
+              userEnteredFormat: {
+                backgroundColor: darkHeaderBg,
+                textFormat: { bold: true, foregroundColor: whiteText, fontSize: 10 },
+                horizontalAlignment: "CENTER",
+                verticalAlignment: "MIDDLE",
+                padding: { top: 4, bottom: 4, left: 6, right: 6 },
+              },
+            },
+            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,padding)",
           },
         });
-        
+        formatRequests.push({
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { frozenRowCount: 1, hideGridlines: true } },
+            fields: "gridProperties.frozenRowCount,gridProperties.hideGridlines",
+          },
+        });
+        if (rowCount > 1) {
+          formatRequests.push({
+            addBanding: {
+              bandedRange: {
+                range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
+                rowProperties: {
+                  firstBandColor: { red: 1, green: 1, blue: 1 },
+                  secondBandColor: altRowBg,
+                },
+              },
+            },
+          });
+        }
         formatRequests.push({
           updateBorders: {
             range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
             top: borderStyle, bottom: borderStyle, left: borderStyle, right: borderStyle,
-            innerHorizontal: borderStyle, innerVertical: borderStyle,
+            innerHorizontal: thinBorder, innerVertical: thinBorder,
+          },
+        });
+        if (dataHeaders) {
+          const numericKeywords = ["amount", "net", "price", "difference", "discrepancy", "payable", "rate", "loss"];
+          for (let c = 0; c < dataHeaders.length; c++) {
+            const colName = String(dataHeaders[c] || "").toLowerCase();
+            const isNumeric = numericKeywords.some(kw => colName.includes(kw)) && !colName.includes("%");
+            if (isNumeric) {
+              formatRequests.push({
+                repeatCell: {
+                  range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: c, endColumnIndex: c + 1 },
+                  cell: { userEnteredFormat: { horizontalAlignment: "RIGHT" } },
+                  fields: "userEnteredFormat.horizontalAlignment",
+                },
+              });
+            }
+          }
+        }
+        formatRequests.push({
+          autoResizeDimensions: {
+            dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: colCount },
           },
         });
       };
@@ -2445,21 +2515,21 @@ export function registerExportRoutes(app: Express) {
       // Payable Summary
       const payableSheetId = sheetIdMap.get("Payable Summary");
       if (payableSheetId !== undefined) {
-        addSheetFormatting(payableSheetId, payableSummaryData.length, 4, [0]);
+        addFinancialSheetFormatting(payableSheetId, payableSummaryData.length, 4, payableSummaryData[0]);
       }
 
       // SP Invoice Report
       const spSheetId = sheetIdMap.get("SP Invoice Report");
       if (spSheetId !== undefined) {
         const spCols = spReportData.length > 0 && Array.isArray(spReportData[0]) ? spReportData[0].length : 5;
-        addSheetFormatting(spSheetId, spReportData.length, spCols, [0]);
+        addFinancialSheetFormatting(spSheetId, spReportData.length, spCols, spReportData[0]);
       }
 
       // HO Report Updated
       const hoSheetId = sheetIdMap.get("HO Report Updated");
       if (hoSheetId !== undefined) {
         const hoCols = hoReportData.length > 0 && Array.isArray(hoReportData[0]) ? hoReportData[0].length : 11;
-        addSheetFormatting(hoSheetId, hoReportData.length, hoCols, [0]);
+        addFinancialSheetFormatting(hoSheetId, hoReportData.length, hoCols, hoReportData[0]);
       }
 
       if (formatRequests.length > 0) {
