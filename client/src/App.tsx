@@ -425,29 +425,47 @@ function AppContent() {
     setLastExportTimestamp(new Date().toISOString());
   }, []);
 
-  const handleExportXlsx = useCallback(async () => {
-    const response = await fetch("/api/export/xlsx");
+  const handleExportAnalysisXlsx = useCallback(async () => {
+    if (!currentRunId) return;
+    const response = await fetch(`/api/runs/${currentRunId}/export/analysis`);
+    if (!response.ok) throw new Error("Failed to export analysis");
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `reconciliation-${Date.now()}.xlsx`;
+    a.download = `reconciliation_analysis_${new Date().toISOString().slice(0, 10)}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
     setLastExportTimestamp(new Date().toISOString());
-  }, []);
+  }, [currentRunId]);
 
-  const handleExportGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
-    if (!currentRunId) {
-      return {};
-    }
-    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet`, {
-      method: "POST",
-    });
+  const handleExportFinancialXlsx = useCallback(async () => {
+    if (!currentRunId) return;
+    const response = await fetch(`/api/runs/${currentRunId}/export/financial`);
+    if (!response.ok) throw new Error("Failed to export financial report");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `financial_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setLastExportTimestamp(new Date().toISOString());
+  }, [currentRunId]);
+
+  const handleExportAnalysisGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
+    if (!currentRunId) return {};
+    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/analysis`, { method: "POST" });
     const data = await response.json();
-    if (data.spreadsheetUrl) {
-      setLastExportTimestamp(new Date().toISOString());
-    }
+    if (data.spreadsheetUrl) setLastExportTimestamp(new Date().toISOString());
+    return data;
+  }, [currentRunId]);
+
+  const handleExportFinancialGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
+    if (!currentRunId) return {};
+    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/financial`, { method: "POST" });
+    const data = await response.json();
+    if (data.spreadsheetUrl) setLastExportTimestamp(new Date().toISOString());
     return data;
   }, [currentRunId]);
 
@@ -491,7 +509,8 @@ function AppContent() {
                   onLoadDemo={handleLoadDemo}
                   uploadedFiles={uploadedFiles}
                   currentRunId={currentRunId}
-                  onExportGSheet={handleExportGSheet}
+                  onExportAnalysisGSheet={handleExportAnalysisGSheet}
+                  onExportFinancialGSheet={handleExportFinancialGSheet}
                   initialRunResult={currentRunResult}
                 />
               </Route>
@@ -527,8 +546,10 @@ function AppContent() {
                 <ExportPage
                   hasResults={hasResults}
                   onExportZip={handleExportZip}
-                  onExportXlsx={handleExportXlsx}
-                  onExportGSheet={handleExportGSheet}
+                  onExportAnalysisXlsx={handleExportAnalysisXlsx}
+                  onExportFinancialXlsx={handleExportFinancialXlsx}
+                  onExportAnalysisGSheet={handleExportAnalysisGSheet}
+                  onExportFinancialGSheet={handleExportFinancialGSheet}
                   lastExportTimestamp={lastExportTimestamp}
                 />
               </Route>

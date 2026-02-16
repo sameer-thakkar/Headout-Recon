@@ -2812,21 +2812,35 @@ export function AmountPayablePanel({
         description: "Please wait while the export file is being prepared",
       });
 
-      const response = await fetch(`/api/runs/${runId}/export`);
-      if (!response.ok) {
+      const [analysisResponse, financialResponse] = await Promise.all([
+        fetch(`/api/runs/${runId}/export/analysis`),
+        fetch(`/api/runs/${runId}/export/financial`),
+      ]);
+      if (!analysisResponse.ok || !financialResponse.ok) {
         throw new Error("Failed to generate export");
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       const timestamp = new Date().toISOString().slice(0, 10);
-      a.download = `reconciliation_export_${timestamp}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+
+      const analysisBlob = await analysisResponse.blob();
+      const analysisUrl = window.URL.createObjectURL(analysisBlob);
+      const a1 = document.createElement("a");
+      a1.href = analysisUrl;
+      a1.download = `reconciliation_analysis_${timestamp}.xlsx`;
+      document.body.appendChild(a1);
+      a1.click();
+      window.URL.revokeObjectURL(analysisUrl);
+      document.body.removeChild(a1);
+
+      const financialBlob = await financialResponse.blob();
+      const financialUrl = window.URL.createObjectURL(financialBlob);
+      const a2 = document.createElement("a");
+      a2.href = financialUrl;
+      a2.download = `financial_report_${timestamp}.xlsx`;
+      document.body.appendChild(a2);
+      a2.click();
+      window.URL.revokeObjectURL(financialUrl);
+      document.body.removeChild(a2);
 
       toast({
         title: "Export complete",
