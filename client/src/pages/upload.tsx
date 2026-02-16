@@ -810,16 +810,21 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                           </DropdownMenuContent>
                         </DropdownMenu>
                         {analysisGSheetUrl && (
-                          <a
-                            href={analysisGSheetUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-sm text-green-600 hover:underline"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            asChild
                             data-testid="link-analysis-gsheet"
                           >
-                            <ExternalLink className="h-3 w-3" />
-                            Discrepancy Analysis Sheet
-                          </a>
+                            <a
+                              href={analysisGSheetUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                              Open Sheet
+                            </a>
+                          </Button>
                         )}
                       </div>
                     )}
