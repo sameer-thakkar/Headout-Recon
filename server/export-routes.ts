@@ -1816,12 +1816,8 @@ export function registerExportRoutes(app: Express) {
 
       const formatRequests: any[] = [];
       
-      const darkHeaderBg = { red: 0.16, green: 0.22, blue: 0.35 };
-      const whiteText = { red: 1, green: 1, blue: 1 };
-      const sectionTitleBg = { red: 0.24, green: 0.31, blue: 0.46 };
-      const altRowBg = { red: 0.94, green: 0.95, blue: 0.97 };
-      const borderStyle = { style: "SOLID", color: { red: 0.75, green: 0.75, blue: 0.75 } };
-      const thinBorder = { style: "SOLID", color: { red: 0.85, green: 0.85, blue: 0.85 } };
+      const borderStyle = { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } };
+      const thinBorder = { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } };
 
       const addTableHeaderRow = (sheetId: number, rowIdx: number, colCount: number) => {
         formatRequests.push({
@@ -1829,14 +1825,10 @@ export function registerExportRoutes(app: Express) {
             range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
             cell: {
               userEnteredFormat: {
-                backgroundColor: darkHeaderBg,
-                textFormat: { bold: true, foregroundColor: whiteText, fontSize: 10 },
-                horizontalAlignment: "CENTER",
-                verticalAlignment: "MIDDLE",
-                padding: { top: 4, bottom: 4, left: 6, right: 6 },
+                textFormat: { bold: true },
               },
             },
-            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,padding)",
+            fields: "userEnteredFormat.textFormat.bold",
           },
         });
       };
@@ -1847,29 +1839,10 @@ export function registerExportRoutes(app: Express) {
             range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: colCount },
             cell: {
               userEnteredFormat: {
-                backgroundColor: sectionTitleBg,
-                textFormat: { bold: true, foregroundColor: whiteText, fontSize: 12 },
-                horizontalAlignment: "LEFT",
-                verticalAlignment: "MIDDLE",
-                padding: { top: 6, bottom: 6, left: 8, right: 8 },
+                textFormat: { bold: true },
               },
             },
-            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,padding)",
-          },
-        });
-      };
-
-      const addAlternatingRows = (sheetId: number, startRow: number, endRow: number, colCount: number) => {
-        if (endRow <= startRow) return;
-        formatRequests.push({
-          addBanding: {
-            bandedRange: {
-              range: { sheetId, startRowIndex: startRow, endRowIndex: endRow, startColumnIndex: 0, endColumnIndex: colCount },
-              rowProperties: {
-                firstBandColor: { red: 1, green: 1, blue: 1 },
-                secondBandColor: altRowBg,
-              },
-            },
+            fields: "userEnteredFormat.textFormat.bold",
           },
         });
       };
@@ -1901,15 +1874,6 @@ export function registerExportRoutes(app: Express) {
         }
       };
 
-      const hideGridlines = (sheetId: number) => {
-        formatRequests.push({
-          updateSheetProperties: {
-            properties: { sheetId, gridProperties: { hideGridlines: true } },
-            fields: "gridProperties.hideGridlines",
-          },
-        });
-      };
-
       const addSheetFormatting = (sheetId: number, rowCount: number, colCount: number, headerRowIndices: number[] = [0], dataHeaders?: (string | number)[]) => {
         for (const rowIdx of headerRowIndices) {
           addTableHeaderRow(sheetId, rowIdx, colCount);
@@ -1922,7 +1886,6 @@ export function registerExportRoutes(app: Express) {
             },
           });
         }
-        addAlternatingRows(sheetId, (headerRowIndices[headerRowIndices.length - 1] || 0) + 1, rowCount, colCount);
         addTableBorders(sheetId, 0, rowCount, 0, colCount);
         if (dataHeaders) {
           addNumericAlignment(sheetId, (headerRowIndices[headerRowIndices.length - 1] || 0) + 1, rowCount, [], dataHeaders);
@@ -1932,7 +1895,6 @@ export function registerExportRoutes(app: Express) {
             dimensions: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: colCount },
           },
         });
-        hideGridlines(sheetId);
       };
 
       // Discrepancy Analysis formatting
@@ -1981,7 +1943,6 @@ export function registerExportRoutes(app: Express) {
         let maxCols = 1;
         discrepancyData.forEach((row: any) => { maxCols = Math.max(maxCols, row.length); });
         
-        hideGridlines(discSheetId);
         formatRequests.push({
           autoResizeDimensions: {
             dimensions: { sheetId: discSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: maxCols },
@@ -1992,7 +1953,6 @@ export function registerExportRoutes(app: Express) {
           addSectionTitle(discSheetId, table.sectionHeaderRow, table.colCount);
           addTableHeaderRow(discSheetId, table.tableHeaderRow, table.colCount);
           addTableBorders(discSheetId, table.tableHeaderRow, table.lastDataRow + 1, 0, table.colCount);
-          addAlternatingRows(discSheetId, table.tableHeaderRow + 1, table.lastDataRow + 1, table.colCount);
           addNumericAlignment(discSheetId, table.tableHeaderRow + 1, table.lastDataRow + 1, [], table.headers);
         }
       }
@@ -2033,7 +1993,6 @@ export function registerExportRoutes(app: Express) {
         let maxCols = 1;
         draftMessagesData.forEach((row: any) => { maxCols = Math.max(maxCols, row.length); });
         
-        hideGridlines(draftSheetId);
         formatRequests.push({
           autoResizeDimensions: {
             dimensions: { sheetId: draftSheetId, dimension: "COLUMNS", startIndex: 0, endIndex: maxCols },
@@ -2046,7 +2005,6 @@ export function registerExportRoutes(app: Express) {
         for (const table of draftTables) {
           addTableHeaderRow(draftSheetId, table.headerRow, table.colCount);
           addTableBorders(draftSheetId, table.headerRow, table.lastDataRow + 1, 0, table.colCount);
-          addAlternatingRows(draftSheetId, table.headerRow + 1, table.lastDataRow + 1, table.colCount);
           addNumericAlignment(draftSheetId, table.headerRow + 1, table.lastDataRow + 1, [], table.headers);
         }
       }
@@ -2441,11 +2399,8 @@ export function registerExportRoutes(app: Express) {
 
       const formatRequests: any[] = [];
       
-      const darkHeaderBg = { red: 0.16, green: 0.22, blue: 0.35 };
-      const whiteText = { red: 1, green: 1, blue: 1 };
-      const altRowBg = { red: 0.94, green: 0.95, blue: 0.97 };
-      const borderStyle = { style: "SOLID", color: { red: 0.75, green: 0.75, blue: 0.75 } };
-      const thinBorder = { style: "SOLID", color: { red: 0.85, green: 0.85, blue: 0.85 } };
+      const borderStyle = { style: "SOLID", color: { red: 0.6, green: 0.6, blue: 0.6 } };
+      const thinBorder = { style: "SOLID", color: { red: 0.8, green: 0.8, blue: 0.8 } };
 
       const addFinancialSheetFormatting = (sheetId: number, rowCount: number, colCount: number, dataHeaders?: (string | number | null)[]) => {
         formatRequests.push({
@@ -2453,35 +2408,18 @@ export function registerExportRoutes(app: Express) {
             range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: colCount },
             cell: {
               userEnteredFormat: {
-                backgroundColor: darkHeaderBg,
-                textFormat: { bold: true, foregroundColor: whiteText, fontSize: 10 },
-                horizontalAlignment: "CENTER",
-                verticalAlignment: "MIDDLE",
-                padding: { top: 4, bottom: 4, left: 6, right: 6 },
+                textFormat: { bold: true },
               },
             },
-            fields: "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,padding)",
+            fields: "userEnteredFormat.textFormat.bold",
           },
         });
         formatRequests.push({
           updateSheetProperties: {
-            properties: { sheetId, gridProperties: { frozenRowCount: 1, hideGridlines: true } },
-            fields: "gridProperties.frozenRowCount,gridProperties.hideGridlines",
+            properties: { sheetId, gridProperties: { frozenRowCount: 1 } },
+            fields: "gridProperties.frozenRowCount",
           },
         });
-        if (rowCount > 1) {
-          formatRequests.push({
-            addBanding: {
-              bandedRange: {
-                range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
-                rowProperties: {
-                  firstBandColor: { red: 1, green: 1, blue: 1 },
-                  secondBandColor: altRowBg,
-                },
-              },
-            },
-          });
-        }
         formatRequests.push({
           updateBorders: {
             range: { sheetId, startRowIndex: 0, endRowIndex: rowCount, startColumnIndex: 0, endColumnIndex: colCount },
