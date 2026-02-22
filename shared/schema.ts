@@ -286,6 +286,47 @@ export const summaryRowSchema = z.object({
 });
 export type SummaryRow = z.infer<typeof summaryRowSchema>;
 
+// Error Bucket → RCA mapping (hierarchical)
+export const errorBucketRcaMapping: Record<string, string[]> = {
+  "Pricing": ["Price Sync Migration (RP/NP)", "Manual Error", "Secondary SP", "API Failure - Booked with Same SP"],
+  "Cancellation": ["Price Sync Off", "API Failure - Not Cancelled Manually", "Fraud", "Reschedule"],
+  "Unmapped_VRN": ["Manual Pricing Error", "Product Listing/Content Error", "VRN not updated - CO", "Selenium Error"],
+  "Multiple_Tickets_Booked": ["SP/HO Discount", "Test Bookings", "VRN not updated - API/Selenium", "Manual Error"],
+  "Currency Conversion": ["Delayed Tickets"],
+  "Fraud": ["Secondary SP", "Fraud"],
+  "API Failure - Booked with alternate SP": ["API Failure - Booked with alternate SP"],
+  "Incorrect Setup": ["Cancellation Insurance"],
+  "Incorrect API Mapping": ["Incorrect API Mapping"],
+  "Partial Refund Error": ["DSS Policy"],
+  "DSS Policy": ["DSS Policy"],
+  "Incorrect Variant": ["Selenium Error", "Product Listing/Content Error"],
+  "Incorrect Pax": ["Duplicate Bookings"],
+  "BI Not Updated": ["Pending Status - Auto Refund"],
+  "Incorrect Tickets": ["Refund Due"],
+  "Margin Error": ["Incorrect pax/variant mapping"],
+  "Product Listing/Content Error": ["Product Listing/Content Error"],
+  "Two Step FF": ["Two Step FF"],
+};
+
+export const errorBuckets = Object.keys(errorBucketRcaMapping);
+
+// Issue status options
+export const issueStatuses = [
+  "Issue resolved - Loss",
+  "Issue resolved - No loss",
+  "Pending - Finance",
+  "Pending - SP",
+  "Pending - BDM",
+  "Pending - IO",
+  "Pending - CO",
+  "Pending - RO",
+  "Pending - Tech",
+  "Pending - BizOps",
+  "Pending - Other",
+] as const;
+
+export type IssueStatus = typeof issueStatuses[number];
+
 // Issue record for tracking issues from Amount Payable Calculator
 export const issueRecordSchema = z.object({
   issueId: z.string(),
@@ -298,8 +339,15 @@ export const issueRecordSchema = z.object({
   discrepancyUsd: z.number(),
   reason: z.string(),
   driTeam: z.string(),
-  // Optional: bookingIds associated with this issue
   bookingIds: z.array(z.string()).optional(),
+  paymentMethod: z.string().optional(),
+  period: z.string().optional(),
+  assignee: z.string().optional(),
+  errorBucket: z.string().optional(),
+  rca: z.string().optional(),
+  slackLink: z.string().optional(),
+  workingsLink: z.string().optional(),
+  issueStatus: z.string().optional(),
 });
 export type IssueRecord = z.infer<typeof issueRecordSchema>;
 
@@ -548,8 +596,8 @@ export type Dispute = typeof disputes.$inferSelect;
 // Issues table - persistent issue tracking
 export const issues = pgTable("issues", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  issueId: text("issue_id").notNull().unique(), // Human-readable ID like IID-#1
-  sessionId: varchar("session_id").notNull(), // Reference to reconciliation session
+  issueId: text("issue_id").notNull().unique(),
+  sessionId: varchar("session_id").notNull(),
   billingEntityId: text("billing_entity_id").notNull(),
   billingEntityName: text("billing_entity_name").notNull(),
   currency: text("currency").notNull(),
@@ -557,8 +605,17 @@ export const issues = pgTable("issues", {
   discrepancyUsd: real("discrepancy_usd").notNull(),
   reason: text("reason").notNull(),
   driTeam: text("dri_team").notNull(),
-  bookingIds: jsonb("booking_ids"), // Array of booking IDs
+  bookingIds: jsonb("booking_ids"),
+  paymentMethod: text("payment_method"),
+  period: text("period"),
+  assignee: text("assignee"),
+  errorBucket: text("error_bucket"),
+  rca: text("rca"),
+  slackLink: text("slack_link"),
+  workingsLink: text("workings_link"),
+  issueStatus: text("issue_status"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
 });
 
 export const insertIssueSchema = createInsertSchema(issues).omit({

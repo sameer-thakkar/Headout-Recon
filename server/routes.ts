@@ -7,6 +7,7 @@ import XLSX from "xlsx-js-style";
 import path from "path";
 import fs from "fs";
 import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
+import { errorBucketRcaMapping } from "@shared/schema";
 import { runReconciliation } from "./reconciliation";
 import { registerExportRoutes } from "./export-routes";
 import { formatIndianNumber } from "./export-utils";
@@ -1332,7 +1333,8 @@ export async function registerRoutes(
   // Create a new issue
   app.post("/api/issues", async (req, res) => {
     try {
-      const { runId, billingEntityId, billingEntityName, currency, discrepancyLocal, discrepancyUsd, reason, driTeam, bookingIds } = req.body;
+      const { runId, billingEntityId, billingEntityName, currency, discrepancyLocal, discrepancyUsd, reason, driTeam, bookingIds,
+        paymentMethod, period, assignee, errorBucket, rca, slackLink, workingsLink, issueStatus } = req.body;
       
       if (!runId || !billingEntityId || !reason || !driTeam) {
         res.status(400).json({ error: "Missing required fields: runId, billingEntityId, reason, driTeam" });
@@ -1349,12 +1351,60 @@ export async function registerRoutes(
         reason,
         driTeam,
         bookingIds: bookingIds || [],
+        paymentMethod,
+        period,
+        assignee,
+        errorBucket,
+        rca,
+        slackLink,
+        workingsLink,
+        issueStatus,
       });
 
       res.json({ issue });
     } catch (error) {
       console.error("Create issue error:", error);
       res.status(500).json({ error: "Failed to create issue" });
+    }
+  });
+
+  // Update an issue (inline editing)
+  app.patch("/api/issues/:issueId", async (req, res) => {
+    try {
+      const { issueId } = req.params;
+      const updates = req.body;
+
+      if (updates.errorBucket !== undefined) {
+        if (updates.errorBucket && !errorBucketRcaMapping[updates.errorBucket]) {
+          res.status(400).json({ error: `Invalid Error Bucket: ${updates.errorBucket}` });
+          return;
+        }
+        if (!updates.rca) {
+          updates.rca = null;
+        }
+      }
+
+      if (updates.rca !== undefined && updates.rca !== null) {
+        const existing = await storage.getIssueById(issueId);
+        const bucket = updates.errorBucket || existing?.errorBucket;
+        if (bucket) {
+          const allowed = errorBucketRcaMapping[bucket] || [];
+          if (!allowed.includes(updates.rca)) {
+            res.status(400).json({ error: `Invalid RCA '${updates.rca}' for Error Bucket '${bucket}'` });
+            return;
+          }
+        }
+      }
+
+      const updated = await storage.updateIssue(issueId, updates);
+      if (updated) {
+        res.json({ issue: updated });
+      } else {
+        res.status(404).json({ error: "Issue not found" });
+      }
+    } catch (error) {
+      console.error("Update issue error:", error);
+      res.status(500).json({ error: "Failed to update issue" });
     }
   });
 

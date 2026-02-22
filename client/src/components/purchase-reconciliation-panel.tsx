@@ -1986,6 +1986,8 @@ export function PurchaseReconciliationPanel({
         bookingIds: tidBookings.map(b => b.bookingId),
         ticketId: tidBookings[0]?.ticketId || "",
         tid: tid,
+        paymentMethod: "PORTAL_DEPOSIT",
+        errorBucket: reason,
       });
       setLoggedIssues(prev => { const next = new Set(prev); tidBookings.forEach(b => next.add(b.bookingId)); return next; });
       toast({ title: "Issue Flagged", description: `Issue created for TID ${tid} with ${tidBookings.length} bookings.` });

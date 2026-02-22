@@ -57,6 +57,7 @@ export interface IStorage {
   createIssue(issue: Omit<IssueRecord, "issueId" | "createdDate">): Promise<IssueRecord>;
   getIssues(runId: string): Promise<IssueRecord[]>;
   getIssueById(issueId: string): Promise<IssueRecord | undefined>;
+  updateIssue(issueId: string, updates: Partial<IssueRecord>): Promise<IssueRecord | undefined>;
   deleteIssue(issueId: string): Promise<boolean>;
 
   // Vendor Corrections
@@ -327,6 +328,15 @@ export class MemStorage implements IStorage {
 
   async getIssueById(issueId: string): Promise<IssueRecord | undefined> {
     return this.issues.get(issueId);
+  }
+
+  async updateIssue(issueId: string, updates: Partial<IssueRecord>): Promise<IssueRecord | undefined> {
+    const issue = this.issues.get(issueId);
+    if (!issue) return undefined;
+    const { issueId: _, runId: __, createdDate: ___, ...safeUpdates } = updates;
+    const updated = { ...issue, ...safeUpdates };
+    this.issues.set(issueId, updated);
+    return updated;
   }
 
   async deleteIssue(issueId: string): Promise<boolean> {
@@ -874,6 +884,30 @@ export class DatabaseStorage implements ISessionStorage {
     return closedDisputes;
   }
 
+  private dbIssueToRecord(i: typeof issuesTable.$inferSelect): IssueRecord {
+    return {
+      issueId: i.issueId,
+      runId: i.sessionId,
+      createdDate: i.createdAt.toISOString(),
+      billingEntityId: i.billingEntityId,
+      billingEntityName: i.billingEntityName,
+      currency: i.currency,
+      discrepancyLocal: i.discrepancyLocal,
+      discrepancyUsd: i.discrepancyUsd,
+      reason: i.reason,
+      driTeam: i.driTeam,
+      bookingIds: i.bookingIds as string[] | undefined,
+      paymentMethod: i.paymentMethod ?? undefined,
+      period: i.period ?? undefined,
+      assignee: i.assignee ?? undefined,
+      errorBucket: i.errorBucket ?? undefined,
+      rca: i.rca ?? undefined,
+      slackLink: i.slackLink ?? undefined,
+      workingsLink: i.workingsLink ?? undefined,
+      issueStatus: i.issueStatus ?? undefined,
+    };
+  }
+
   // Issue methods
   async createIssue(issue: Omit<IssueRecord, "issueId" | "createdDate">): Promise<IssueRecord> {
     const counter = await this.getNextCounter("issue");
@@ -892,22 +926,18 @@ export class DatabaseStorage implements ISessionStorage {
         reason: issue.reason,
         driTeam: issue.driTeam,
         bookingIds: issue.bookingIds,
+        paymentMethod: issue.paymentMethod,
+        period: issue.period,
+        assignee: issue.assignee,
+        errorBucket: issue.errorBucket,
+        rca: issue.rca,
+        slackLink: issue.slackLink,
+        workingsLink: issue.workingsLink,
+        issueStatus: issue.issueStatus,
       })
       .returning();
     
-    return {
-      issueId: result[0].issueId,
-      runId: result[0].sessionId,
-      createdDate: result[0].createdAt.toISOString(),
-      billingEntityId: result[0].billingEntityId,
-      billingEntityName: result[0].billingEntityName,
-      currency: result[0].currency,
-      discrepancyLocal: result[0].discrepancyLocal,
-      discrepancyUsd: result[0].discrepancyUsd,
-      reason: result[0].reason,
-      driTeam: result[0].driTeam,
-      bookingIds: result[0].bookingIds as string[] | undefined,
-    };
+    return this.dbIssueToRecord(result[0]);
   }
 
   async getIssues(runId: string): Promise<IssueRecord[]> {
@@ -917,19 +947,7 @@ export class DatabaseStorage implements ISessionStorage {
       .where(eq(issuesTable.sessionId, runId))
       .orderBy(desc(issuesTable.createdAt));
     
-    return results.map(i => ({
-      issueId: i.issueId,
-      runId: i.sessionId,
-      createdDate: i.createdAt.toISOString(),
-      billingEntityId: i.billingEntityId,
-      billingEntityName: i.billingEntityName,
-      currency: i.currency,
-      discrepancyLocal: i.discrepancyLocal,
-      discrepancyUsd: i.discrepancyUsd,
-      reason: i.reason,
-      driTeam: i.driTeam,
-      bookingIds: i.bookingIds as string[] | undefined,
-    }));
+    return results.map(i => this.dbIssueToRecord(i));
   }
 
   async getIssueById(issueId: string): Promise<IssueRecord | undefined> {
@@ -939,21 +957,29 @@ export class DatabaseStorage implements ISessionStorage {
       .where(eq(issuesTable.issueId, issueId));
     
     if (!results[0]) return undefined;
+    return this.dbIssueToRecord(results[0]);
+  }
+
+  async updateIssue(issueId: string, updates: Partial<IssueRecord>): Promise<IssueRecord | undefined> {
+    const dbUpdates: Record<string, unknown> = { updatedAt: new Date() };
+    if (updates.assignee !== undefined) dbUpdates.assignee = updates.assignee;
+    if (updates.errorBucket !== undefined) dbUpdates.errorBucket = updates.errorBucket;
+    if (updates.rca !== undefined) dbUpdates.rca = updates.rca;
+    if (updates.slackLink !== undefined) dbUpdates.slackLink = updates.slackLink;
+    if (updates.workingsLink !== undefined) dbUpdates.workingsLink = updates.workingsLink;
+    if (updates.issueStatus !== undefined) dbUpdates.issueStatus = updates.issueStatus;
+    if (updates.driTeam !== undefined) dbUpdates.driTeam = updates.driTeam;
+    if (updates.paymentMethod !== undefined) dbUpdates.paymentMethod = updates.paymentMethod;
+    if (updates.period !== undefined) dbUpdates.period = updates.period;
+
+    const result = await db
+      .update(issuesTable)
+      .set(dbUpdates)
+      .where(eq(issuesTable.issueId, issueId))
+      .returning();
     
-    const i = results[0];
-    return {
-      issueId: i.issueId,
-      runId: i.sessionId,
-      createdDate: i.createdAt.toISOString(),
-      billingEntityId: i.billingEntityId,
-      billingEntityName: i.billingEntityName,
-      currency: i.currency,
-      discrepancyLocal: i.discrepancyLocal,
-      discrepancyUsd: i.discrepancyUsd,
-      reason: i.reason,
-      driTeam: i.driTeam,
-      bookingIds: i.bookingIds as string[] | undefined,
-    };
+    if (!result[0]) return undefined;
+    return this.dbIssueToRecord(result[0]);
   }
 
   async deleteIssue(issueId: string): Promise<boolean> {

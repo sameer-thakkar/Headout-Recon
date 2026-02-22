@@ -1203,6 +1203,8 @@ export function AmountPayablePanel({
         bookingIds,
         description,
         priority,
+        paymentMethod: firstBooking?.paymentMethod || undefined,
+        errorBucket: reason,
       });
 
       toast({ title: "Issue Flagged", description: `Issue flagged for ${reason} (${bookingIds.length} bookings) — assigned to ${driTeam}.` });
@@ -2415,6 +2417,8 @@ export function AmountPayablePanel({
         reason,
         driTeam,
         bookingIds: tidBookings.map(b => b.bookingId),
+        paymentMethod: firstBooking.paymentMethod || undefined,
+        errorBucket: reason,
       });
 
       toast({
@@ -2529,6 +2533,8 @@ export function AmountPayablePanel({
           reason,
           driTeam,
           bookingIds: bookings.map((b: BookingForPayable) => b.bookingId),
+          paymentMethod: firstBooking.paymentMethod || undefined,
+          errorBucket: reason,
         });
       }
 
