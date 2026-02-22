@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
+import { ValidationModal } from "@/components/validation-modal";
 
 interface ExportHistoryEntry {
   reportType: string;
@@ -72,6 +73,8 @@ export function ExportPage({
   const [isExportingFinancial, setIsExportingFinancial] = useState(false);
   const [analysisExportStep, setAnalysisExportStep] = useState<string | null>(null);
   const [financialExportStep, setFinancialExportStep] = useState<string | null>(null);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [pendingExportFormat, setPendingExportFormat] = useState<"excel" | "gsheet">("excel");
   const { toast } = useToast();
 
   const handleExportAnalysisXlsx = async () => {
@@ -107,36 +110,43 @@ export function ExportPage({
     }
   };
 
-  const handleExportFinancialXlsx = async () => {
-    setIsExportingFinancial(true);
-    setFinancialExportStep("Preparing Excel file...");
-    try {
-      await onExportFinancialXlsx();
-      setFinancialExportStep(null);
-      toast({ title: "Export complete", description: "Reconciliation Report downloaded" });
-    } catch (error) {
-      setFinancialExportStep(null);
-      toast({ title: "Export failed", variant: "destructive" });
-    } finally {
-      setIsExportingFinancial(false);
-    }
+  const handleRequestFinancialExport = (format: "excel" | "gsheet") => {
+    setPendingExportFormat(format);
+    setShowValidationModal(true);
   };
 
-  const handleExportFinancialGSheet = async () => {
-    setIsExportingFinancial(true);
-    setFinancialExportStep("Creating Google Sheet...");
-    try {
-      setFinancialExportStep("Uploading data & formatting...");
-      const result = await onExportFinancialGSheet();
-      if (result.spreadsheetUrl) {
+  const handleValidationProceed = async () => {
+    setShowValidationModal(false);
+    
+    if (pendingExportFormat === "excel") {
+      setIsExportingFinancial(true);
+      setFinancialExportStep("Preparing Excel file...");
+      try {
+        await onExportFinancialXlsx();
         setFinancialExportStep(null);
-        toast({ title: "Export complete", description: "Reconciliation Report Google Sheet created" });
+        toast({ title: "Export complete", description: "Reconciliation Report downloaded" });
+      } catch (error) {
+        setFinancialExportStep(null);
+        toast({ title: "Export failed", variant: "destructive" });
+      } finally {
+        setIsExportingFinancial(false);
       }
-    } catch (error) {
-      setFinancialExportStep(null);
-      toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
-    } finally {
-      setIsExportingFinancial(false);
+    } else {
+      setIsExportingFinancial(true);
+      setFinancialExportStep("Creating Google Sheet...");
+      try {
+        setFinancialExportStep("Uploading data & formatting...");
+        const result = await onExportFinancialGSheet();
+        if (result.spreadsheetUrl) {
+          setFinancialExportStep(null);
+          toast({ title: "Export complete", description: "Reconciliation Report Google Sheet created" });
+        }
+      } catch (error) {
+        setFinancialExportStep(null);
+        toast({ title: "Export failed", description: "Could not create Google Sheet", variant: "destructive" });
+      } finally {
+        setIsExportingFinancial(false);
+      }
     }
   };
 
@@ -340,14 +350,14 @@ export function ExportPage({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={handleExportFinancialXlsx}
+                          onClick={() => handleRequestFinancialExport("excel")}
                           data-testid="menu-export-financial-excel"
                         >
                           <FileSpreadsheet className="h-4 w-4 mr-2" />
                           Excel (.xlsx)
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={handleExportFinancialGSheet}
+                          onClick={() => handleRequestFinancialExport("gsheet")}
                           data-testid="menu-export-financial-gsheet"
                         >
                           <SiGooglesheets className="h-4 w-4 mr-2" />
@@ -417,6 +427,16 @@ export function ExportPage({
           </div>
         )}
       </div>
+
+      {currentRunId && (
+        <ValidationModal
+          open={showValidationModal}
+          onClose={() => setShowValidationModal(false)}
+          onProceed={handleValidationProceed}
+          runId={currentRunId}
+          exportFormat={pendingExportFormat}
+        />
+      )}
     </div>
   );
 }

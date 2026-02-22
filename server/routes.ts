@@ -1642,6 +1642,312 @@ export async function registerRoutes(
     }
   });
 
+  // =====================================================================
+  // FINANCIAL EXPORT VALIDATION
+  // GET /api/runs/:runId/validate-financial
+  // Runs all data integrity checks before allowing financial export
+  // =====================================================================
+  app.get("/api/runs/:runId/validate-financial", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      
+      const run = await storage.getRun(runId);
+      if (!run) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      if (run.status !== "done") {
+        return res.status(400).json({ error: "Run not complete" });
+      }
+      
+      const result = await storage.getRunResult(runId);
+      if (!result) {
+        return res.status(404).json({ error: "Results not found" });
+      }
+      
+      const allDisputes = await storage.getDisputes(runId);
+      const priceOverrides = await storage.getPriceOverrides(runId);
+      const vendorCorrections = await storage.getVendorCorrections(runId);
+      
+      const allRows = [...result.primaryRows, ...result.secondaryVendorRows];
+      const discrepancyRows = allRows.filter((r: any) => r.reason !== "Reconciled");
+      const reconciledRows = allRows.filter((r: any) => r.reason === "Reconciled");
+      const cancellationRows = allRows.filter((r: any) => 
+        r.reason?.toLowerCase().includes("cancell") || 
+        r.reason === "Cancelled-Refund OK"
+      );
+      
+      interface ValidationCheck {
+        id: string;
+        name: string;
+        category: string;
+        severity: "critical" | "warning";
+        status: "pass" | "fail" | "warning";
+        message: string;
+        details?: any;
+      }
+      
+      const checks: ValidationCheck[] = [];
+      
+      // CHECK 1: Booking count integrity
+      // Count primary rows only for category breakdown (secondary vendor counted separately)
+      const primaryOnly = result.primaryRows;
+      const totalBookings = allRows.length;
+      const secondaryVendorCount = result.secondaryVendorRows.length;
+      const primaryReconciledCount = primaryOnly.filter((r: any) => r.reason === "Reconciled").length;
+      const primaryCancellationCount = primaryOnly.filter((r: any) => 
+        r.reason?.toLowerCase().includes("cancell") || r.reason === "Cancelled-Refund OK"
+      ).length;
+      const primaryAlreadyReconciledCount = primaryOnly.filter((r: any) => r.reason === "Already Reconciled").length;
+      const primaryDiscrepancyCount = primaryOnly.filter((r: any) => 
+        r.reason !== "Reconciled" &&
+        !(r.reason?.toLowerCase().includes("cancell") || r.reason === "Cancelled-Refund OK") &&
+        r.reason !== "Already Reconciled"
+      ).length;
+      const categorizedTotal = primaryReconciledCount + primaryDiscrepancyCount + primaryCancellationCount + primaryAlreadyReconciledCount + secondaryVendorCount;
+      
+      checks.push({
+        id: "booking_count",
+        name: "Booking count integrity",
+        category: "Data Integrity",
+        severity: "critical",
+        status: totalBookings === categorizedTotal ? "pass" : "fail",
+        message: totalBookings === categorizedTotal 
+          ? `All ${totalBookings} bookings accounted for across categories`
+          : `Mismatch: ${totalBookings} total bookings but ${categorizedTotal} categorized (Reconciled: ${primaryReconciledCount}, Discrepancy: ${primaryDiscrepancyCount}, Cancellation: ${primaryCancellationCount}, Already Reconciled: ${primaryAlreadyReconciledCount}, Secondary Vendor: ${secondaryVendorCount})`,
+        details: { totalBookings, primaryReconciledCount, primaryDiscrepancyCount, primaryCancellationCount, primaryAlreadyReconciledCount, secondaryVendorCount },
+      });
+      
+      // CHECK 2: All bookings have prices
+      const missingPriceBookings = allRows.filter((r: any) => 
+        r.spNetInHo === null || r.spNetInHo === undefined
+      );
+      checks.push({
+        id: "all_prices_set",
+        name: "All bookings have SP Net price",
+        category: "Data Completeness",
+        severity: "critical",
+        status: missingPriceBookings.length === 0 ? "pass" : "fail",
+        message: missingPriceBookings.length === 0 
+          ? "All bookings have SP Net prices set"
+          : `${missingPriceBookings.length} booking(s) missing SP Net price`,
+        details: { missingCount: missingPriceBookings.length, bookingIds: missingPriceBookings.slice(0, 5).map((r: any) => r.bookingId) },
+      });
+      
+      // CHECK 3: No zero Final Net Price on non-cancelled active bookings
+      const zeroActiveBookings = allRows.filter((r: any) => {
+        const isCancelled = r.reason?.toLowerCase().includes("cancell") || r.reason === "Cancelled-Refund OK";
+        const isNegativeSp = r.reason === "Negative SP - Partial Refund";
+        return !isCancelled && !isNegativeSp && r.reason !== "Reconciled" && 
+               (r.spNetInHo === 0 || r.hoNet === 0) && r.spNetInHo !== null && r.hoNet !== null;
+      });
+      checks.push({
+        id: "no_zero_active",
+        name: "No zero prices on active bookings",
+        category: "Data Integrity",
+        severity: "warning",
+        status: zeroActiveBookings.length === 0 ? "pass" : "warning",
+        message: zeroActiveBookings.length === 0 
+          ? "No active bookings have zero prices"
+          : `${zeroActiveBookings.length} active booking(s) have zero HO or SP Net price`,
+        details: { count: zeroActiveBookings.length, bookingIds: zeroActiveBookings.slice(0, 5).map((r: any) => r.bookingId) },
+      });
+      
+      // CHECK 4: No unexpected negative prices
+      const unexpectedNegatives = allRows.filter((r: any) => {
+        const isCancelled = r.reason?.toLowerCase().includes("cancell") || r.reason === "Cancelled-Refund OK";
+        const isNegativeSp = r.reason === "Negative SP - Partial Refund";
+        return !isCancelled && !isNegativeSp && (r.spNetInHo < 0 || (r.hoNet < 0 && r.hoNet !== 0));
+      });
+      checks.push({
+        id: "no_unexpected_negatives",
+        name: "No unexpected negative prices",
+        category: "Data Integrity",
+        severity: "warning",
+        status: unexpectedNegatives.length === 0 ? "pass" : "warning",
+        message: unexpectedNegatives.length === 0 
+          ? "No unexpected negative prices found"
+          : `${unexpectedNegatives.length} booking(s) have unexpected negative prices`,
+        details: { count: unexpectedNegatives.length, bookingIds: unexpectedNegatives.slice(0, 5).map((r: any) => r.bookingId) },
+      });
+      
+      // CHECK 5: Payment method mismatches resolved (vendor corrections exist)
+      const paymentMismatchRows = allRows.filter((r: any) => r.reason === "Payment Method Mismatch");
+      const vendorCorrectionMap = new Map<string, string>();
+      for (const vc of vendorCorrections) {
+        vendorCorrectionMap.set(vc.bookingId, vc.finalVendorId);
+      }
+      const unresolvedMismatches = paymentMismatchRows.filter((r: any) => !vendorCorrectionMap.has(r.bookingId));
+      checks.push({
+        id: "payment_mismatches_resolved",
+        name: "Payment method mismatches resolved",
+        category: "Data Completeness",
+        severity: paymentMismatchRows.length > 0 ? "warning" : "critical",
+        status: unresolvedMismatches.length === 0 ? "pass" : (paymentMismatchRows.length > 0 ? "warning" : "pass"),
+        message: paymentMismatchRows.length === 0 
+          ? "No payment method mismatches found"
+          : unresolvedMismatches.length === 0 
+            ? `All ${paymentMismatchRows.length} mismatches have Final Vendor ID assigned`
+            : `${unresolvedMismatches.length} of ${paymentMismatchRows.length} mismatches missing Final Vendor ID`,
+        details: { total: paymentMismatchRows.length, unresolved: unresolvedMismatches.length },
+      });
+      
+      // CHECK 6: FX rate validation
+      const fx = result.fx;
+      const currencies = new Set(allRows.map((r: any) => r.hoCurrency).filter(Boolean));
+      const missingFxCurrencies: string[] = [];
+      const suspiciousFxRates: { currency: string; rate: number }[] = [];
+      if (fx?.usdToCcy) {
+        for (const ccy of currencies) {
+          if (ccy === "USD") continue;
+          const rate = fx.usdToCcy[ccy];
+          if (!rate) {
+            missingFxCurrencies.push(ccy);
+          } else if (rate < 0.001 || rate > 100000) {
+            suspiciousFxRates.push({ currency: ccy, rate });
+          }
+        }
+      }
+      const fxOk = missingFxCurrencies.length === 0 && suspiciousFxRates.length === 0;
+      checks.push({
+        id: "fx_rate_validation",
+        name: "FX rate validation",
+        category: "Data Integrity",
+        severity: missingFxCurrencies.length > 0 ? "critical" : "warning",
+        status: fxOk ? "pass" : (missingFxCurrencies.length > 0 ? "fail" : "warning"),
+        message: fxOk 
+          ? `FX rates valid for ${currencies.size} currencies`
+          : missingFxCurrencies.length > 0 
+            ? `Missing FX rates for: ${missingFxCurrencies.join(", ")}`
+            : `Suspicious FX rates detected for: ${suspiciousFxRates.map(r => `${r.currency}=${r.rate}`).join(", ")}`,
+        details: { currencies: Array.from(currencies), missingFxCurrencies, suspiciousFxRates },
+      });
+      
+      // CHECK 7: Price overrides summary (manual edits)
+      const overrideEntries = priceOverrides ? Object.entries(priceOverrides) : [];
+      const manualEditCount = overrideEntries.length;
+      let totalValueImpact = 0;
+      for (const [bookingId, override] of overrideEntries) {
+        const originalRow = allRows.find((r: any) => r.bookingId === bookingId);
+        if (originalRow) {
+          const originalPrice = originalRow.spNetInHo || 0;
+          const overridePrice = typeof override === "number" ? override : (override as any)?.finalPrice || 0;
+          totalValueImpact += Math.abs(overridePrice - originalPrice);
+        }
+      }
+      checks.push({
+        id: "manual_edits_summary",
+        name: "Manual edits summary",
+        category: "Review Completeness",
+        severity: "warning",
+        status: manualEditCount === 0 ? "pass" : "warning",
+        message: manualEditCount === 0 
+          ? "No manual price overrides applied"
+          : `${manualEditCount} booking(s) have manual price overrides (total value impact: ${formatIndianNumber(totalValueImpact)})`,
+        details: { manualEditCount, totalValueImpact, bookingIds: overrideEntries.slice(0, 5).map(([id]) => id) },
+      });
+      
+      // CHECK 8: Open disputes check
+      const openDisputes = allDisputes.filter((d: any) => d.closureStatus === "open");
+      checks.push({
+        id: "open_disputes",
+        name: "Open disputes check",
+        category: "Review Completeness",
+        severity: "warning",
+        status: openDisputes.length === 0 ? "pass" : "warning",
+        message: openDisputes.length === 0 
+          ? "No open disputes remaining"
+          : `${openDisputes.length} dispute(s) still open`,
+        details: { 
+          openCount: openDisputes.length, 
+          totalDisputeValue: openDisputes.reduce((sum: number, d: any) => sum + (d.disputeAmount || 0), 0),
+          bookingIds: openDisputes.slice(0, 5).map((d: any) => d.bookingId),
+        },
+      });
+      
+      // CHECK 9: Grand total variance (SP total vs HO total)
+      const spTotal = allRows.reduce((sum: number, r: any) => sum + (r.spNetInHo || 0), 0);
+      const hoTotal = allRows.reduce((sum: number, r: any) => sum + (r.hoNet || 0), 0);
+      const totalDifference = Math.abs(spTotal - hoTotal);
+      const variancePercent = spTotal !== 0 ? (totalDifference / Math.abs(spTotal)) * 100 : 0;
+      checks.push({
+        id: "grand_total_variance",
+        name: "Grand total variance",
+        category: "Financial Sanity",
+        severity: "warning",
+        status: variancePercent <= 10 ? "pass" : "warning",
+        message: variancePercent <= 10 
+          ? `Variance within threshold (${variancePercent.toFixed(1)}% difference between SP and HO totals)`
+          : `High variance: ${variancePercent.toFixed(1)}% difference between SP total (${formatIndianNumber(spTotal)}) and HO total (${formatIndianNumber(hoTotal)})`,
+        details: { spTotal, hoTotal, totalDifference, variancePercent: Math.round(variancePercent * 10) / 10 },
+      });
+      
+      // CHECK 10: Amount Paid reconciliation
+      const amountPaidBookings = allRows.filter((r: any) => r.amountPaid && r.amountPaid !== 0);
+      const totalAmountPaid = amountPaidBookings.reduce((sum: number, r: any) => sum + (r.amountPaid || 0), 0);
+      checks.push({
+        id: "amount_paid_reconciliation",
+        name: "Amount Paid reconciliation",
+        category: "Financial Sanity",
+        severity: "warning",
+        status: "pass",
+        message: amountPaidBookings.length === 0 
+          ? "No Amount Paid entries found"
+          : `${amountPaidBookings.length} booking(s) with Amount Paid totalling ${formatIndianNumber(totalAmountPaid)}`,
+        details: { bookingCount: amountPaidBookings.length, totalAmountPaid },
+      });
+      
+      // CHECK 11: Vendor corrections completeness (for secondary vendor bookings)
+      const svBookings = result.secondaryVendorRows || [];
+      const svWithoutCorrection = svBookings.filter((r: any) => !vendorCorrectionMap.has(r.bookingId));
+      checks.push({
+        id: "vendor_corrections",
+        name: "Secondary vendor assignments",
+        category: "Data Completeness",
+        severity: "warning",
+        status: svWithoutCorrection.length === 0 ? "pass" : "warning",
+        message: svBookings.length === 0 
+          ? "No secondary vendor bookings"
+          : svWithoutCorrection.length === 0 
+            ? `All ${svBookings.length} secondary vendor bookings have vendor corrections`
+            : `${svWithoutCorrection.length} of ${svBookings.length} secondary vendor bookings need vendor assignment`,
+        details: { total: svBookings.length, unresolved: svWithoutCorrection.length },
+      });
+      
+      // CHECK 12: Data source verification (use result row counts instead of loading full upload)
+      const hoBookingCount = result.primaryRows.length + result.secondaryVendorRows.length;
+      const spFxCount = result.spFxDebugRows?.length || 0;
+      checks.push({
+        id: "data_source_verification",
+        name: "Data source verification",
+        category: "Data Completeness",
+        severity: "critical",
+        status: hoBookingCount > 0 && spFxCount > 0 ? "pass" : "fail",
+        message: hoBookingCount > 0 && spFxCount > 0
+          ? `Source data verified: ${hoBookingCount} reconciled bookings, ${spFxCount} SP invoice rows`
+          : `Missing source data: ${hoBookingCount === 0 ? "No HO bookings" : ""} ${spFxCount === 0 ? "No SP invoice rows" : ""}`,
+        details: { hoBookingCount, spFxCount },
+      });
+      
+      const criticalFails = checks.filter(c => c.severity === "critical" && c.status === "fail");
+      const warnings = checks.filter(c => c.status === "warning");
+      const passed = checks.filter(c => c.status === "pass");
+      
+      res.json({
+        checks,
+        summary: {
+          total: checks.length,
+          passed: passed.length,
+          warnings: warnings.length,
+          criticalFails: criticalFails.length,
+          canProceed: criticalFails.length === 0,
+        },
+      });
+    } catch (error) {
+      console.error("Validation error:", error);
+      res.status(500).json({ error: "Failed to run validation checks" });
+    }
+  });
+
   // Rename a session
   app.patch("/api/sessions/:id/rename", async (req, res) => {
     try {

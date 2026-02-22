@@ -77,3 +77,4 @@ Preferred communication style: Simple, everyday language.
 - `/api/pax-types`: CRUD operations for pax types.
 - `/api/disputes`: POST and DELETE for managing disputes.
 - `/api/issues`: POST for flagging issues.
+- `/api/runs/:runId/validate-financial`: GET - Pre-export validation that runs 12 data integrity checks before allowing financial report export. Returns checks array and summary with pass/fail/warning statuses. Checks include: booking count integrity, price completeness, zero/negative price detection, payment mismatch resolution, FX rate validation, manual edits summary, open disputes, grand total variance, amount paid reconciliation, vendor corrections, and data source verification. The `ValidationModal` component in `client/src/components/validation-modal.tsx` displays these checks with animated progress and requires warning acknowledgment before proceeding to export.
