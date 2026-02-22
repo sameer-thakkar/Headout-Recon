@@ -730,6 +730,292 @@ const ManageTidModal = forwardRef<ManageTidModalHandle, {
   );
 });
 
+interface ManageReasonModalHandle {
+  open: (reason: string, allBookingsForReason: PurchaseBooking[]) => void;
+}
+
+const ManageReasonModal = forwardRef<ManageReasonModalHandle, {
+  currency: string;
+  runId?: string | null;
+  onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
+  onRaiseDispute: (tidBookings: PurchaseBooking[], reason: string) => void;
+  onLogIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+}>(function ManageReasonModal({ currency, runId, onApplySpNet, onApplyHoNet, onRaiseDispute, onLogIssue }, ref) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [bookings, setBookings] = useState<PurchaseBooking[]>([]);
+  const [disputeChecked, setDisputeChecked] = useState(false);
+  const [issueChecked, setIssueChecked] = useState(false);
+  const [showAllTids, setShowAllTids] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    open: (r: string, allBookingsForReason: PurchaseBooking[]) => {
+      setReason(r);
+      setBookings(allBookingsForReason);
+      setDisputeChecked(false);
+      setIssueChecked(false);
+      setShowAllTids(false);
+      setIsOpen(true);
+    },
+  }));
+
+  const tidAggregates = useMemo(() => {
+    const tidMap = new Map<string, PurchaseBooking[]>();
+    for (const b of bookings) {
+      const tid = b.tid || "UNKNOWN";
+      if (!tidMap.has(tid)) tidMap.set(tid, []);
+      tidMap.get(tid)!.push(b);
+    }
+    const result: { tid: string; bookings: PurchaseBooking[]; totalSpNet: number; totalHoNet: number; discrepancy: number }[] = [];
+    Array.from(tidMap.entries()).forEach(([tid, tidBookings]) => {
+      const totalSpNet = Math.round(tidBookings.reduce((s: number, b: PurchaseBooking) => s + b.spNet, 0) * 100) / 100;
+      const totalHoNet = Math.round(tidBookings.reduce((s: number, b: PurchaseBooking) => s + b.hoNet, 0) * 100) / 100;
+      result.push({ tid, bookings: tidBookings, totalSpNet, totalHoNet, discrepancy: Math.round((totalHoNet - totalSpNet) * 100) / 100 });
+    });
+    return result.sort((a, b) => Math.abs(b.discrepancy) - Math.abs(a.discrepancy));
+  }, [bookings]);
+
+  const totalSpNet = useMemo(() => Math.round(bookings.reduce((s, b) => s + b.spNet, 0) * 100) / 100, [bookings]);
+  const totalHoNet = useMemo(() => Math.round(bookings.reduce((s, b) => s + b.hoNet, 0) * 100) / 100, [bookings]);
+  const totalDiscrepancy = useMemo(() => Math.round((totalHoNet - totalSpNet) * 100) / 100, [totalHoNet, totalSpNet]);
+
+  const pinnedTids = useMemo(() => tidAggregates.slice(0, 2), [tidAggregates]);
+  const collapsedTids = useMemo(() => tidAggregates.slice(2), [tidAggregates]);
+  const visibleCollapsed = showAllTids ? collapsedTids : collapsedTids.slice(0, 3);
+
+  const discColor = (v: number) => v > 0 ? "text-green-700 dark:text-green-300" : v < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
+  const formatSigned = (v: number) => {
+    const f = formatNumber(Math.abs(v));
+    return v > 0 ? `+${f}` : v < 0 ? `-${f}` : f;
+  };
+
+  const handleApplySpNetAll = useCallback(() => {
+    onApplySpNet(bookings);
+    if (disputeChecked) {
+      for (const agg of tidAggregates) onRaiseDispute(agg.bookings, reason);
+    }
+    if (issueChecked) {
+      for (const agg of tidAggregates) onLogIssue(agg.bookings, reason, agg.tid);
+    }
+    setIsOpen(false);
+  }, [bookings, onApplySpNet, tidAggregates, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason]);
+
+  const handleApplyHoNetAll = useCallback(() => {
+    onApplyHoNet(bookings);
+    if (disputeChecked) {
+      for (const agg of tidAggregates) onRaiseDispute(agg.bookings, reason);
+    }
+    if (issueChecked) {
+      for (const agg of tidAggregates) onLogIssue(agg.bookings, reason, agg.tid);
+    }
+    setIsOpen(false);
+  }, [bookings, onApplyHoNet, tidAggregates, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason]);
+
+  const handleDisputeIssueOnly = useCallback(() => {
+    if (disputeChecked) {
+      for (const agg of tidAggregates) onRaiseDispute(agg.bookings, reason);
+    }
+    if (issueChecked) {
+      for (const agg of tidAggregates) onLogIssue(agg.bookings, reason, agg.tid);
+    }
+    setIsOpen(false);
+  }, [tidAggregates, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason]);
+
+  const renderTidRow = useCallback((agg: { tid: string; bookings: PurchaseBooking[]; totalSpNet: number; totalHoNet: number; discrepancy: number }, isPinned: boolean) => (
+    <TableRow key={agg.tid} className={isPinned ? "bg-muted/20" : ""} data-testid={`row-reason-tid-${agg.tid}`}>
+      <TableCell className="text-xs font-mono font-medium">{agg.tid}</TableCell>
+      <TableCell className="text-xs font-mono text-center">{agg.bookings.length}</TableCell>
+      <TableCell className="text-xs font-mono text-right text-blue-700 dark:text-blue-300">{formatNumber(agg.totalSpNet)}</TableCell>
+      <TableCell className="text-xs font-mono text-right text-green-700 dark:text-green-300">{formatNumber(agg.totalHoNet)}</TableCell>
+      <TableCell className={`text-xs font-mono text-right font-semibold ${discColor(agg.discrepancy)}`}>{formatSigned(agg.discrepancy)}</TableCell>
+    </TableRow>
+  ), []);
+
+  const isCancellation = reason.toLowerCase().includes("cancel");
+  const isNegativeSp = reason.toLowerCase().includes("negative sp");
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Manage Reason: {reason}
+          </DialogTitle>
+          <DialogDescription>
+            {tidAggregates.length} TIDs, {bookings.length} bookings
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="reason-manage-modal-scroll">
+          <div className="rounded-md border bg-background overflow-visible">
+            <div className="px-4 py-3 border-b bg-blue-50 dark:bg-blue-900/20">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                  <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="text-sm font-medium">Bulk Final Net Price Update</div>
+              </div>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-4 gap-2">
+                <div className="rounded-md border p-2 bg-muted/30">
+                  <div className="text-xs text-muted-foreground">TIDs / Bookings</div>
+                  <div className="text-sm font-semibold font-mono" data-testid="reason-stat-tid-count">{tidAggregates.length} / {bookings.length}</div>
+                </div>
+                <div className="rounded-md border p-2 bg-blue-50/50 dark:bg-blue-900/10">
+                  <div className="text-xs text-muted-foreground">Total SP Net</div>
+                  <div className="text-sm font-semibold font-mono text-blue-700 dark:text-blue-300" data-testid="reason-stat-sp-net">{formatNumber(totalSpNet)}</div>
+                </div>
+                <div className="rounded-md border p-2 bg-green-50/50 dark:bg-green-900/10">
+                  <div className="text-xs text-muted-foreground">Total HO Net</div>
+                  <div className="text-sm font-semibold font-mono text-green-700 dark:text-green-300" data-testid="reason-stat-ho-net">{formatNumber(totalHoNet)}</div>
+                </div>
+                <div className="rounded-md border p-2 bg-amber-50/50 dark:bg-amber-900/10">
+                  <div className="text-xs text-muted-foreground">Discrepancy (HO−SP)</div>
+                  <div className={`text-sm font-semibold font-mono ${discColor(totalDiscrepancy)}`} data-testid="reason-stat-discrepancy">{formatSigned(totalDiscrepancy)}</div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div
+                  className="flex items-center justify-between px-4 py-3 rounded-md border cursor-pointer hover-elevate"
+                  onClick={handleApplySpNetAll}
+                  data-testid="btn-reason-use-sp-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                      <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">{isCancellation ? "Accept Cancellation (SP Net)" : "Use SP Net for All"}</div>
+                      <div className="text-xs text-muted-foreground">Set Final Net Price = SP Net for {bookings.length} bookings (Total: {formatNumber(totalSpNet)} {currency})</div>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+                {!isNegativeSp && (
+                  <div
+                    className="flex items-center justify-between px-4 py-3 rounded-md border cursor-pointer hover-elevate"
+                    onClick={handleApplyHoNetAll}
+                    data-testid="btn-reason-use-ho-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center h-8 w-8 rounded-md bg-green-100 dark:bg-green-900/30">
+                        <TrendingDown className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{isCancellation ? "Accept Cancellation (HO Net)" : "Use HO Net for All"}</div>
+                        <div className="text-xs text-muted-foreground">Set Final Net Price = HO Net for {bookings.length} bookings (Total: {formatNumber(totalHoNet)} {currency})</div>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+
+              {pinnedTids.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground font-medium">Top Discrepancies</div>
+                  <div className="overflow-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">TID</TableHead>
+                          <TableHead className="text-xs text-center">Bookings</TableHead>
+                          <TableHead className="text-xs text-right">SP Net</TableHead>
+                          <TableHead className="text-xs text-right">HO Net</TableHead>
+                          <TableHead className="text-xs text-right">Discrepancy</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pinnedTids.map(t => renderTidRow(t, true))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {collapsedTids.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground font-medium">Other TIDs ({collapsedTids.length})</div>
+                  <div className="overflow-auto rounded-md border max-h-40">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">TID</TableHead>
+                          <TableHead className="text-xs text-center">Bookings</TableHead>
+                          <TableHead className="text-xs text-right">SP Net</TableHead>
+                          <TableHead className="text-xs text-right">HO Net</TableHead>
+                          <TableHead className="text-xs text-right">Discrepancy</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {visibleCollapsed.map(t => renderTidRow(t, false))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {collapsedTids.length > 3 && !showAllTids && (
+                    <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setShowAllTids(true)} data-testid="btn-show-all-reason-tids">
+                      Show all {collapsedTids.length} TIDs
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-background overflow-visible">
+            <div className="px-4 py-3 border-b bg-amber-50 dark:bg-amber-900/20">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-amber-100 dark:bg-amber-900/30">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="text-sm font-medium">Dispute & Issue</div>
+              </div>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={disputeChecked}
+                    onCheckedChange={(v) => setDisputeChecked(!!v)}
+                    disabled={!runId}
+                    data-testid="checkbox-reason-dispute"
+                  />
+                  Raise Dispute for all {bookings.length} bookings
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={issueChecked}
+                    onCheckedChange={(v) => setIssueChecked(!!v)}
+                    disabled={!runId}
+                    data-testid="checkbox-reason-issue"
+                  />
+                  Flag Issue for all TIDs
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3 bg-muted/50 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Applies to <span className="font-semibold">{bookings.length}</span> bookings across <span className="font-semibold">{tidAggregates.length}</span> TIDs for reason <span className="font-mono font-medium">{reason}</span>
+            </p>
+            {(disputeChecked || issueChecked) && (
+              <Button size="sm" onClick={handleDisputeIssueOnly} data-testid="button-submit-reason-dispute-issue">
+                <Check className="h-3.5 w-3.5 mr-1.5" />
+                {disputeChecked && issueChecked ? "Raise Dispute & Flag Issue" : disputeChecked ? "Raise Dispute" : "Flag Issue"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
 interface DisputeModalHandle {
   open: (booking: BookingForDispute) => void;
 }
@@ -1140,6 +1426,7 @@ interface ReasonGroupProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
+  openManageReasonModal: (reason: string, allBookings: PurchaseBooking[]) => void;
   openIssueModal: (booking: BookingForDispute) => void;
 }
 
@@ -1149,7 +1436,7 @@ const ReasonGroup = memo(function ReasonGroup({
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
-  openIssueModal,
+  openManageReasonModal, openIssueModal,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
   const tidEntries = reasonGroup.tidEntries;
@@ -1177,6 +1464,19 @@ const ReasonGroup = memo(function ReasonGroup({
             )}
           </div>
           <div className="flex items-center gap-3 text-xs">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                const allBookings = tidEntries.flatMap(([, b]) => b);
+                openManageReasonModal(reasonGroup.reason, allBookings);
+              }}
+              data-testid={`button-manage-reason-${itemId}-${groupIdx}`}
+            >
+              <Pencil className="h-3 w-3 mr-1" />
+              Manage
+            </Button>
             <Badge variant="outline" className="text-[10px] font-mono">{percentage}%</Badge>
             <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
               {formatNumber(reasonGroup.totalDifference)} {currency}
@@ -1260,6 +1560,7 @@ interface BreakupSectionProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
+  openManageReasonModal: (reason: string, allBookings: PurchaseBooking[]) => void;
   openIssueModal: (booking: BookingForDispute) => void;
 }
 
@@ -1269,7 +1570,7 @@ function BreakupSection({
   toggleReasonExpand, toggleTidExpand, showMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
-  openManageTidModal, openIssueModal,
+  openManageTidModal, openManageReasonModal, openIssueModal,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
   const [showAllReasons, setShowAllReasons] = useState(false);
@@ -1368,6 +1669,7 @@ function BreakupSection({
             getFinalNetPrice={getFinalNetPrice}
             updateFinalNetPrice={updateFinalNetPrice}
             openManageTidModal={openManageTidModal}
+            openManageReasonModal={openManageReasonModal}
             openIssueModal={openIssueModal}
           />
         );
@@ -1440,6 +1742,7 @@ export function PurchaseReconciliationPanel({
   
   // Imperative refs for modals (state lives inside modal components, not here)
   const manageTidModalRef = useRef<ManageTidModalHandle>(null);
+  const manageReasonModalRef = useRef<ManageReasonModalHandle>(null);
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
   
@@ -1563,6 +1866,10 @@ export function PurchaseReconciliationPanel({
 
   const openManageTidModal = useCallback((tidBookings: PurchaseBooking[], tid: string, reason: string) => {
     manageTidModalRef.current?.open(tidBookings, tid, reason);
+  }, []);
+
+  const openManageReasonModal = useCallback((reason: string, allBookings: PurchaseBooking[]) => {
+    manageReasonModalRef.current?.open(reason, allBookings);
   }, []);
 
   const handlePaxApply = useCallback((bookings: PurchaseBooking[], newPrices: Record<string, string>, dtRowKeyMap: Map<string, string>, tid: string) => {
@@ -2509,6 +2816,7 @@ export function PurchaseReconciliationPanel({
                                     getFinalNetPrice={getFinalNetPrice}
                                     updateFinalNetPrice={updateFinalNetPrice}
                                     openManageTidModal={openManageTidModal}
+                                    openManageReasonModal={openManageReasonModal}
                                     openIssueModal={openIssueModal}
                                   />
                                 </TableCell>
@@ -2828,6 +3136,15 @@ export function PurchaseReconciliationPanel({
         onApplyHoNet={handleApplyHoNet}
         onApplyPax={handlePaxApply}
         onApplyVendorId={handleApplyVendorIdBulk}
+        onRaiseDispute={handleTidBulkDispute}
+        onLogIssue={handleTidBulkIssue}
+      />
+      <ManageReasonModal
+        ref={manageReasonModalRef}
+        currency={currency}
+        runId={runId}
+        onApplySpNet={handleApplySpNet}
+        onApplyHoNet={handleApplyHoNet}
         onRaiseDispute={handleTidBulkDispute}
         onLogIssue={handleTidBulkIssue}
       />
