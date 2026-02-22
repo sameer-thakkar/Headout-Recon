@@ -41,7 +41,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   errorBucketRcaMapping,
-  errorBuckets,
+  errorBucketOptions,
   issueStatuses,
   driTeams,
 } from "@shared/schema";
@@ -480,7 +480,7 @@ export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
                       <TableCell>
                         <InlineSelectEdit
                           value={issue.errorBucket || ""}
-                          options={errorBuckets}
+                          options={[...errorBucketOptions]}
                           onSave={(val) => handleUpdateField(issue.issueId, "errorBucket", val)}
                           placeholder="Select..."
                           issueId={issue.issueId}

@@ -7,7 +7,7 @@ import XLSX from "xlsx-js-style";
 import path from "path";
 import fs from "fs";
 import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
-import { errorBucketRcaMapping } from "@shared/schema";
+import { errorBucketRcaMapping, errorBucketOptions } from "@shared/schema";
 import { runReconciliation } from "./reconciliation";
 import { registerExportRoutes } from "./export-routes";
 import { formatIndianNumber } from "./export-utils";
@@ -1375,7 +1375,8 @@ export async function registerRoutes(
       const updates = req.body;
 
       if (updates.errorBucket !== undefined) {
-        if (updates.errorBucket && !errorBucketRcaMapping[updates.errorBucket]) {
+        const validBuckets = [...errorBucketOptions] as string[];
+        if (updates.errorBucket && !validBuckets.includes(updates.errorBucket)) {
           res.status(400).json({ error: `Invalid Error Bucket: ${updates.errorBucket}` });
           return;
         }

@@ -286,30 +286,6 @@ export const summaryRowSchema = z.object({
 });
 export type SummaryRow = z.infer<typeof summaryRowSchema>;
 
-// Error Bucket → RCA mapping (hierarchical)
-export const errorBucketRcaMapping: Record<string, string[]> = {
-  "Pricing": ["Price Sync Migration (RP/NP)", "Manual Error", "Secondary SP", "API Failure - Booked with Same SP"],
-  "Cancellation": ["Price Sync Off", "API Failure - Not Cancelled Manually", "Fraud", "Reschedule"],
-  "Unmapped_VRN": ["Manual Pricing Error", "Product Listing/Content Error", "VRN not updated - CO", "Selenium Error"],
-  "Multiple_Tickets_Booked": ["SP/HO Discount", "Test Bookings", "VRN not updated - API/Selenium", "Manual Error"],
-  "Currency Conversion": ["Delayed Tickets"],
-  "Fraud": ["Secondary SP", "Fraud"],
-  "API Failure - Booked with alternate SP": ["API Failure - Booked with alternate SP"],
-  "Incorrect Setup": ["Cancellation Insurance"],
-  "Incorrect API Mapping": ["Incorrect API Mapping"],
-  "Partial Refund Error": ["DSS Policy"],
-  "DSS Policy": ["DSS Policy"],
-  "Incorrect Variant": ["Selenium Error", "Product Listing/Content Error"],
-  "Incorrect Pax": ["Duplicate Bookings"],
-  "BI Not Updated": ["Pending Status - Auto Refund"],
-  "Incorrect Tickets": ["Refund Due"],
-  "Margin Error": ["Incorrect pax/variant mapping"],
-  "Product Listing/Content Error": ["Product Listing/Content Error"],
-  "Two Step FF": ["Two Step FF"],
-};
-
-export const errorBuckets = Object.keys(errorBucketRcaMapping);
-
 // Issue status options
 export const issueStatuses = [
   "Issue resolved - Loss",
@@ -486,6 +462,7 @@ export const reasonCodes = [
   "Cancelled-Insured Booking",
   "Cancelled-DSS policy",
   "Cancelled-Check for Charge loss",
+  "Negative SP - Partial Refund",
 ] as const;
 
 // Already Reconciled sub-classification type
@@ -510,6 +487,36 @@ export const driTeams = [
   "Finance",
   "Selenium",
 ] as const;
+
+// Error Bucket options — derived from reconciliation reason codes + "Other"
+export const errorBucketOptions = [
+  ...reasonCodes.filter(r => r !== "Reconciled"),
+  "Other",
+] as const;
+
+export type ErrorBucket = typeof errorBucketOptions[number];
+
+// Error Bucket → RCA mapping (hierarchical)
+export const errorBucketRcaMapping: Record<string, string[]> = {
+  "Already Reconciled-Same BE": ["Price Sync Migration (RP/NP)", "Manual Error", "Secondary SP"],
+  "Already Reconciled-Different BE": ["Price Sync Migration (RP/NP)", "Manual Error", "Secondary SP"],
+  "Secondary Vendor": ["Secondary SP", "API Failure - Booked with alternate SP"],
+  "Net Price Discrepancy": ["Price Sync Migration (RP/NP)", "Manual Error", "Incorrect API Mapping", "Incorrect Variant", "Incorrect Pax", "Margin Error", "Currency Conversion"],
+  "Multiple Tickets Booked": ["SP/HO Discount", "Test Bookings", "VRN not updated - API/Selenium", "Manual Error", "Duplicate Bookings"],
+  "Charge loss": ["Fraud", "DSS Policy", "Cancellation Insurance", "Manual Error"],
+  "Cancellation Insurance": ["Cancellation Insurance", "DSS Policy"],
+  "HO policy cancellation": ["DSS Policy", "Manual Error"],
+  "Duplicate Fulfillment": ["Selenium Error", "API Failure - Booked with Same SP", "Manual Error"],
+  "Unmapped": ["VRN not updated - CO", "Product Listing/Content Error", "Selenium Error", "Manual Pricing Error"],
+  "Cancelled-SP error": ["API Failure - Not Cancelled Manually", "Fraud", "Reschedule", "Manual Error"],
+  "Cancelled-Insured Booking": ["Cancellation Insurance", "DSS Policy"],
+  "Cancelled-DSS policy": ["DSS Policy"],
+  "Cancelled-Check for Charge loss": ["Fraud", "Manual Error", "DSS Policy"],
+  "Negative SP - Partial Refund": ["Partial Refund Error", "Manual Error"],
+  "Other": ["Manual Error", "Incorrect Setup", "Product Listing/Content Error", "Two Step FF", "BI Not Updated", "Pending Status - Auto Refund", "Refund Due", "Other"],
+};
+
+export const errorBuckets = [...errorBucketOptions];
 
 // Database tables for persistent storage
 import { sql } from "drizzle-orm";
