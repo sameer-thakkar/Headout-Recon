@@ -236,22 +236,28 @@ function normalizeDate(d: string): Date | null {
   return null;
 }
 
-interface FinalNetPriceModalHandle {
-  open: (bookings: PurchaseBooking[], tid: string) => void;
+interface ManageTidModalHandle {
+  open: (bookings: PurchaseBooking[], tid: string, reason: string) => void;
 }
 
-const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
+const ManageTidModal = forwardRef<ManageTidModalHandle, {
   currency: string;
+  runId?: string | null;
   onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
   onApplyPax: (bookings: PurchaseBooking[], newPrices: Record<string, string>, dateToRowKeyMap: Map<string, string>, tid: string) => void;
   onApplyVendorId: (bookingIds: string[], vendorId: string) => void;
-}>(function FinalNetPriceModal({ currency, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId }, ref) {
+  onRaiseDispute: (tidBookings: PurchaseBooking[], reason: string) => void;
+  onLogIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+}>(function ManageTidModal({ currency, runId, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId, onRaiseDispute, onLogIssue }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [bookings, setBookings] = useState<PurchaseBooking[]>([]);
   const [tid, setTid] = useState("");
+  const [reason, setReason] = useState("");
   const [newPrices, setNewPrices] = useState<Record<string, string>>({});
   const [vendorId, setVendorId] = useState("");
+  const [disputeChecked, setDisputeChecked] = useState(false);
+  const [issueChecked, setIssueChecked] = useState(false);
   const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
 
   const paymentBasis = useMemo(() => {
@@ -423,11 +429,14 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const vendorCorrectionBookings = useMemo(() => bookings.filter(b => needsVendorCorrection(b)), [bookings]);
 
   useImperativeHandle(ref, () => ({
-    open: (tidBookings: PurchaseBooking[], tidVal: string) => {
+    open: (tidBookings: PurchaseBooking[], tidVal: string, reasonVal: string) => {
       setNewPrices({});
       setVendorId("");
+      setDisputeChecked(false);
+      setIssueChecked(false);
       setBookings(tidBookings);
       setTid(tidVal);
+      setReason(reasonVal);
       setIsOpen(true);
     }
   }));
@@ -440,15 +449,19 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
 
   const handleApplySpNet = useCallback(() => {
     applyVendorIdIfSet();
+    if (disputeChecked) onRaiseDispute(bookings, reason);
+    if (issueChecked) onLogIssue(bookings, reason, tid);
     setIsOpen(false);
     onApplySpNet(bookings);
-  }, [bookings, onApplySpNet, applyVendorIdIfSet]);
+  }, [bookings, onApplySpNet, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason, tid]);
 
   const handleApplyHoNet = useCallback(() => {
     applyVendorIdIfSet();
+    if (disputeChecked) onRaiseDispute(bookings, reason);
+    if (issueChecked) onLogIssue(bookings, reason, tid);
     setIsOpen(false);
     onApplyHoNet(bookings);
-  }, [bookings, onApplyHoNet, applyVendorIdIfSet]);
+  }, [bookings, onApplyHoNet, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason, tid]);
 
   const allPaxFilled = useMemo(() => {
     if (!hasPax || paxDateRows.length === 0) return false;
@@ -462,9 +475,18 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
   const handleApplyPax = useCallback(() => {
     if (!allPaxFilled) return;
     applyVendorIdIfSet();
+    if (disputeChecked) onRaiseDispute(bookings, reason);
+    if (issueChecked) onLogIssue(bookings, reason, tid);
     setIsOpen(false);
     onApplyPax(bookings, newPrices, dateToRowKeyMap, tid);
-  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled, applyVendorIdIfSet]);
+  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason, tid]);
+
+  const handleDisputeIssueOnly = useCallback(() => {
+    applyVendorIdIfSet();
+    if (disputeChecked) onRaiseDispute(bookings, reason);
+    if (issueChecked) onLogIssue(bookings, reason, tid);
+    setIsOpen(false);
+  }, [bookings, reason, tid, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue]);
 
   const formatDisplayName = (paxType: string) =>
     paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -475,10 +497,10 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="h-5 w-5 text-primary" />
-            Update Final Net Price
+            Manage TID
           </DialogTitle>
           <DialogDescription>
-            Choose how to update Final Net Price for {bookings.length} bookings in TID {tid}.
+            Manage {bookings.length} bookings in TID {tid} — update pricing, raise disputes, or flag issues.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="modal-scroll-area">
@@ -638,10 +660,69 @@ const FinalNetPriceModal = forwardRef<FinalNetPriceModalHandle, {
             </div>
           )}
 
-          <div className="rounded-md border p-3 bg-muted/50">
+          {runId && (
+            <>
+              <div
+                className={`rounded-md border-2 overflow-hidden transition-colors ${disputeChecked ? "border-amber-500 dark:border-amber-400 bg-amber-50/50 dark:bg-amber-900/15" : "border-border bg-background"}`}
+                data-testid={`manage-tid-dispute-card-${tid}`}
+              >
+                <div className="flex items-center justify-between px-4 py-3 gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-8 w-8 rounded-md flex-shrink-0 ${disputeChecked ? "bg-amber-100 dark:bg-amber-900/40" : "bg-muted"}`}>
+                      <FileWarning className={`h-4 w-4 ${disputeChecked ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">Raise Dispute</div>
+                      <div className="text-xs text-muted-foreground">
+                        Raise disputes for all {bookings.length} bookings in this TID
+                      </div>
+                    </div>
+                  </div>
+                  <Checkbox
+                    checked={disputeChecked}
+                    onCheckedChange={(checked) => setDisputeChecked(checked === true)}
+                    data-testid={`checkbox-manage-tid-dispute-${tid}`}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-md border bg-background overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-8 w-8 rounded-md ${issueChecked ? "bg-orange-100 dark:bg-orange-900/30" : "bg-muted"}`}>
+                      <AlertTriangle className={`h-4 w-4 ${issueChecked ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium">Flag Issue</div>
+                      <div className="text-xs text-muted-foreground">
+                        Log this TID as an issue for the {reason} team to review
+                      </div>
+                    </div>
+                  </div>
+                  <Checkbox
+                    checked={issueChecked}
+                    onCheckedChange={(checked) => setIssueChecked(checked === true)}
+                    data-testid={`checkbox-manage-tid-issue-${tid}`}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="rounded-md border p-3 bg-muted/50 flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
               Applies to <span className="font-semibold">{bookings.length}</span> bookings in TID <span className="font-mono font-medium">{tid}</span>
             </p>
+            {(disputeChecked || issueChecked) && (
+              <Button
+                size="sm"
+                onClick={handleDisputeIssueOnly}
+                data-testid={`button-submit-dispute-issue-${tid}`}
+              >
+                <Check className="h-3.5 w-3.5 mr-1.5" />
+                {disputeChecked && issueChecked ? "Raise Dispute & Flag Issue" : disputeChecked ? "Raise Dispute" : "Flag Issue"}
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>
@@ -935,16 +1016,15 @@ interface TidGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
-  handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+  openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
 }
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded: isExpandedProp, autoExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
-  handleTidBulkIssue, openIssueModal,
+  getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
+  openIssueModal,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
   const [userCollapsed, setUserCollapsed] = useState(false);
@@ -974,26 +1054,14 @@ const TidGroup = memo(function TidGroup({
         <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
           <Button
             size="sm"
-            variant="outline"
+            variant="default"
             className="text-xs"
-            onClick={() => openFnpModal(tidBookings, tid)}
-            data-testid={`button-update-fnp-${tid}`}
+            onClick={() => openManageTidModal(tidBookings, tid, reasonName)}
+            data-testid={`button-manage-tid-${tid}`}
           >
             <Pencil className="h-3 w-3 mr-1" />
-            {tidBookings.some(b => needsVendorCorrection(b)) ? "Update Final Net Price & Vendor ID" : "Update Final Net Price"}
+            Manage TID
           </Button>
-          {runId && (
-            <>
-              <Button size="sm" variant="outline" className="text-xs text-amber-600 opacity-50 cursor-not-allowed" disabled title="Dispute functionality coming soon" data-testid={`button-tid-bulk-dispute-${tid}`}>
-                <FileWarning className="h-3 w-3 mr-1" />
-                Dispute All
-              </Button>
-              <Button size="sm" variant="outline" className="text-xs" onClick={() => handleTidBulkIssue(tidBookings, reasonName, tid)} data-testid={`button-tid-bulk-issue-${tid}`}>
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                Issue All
-              </Button>
-            </>
-          )}
           <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
             {formatNumber(tidTotal)} {currency}
           </span>
@@ -1071,8 +1139,7 @@ interface ReasonGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
-  handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+  openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
 }
 
@@ -1081,8 +1148,8 @@ const ReasonGroup = memo(function ReasonGroup({
   isReasonExpanded, expandedTids, visibleTidCount, grandTotal,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, openFnpModal,
-  handleTidBulkIssue, openIssueModal,
+  getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
+  openIssueModal,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
   const tidEntries = reasonGroup.tidEntries;
@@ -1151,8 +1218,7 @@ const ReasonGroup = memo(function ReasonGroup({
                 fnpVersion={fnpVersion}
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
-                openFnpModal={openFnpModal}
-                handleTidBulkIssue={handleTidBulkIssue}
+                openManageTidModal={openManageTidModal}
                 openIssueModal={openIssueModal}
               />
             );
@@ -1193,8 +1259,7 @@ interface BreakupSectionProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  openFnpModal: (tidBookings: PurchaseBooking[], tid: string) => void;
-  handleTidBulkIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
+  openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
 }
 
@@ -1204,7 +1269,7 @@ function BreakupSection({
   toggleReasonExpand, toggleTidExpand, showMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
-  openFnpModal, handleTidBulkIssue, openIssueModal,
+  openManageTidModal, openIssueModal,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
   const [showAllReasons, setShowAllReasons] = useState(false);
@@ -1302,8 +1367,7 @@ function BreakupSection({
             fnpVersion={fnpVersion}
             getFinalNetPrice={getFinalNetPrice}
             updateFinalNetPrice={updateFinalNetPrice}
-            openFnpModal={openFnpModal}
-            handleTidBulkIssue={handleTidBulkIssue}
+            openManageTidModal={openManageTidModal}
             openIssueModal={openIssueModal}
           />
         );
@@ -1375,7 +1439,7 @@ export function PurchaseReconciliationPanel({
   const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
   
   // Imperative refs for modals (state lives inside modal components, not here)
-  const fnpModalRef = useRef<FinalNetPriceModalHandle>(null);
+  const manageTidModalRef = useRef<ManageTidModalHandle>(null);
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
   
@@ -1497,8 +1561,8 @@ export function PurchaseReconciliationPanel({
     setFnpVersion(v => v + 1);
   }, []);
 
-  const openFnpModal = useCallback((tidBookings: PurchaseBooking[], tid: string) => {
-    fnpModalRef.current?.open(tidBookings, tid);
+  const openManageTidModal = useCallback((tidBookings: PurchaseBooking[], tid: string, reason: string) => {
+    manageTidModalRef.current?.open(tidBookings, tid, reason);
   }, []);
 
   const handlePaxApply = useCallback((bookings: PurchaseBooking[], newPrices: Record<string, string>, dtRowKeyMap: Map<string, string>, tid: string) => {
@@ -2444,8 +2508,7 @@ export function PurchaseReconciliationPanel({
                                     fnpVersion={fnpVersion}
                                     getFinalNetPrice={getFinalNetPrice}
                                     updateFinalNetPrice={updateFinalNetPrice}
-                                    openFnpModal={openFnpModal}
-                                    handleTidBulkIssue={handleTidBulkIssue}
+                                    openManageTidModal={openManageTidModal}
                                     openIssueModal={openIssueModal}
                                   />
                                 </TableCell>
@@ -2757,13 +2820,16 @@ export function PurchaseReconciliationPanel({
         </Button>
       </div>
       
-      <FinalNetPriceModal
-        ref={fnpModalRef}
+      <ManageTidModal
+        ref={manageTidModalRef}
         currency={currency}
+        runId={runId}
         onApplySpNet={handleApplySpNet}
         onApplyHoNet={handleApplyHoNet}
         onApplyPax={handlePaxApply}
         onApplyVendorId={handleApplyVendorIdBulk}
+        onRaiseDispute={handleTidBulkDispute}
+        onLogIssue={handleTidBulkIssue}
       />
       <DisputeModal ref={disputeModalRef} currency={currency} onSave={handleDisputeSave} />
       <IssueModal ref={issueModalRef} currency={currency} billingEntityName={billingEntityName} effectiveFxRate={effectiveFxRate} onSave={handleIssueSave} />
