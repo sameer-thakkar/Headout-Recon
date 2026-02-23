@@ -12,7 +12,6 @@ import * as XLSX from "xlsx";
 interface ParsedBalance {
   beId: string;
   openingBalance: number;
-  reloads: number;
   closingBalance: number;
   currency: string;
   isValid: boolean;
@@ -38,7 +37,6 @@ export function VendorBalancesSection() {
         await apiRequest("POST", "/api/vendor-balances", {
           beId: balance.beId,
           openingBalance: balance.openingBalance,
-          reloads: balance.reloads,
           closingBalance: balance.closingBalance,
           currency: balance.currency,
         });
@@ -112,7 +110,6 @@ export function VendorBalancesSection() {
 
       const beIdCol = findBeIdColumn();
       const openingCol = findColumn(["opening"], ["opening balance", "opening_balance", "openingbalance"]);
-      const reloadsCol = findColumn(["reload"], ["reloads"]);
       const closingCol = findColumn(["closing"], ["closing balance", "closing_balance", "closingbalance"]);
       const currencyCol = findColumn(["currency"], ["ccy", "curr"]);
 
@@ -124,11 +121,10 @@ export function VendorBalancesSection() {
 
       const missingCols: string[] = [];
       if (!openingCol) missingCols.push("Opening Balance");
-      if (!reloadsCol) missingCols.push("Reloads");
       if (!closingCol) missingCols.push("Closing Balance");
       
       if (missingCols.length > 0) {
-        setParseError(`Missing required columns: ${missingCols.join(", ")}. Please ensure your file has columns for Opening Balance, Reloads, and Closing Balance.`);
+        setParseError(`Missing required columns: ${missingCols.join(", ")}. Please ensure your file has columns for Opening Balance and Closing Balance.`);
         setParsedBalances([]);
         return;
       }
@@ -136,11 +132,9 @@ export function VendorBalancesSection() {
       const parsed: ParsedBalance[] = jsonData.map((row) => {
         const beId = String(row[beIdCol] || "").trim();
         const openingRaw = row[openingCol!];
-        const reloadsRaw = row[reloadsCol!];
         const closingRaw = row[closingCol!];
         
         const openingBalance = openingRaw !== undefined && openingRaw !== "" ? parseFloat(String(openingRaw)) : NaN;
-        const reloads = reloadsRaw !== undefined && reloadsRaw !== "" ? parseFloat(String(reloadsRaw)) : NaN;
         const closingBalance = closingRaw !== undefined && closingRaw !== "" ? parseFloat(String(closingRaw)) : NaN;
         const currency = currencyCol ? String(row[currencyCol] || "INR").trim().toUpperCase() : "INR";
 
@@ -153,9 +147,6 @@ export function VendorBalancesSection() {
         } else if (isNaN(openingBalance)) {
           isValid = false;
           error = "Invalid/missing Opening Balance";
-        } else if (isNaN(reloads)) {
-          isValid = false;
-          error = "Invalid/missing Reloads";
         } else if (isNaN(closingBalance)) {
           isValid = false;
           error = "Invalid/missing Closing Balance";
@@ -164,7 +155,6 @@ export function VendorBalancesSection() {
         return { 
           beId, 
           openingBalance: isNaN(openingBalance) ? 0 : openingBalance, 
-          reloads: isNaN(reloads) ? 0 : reloads, 
           closingBalance: isNaN(closingBalance) ? 0 : closingBalance, 
           currency, 
           isValid, 
@@ -206,8 +196,8 @@ export function VendorBalancesSection() {
 
   const handleDownloadTemplate = () => {
     const templateData = [
-      { "BE ID": "VENDOR-001", "BE ID Name": "Vendor Company ABC", "Opening Balance": 50000, "Reloads": 25000, "Closing Balance": 35000, "Currency": "INR" },
-      { "BE ID": "VENDOR-002", "BE ID Name": "Vendor Company XYZ", "Opening Balance": 100000, "Reloads": 0, "Closing Balance": 75000, "Currency": "INR" },
+      { "BE ID": "VENDOR-001", "Opening Balance": 50000, "Closing Balance": 35000, "Currency": "INR" },
+      { "BE ID": "VENDOR-002", "Opening Balance": 100000, "Closing Balance": 75000, "Currency": "INR" },
     ];
     
     const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -227,7 +217,7 @@ export function VendorBalancesSection() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
-              Vendor Balances & Reloads
+              Vendor Balances
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -322,10 +312,9 @@ export function VendorBalancesSection() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>BE ID</TableHead>
-                        <TableHead className="text-right">Opening Balance</TableHead>
-                        <TableHead className="text-right">Reloads</TableHead>
-                        <TableHead className="text-right">Closing Balance</TableHead>
                         <TableHead>Currency</TableHead>
+                        <TableHead className="text-right">Opening Balance</TableHead>
+                        <TableHead className="text-right">Closing Balance</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -337,10 +326,9 @@ export function VendorBalancesSection() {
                           data-testid={`row-preview-${idx}`}
                         >
                           <TableCell className="font-mono">{balance.beId || "-"}</TableCell>
-                          <TableCell className="text-right font-mono">{formatNumber(balance.openingBalance)}</TableCell>
-                          <TableCell className="text-right font-mono">{formatNumber(balance.reloads)}</TableCell>
-                          <TableCell className="text-right font-mono">{formatNumber(balance.closingBalance)}</TableCell>
                           <TableCell>{balance.currency}</TableCell>
+                          <TableCell className="text-right font-mono">{formatNumber(balance.openingBalance)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatNumber(balance.closingBalance)}</TableCell>
                           <TableCell>
                             {balance.isValid ? (
                               <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -379,10 +367,9 @@ export function VendorBalancesSection() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>BE ID</TableHead>
-                        <TableHead className="text-right">Opening Balance</TableHead>
-                        <TableHead className="text-right">Reloads</TableHead>
-                        <TableHead className="text-right">Closing Balance</TableHead>
                         <TableHead>Currency</TableHead>
+                        <TableHead className="text-right">Opening Balance</TableHead>
+                        <TableHead className="text-right">Closing Balance</TableHead>
                         <TableHead className="text-right">Updated</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
@@ -391,10 +378,9 @@ export function VendorBalancesSection() {
                       {balances.map((balance) => (
                         <TableRow key={balance.beId} data-testid={`row-balance-${balance.beId}`}>
                           <TableCell className="font-mono">{balance.beId}</TableCell>
-                          <TableCell className="text-right font-mono">{formatNumber(balance.openingBalance)}</TableCell>
-                          <TableCell className="text-right font-mono">{formatNumber(balance.reloads)}</TableCell>
-                          <TableCell className="text-right font-mono">{formatNumber(balance.closingBalance)}</TableCell>
                           <TableCell>{balance.currency}</TableCell>
+                          <TableCell className="text-right font-mono">{formatNumber(balance.openingBalance)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatNumber(balance.closingBalance)}</TableCell>
                           <TableCell className="text-right text-sm text-muted-foreground">
                             {new Date(balance.updatedAt).toLocaleDateString()}
                           </TableCell>

@@ -378,7 +378,6 @@ export type VendorCorrection = z.infer<typeof vendorCorrectionSchema>;
 export const vendorBalanceSchema = z.object({
   beId: z.string(), // Billing Entity ID - primary identifier
   openingBalance: z.number(),
-  reloads: z.number(),
   closingBalance: z.number(),
   currency: z.string(),
   createdAt: z.string(),
@@ -661,7 +660,6 @@ export const counters = pgTable("counters", {
 export const vendorBalances = pgTable("vendor_balances", {
   beId: varchar("be_id").primaryKey(), // Billing Entity ID is the primary key
   openingBalance: real("opening_balance").notNull().default(0),
-  reloads: real("reloads").notNull().default(0),
   closingBalance: real("closing_balance").notNull().default(0),
   currency: varchar("currency").notNull().default("INR"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

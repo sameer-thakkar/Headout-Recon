@@ -1577,16 +1577,15 @@ export async function registerRoutes(
   // Create or update vendor balance
   app.post("/api/vendor-balances", async (req, res) => {
     try {
-      const { beId, openingBalance, reloads, closingBalance, currency } = req.body;
+      const { beId, openingBalance, closingBalance, currency } = req.body;
       
-      if (!beId || openingBalance === undefined || reloads === undefined || closingBalance === undefined || !currency) {
-        return res.status(400).json({ error: "Missing required fields: beId, openingBalance, reloads, closingBalance, currency" });
+      if (!beId || openingBalance === undefined || closingBalance === undefined || !currency) {
+        return res.status(400).json({ error: "Missing required fields: beId, openingBalance, closingBalance, currency" });
       }
 
       const balance = await storage.upsertVendorBalance({
         beId,
         openingBalance: Number(openingBalance),
-        reloads: Number(reloads),
         closingBalance: Number(closingBalance),
         currency,
       });

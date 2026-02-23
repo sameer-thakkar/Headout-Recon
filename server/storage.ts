@@ -1128,7 +1128,6 @@ export class DatabaseStorage implements ISessionStorage {
     return {
       beId: result.beId,
       openingBalance: result.openingBalance,
-      reloads: result.reloads,
       closingBalance: result.closingBalance,
       currency: result.currency,
       createdAt: result.createdAt.toISOString(),
@@ -1141,7 +1140,6 @@ export class DatabaseStorage implements ISessionStorage {
     return results.map(result => ({
       beId: result.beId,
       openingBalance: result.openingBalance,
-      reloads: result.reloads,
       closingBalance: result.closingBalance,
       currency: result.currency,
       createdAt: result.createdAt.toISOString(),
@@ -1155,7 +1153,6 @@ export class DatabaseStorage implements ISessionStorage {
       .values({
         beId: balance.beId,
         openingBalance: balance.openingBalance,
-        reloads: balance.reloads,
         closingBalance: balance.closingBalance,
         currency: balance.currency,
         createdAt: now,
@@ -1165,7 +1162,6 @@ export class DatabaseStorage implements ISessionStorage {
         target: vendorBalancesTable.beId,
         set: {
           openingBalance: balance.openingBalance,
-          reloads: balance.reloads,
           closingBalance: balance.closingBalance,
           currency: balance.currency,
           updatedAt: now,
@@ -1176,7 +1172,6 @@ export class DatabaseStorage implements ISessionStorage {
     return {
       beId: result.beId,
       openingBalance: result.openingBalance,
-      reloads: result.reloads,
       closingBalance: result.closingBalance,
       currency: result.currency,
       createdAt: result.createdAt.toISOString(),

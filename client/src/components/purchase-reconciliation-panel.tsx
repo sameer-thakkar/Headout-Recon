@@ -2127,7 +2127,7 @@ export function PurchaseReconciliationPanel({
 
   const calculations = useMemo(() => {
     const openingBalance = balance?.openingBalance ?? 0;
-    const reloads = portalReloadTotal > 0 ? portalReloadTotal : (balance?.reloads ?? 0);
+    const reloads = portalReloadTotal;
     const closingBalance = balance?.closingBalance ?? 0;
     
     // Refunds: All negative SP values from entire SP Invoice (primary + secondary)
@@ -2354,7 +2354,7 @@ export function PurchaseReconciliationPanel({
       id: 2,
       label: "Reloads",
       value: calculations.reloads,
-      description: portalReloadTotal > 0 ? "From portal reloads upload" : (hasBalance ? "From vendor balances" : "Not configured"),
+      description: portalReloadTotal > 0 ? "From portal reloads upload" : "Not configured",
       icon: Plus,
       isFromDb: true,
     },
