@@ -1740,14 +1740,14 @@ export async function registerRoutes(
         });
       }
 
-      const parsed: { beId: string; paidAmount: number }[] = [];
+      const parsed: { beId: string; paidAmount: number; rawRow: Record<string, unknown> }[] = [];
       for (const row of rawRows) {
         const beId = String(row[partnerIdCol] || "").trim();
         const rawAmount = row[paidAmountCol];
         const paidAmount = typeof rawAmount === "number" ? rawAmount : parseFloat(String(rawAmount).replace(/,/g, "")) || 0;
 
         if (beId && paidAmount !== 0) {
-          parsed.push({ beId, paidAmount });
+          parsed.push({ beId, paidAmount, rawRow: row as Record<string, unknown> });
         }
       }
 
@@ -1758,6 +1758,7 @@ export async function registerRoutes(
       res.json({
         parsed,
         count: parsed.length,
+        headers,
         columns: { partnerIdCol, paidAmountCol },
       });
     } catch (error) {

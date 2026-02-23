@@ -11,10 +11,12 @@ import type { PortalReload } from "@shared/schema";
 interface ParsedReload {
   beId: string;
   paidAmount: number;
+  rawRow: Record<string, unknown>;
 }
 
 export function PortalReloadsSection() {
   const [parsedReloads, setParsedReloads] = useState<ParsedReload[]>([]);
+  const [allHeaders, setAllHeaders] = useState<string[]>([]);
   const [fileName, setFileName] = useState<string>("");
   const [parseError, setParseError] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
@@ -28,11 +30,14 @@ export function PortalReloadsSection() {
 
   const saveMutation = useMutation({
     mutationFn: async (reloadsToSave: ParsedReload[]) => {
-      await apiRequest("POST", "/api/portal-reloads/save", { reloads: reloadsToSave });
+      await apiRequest("POST", "/api/portal-reloads/save", {
+        reloads: reloadsToSave.map(r => ({ beId: r.beId, paidAmount: r.paidAmount })),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portal-reloads"] });
       setParsedReloads([]);
+      setAllHeaders([]);
       setFileName("");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -71,13 +76,16 @@ export function PortalReloadsSection() {
       if (!response.ok) {
         setParseError(result.error || "Failed to parse file");
         setParsedReloads([]);
+        setAllHeaders([]);
         return;
       }
 
       setParsedReloads(result.parsed);
+      setAllHeaders(result.headers || []);
     } catch (err) {
       setParseError("Failed to upload file. Please ensure it's a valid Excel or CSV file.");
       setParsedReloads([]);
+      setAllHeaders([]);
     } finally {
       setIsUploading(false);
     }
@@ -85,6 +93,7 @@ export function PortalReloadsSection() {
 
   const handleClearPreview = () => {
     setParsedReloads([]);
+    setAllHeaders([]);
     setFileName("");
     setParseError("");
     if (fileInputRef.current) {
@@ -107,14 +116,13 @@ export function PortalReloadsSection() {
     return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const aggregatedByBeId = reloads.reduce<Record<string, { total: number; count: number }>>((acc, r) => {
-    if (!acc[r.beId]) acc[r.beId] = { total: 0, count: 0 };
-    acc[r.beId].total += r.paidAmount;
-    acc[r.beId].count += 1;
-    return acc;
-  }, {});
+  const formatCellValue = (value: unknown): string => {
+    if (value === null || value === undefined || value === "") return "—";
+    if (typeof value === "number") return formatNumber(value);
+    return String(value);
+  };
 
-  const previewAggregated = parsedReloads.reduce<Record<string, { total: number; count: number }>>((acc, r) => {
+  const aggregatedByBeId = reloads.reduce<Record<string, { total: number; count: number }>>((acc, r) => {
     if (!acc[r.beId]) acc[r.beId] = { total: 0, count: 0 };
     acc[r.beId].total += r.paidAmount;
     acc[r.beId].count += 1;
@@ -123,7 +131,7 @@ export function PortalReloadsSection() {
 
   return (
     <section className="py-8 px-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -190,8 +198,11 @@ export function PortalReloadsSection() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" data-testid="badge-reload-count">
-                        {parsedReloads.length} entries → {Object.keys(previewAggregated).length} BE IDs
+                        {parsedReloads.length} entries
                       </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Showing all {allHeaders.length} columns from uploaded file
+                      </span>
                     </div>
                     <Button
                       size="sm"
@@ -208,23 +219,33 @@ export function PortalReloadsSection() {
                     </Button>
                   </div>
 
-                  <div className="border rounded-md overflow-hidden max-h-64 overflow-y-auto">
+                  <div className="border rounded-md overflow-hidden max-h-96 overflow-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>BE ID</TableHead>
-                          <TableHead className="text-right">Entries</TableHead>
-                          <TableHead className="text-right">Total Paid Amount</TableHead>
+                          <TableHead className="sticky left-0 z-10 bg-muted/80 backdrop-blur-sm text-xs whitespace-nowrap">#</TableHead>
+                          {allHeaders.map((header) => (
+                            <TableHead key={header} className="text-xs whitespace-nowrap">
+                              {header}
+                            </TableHead>
+                          ))}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {Object.entries(previewAggregated).map(([beId, data]) => (
-                          <TableRow key={beId}>
-                            <TableCell className="font-mono text-sm" data-testid={`text-preview-reload-beid-${beId}`}>{beId}</TableCell>
-                            <TableCell className="text-right text-sm">{data.count}</TableCell>
-                            <TableCell className="text-right font-mono text-sm" data-testid={`text-preview-reload-amount-${beId}`}>
-                              {formatNumber(data.total)}
+                        {parsedReloads.map((entry, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="sticky left-0 z-10 bg-background text-xs text-muted-foreground font-mono">
+                              {idx + 1}
                             </TableCell>
+                            {allHeaders.map((header) => (
+                              <TableCell
+                                key={header}
+                                className="text-xs whitespace-nowrap font-mono"
+                                data-testid={`cell-reload-${idx}-${header.replace(/\s+/g, "-").toLowerCase()}`}
+                              >
+                                {formatCellValue(entry.rawRow[header])}
+                              </TableCell>
+                            ))}
                           </TableRow>
                         ))}
                       </TableBody>
