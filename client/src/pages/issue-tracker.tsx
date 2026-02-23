@@ -36,7 +36,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { AlertTriangle, Trash2, ExternalLink, Check, X, Pencil, RefreshCw, Loader2 } from "lucide-react";
+import { AlertTriangle, Trash2, ExternalLink, Check, X, Pencil, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -245,7 +245,6 @@ function InlineSelectEdit({
 export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
   const { toast } = useToast();
   const [deletingIssueId, setDeletingIssueId] = useState<string | null>(null);
-  const [generatingWorkings, setGeneratingWorkings] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<{ issues: IssueRecord[] }>({
     queryKey: [`/api/issues/${runId}`],
@@ -304,27 +303,6 @@ export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
       });
     } finally {
       setDeletingIssueId(null);
-    }
-  };
-
-  const handleGenerateWorkings = async (issueId: string) => {
-    setGeneratingWorkings(issueId);
-    try {
-      await apiRequest("POST", `/api/issues/${encodeURIComponent(issueId)}/generate-workings`);
-      toast({
-        title: "Workings Sheet Generated",
-        description: "Google Sheet created with Draft Message and DRI Discrepancy tabs.",
-      });
-      await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
-    } catch (error: any) {
-      console.error("Generate workings error:", error);
-      toast({
-        title: "Error",
-        description: error?.message || "Failed to generate workings sheet. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setGeneratingWorkings(null);
     }
   };
 
@@ -542,48 +520,21 @@ export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
                       </TableCell>
                       <TableCell>
                         {issue.workingsLink ? (
-                          <div className="flex items-center gap-1 group">
-                            <a
-                              href={issue.workingsLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline truncate max-w-[80px]"
-                              data-testid={`link-workings-${issue.issueId}`}
-                            >
-                              <ExternalLink className="h-3 w-3 inline mr-1" />
-                              Sheet
-                            </a>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={() => handleGenerateWorkings(issue.issueId)}
-                              disabled={generatingWorkings === issue.issueId}
-                              data-testid={`button-regenerate-workings-${issue.issueId}`}
-                            >
-                              {generatingWorkings === issue.issueId ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <RefreshCw className="h-3 w-3" />
-                              )}
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs"
-                            onClick={() => handleGenerateWorkings(issue.issueId)}
-                            disabled={generatingWorkings === issue.issueId}
-                            data-testid={`button-generate-workings-${issue.issueId}`}
+                          <a
+                            href={issue.workingsLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                            data-testid={`link-workings-${issue.issueId}`}
                           >
-                            {generatingWorkings === issue.issueId ? (
-                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                            ) : (
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                            )}
-                            Generate
-                          </Button>
+                            <ExternalLink className="h-3 w-3" />
+                            Sheet
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Generating...
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
