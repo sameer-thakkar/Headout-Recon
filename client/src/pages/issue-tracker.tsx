@@ -255,7 +255,7 @@ export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
 
   const updateMutation = useMutation({
     mutationFn: async ({ issueId, updates }: { issueId: string; updates: Partial<IssueRecord> }) => {
-      return apiRequest("PATCH", `/api/issues/${issueId}`, updates);
+      return apiRequest("PATCH", `/api/issues/${encodeURIComponent(issueId)}`, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
@@ -283,7 +283,7 @@ export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
   const handleDeleteIssue = async (issueId: string) => {
     setDeletingIssueId(issueId);
     try {
-      await apiRequest("DELETE", `/api/issues/${issueId}`);
+      await apiRequest("DELETE", `/api/issues/${encodeURIComponent(issueId)}`);
       toast({
         title: "Issue Deleted",
         description: `${issueId} has been removed from the tracker.`,
