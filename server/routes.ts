@@ -9,7 +9,7 @@ import fs from "fs";
 import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
 import { errorBucketRcaMapping, errorBucketOptions } from "@shared/schema";
 import { runReconciliation } from "./reconciliation";
-import { registerExportRoutes } from "./export-routes";
+import { registerExportRoutes, generateIssueWorkingsSheet } from "./export-routes";
 import { formatIndianNumber } from "./export-utils";
 
 
@@ -1361,10 +1361,69 @@ export async function registerRoutes(
         issueStatus,
       });
 
+      if (!workingsLink && issue.issueId) {
+        generateIssueWorkingsSheet({
+          issueId: issue.issueId,
+          runId,
+          reason,
+          driTeam,
+          bookingIds: bookingIds || [],
+          billingEntityName: billingEntityName || billingEntityId,
+          currency: currency || "USD",
+          discrepancyLocal: discrepancyLocal || 0,
+          discrepancyUsd: discrepancyUsd || 0,
+        }).then(async (sheetUrl) => {
+          if (sheetUrl) {
+            await storage.updateIssue(issue.issueId, { workingsLink: sheetUrl });
+          }
+        }).catch((err) => {
+          console.error("Background workings sheet generation failed:", err);
+        });
+      }
+
       res.json({ issue });
     } catch (error) {
       console.error("Create issue error:", error);
       res.status(500).json({ error: "Failed to create issue" });
+    }
+  });
+
+  app.post("/api/issues/:issueId/generate-workings", async (req, res) => {
+    try {
+      const { issueId } = req.params;
+      const issue = await storage.getIssueById(issueId);
+      if (!issue) {
+        res.status(404).json({ error: "Issue not found" });
+        return;
+      }
+
+      const bookingIds = (issue.bookingIds as string[]) || [];
+      if (bookingIds.length === 0) {
+        res.status(400).json({ error: "No booking IDs associated with this issue. Cannot generate workings sheet." });
+        return;
+      }
+
+      const sheetUrl = await generateIssueWorkingsSheet({
+        issueId: issue.issueId,
+        runId: issue.runId,
+        reason: issue.reason,
+        driTeam: issue.driTeam,
+        bookingIds,
+        billingEntityName: issue.billingEntityName,
+        currency: issue.currency,
+        discrepancyLocal: issue.discrepancyLocal,
+        discrepancyUsd: issue.discrepancyUsd,
+      });
+
+      if (sheetUrl) {
+        await storage.updateIssue(issue.issueId, { workingsLink: sheetUrl });
+        res.json({ success: true, workingsLink: sheetUrl });
+      } else {
+        res.status(500).json({ error: "Failed to generate workings sheet. Ensure the reconciliation run is complete and bookings exist." });
+      }
+    } catch (error) {
+      console.error("Generate workings error:", error);
+      res.status(500).json({ error: "Failed to generate workings sheet" });
     }
   });
 
