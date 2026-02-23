@@ -7,6 +7,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { ReconciliationSession } from "@shared/schema";
 import { VendorBalancesSection } from "@/components/vendor-balances-section";
+import { PortalReloadsSection } from "@/components/portal-reloads-section";
 import { PaxTypesSection } from "@/components/pax-types-section";
 
 interface LandingPageProps {
@@ -134,6 +135,8 @@ export function LandingPage({ lastFxRefresh, onStartDemo, onLoadSession }: Landi
       </section>
 
       <VendorBalancesSection />
+
+      <PortalReloadsSection />
 
       <PaxTypesSection />
 

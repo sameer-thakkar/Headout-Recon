@@ -2116,12 +2116,18 @@ export function PurchaseReconciliationPanel({
     enabled: !!beId,
   });
 
+  const { data: portalReloadData } = useQuery<{ total: number }>({
+    queryKey: ['/api/portal-reloads', beId],
+    enabled: !!beId,
+  });
+
   const balance = balanceData?.balance;
   const hasBalance = !!balance;
+  const portalReloadTotal = portalReloadData?.total ?? 0;
 
   const calculations = useMemo(() => {
     const openingBalance = balance?.openingBalance ?? 0;
-    const reloads = balance?.reloads ?? 0;
+    const reloads = portalReloadTotal > 0 ? portalReloadTotal : (balance?.reloads ?? 0);
     const closingBalance = balance?.closingBalance ?? 0;
     
     // Refunds: All negative SP values from entire SP Invoice (primary + secondary)
@@ -2333,7 +2339,7 @@ export function PurchaseReconciliationPanel({
       row10WithTids,
       row11WithTids,
     };
-  }, [allRows, primaryRows, secondaryVendorRows, unmappedRows, balance]);
+  }, [allRows, primaryRows, secondaryVendorRows, unmappedRows, balance, portalReloadTotal]);
 
   const lineItems = useMemo(() => [
     {
@@ -2348,7 +2354,7 @@ export function PurchaseReconciliationPanel({
       id: 2,
       label: "Reloads",
       value: calculations.reloads,
-      description: hasBalance ? "From database" : "Not configured",
+      description: portalReloadTotal > 0 ? "From portal reloads upload" : (hasBalance ? "From vendor balances" : "Not configured"),
       icon: Plus,
       isFromDb: true,
     },

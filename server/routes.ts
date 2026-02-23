@@ -1680,6 +1680,125 @@ export async function registerRoutes(
     }
   });
 
+  // ========== Portal Reloads Endpoints ==========
+
+  app.get("/api/portal-reloads", async (req, res) => {
+    try {
+      const reloads = await storage.getPortalReloads();
+      res.json({ reloads });
+    } catch (error) {
+      console.error("Get portal reloads error:", error);
+      res.status(500).json({ error: "Failed to fetch portal reloads" });
+    }
+  });
+
+  app.get("/api/portal-reloads/:beId", async (req, res) => {
+    try {
+      const { beId } = req.params;
+      const total = await storage.getPortalReloadTotal(beId);
+      const reloads = await storage.getPortalReloadsByBeId(beId);
+      res.json({ total, reloads });
+    } catch (error) {
+      console.error("Get portal reloads by beId error:", error);
+      res.status(500).json({ error: "Failed to fetch portal reloads" });
+    }
+  });
+
+  app.post("/api/portal-reloads/upload", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      // Clean up temp file
+      try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+
+      if (rawRows.length === 0) {
+        return res.status(400).json({ error: "File is empty" });
+      }
+
+      const headers = Object.keys(rawRows[0]);
+
+      const partnerIdCol = headers.find(h =>
+        h.toLowerCase().includes("portal partner id") ||
+        h.toLowerCase().includes("partner id")
+      );
+      const paidAmountCol = headers.find(h =>
+        h.toLowerCase().includes("paid amount") ||
+        h.toLowerCase().includes("tickets paid amount")
+      );
+
+      if (!partnerIdCol || !paidAmountCol) {
+        return res.status(400).json({
+          error: `Required columns not found. Looking for "Finance Zendesk Tickets Portal Partner ID" and "Finance Zendesk Tickets Paid Amount". Found columns: ${headers.join(", ")}`,
+        });
+      }
+
+      const parsed: { beId: string; paidAmount: number }[] = [];
+      for (const row of rawRows) {
+        const beId = String(row[partnerIdCol] || "").trim();
+        const rawAmount = row[paidAmountCol];
+        const paidAmount = typeof rawAmount === "number" ? rawAmount : parseFloat(String(rawAmount).replace(/,/g, "")) || 0;
+
+        if (beId && paidAmount !== 0) {
+          parsed.push({ beId, paidAmount });
+        }
+      }
+
+      if (parsed.length === 0) {
+        return res.status(400).json({ error: "No valid reload entries found in the file" });
+      }
+
+      res.json({
+        parsed,
+        count: parsed.length,
+        columns: { partnerIdCol, paidAmountCol },
+      });
+    } catch (error) {
+      console.error("Parse portal reloads file error:", error);
+      res.status(500).json({ error: "Failed to parse reloads file" });
+    }
+  });
+
+  app.post("/api/portal-reloads/save", async (req, res) => {
+    try {
+      const { reloads } = req.body;
+      if (!Array.isArray(reloads) || reloads.length === 0) {
+        return res.status(400).json({ error: "Missing required field: reloads (array)" });
+      }
+
+      const validReloads = reloads
+        .filter((r: any) => r.beId && typeof r.paidAmount === "number")
+        .map((r: any) => ({ beId: String(r.beId).trim(), paidAmount: r.paidAmount }));
+
+      if (validReloads.length === 0) {
+        return res.status(400).json({ error: "No valid reload entries" });
+      }
+
+      const saved = await storage.bulkCreatePortalReloads(validReloads);
+      res.json({ reloads: saved, count: saved.length });
+    } catch (error) {
+      console.error("Save portal reloads error:", error);
+      res.status(500).json({ error: "Failed to save portal reloads" });
+    }
+  });
+
+  app.delete("/api/portal-reloads", async (req, res) => {
+    try {
+      const deleted = await storage.deleteAllPortalReloads();
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete portal reloads error:", error);
+      res.status(500).json({ error: "Failed to delete portal reloads" });
+    }
+  });
+
   // ========== Session Management Endpoints ==========
 
   // Get all sessions

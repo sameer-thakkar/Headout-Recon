@@ -17,6 +17,8 @@ import type {
   InsertVendorBalance,
   PaxType,
   InsertPaxType,
+  PortalReload,
+  InsertPortalReload,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -80,6 +82,13 @@ export interface IStorage {
   deletePaxType(id: number): Promise<boolean>;
   deleteAllPaxTypes(): Promise<boolean>;
 
+  // Portal Reloads
+  getPortalReloads(): Promise<PortalReload[]>;
+  getPortalReloadsByBeId(beId: string): Promise<PortalReload[]>;
+  getPortalReloadTotal(beId: string): Promise<number>;
+  bulkCreatePortalReloads(reloads: InsertPortalReload[]): Promise<PortalReload[]>;
+  deleteAllPortalReloads(): Promise<boolean>;
+
   // Dispute Overrides (per-run, per-booking edits from Manage Disputes modal)
   setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void>;
   getDisputeOverrides(runId: string): Promise<Record<string, DisputeOverride>>;
@@ -116,6 +125,8 @@ export class MemStorage implements IStorage {
   private vendorBalances: Map<string, VendorBalance> = new Map(); // key: beId
   private paxTypesList: PaxType[] = [];
   private paxTypeCounter: number = 0;
+  private portalReloadsList: PortalReload[] = [];
+  private portalReloadCounter: number = 0;
   private disputeOverrides: Map<string, Record<string, DisputeOverride>> = new Map();
   private priceOverrides: Map<string, Record<string, PriceOverride>> = new Map();
 
@@ -447,6 +458,41 @@ export class MemStorage implements IStorage {
     return true;
   }
 
+  // Portal Reloads
+  async getPortalReloads(): Promise<PortalReload[]> {
+    return [...this.portalReloadsList];
+  }
+
+  async getPortalReloadsByBeId(beId: string): Promise<PortalReload[]> {
+    return this.portalReloadsList.filter(r => r.beId === beId);
+  }
+
+  async getPortalReloadTotal(beId: string): Promise<number> {
+    return this.portalReloadsList
+      .filter(r => r.beId === beId)
+      .reduce((sum, r) => sum + r.paidAmount, 0);
+  }
+
+  async bulkCreatePortalReloads(reloads: InsertPortalReload[]): Promise<PortalReload[]> {
+    const created: PortalReload[] = [];
+    for (const reload of reloads) {
+      const newReload: PortalReload = {
+        id: ++this.portalReloadCounter,
+        beId: reload.beId,
+        paidAmount: reload.paidAmount,
+        createdAt: new Date().toISOString(),
+      };
+      this.portalReloadsList.push(newReload);
+      created.push(newReload);
+    }
+    return created;
+  }
+
+  async deleteAllPortalReloads(): Promise<boolean> {
+    this.portalReloadsList = [];
+    return true;
+  }
+
   async setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void> {
     const existing = this.disputeOverrides.get(runId) || {};
     this.disputeOverrides.set(runId, { ...existing, ...overrides });
@@ -476,6 +522,7 @@ import {
   vendorCorrections as vendorCorrectionsTable,
   vendorBalances as vendorBalancesTable,
   paxTypes as paxTypesTable,
+  portalReloads as portalReloadsTable,
   counters,
   type ReconciliationSession,
 } from "@shared/schema";
@@ -1178,6 +1225,45 @@ export class DatabaseStorage implements ISessionStorage {
 
   async deleteAllPaxTypes(): Promise<boolean> {
     await db.delete(paxTypesTable);
+    return true;
+  }
+
+  // Portal Reloads
+  async getPortalReloads(): Promise<PortalReload[]> {
+    const results = await db.select().from(portalReloadsTable).orderBy(portalReloadsTable.beId);
+    return results.map(r => ({
+      id: r.id,
+      beId: r.beId,
+      paidAmount: r.paidAmount,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async getPortalReloadsByBeId(beId: string): Promise<PortalReload[]> {
+    const results = await db.select().from(portalReloadsTable).where(eq(portalReloadsTable.beId, beId));
+    return results.map(r => ({
+      id: r.id,
+      beId: r.beId,
+      paidAmount: r.paidAmount,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async getPortalReloadTotal(beId: string): Promise<number> {
+    const results = await db.select().from(portalReloadsTable).where(eq(portalReloadsTable.beId, beId));
+    return results.reduce((sum, r) => sum + r.paidAmount, 0);
+  }
+
+  async bulkCreatePortalReloads(reloads: InsertPortalReload[]): Promise<PortalReload[]> {
+    if (reloads.length === 0) return [];
+    await db.delete(portalReloadsTable);
+    const values = reloads.map(r => ({ beId: r.beId, paidAmount: r.paidAmount }));
+    await db.insert(portalReloadsTable).values(values);
+    return this.getPortalReloads();
+  }
+
+  async deleteAllPortalReloads(): Promise<boolean> {
+    await db.delete(portalReloadsTable);
     return true;
   }
 

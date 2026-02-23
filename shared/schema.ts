@@ -690,3 +690,27 @@ export const insertPaxTypeSchema = z.object({
   name: z.string().min(1),
 });
 export type InsertPaxType = z.infer<typeof insertPaxTypeSchema>;
+
+// Portal Reloads - from separate file upload
+export const portalReloads = pgTable("portal_reloads", {
+  id: serial("id").primaryKey(),
+  beId: varchar("be_id").notNull(),
+  paidAmount: real("paid_amount").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DbPortalReload = typeof portalReloads.$inferSelect;
+
+export const portalReloadSchema = z.object({
+  id: z.number(),
+  beId: z.string(),
+  paidAmount: z.number(),
+  createdAt: z.string(),
+});
+export type PortalReload = z.infer<typeof portalReloadSchema>;
+
+export const insertPortalReloadSchema = z.object({
+  beId: z.string().min(1),
+  paidAmount: z.number(),
+});
+export type InsertPortalReload = z.infer<typeof insertPortalReloadSchema>;
