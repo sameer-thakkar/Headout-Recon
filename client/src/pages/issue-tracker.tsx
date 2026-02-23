@@ -43,7 +43,6 @@ import {
   Check,
   X,
   Pencil,
-  Loader2,
   Search,
   ArrowUpDown,
   ArrowUp,
@@ -328,11 +327,6 @@ export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
   const { data, isLoading } = useQuery<{ issues: IssueRecord[] }>({
     queryKey: [`/api/issues/${runId}`],
     enabled: !!runId,
-    refetchInterval: (query) => {
-      const list = query.state.data?.issues;
-      if (list && list.some((i: IssueRecord) => !i.workingsLink)) return 5000;
-      return false;
-    },
   });
 
   const issues = data?.issues || [];
@@ -793,10 +787,7 @@ export function IssueTrackerPage({ runId }: IssueTrackerPageProps) {
                               Sheet
                             </a>
                           ) : (
-                            <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              Generating...
-                            </span>
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell className="border-l border-border/20">
