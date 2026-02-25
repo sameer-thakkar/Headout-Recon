@@ -2574,6 +2574,8 @@ interface LineItemsTableCardProps {
   runId?: string | null;
   unmappedResolutions?: Map<string, UnmappedResolution>;
   onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
+  negativeSpVerified?: boolean;
+  onSetNegativeSpVerified?: (val: boolean) => void;
 }
 
 const LineItemsTableCard = memo(function LineItemsTableCard({
@@ -2607,6 +2609,8 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   runId,
   unmappedResolutions,
   onManageUnmapped,
+  negativeSpVerified,
+  onSetNegativeSpVerified,
 }: LineItemsTableCardProps) {
   return (
     <Card>
@@ -2770,7 +2774,7 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                                   unmappedResolutions={unmappedResolutions}
                                   onManageUnmapped={onManageUnmapped}
                                   negativeSpVerified={negativeSpVerified}
-                                  onSetNegativeSpVerified={setNegativeSpVerified}
+                                  onSetNegativeSpVerified={onSetNegativeSpVerified}
                                 />
                               </TableCell>
                             </TableRow>
@@ -4293,6 +4297,8 @@ export function PurchaseReconciliationPanel({
         runId={runId}
         unmappedResolutions={unmappedResolutions}
         onManageUnmapped={handleManageUnmapped}
+        negativeSpVerified={negativeSpVerified}
+        onSetNegativeSpVerified={setNegativeSpVerified}
       />
 
       <InsightsCard
