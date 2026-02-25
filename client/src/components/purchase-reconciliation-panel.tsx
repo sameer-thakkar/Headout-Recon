@@ -1975,7 +1975,7 @@ export function PurchaseReconciliationPanel({
       const response = await fetch(`/api/runs/${runId}/export-gsheet/financial`, { method: "POST" });
       if (!response.ok) throw new Error("Failed to create Google Sheet");
       const data = await response.json();
-      if (data.url) setGSheetUrl(data.url);
+      if (data.spreadsheetUrl) setGSheetUrl(data.spreadsheetUrl);
       toast({ title: "Google Sheet ready", description: "Click the link below to open it" });
     } catch (error) {
       toast({ title: "Export failed", description: "Failed to create Google Sheet", variant: "destructive" });
