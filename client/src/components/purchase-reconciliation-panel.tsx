@@ -1251,7 +1251,7 @@ const IssueModal = memo(forwardRef<IssueModalHandle, {
                 <Badge variant="outline" className="text-xs">{booking.reason}</Badge>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Discrepancy ({currency}):</span>
+                <span className="text-muted-foreground">Discrepancy:</span>
                 <span className="font-mono text-amber-600 font-semibold">{formatNumber(booking.difference)}</span>
               </div>
               {effectiveFxRate && (
@@ -1400,10 +1400,10 @@ const TidGroup = memo(function TidGroup({
             <TableHeader>
               <TableRow className="h-7">
                 <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
-                <TableHead className="py-1 text-xs text-right">Difference ({currency})</TableHead>
-                <TableHead className="py-1 text-xs text-right">Final Net Price ({currency})</TableHead>
+                <TableHead className="py-1 text-xs text-right">SP Net</TableHead>
+                <TableHead className="py-1 text-xs text-right">HO Net</TableHead>
+                <TableHead className="py-1 text-xs text-right">Difference</TableHead>
+                <TableHead className="py-1 text-xs text-right">Final Net Price</TableHead>
                 {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -2915,8 +2915,8 @@ const InsightsCard = memo(function InsightsCard({
                           <TableRow className="h-7">
                             <TableHead className="py-1 text-xs">TID</TableHead>
                             <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                            <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                            <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                            <TableHead className="py-1 text-xs text-right">SP Net</TableHead>
+                            <TableHead className="py-1 text-xs text-right">HO Net</TableHead>
                             <TableHead className="py-1 text-xs">Payment</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2966,8 +2966,8 @@ const InsightsCard = memo(function InsightsCard({
                           <TableRow className="h-7">
                             <TableHead className="py-1 text-xs">TID</TableHead>
                             <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                            <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                            <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                            <TableHead className="py-1 text-xs text-right">SP Net</TableHead>
+                            <TableHead className="py-1 text-xs text-right">HO Net</TableHead>
                             <TableHead className="py-1 text-xs">HO BE ID</TableHead>
                             <TableHead className="py-1 text-xs">SP BE ID</TableHead>
                           </TableRow>
@@ -3025,8 +3025,8 @@ const InsightsCard = memo(function InsightsCard({
                             <TableHeader>
                               <TableRow className="h-7">
                                 <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                                <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                                <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                <TableHead className="py-1 text-xs text-right">SP Net</TableHead>
+                                <TableHead className="py-1 text-xs text-right">HO Net</TableHead>
                                 <TableHead className="py-1 text-xs">HO Payment</TableHead>
                                 <TableHead className="py-1 text-xs">SP Payment</TableHead>
                                 <TableHead className="py-1 text-xs">Reason</TableHead>
@@ -3099,8 +3099,8 @@ const InsightsCard = memo(function InsightsCard({
                                 <TableRow className="h-7">
                                   <TableHead className="py-1 text-xs">TID</TableHead>
                                   <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                                  <TableHead className="py-1 text-xs text-right">SP Net ({currency})</TableHead>
-                                  <TableHead className="py-1 text-xs text-right">HO Net ({currency})</TableHead>
+                                  <TableHead className="py-1 text-xs text-right">SP Net</TableHead>
+                                  <TableHead className="py-1 text-xs text-right">HO Net</TableHead>
                                   <TableHead className="py-1 text-xs">Charged Loss</TableHead>
                                 </TableRow>
                               </TableHeader>
