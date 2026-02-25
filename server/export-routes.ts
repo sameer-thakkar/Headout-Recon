@@ -1413,7 +1413,7 @@ export function registerExportRoutes(app: Express) {
           } else if (isNetPricePayableCol(key)) {
             newRow[key] = netPricePayable;
           } else if (isFinalNetCol(key)) {
-            newRow[key] = row[key];
+            newRow[key] = totalAmountPayable;
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
             newRow[key] = errorTeamAttribution;
             hasErrorTeamCol = true;
@@ -2734,7 +2734,7 @@ export function registerExportRoutes(app: Express) {
           } else if (gsIsNetPricePayableCol(key)) {
             newRow[key] = netPricePayable;
           } else if (gsIsFinalNetCol(key)) {
-            newRow[key] = row[key];
+            newRow[key] = totalAmountPayable;
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
             newRow[key] = errorTeamAttribution;
             hasErrorTeamCol = true;
