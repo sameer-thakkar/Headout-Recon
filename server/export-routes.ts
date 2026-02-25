@@ -895,6 +895,152 @@ export function registerExportRoutes(app: Express) {
         }
       }
       
+      // =====================================================
+      // APPEND: Amount Payable Summary + Purchase Reconciliation
+      // =====================================================
+
+      // Compute amount payable by payment type (Invoice SP vs Portal Deposit)
+      const allPayableRowsCombined = [
+        ...result.primaryRows,
+        ...result.secondaryVendorRows,
+        ...(result.unmappedRows || []),
+      ];
+      const seenBidsForPayable = new Set<string>();
+      const invoiceSpPayableTotals = new Map<string, number>();
+      const portalDepositPayableTotals = new Map<string, number>();
+      let portalDepositBeId: string | null = null;
+      let portalDepositCurrency: string | null = null;
+
+      for (const row of allPayableRowsCombined) {
+        if (seenBidsForPayable.has(row.bookingId)) continue;
+        seenBidsForPayable.add(row.bookingId);
+        const isPortalDeposit = (row.paymentMethod || "").toUpperCase() === "PORTAL_DEPOSIT";
+        const ccy = row.hoCurrency;
+        const override = priceOverrides[row.bookingId];
+        const amount = override ? override.totalAmountPayable : row.spNetInHo;
+        if (isPortalDeposit) {
+          portalDepositPayableTotals.set(ccy, (portalDepositPayableTotals.get(ccy) || 0) + amount);
+          if (!portalDepositBeId && row.beId) {
+            portalDepositBeId = row.beId;
+            portalDepositCurrency = ccy;
+          }
+        } else {
+          invoiceSpPayableTotals.set(ccy, (invoiceSpPayableTotals.get(ccy) || 0) + amount);
+        }
+      }
+
+      // Build AOA rows to append
+      const appendAoa: (string | number)[][] = [];
+      appendAoa.push(["", "", "", ""]);
+      appendAoa.push(["Amount Payable Summary", "", "", ""]);
+      appendAoa.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
+      Array.from(invoiceSpPayableTotals.entries()).forEach(([ccy, total]) => {
+        appendAoa.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
+      });
+      Array.from(portalDepositPayableTotals.entries()).forEach(([ccy, total]) => {
+        appendAoa.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
+      });
+
+      // Purchase Reconciliation section (Portal Deposit vendors only)
+      if (portalDepositBeId) {
+        const pdVendorBalance = await storage.getVendorBalance(portalDepositBeId);
+        const pdPortalReloadTotal = await storage.getPortalReloadTotal(portalDepositBeId);
+        const pdOpeningBalance = pdVendorBalance?.openingBalance ?? 0;
+        const pdClosingBalance = pdVendorBalance?.closingBalance ?? 0;
+        const pdReloads = pdPortalReloadTotal;
+        const pdRefunds = allPayableRowsCombined.filter(r => r.spNetInHo < 0).reduce((s, r) => s + r.spNetInHo, 0);
+        const pdComputedPurchase = pdOpeningBalance + pdReloads + pdRefunds - pdClosingBalance;
+        const pdActualPurchase = allPayableRowsCombined.reduce((s, r) => s + r.spNetInHo, 0);
+        const pdTimingDifference = pdComputedPurchase - pdActualPurchase;
+        const pdPurchasesAsPerHO = result.primaryRows.filter((r: any) => !r.isSecondaryVendor).reduce((s: number, r: any) => s + r.hoNet, 0);
+        const pdDifference = pdPurchasesAsPerHO - pdActualPurchase;
+        const pdInSPNotInHO = result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.spNetInHo > r.hoNet).reduce((s: number, r: any) => s + (r.spNetInHo - r.hoNet), 0)
+          + result.secondaryVendorRows.reduce((s: number, r: any) => s + r.spNetInHo, 0)
+          + (result.unmappedRows || []).reduce((s: number, r: any) => s + r.spNetInHo, 0);
+        const pdInHONotInSP = result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.hoNet > r.spNetInHo).reduce((s: number, r: any) => s + (r.hoNet - r.spNetInHo), 0);
+        const pdNetDifference = pdDifference + pdInSPNotInHO - pdInHONotInSP;
+        const pdCurrency = portalDepositCurrency || "";
+
+        const pdLineItems: [number, string, number, string][] = [
+          [1, "Opening Balance", pdOpeningBalance, "From vendor balances"],
+          [2, "Reloads", pdReloads, pdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
+          [3, "Refunds", pdRefunds, "SP Invoice negative values"],
+          [4, "Closing Balance", pdClosingBalance, "From vendor balances"],
+          [5, "Computed Purchase", pdComputedPurchase, "= 1 + 2 + 3 - 4"],
+          [6, "Actual Purchase", pdActualPurchase, "Total from SP Invoice data"],
+          [7, "Timing Difference in Closing Balance", pdTimingDifference, "= 5 - 6"],
+          [8, "Purchases as per HO", pdPurchasesAsPerHO, "Total of primary fulfillments (HO Net)"],
+          [9, "Difference", pdDifference, "= 8 - 6"],
+          [10, "In SP data not in HO", pdInSPNotInHO, "Sum where SP Net > HO Net"],
+          [11, "In HO data not in SP", pdInHONotInSP, "Sum where HO Net > SP Net"],
+          [12, "Net Difference", pdNetDifference, "= 9 + 10 - 11 (should be 0)"],
+        ];
+
+        appendAoa.push(["", "", "", ""]);
+        appendAoa.push([`Purchase Reconciliation Summary (BE ID: ${portalDepositBeId})`, "", "", ""]);
+        appendAoa.push(["#", "Line Item", `Value (${pdCurrency})`, "Description"]);
+        for (const [num, label, value, desc] of pdLineItems) {
+          appendAoa.push([num, label, formatIndianNumber(value), desc]);
+        }
+      }
+
+      // Append the new rows to the payable sheet
+      const payableAppendStart = payableRowCount;
+      XLSX.utils.sheet_add_aoa(payableSheet, appendAoa, { origin: { r: payableAppendStart, c: 0 } });
+
+      // Style the appended rows
+      const sectionTitleIndices = new Set<number>();
+      const subHeaderIndices = new Set<number>();
+      const formulaRowIndices = new Set<number>(); // rows 5,7,9,12 in purchase recon
+
+      let appendIdx = payableAppendStart;
+      appendIdx++; // blank
+      sectionTitleIndices.add(appendIdx++); // "Amount Payable Summary"
+      subHeaderIndices.add(appendIdx++); // Payment Type header
+      appendIdx += invoiceSpPayableTotals.size;
+      appendIdx += portalDepositPayableTotals.size;
+      if (portalDepositBeId) {
+        appendIdx++; // blank
+        sectionTitleIndices.add(appendIdx++); // "Purchase Reconciliation Summary..."
+        subHeaderIndices.add(appendIdx++); // # | Line Item | Value | Description
+        const formulaLineNums = new Set([5, 7, 9, 12]);
+        for (let li = 1; li <= 12; li++) {
+          if (formulaLineNums.has(li)) formulaRowIndices.add(appendIdx);
+          appendIdx++;
+        }
+      }
+
+      const payAppendBorder = { style: "thin" as const, color: { rgb: "CCCCCC" } };
+      const payAppendBorderStyle = { top: payAppendBorder, bottom: payAppendBorder, left: payAppendBorder, right: payAppendBorder };
+      const totalAppendRows = appendAoa.length;
+
+      for (let ra = 0; ra < totalAppendRows; ra++) {
+        const absRow = payableAppendStart + ra;
+        for (let c = 0; c < 4; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r: absRow, c });
+          if (!payableSheet[cellRef]) {
+            payableSheet[cellRef] = { t: "z", v: "" };
+          }
+          payableSheet[cellRef].s = payableSheet[cellRef].s || {};
+          if (sectionTitleIndices.has(absRow)) {
+            payableSheet[cellRef].s.font = { bold: true, sz: 11 };
+            payableSheet[cellRef].s.fill = { fgColor: { rgb: "E8EAF6" }, patternType: "solid" };
+          } else if (subHeaderIndices.has(absRow)) {
+            payableSheet[cellRef].s.font = { bold: true };
+            payableSheet[cellRef].s.border = payAppendBorderStyle;
+            payableSheet[cellRef].s.fill = { fgColor: { rgb: "F5F5F5" }, patternType: "solid" };
+          } else if (formulaRowIndices.has(absRow)) {
+            payableSheet[cellRef].s.font = { bold: true };
+            payableSheet[cellRef].s.border = payAppendBorderStyle;
+          } else if (appendAoa[ra][0] !== "") {
+            payableSheet[cellRef].s.border = payAppendBorderStyle;
+          }
+          if (c === 2 && !sectionTitleIndices.has(absRow) && !subHeaderIndices.has(absRow)) {
+            payableSheet[cellRef].s.alignment = { horizontal: "right" };
+          }
+        }
+      }
+
       XLSX.utils.book_append_sheet(workbook, payableSheet, getUniqueSheetName("Payable Summary", usedSheetNames));
 
       // =====================================================
@@ -2111,6 +2257,87 @@ export function registerExportRoutes(app: Express) {
       Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
         payableSummaryData.push(["Payable as per HO", ccy, formatIndianNumber(amount), "Sum of HO Net (Primary only)"]);
       });
+
+      // Amount Payable Summary + Purchase Reconciliation (appended to Payable Summary)
+      const gsAllPayableRows = [
+        ...result.primaryRows,
+        ...result.secondaryVendorRows,
+        ...(result.unmappedRows || []),
+      ];
+      const gsSeenBids = new Set<string>();
+      const gsInvoiceSpTotals = new Map<string, number>();
+      const gsPortalDepositTotals = new Map<string, number>();
+      let gsPortalDepositBeId: string | null = null;
+      let gsPortalDepositCurrency: string | null = null;
+
+      for (const row of gsAllPayableRows) {
+        if (gsSeenBids.has(row.bookingId)) continue;
+        gsSeenBids.add(row.bookingId);
+        const isPortalDeposit = (row.paymentMethod || "").toUpperCase() === "PORTAL_DEPOSIT";
+        const ccy = row.hoCurrency;
+        const override = priceOverrides[row.bookingId];
+        const amount = override ? override.totalAmountPayable : row.spNetInHo;
+        if (isPortalDeposit) {
+          gsPortalDepositTotals.set(ccy, (gsPortalDepositTotals.get(ccy) || 0) + amount);
+          if (!gsPortalDepositBeId && row.beId) {
+            gsPortalDepositBeId = row.beId;
+            gsPortalDepositCurrency = ccy;
+          }
+        } else {
+          gsInvoiceSpTotals.set(ccy, (gsInvoiceSpTotals.get(ccy) || 0) + amount);
+        }
+      }
+
+      payableSummaryData.push(["", "", "", ""]);
+      payableSummaryData.push(["Amount Payable Summary", "", "", ""]);
+      payableSummaryData.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
+      Array.from(gsInvoiceSpTotals.entries()).forEach(([ccy, total]) => {
+        payableSummaryData.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
+      });
+      Array.from(gsPortalDepositTotals.entries()).forEach(([ccy, total]) => {
+        payableSummaryData.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
+      });
+
+      if (gsPortalDepositBeId) {
+        const gsPdVendorBalance = await storage.getVendorBalance(gsPortalDepositBeId);
+        const gsPdPortalReloadTotal = await storage.getPortalReloadTotal(gsPortalDepositBeId);
+        const gsPdOpeningBalance = gsPdVendorBalance?.openingBalance ?? 0;
+        const gsPdClosingBalance = gsPdVendorBalance?.closingBalance ?? 0;
+        const gsPdReloads = gsPdPortalReloadTotal;
+        const gsPdRefunds = gsAllPayableRows.filter(r => r.spNetInHo < 0).reduce((s, r) => s + r.spNetInHo, 0);
+        const gsPdComputedPurchase = gsPdOpeningBalance + gsPdReloads + gsPdRefunds - gsPdClosingBalance;
+        const gsPdActualPurchase = gsAllPayableRows.reduce((s, r) => s + r.spNetInHo, 0);
+        const gsPdTimingDifference = gsPdComputedPurchase - gsPdActualPurchase;
+        const gsPdPurchasesAsPerHO = result.primaryRows.filter((r: any) => !r.isSecondaryVendor).reduce((s: number, r: any) => s + r.hoNet, 0);
+        const gsPdDifference = gsPdPurchasesAsPerHO - gsPdActualPurchase;
+        const gsPdInSPNotInHO = result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.spNetInHo > r.hoNet).reduce((s: number, r: any) => s + (r.spNetInHo - r.hoNet), 0)
+          + result.secondaryVendorRows.reduce((s: number, r: any) => s + r.spNetInHo, 0)
+          + (result.unmappedRows || []).reduce((s: number, r: any) => s + r.spNetInHo, 0);
+        const gsPdInHONotInSP = result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.hoNet > r.spNetInHo).reduce((s: number, r: any) => s + (r.hoNet - r.spNetInHo), 0);
+        const gsPdNetDifference = gsPdDifference + gsPdInSPNotInHO - gsPdInHONotInSP;
+        const gsPdCurrency = gsPortalDepositCurrency || "";
+
+        payableSummaryData.push(["", "", "", ""]);
+        payableSummaryData.push([`Purchase Reconciliation Summary (BE ID: ${gsPortalDepositBeId})`, "", "", ""]);
+        payableSummaryData.push(["#", "Line Item", `Value (${gsPdCurrency})`, "Description"]);
+        const gsPdLineItems: [number, string, number, string][] = [
+          [1, "Opening Balance", gsPdOpeningBalance, "From vendor balances"],
+          [2, "Reloads", gsPdReloads, gsPdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
+          [3, "Refunds", gsPdRefunds, "SP Invoice negative values"],
+          [4, "Closing Balance", gsPdClosingBalance, "From vendor balances"],
+          [5, "Computed Purchase", gsPdComputedPurchase, "= 1 + 2 + 3 - 4"],
+          [6, "Actual Purchase", gsPdActualPurchase, "Total from SP Invoice data"],
+          [7, "Timing Difference in Closing Balance", gsPdTimingDifference, "= 5 - 6"],
+          [8, "Purchases as per HO", gsPdPurchasesAsPerHO, "Total of primary fulfillments (HO Net)"],
+          [9, "Difference", gsPdDifference, "= 8 - 6"],
+          [10, "In SP data not in HO", gsPdInSPNotInHO, "Sum where SP Net > HO Net"],
+          [11, "In HO data not in SP", gsPdInHONotInSP, "Sum where HO Net > SP Net"],
+          [12, "Net Difference", gsPdNetDifference, "= 9 + 10 - 11 (should be 0)"],
+        ];
+        for (const [num, label, value, desc] of gsPdLineItems) {
+          payableSummaryData.push([num, label, formatIndianNumber(value), desc]);
+        }
+      }
 
       // SP Invoice Report
       const spReportData: (string | number | null)[][] = [];
