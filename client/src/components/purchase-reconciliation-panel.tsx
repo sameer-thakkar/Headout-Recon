@@ -2162,10 +2162,17 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                 </div>
               </div>
               {isSectionExpanded && (
-                <Table className="text-sm">
+                <Table className="text-sm table-fixed w-full">
+                  <colgroup>
+                    <col className="w-8" />
+                    <col style={{ width: "35%" }} />
+                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "31%" }} />
+                  </colgroup>
                   <TableHeader>
                     <TableRow className="h-8">
-                      <TableHead className="py-1.5 text-xs w-8">#</TableHead>
+                      <TableHead className="py-1.5 text-xs">#</TableHead>
                       <TableHead className="py-1.5 text-xs">Line Item</TableHead>
                       <TableHead className="py-1.5 text-xs text-right">Amount ({currency})</TableHead>
                       <TableHead className="py-1.5 text-xs text-right">Amount (USD)</TableHead>
