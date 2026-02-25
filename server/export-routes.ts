@@ -877,7 +877,7 @@ export function registerExportRoutes(app: Express) {
       }
       
       const payableSheet = XLSX.utils.json_to_sheet(payableSummaryData);
-      payableSheet["!cols"] = [{ wch: 6 }, { wch: 55 }, { wch: 20 }, { wch: 40 }];
+      payableSheet["!cols"] = [{ wch: 6 }, { wch: 55 }, { wch: 20 }, { wch: 20 }, { wch: 40 }];
       payableSheet["!sheetViews"] = [{ showGridLines: false }];
       
       const payableHeaders = ["Description", "Currency", "Amount", "Note"];
@@ -937,14 +937,14 @@ export function registerExportRoutes(app: Express) {
       // Build AOA rows to append
       const appendAoa: (string | number)[][] = [];
       if (!isPortalDepositRun) {
-        appendAoa.push(["", "", "", ""]);
-        appendAoa.push(["Amount Payable Summary", "", "", ""]);
-        appendAoa.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
+        appendAoa.push(["", "", "", "", ""]);
+        appendAoa.push(["Amount Payable Summary", "", "", "", ""]);
+        appendAoa.push(["Payment Type", "Currency", "Amount Payable", "", "Note"]);
         Array.from(invoiceSpPayableTotals.entries()).forEach(([ccy, total]) => {
-          appendAoa.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
+          appendAoa.push(["Invoice SP", ccy, formatIndianNumber(total), "", "Confirmed payable to SP"]);
         });
         Array.from(portalDepositPayableTotals.entries()).forEach(([ccy, total]) => {
-          appendAoa.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
+          appendAoa.push(["Portal Deposit", ccy, formatIndianNumber(total), "", "Confirmed payable (portal deposit)"]);
         });
       }
 
@@ -1004,32 +1004,35 @@ export function registerExportRoutes(app: Express) {
           .map(([reason, bookings]) => ({ reason, bookings: bookings.sort((a, b) => b.diff - a.diff), total: bookings.reduce((s, b) => s + b.diff, 0) }))
           .sort((a, b) => b.total - a.total);
 
-        const pdLineItems: [number, string, number, string][] = [
-          [1, "Opening Balance", pdOpeningBalance, "From vendor balances"],
-          [2, "Reloads", pdReloads, pdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
-          [3, "Refunds", pdRefunds, "SP Invoice negative values"],
-          [4, "Closing Balance", pdClosingBalance, "From vendor balances"],
-          [5, "Computed Purchase", pdComputedPurchase, "= 1 + 2 + 3 - 4"],
-          [6, "Actual Purchase", pdActualPurchase, "Total from SP Invoice data"],
-          [7, "Timing Difference in Closing Balance", pdTimingDifference, "= 5 - 6"],
-          [8, "Purchases as per HO", pdPurchasesAsPerHO, "Total of primary fulfillments (HO Net)"],
-          [9, "Difference", pdDifference, "= 8 - 6"],
-          [10, "In SP data not in HO", pdInSPNotInHO, "Sum where SP Net > HO Net"],
-          [11, "In HO data not in SP", pdInHONotInSP, "Sum where HO Net > SP Net"],
-          [12, "Net Difference", pdNetDifference, "= 9 + 10 - 11 (should be 0)"],
+        const pdUsdRate = result.fx?.usdToCcy?.[pdCurrency] || 1;
+        const toUsd = (val: number) => val / pdUsdRate;
+
+        const pdLineItems: [number, string, number, number, string][] = [
+          [1, "Opening Balance", pdOpeningBalance, toUsd(pdOpeningBalance), "From vendor balances"],
+          [2, "Reloads", pdReloads, toUsd(pdReloads), pdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
+          [3, "Refunds", pdRefunds, toUsd(pdRefunds), "SP Invoice negative values"],
+          [4, "Closing Balance", pdClosingBalance, toUsd(pdClosingBalance), "From vendor balances"],
+          [5, "Computed Purchase", pdComputedPurchase, toUsd(pdComputedPurchase), "= 1 + 2 + 3 - 4"],
+          [6, "Actual Purchase", pdActualPurchase, toUsd(pdActualPurchase), "Total from SP Invoice data"],
+          [7, "Timing Difference in Closing Balance", pdTimingDifference, toUsd(pdTimingDifference), "= 5 - 6"],
+          [8, "Purchases as per HO", pdPurchasesAsPerHO, toUsd(pdPurchasesAsPerHO), "Total of primary fulfillments (HO Net)"],
+          [9, "Difference", pdDifference, toUsd(pdDifference), "= 8 - 6"],
+          [10, "In SP data not in HO", pdInSPNotInHO, toUsd(pdInSPNotInHO), "Sum where SP Net > HO Net"],
+          [11, "In HO data not in SP", pdInHONotInSP, toUsd(pdInHONotInSP), "Sum where HO Net > SP Net"],
+          [12, "Net Difference", pdNetDifference, toUsd(pdNetDifference), "= 9 + 10 - 11 (should be 0)"],
         ];
 
         const pdPushBreakupGroups = (groups: { reason: string; bookings: { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]; total: number }[]) => {
           for (const { reason, bookings, total } of groups) {
-            appendAoa.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), "Reason subtotal"]);
+            appendAoa.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), formatIndianNumber(toUsd(total)), "Reason subtotal"]);
           }
         };
 
-        if (!isPortalDepositRun) appendAoa.push(["", "", "", ""]);
-        appendAoa.push([`Purchase Reconciliation Summary (BE ID: ${portalDepositBeId})`, "", "", ""]);
-        appendAoa.push(["#", "Line Item", `Value (${pdCurrency})`, "Description"]);
-        for (const [num, label, value, desc] of pdLineItems) {
-          appendAoa.push([num, label, formatIndianNumber(value), desc]);
+        if (!isPortalDepositRun) appendAoa.push(["", "", "", "", ""]);
+        appendAoa.push([`Purchase Reconciliation Summary (BE ID: ${portalDepositBeId})`, "", "", "", ""]);
+        appendAoa.push(["#", "Line Item", `Value (${pdCurrency})`, "Value (USD)", "Description"]);
+        for (const [num, label, value, valueUsd, desc] of pdLineItems) {
+          appendAoa.push([num, label, formatIndianNumber(value), formatIndianNumber(valueUsd), desc]);
           if (num === 10) pdPushBreakupGroups(pdRow10Groups);
           if (num === 11) pdPushBreakupGroups(pdRow11Groups);
         }
@@ -1077,7 +1080,7 @@ export function registerExportRoutes(app: Express) {
 
       for (let ra = 0; ra < totalAppendRows; ra++) {
         const absRow = payableAppendStart + ra;
-        for (let c = 0; c < 4; c++) {
+        for (let c = 0; c < 5; c++) {
           const cellRef = XLSX.utils.encode_cell({ r: absRow, c });
           if (!payableSheet[cellRef]) {
             payableSheet[cellRef] = { t: "z", v: "" };
@@ -1100,7 +1103,7 @@ export function registerExportRoutes(app: Express) {
           } else if (appendAoa[ra][0] !== "") {
             payableSheet[cellRef].s.border = payAppendBorderStyle;
           }
-          if (c === 2 && !sectionTitleIndices.has(absRow) && !subHeaderIndices.has(absRow)) {
+          if ((c === 2 || c === 3) && !sectionTitleIndices.has(absRow) && !subHeaderIndices.has(absRow)) {
             payableSheet[cellRef].s.alignment = { horizontal: "right" };
           }
         }
@@ -2375,13 +2378,13 @@ export function registerExportRoutes(app: Express) {
         hoTotalByCurrency.set(r.hoCurrency, (hoTotalByCurrency.get(r.hoCurrency) || 0) + r.hoNet);
       }
 
-      const payableSummaryData: (string | number)[][] = [["Description", "Currency", "Amount", "Note"]];
+      const payableSummaryData: (string | number)[][] = [["Description", "Currency", "Amount", "", "Note"]];
       if (!gsIsPortalDepositRun) {
         Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-          payableSummaryData.push(["Payable as per SP", ccy, formatIndianNumber(amount), "Sum of SP Invoice"]);
+          payableSummaryData.push(["Payable as per SP", ccy, formatIndianNumber(amount), "", "Sum of SP Invoice"]);
         });
         Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-          payableSummaryData.push(["Payable as per HO", ccy, formatIndianNumber(amount), "Sum of HO Net (Primary only)"]);
+          payableSummaryData.push(["Payable as per HO", ccy, formatIndianNumber(amount), "", "Sum of HO Net (Primary only)"]);
         });
       }
 
@@ -2411,14 +2414,14 @@ export function registerExportRoutes(app: Express) {
       }
 
       if (!gsIsPortalDepositRun) {
-        payableSummaryData.push(["", "", "", ""]);
-        payableSummaryData.push(["Amount Payable Summary", "", "", ""]);
-        payableSummaryData.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
+        payableSummaryData.push(["", "", "", "", ""]);
+        payableSummaryData.push(["Amount Payable Summary", "", "", "", ""]);
+        payableSummaryData.push(["Payment Type", "Currency", "Amount Payable", "", "Note"]);
         Array.from(gsInvoiceSpTotals.entries()).forEach(([ccy, total]) => {
-          payableSummaryData.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
+          payableSummaryData.push(["Invoice SP", ccy, formatIndianNumber(total), "", "Confirmed payable to SP"]);
         });
         Array.from(gsPortalDepositTotals.entries()).forEach(([ccy, total]) => {
-          payableSummaryData.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
+          payableSummaryData.push(["Portal Deposit", ccy, formatIndianNumber(total), "", "Confirmed payable (portal deposit)"]);
         });
       }
 
@@ -2441,9 +2444,12 @@ export function registerExportRoutes(app: Express) {
         const gsPdNetDifference = gsPdDifference + gsPdInSPNotInHO - gsPdInHONotInSP;
         const gsPdCurrency = gsPortalDepositCurrency || "";
 
-        if (!gsIsPortalDepositRun) payableSummaryData.push(["", "", "", ""]);
-        payableSummaryData.push([`Purchase Reconciliation Summary (BE ID: ${gsPortalDepositBeId})`, "", "", ""]);
-        payableSummaryData.push(["#", "Line Item", `Value (${gsPdCurrency})`, "Description"]);
+        const gsPdUsdRate = result.fx?.usdToCcy?.[gsPdCurrency] || 1;
+        const gsToUsd = (val: number) => val / gsPdUsdRate;
+
+        if (!gsIsPortalDepositRun) payableSummaryData.push(["", "", "", "", ""]);
+        payableSummaryData.push([`Purchase Reconciliation Summary (BE ID: ${gsPortalDepositBeId})`, "", "", "", ""]);
+        payableSummaryData.push(["#", "Line Item", `Value (${gsPdCurrency})`, "Value (USD)", "Description"]);
         // Build row 10 & 11 breakup for sub-rows
         const gsRow10ByReason = new Map<string, { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]>();
         result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.spNetInHo > r.hoNet).forEach((r: any) => {
@@ -2477,26 +2483,26 @@ export function registerExportRoutes(app: Express) {
 
         const gsPushBreakupGroups = (groups: { reason: string; bookings: { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]; total: number }[]) => {
           for (const { reason, bookings, total } of groups) {
-            payableSummaryData.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), "Reason subtotal"]);
+            payableSummaryData.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), formatIndianNumber(gsToUsd(total)), "Reason subtotal"]);
           }
         };
 
-        const gsPdLineItems: [number, string, number, string][] = [
-          [1, "Opening Balance", gsPdOpeningBalance, "From vendor balances"],
-          [2, "Reloads", gsPdReloads, gsPdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
-          [3, "Refunds", gsPdRefunds, "SP Invoice negative values"],
-          [4, "Closing Balance", gsPdClosingBalance, "From vendor balances"],
-          [5, "Computed Purchase", gsPdComputedPurchase, "= 1 + 2 + 3 - 4"],
-          [6, "Actual Purchase", gsPdActualPurchase, "Total from SP Invoice data"],
-          [7, "Timing Difference in Closing Balance", gsPdTimingDifference, "= 5 - 6"],
-          [8, "Purchases as per HO", gsPdPurchasesAsPerHO, "Total of primary fulfillments (HO Net)"],
-          [9, "Difference", gsPdDifference, "= 8 - 6"],
-          [10, "In SP data not in HO", gsPdInSPNotInHO, "Sum where SP Net > HO Net"],
-          [11, "In HO data not in SP", gsPdInHONotInSP, "Sum where HO Net > SP Net"],
-          [12, "Net Difference", gsPdNetDifference, "= 9 + 10 - 11 (should be 0)"],
+        const gsPdLineItems: [number, string, number, number, string][] = [
+          [1, "Opening Balance", gsPdOpeningBalance, gsToUsd(gsPdOpeningBalance), "From vendor balances"],
+          [2, "Reloads", gsPdReloads, gsToUsd(gsPdReloads), gsPdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
+          [3, "Refunds", gsPdRefunds, gsToUsd(gsPdRefunds), "SP Invoice negative values"],
+          [4, "Closing Balance", gsPdClosingBalance, gsToUsd(gsPdClosingBalance), "From vendor balances"],
+          [5, "Computed Purchase", gsPdComputedPurchase, gsToUsd(gsPdComputedPurchase), "= 1 + 2 + 3 - 4"],
+          [6, "Actual Purchase", gsPdActualPurchase, gsToUsd(gsPdActualPurchase), "Total from SP Invoice data"],
+          [7, "Timing Difference in Closing Balance", gsPdTimingDifference, gsToUsd(gsPdTimingDifference), "= 5 - 6"],
+          [8, "Purchases as per HO", gsPdPurchasesAsPerHO, gsToUsd(gsPdPurchasesAsPerHO), "Total of primary fulfillments (HO Net)"],
+          [9, "Difference", gsPdDifference, gsToUsd(gsPdDifference), "= 8 - 6"],
+          [10, "In SP data not in HO", gsPdInSPNotInHO, gsToUsd(gsPdInSPNotInHO), "Sum where SP Net > HO Net"],
+          [11, "In HO data not in SP", gsPdInHONotInSP, gsToUsd(gsPdInHONotInSP), "Sum where HO Net > SP Net"],
+          [12, "Net Difference", gsPdNetDifference, gsToUsd(gsPdNetDifference), "= 9 + 10 - 11 (should be 0)"],
         ];
-        for (const [num, label, value, desc] of gsPdLineItems) {
-          payableSummaryData.push([num, label, formatIndianNumber(value), desc]);
+        for (const [num, label, value, valueUsd, desc] of gsPdLineItems) {
+          payableSummaryData.push([num, label, formatIndianNumber(value), formatIndianNumber(valueUsd), desc]);
           if (num === 10) gsPushBreakupGroups(gsRow10Groups);
           if (num === 11) gsPushBreakupGroups(gsRow11Groups);
         }

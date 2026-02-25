@@ -1366,16 +1366,18 @@ const TidGroup = memo(function TidGroup({
           <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
         </div>
         <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
-          <Button
-            size="sm"
-            variant="default"
-            className="text-xs"
-            onClick={() => openManageTidModal(tidBookings, tid, reasonName)}
-            data-testid={`button-manage-tid-${tid}`}
-          >
-            <Pencil className="h-3 w-3 mr-1" />
-            Manage TID
-          </Button>
+          {reasonName !== "Unmapped" && (
+            <Button
+              size="sm"
+              variant="default"
+              className="text-xs"
+              onClick={() => openManageTidModal(tidBookings, tid, reasonName)}
+              data-testid={`button-manage-tid-${tid}`}
+            >
+              <Pencil className="h-3 w-3 mr-1" />
+              Manage TID
+            </Button>
+          )}
           <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
             {formatNumber(tidTotal)} {currency}
           </span>
