@@ -3220,7 +3220,7 @@ export function PurchaseReconciliationPanel({
     if (spCurrency === "USD") return 1;
     const firstRow = primaryRows.find(r => r.fxRateUsed && r.fxRateUsed !== 0);
     if (firstRow && effectiveFxRate) {
-      return effectiveFxRate / firstRow.fxRateUsed;
+      return effectiveFxRate * firstRow.fxRateUsed;
     }
     return effectiveFxRate;
   }, [isCrossCurrency, spCurrency, primaryRows, effectiveFxRate]);
