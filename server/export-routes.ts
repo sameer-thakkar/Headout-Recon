@@ -2580,6 +2580,10 @@ export function registerExportRoutes(app: Express) {
         }
       });
       
+      const gsOriginalKeys = originalHoData.length > 0
+        ? (exportData.upload?.hoData?.headers || Object.keys(originalHoData[0] as Record<string, unknown>))
+        : [];
+
       const gsIsErrorAttrCol = (k: string) => {
         const kl = k.toLowerCase();
         return kl === "errorteamattribution" || kl === "error team attribution" ||
@@ -2587,86 +2591,68 @@ export function registerExportRoutes(app: Express) {
                kl === "comments" || kl === "comment" ||
                kl === "chargedloss" || kl === "charged_loss" || kl === "charged loss";
       };
-      
-      const gsOriginalKeys = originalHoData.length > 0 ? Object.keys(originalHoData[0] as Record<string, unknown>) : [];
-      
-      const gsIsReconCol = (k: string) => {
-        const kl = k.toLowerCase().replace(/[\s_]+/g, "");
-        return kl === "finalvendorid" || kl === "ticketid" ||
-               kl === "disputeadjustment" || kl === "discrepancyamount" ||
-               kl === "disputedamount" || kl === "adjustedinticketid" ||
-               kl === "finaldisputeamount" || kl === "disputestatus" ||
-               kl === "reconcilednetprice" || kl === "utrnumber" || kl === "utr";
+
+      const gsIsFinalNetCol = (k: string) => {
+        const kLower = k.toLowerCase();
+        return kLower === "finalnetprice" || kLower === "final net price" ||
+               kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
+               kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
       };
 
-      const gsHeaderRow: string[] = [];
-      let gsInsertedNewCols = false;
-      let gsHasAnyReconCol = false;
-      for (const key of gsOriginalKeys) {
-        if (gsIsErrorAttrCol(key) && !gsInsertedNewCols) {
-          gsHeaderRow.push("SP Net", "Difference", "Difference %");
-          gsInsertedNewCols = true;
-        }
-        if (gsIsReconCol(key)) gsHasAnyReconCol = true;
-        gsHeaderRow.push(key);
-      }
-      if (!gsInsertedNewCols) {
-        gsHeaderRow.push("SP Net", "Difference", "Difference %", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss");
-      }
-      if (!gsHasAnyReconCol) {
-        gsHeaderRow.push("finalVendorId", "Ticket ID", "Dispute adjustment", "Discrepancy amount",
-          "Disputed amount", "Adjusted in Ticket ID", "Dispute status", "Reconciled Net price");
-      }
-      
-      const gsDisputesByBooking = disputesByBooking;
-      const gsDisputeOverrides = disputeOverrides;
-      const gsPriceOverrides = priceOverrides;
-      
-      const hoReportData: (string | number | null)[][] = [gsHeaderRow];
-      
-      originalHoData.forEach((row: Record<string, unknown>, rowIndex: number) => {
+      const gsIsTotalAmountPayableCol = (k: string) => {
+        return k.toLowerCase().replace(/[\s_]+/g, "") === "totalamountpayable";
+      };
+
+      const gsIsNetPricePayableCol = (k: string) => {
+        const kLower = k.trim().toLowerCase().replace(/[\s_\u00A0]+/g, "");
+        return kLower === "netpricepayable" || kLower === "netpayable" || kLower === "netpriceamountpayable";
+      };
+
+      const gsObjRows = originalHoData.map((row: Record<string, unknown>, rowIndex: number) => {
         const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
         const reconRows = allRowsMap.get(bookingId) || [];
         const reconRow = reconRows[0];
         const isSecondary = gsSecondaryRowIndices.has(rowIndex);
-        
+
         const spNet = reconRow?.spNetInHo ?? "";
         const hoNet = reconRow?.hoNet ?? 0;
         const difference = reconRow ? hoNet - reconRow.spNetInHo : "";
-        const differencePercent = reconRow && hoNet !== 0 
-          ? ((hoNet - reconRow.spNetInHo) / hoNet * 100).toFixed(2) + "%" 
+        const differencePercent = reconRow && hoNet !== 0
+          ? ((hoNet - reconRow.spNetInHo) / hoNet * 100).toFixed(2) + "%"
           : "";
-        
+
         let finalNetPrice: number | string = "";
         let errorTeamAttribution = row["errorTeamAttribution"] || row["Error Team Attribution"] || "";
         let errorBucket = row["errorBucket"] || row["Error Bucket"] || "";
         let comments = row["comments"] || row["Comments"] || "";
         let chargedLoss = reconRow?.chargedLoss || String(row["chargedLoss"] || row["Charged Loss"] || row["charged_loss"] || "FALSE");
-        
+
         const reason = reconRow?.reason || "Reconciled";
         const fulfillmentMethod = String(reconRow?.fulfillmentMethod || row["fulfillmentMethod"] || row["Fulfillment Method"] || "");
         const priceSync = String(row["priceSync"] || row["Price Sync"] || row["PriceSync"] || "");
-        
         const reconComment = reconRow?.comment || "";
-        
-        const gsDispute = gsDisputesByBooking.get(bookingId);
-        const gsOverride = gsDisputeOverrides[bookingId];
-        const gsDisputeAdjAmount = gsOverride?.disputeAdj ?? "";
-        const gsDiscrepancyAdjAmount = gsOverride?.discrepancyAdj ?? "";
-        const gsDisputedAmount = gsOverride?.finalDispute ?? gsDispute?.disputeAmount ?? reconRow?.disputedAmount ?? "";
-        const gsAdjustedInTicketId = gsOverride?.ticketId ?? gsDispute?.adjustedInTicketId ?? "";
-        const gsDisputeStatus = gsOverride?.status 
-          ?? (gsDispute 
-            ? (gsDispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
+
+        const finalVendorIdValue = gsVendorCorrectionsByBooking.get(bookingId) || "";
+        const ticketIdValue = gsSpTicketIdByBooking.get(bookingId) || "";
+
+        const dispute = disputesByBooking.get(bookingId);
+        const override = disputeOverrides[bookingId];
+        const disputeAdjAmount = override?.disputeAdj ?? "";
+        const discrepancyAdjAmount = override?.discrepancyAdj ?? "";
+        const disputedAmount = override?.finalDispute ?? dispute?.disputeAmount ?? reconRow?.disputedAmount ?? "";
+        const adjustedInTicketId = override?.ticketId ?? dispute?.adjustedInTicketId ?? "";
+        const closedByAmount = dispute?.closedByAdjustmentAmount ?? 0;
+        const disputeStatus = override?.status
+          ?? (dispute
+            ? (dispute.closureStatus === "closed" ? "CLOSED" : "OPEN")
             : (reconRow?.disputeStatus || ""));
-        const gsClosedByAmount = gsDispute?.closedByAdjustmentAmount ?? 0;
-        const gsFinalDisputeForRecon = gsDispute 
-          ? (gsDispute.disputeAmount - gsClosedByAmount)
+        const finalDisputeForRecon = dispute
+          ? (dispute.disputeAmount - closedByAmount)
           : null;
-        const gsReconciledNetPrice = gsDispute && gsDispute.closureStatus === "closed" && typeof gsFinalDisputeForRecon === "number"
-          ? hoNet + gsFinalDisputeForRecon
+        const reconciledNetPrice = dispute && dispute.closureStatus === "closed" && typeof finalDisputeForRecon === "number"
+          ? hoNet + finalDisputeForRecon
           : "";
-        
+
         if (isSecondary) {
           finalNetPrice = 0;
           comments = "Duplicate Fulfillment";
@@ -2675,7 +2661,6 @@ export function registerExportRoutes(app: Express) {
           chargedLoss = "TRUE";
           comments = reconComment || "Cancelled-SP error";
           errorBucket = "Cancelled-SP error";
-          
           if (fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") {
             errorTeamAttribution = "Tech";
           } else if (fulfillmentMethod.toLowerCase() === "manual") {
@@ -2713,10 +2698,10 @@ export function registerExportRoutes(app: Express) {
           errorBucket = "Price Mismatch";
           const varianceComment = hoNet < (reconRow?.spNetInHo || 0) ? "Negative Variance" : "Positive Variance";
           comments = varianceComment;
-          if ((fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") && 
+          if ((fulfillmentMethod.toLowerCase().includes("vendor") || fulfillmentMethod.toLowerCase() === "vendor api") &&
               priceSync.toLowerCase() === "yes") {
             errorTeamAttribution = "Inventory";
-          } else if (fulfillmentMethod.toLowerCase() === "manual" && 
+          } else if (fulfillmentMethod.toLowerCase() === "manual" &&
                      (priceSync.toLowerCase() === "no" || priceSync === "")) {
             errorTeamAttribution = "BizOps";
           } else if (fulfillmentMethod.toLowerCase() === "selenium") {
@@ -2725,83 +2710,153 @@ export function registerExportRoutes(app: Express) {
         } else {
           finalNetPrice = spNet;
         }
-        
-        const dataRow: (string | number | null)[] = [];
-        let insertedNewCols = false;
-        
+
+        const priceOverride = priceOverrides[bookingId];
+        const totalAmountPayable = priceOverride
+          ? priceOverride.totalAmountPayable
+          : (reason === "Reconciled" ? spNet : finalNetPrice);
+        const amountPaidValue = reconRow?.amountPaid || 0;
+        const netPricePayable = typeof totalAmountPayable === "number"
+          ? totalAmountPayable - amountPaidValue
+          : totalAmountPayable;
+
+        const newRow: Record<string, unknown> = {};
+        let hasErrorTeamCol = false;
+        let hasErrorBucketCol = false;
+        let hasCommentsCol = false;
+        let hasChargedLossCol = false;
+        let hasAnyReconCol = false;
+
         for (const key of gsOriginalKeys) {
           const keyLower = key.toLowerCase();
-          
-          if (gsIsErrorAttrCol(key) && !insertedNewCols) {
-            dataRow.push(typeof spNet === "number" ? formatIndianNumber(spNet) : spNet);
-            dataRow.push(typeof difference === "number" ? formatIndianNumber(difference) : difference);
-            dataRow.push(differencePercent);
-            insertedNewCols = true;
-          }
-          
-          let value: string | number | null = row[key] as string | number | null;
-          const keyNorm = keyLower.replace(/[\s_]+/g, "");
-          
-          if (keyNorm === "totalamountpayable") {
-            const gsPriceOverride = gsPriceOverrides[bookingId];
-            const gsTotalAmountPayable = gsPriceOverride 
-              ? gsPriceOverride.totalAmountPayable 
-              : (reason === "Reconciled" ? spNet : finalNetPrice);
-            value = typeof gsTotalAmountPayable === "number" ? formatIndianNumber(gsTotalAmountPayable) : gsTotalAmountPayable;
+          if (gsIsTotalAmountPayableCol(key)) {
+            newRow[key] = totalAmountPayable;
+          } else if (gsIsNetPricePayableCol(key)) {
+            newRow[key] = netPricePayable;
+          } else if (gsIsFinalNetCol(key)) {
+            newRow[key] = row[key];
           } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
-            value = String(errorTeamAttribution);
+            newRow[key] = errorTeamAttribution;
+            hasErrorTeamCol = true;
           } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
-            value = String(errorBucket);
+            newRow[key] = errorBucket;
+            hasErrorBucketCol = true;
           } else if (keyLower === "comments" || keyLower === "comment") {
-            value = String(comments);
+            newRow[key] = comments;
+            hasCommentsCol = true;
           } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
-            value = String(chargedLoss);
-          } else if (keyNorm === "disputeadjustment" || keyLower === "dispute adjustment") {
-            value = typeof gsDisputeAdjAmount === "number" ? formatIndianNumber(gsDisputeAdjAmount) : gsDisputeAdjAmount;
-          } else if (keyNorm === "discrepancyamount" || keyLower === "discrepancy amount") {
-            value = typeof gsDiscrepancyAdjAmount === "number" ? formatIndianNumber(gsDiscrepancyAdjAmount) : gsDiscrepancyAdjAmount;
-          } else if (keyNorm === "disputedamount" || keyLower === "disputed amount") {
-            value = typeof gsDisputedAmount === "number" ? formatIndianNumber(gsDisputedAmount) : gsDisputedAmount;
-          } else if (keyNorm === "adjustedinticketid" || keyLower === "adjusted in ticket id") {
-            value = String(gsAdjustedInTicketId || "");
-          } else if (keyNorm === "disputestatus" || keyLower === "dispute status") {
-            value = String(gsDisputeStatus || "");
-          } else if (keyNorm === "reconcilednetprice" || keyLower === "reconciled net price") {
-            value = typeof gsReconciledNetPrice === "number" ? formatIndianNumber(gsReconciledNetPrice) : gsReconciledNetPrice;
-          } else if (keyLower === "honet" || keyLower === "ho net" || keyLower === "ho_net") {
-            value = typeof value === "number" ? formatIndianNumber(value) : value;
-          } else if (keyLower.includes("date") && value) {
-            value = formatDateValue(value);
+            newRow[key] = chargedLoss;
+            hasChargedLossCol = true;
+          } else if (keyLower === "finalvendorid" || keyLower === "final vendor id" || keyLower === "final_vendor_id") {
+            newRow[key] = finalVendorIdValue;
+            hasAnyReconCol = true;
+          } else if (keyLower === "ticketid" || keyLower === "ticket id" || keyLower === "ticket_id") {
+            newRow[key] = ticketIdValue;
+            hasAnyReconCol = true;
+          } else if (keyLower === "disputeadjustment" || keyLower === "dispute adjustment" || keyLower === "dispute_adjustment") {
+            newRow[key] = disputeAdjAmount;
+            hasAnyReconCol = true;
+          } else if (keyLower === "discrepancyamount" || keyLower === "discrepancy amount" || keyLower === "discrepancy_amount") {
+            newRow[key] = discrepancyAdjAmount;
+            hasAnyReconCol = true;
+          } else if (keyLower === "disputedamount" || keyLower === "disputed amount" || keyLower === "disputed_amount") {
+            newRow[key] = disputedAmount;
+            hasAnyReconCol = true;
+          } else if (keyLower === "adjustedinticketid" || keyLower === "adjusted in ticket id" || keyLower === "adjusted_in_ticket_id") {
+            newRow[key] = adjustedInTicketId;
+            hasAnyReconCol = true;
+          } else if (keyLower === "finaldisputeamount" || keyLower === "final dispute amount" || keyLower === "final_dispute_amount") {
+            hasAnyReconCol = true;
+          } else if (keyLower === "disputestatus" || keyLower === "dispute status" || keyLower === "dispute_status") {
+            newRow[key] = disputeStatus;
+            hasAnyReconCol = true;
+          } else if (keyLower === "reconcilednetprice" || keyLower === "reconciled net price" || keyLower === "reconciled_net_price") {
+            newRow[key] = reconciledNetPrice;
+            hasAnyReconCol = true;
+          } else if (keyLower === "utrnumber" || keyLower === "utr number" || keyLower === "utr_number" || keyLower === "utr") {
+            hasAnyReconCol = true;
+          } else {
+            newRow[key] = row[key];
           }
-          
-          dataRow.push(value);
-        }
-        
-        if (!insertedNewCols) {
-          dataRow.push(typeof spNet === "number" ? formatIndianNumber(spNet) : spNet);
-          dataRow.push(typeof difference === "number" ? formatIndianNumber(difference) : difference);
-          dataRow.push(differencePercent);
-          dataRow.push(String(errorTeamAttribution));
-          dataRow.push(String(errorBucket));
-          dataRow.push(String(comments));
-          dataRow.push(String(chargedLoss));
         }
 
-        if (!gsHasAnyReconCol) {
-          const gsFinalVendorIdValue = gsVendorCorrectionsByBooking.get(bookingId) || "";
-          const gsTicketIdValue = gsSpTicketIdByBooking.get(bookingId) || "";
-          dataRow.push(gsFinalVendorIdValue);
-          dataRow.push(gsTicketIdValue);
-          dataRow.push(typeof gsDisputeAdjAmount === "number" ? formatIndianNumber(gsDisputeAdjAmount) : gsDisputeAdjAmount);
-          dataRow.push(typeof gsDiscrepancyAdjAmount === "number" ? formatIndianNumber(gsDiscrepancyAdjAmount) : gsDiscrepancyAdjAmount);
-          dataRow.push(typeof gsDisputedAmount === "number" ? formatIndianNumber(gsDisputedAmount) : gsDisputedAmount);
-          dataRow.push(String(gsAdjustedInTicketId || ""));
-          dataRow.push(String(gsDisputeStatus || ""));
-          dataRow.push(typeof gsReconciledNetPrice === "number" ? formatIndianNumber(gsReconciledNetPrice) : gsReconciledNetPrice);
+        newRow["SP Net"] = spNet;
+        newRow["Difference"] = difference;
+        newRow["Difference %"] = differencePercent;
+
+        if (!hasErrorTeamCol) newRow["errorTeamAttribution"] = errorTeamAttribution;
+        if (!hasErrorBucketCol) newRow["errorBucket"] = errorBucket;
+        if (!hasCommentsCol) newRow["comments"] = comments;
+        if (!hasChargedLossCol) newRow["chargedLoss"] = chargedLoss;
+
+        if (!hasAnyReconCol) {
+          newRow["finalVendorId"] = finalVendorIdValue;
+          newRow["Ticket ID"] = ticketIdValue;
+          newRow["Dispute adjustment"] = disputeAdjAmount;
+          newRow["Discrepancy amount"] = discrepancyAdjAmount;
+          newRow["Disputed amount"] = disputedAmount;
+          newRow["Adjusted in Ticket ID"] = adjustedInTicketId;
+          newRow["Dispute status"] = disputeStatus;
+          newRow["Reconciled Net price"] = reconciledNetPrice;
         }
-        
-        hoReportData.push(dataRow);
+
+        return newRow;
       });
+
+      const gsCanonicalHeaders: string[] = [...gsOriginalKeys];
+
+      const gsFinalNetAliases = new Set(["finalnetprice", "final net price", "finalnet", "final net", "final payable", "amountpayable", "amount payable", "amount_payable"]);
+      const gsHeaderExistsIn = (name: string, headers: string[]) => {
+        const nameLower = name.toLowerCase();
+        if (gsFinalNetAliases.has(nameLower)) {
+          return headers.some(h => gsFinalNetAliases.has(h.toLowerCase()));
+        }
+        return headers.some(h => h.toLowerCase() === nameLower);
+      };
+
+      const gsInsertCols = ["SP Net", "Difference", "Difference %"];
+      const gsColsToInsert = gsInsertCols.filter(c => !gsHeaderExistsIn(c, gsCanonicalHeaders));
+
+      const gsFirstErrorAttrIdx = gsCanonicalHeaders.findIndex(h => gsIsErrorAttrCol(h));
+      if (gsFirstErrorAttrIdx !== -1 && gsColsToInsert.length > 0) {
+        gsCanonicalHeaders.splice(gsFirstErrorAttrIdx, 0, ...gsColsToInsert);
+      } else if (gsColsToInsert.length > 0) {
+        gsCanonicalHeaders.push(...gsColsToInsert);
+      }
+
+      const gsDisputeAppendCols = [
+        "Ticket ID", "Dispute adjustment", "Discrepancy amount",
+        "Disputed amount", "Adjusted in Ticket ID",
+        "Dispute status", "Reconciled Net price"
+      ];
+      for (const col of gsDisputeAppendCols) {
+        if (!gsHeaderExistsIn(col, gsCanonicalHeaders)) {
+          gsCanonicalHeaders.push(col);
+        }
+      }
+
+      const hoReportData: (string | number | null)[][] = [gsCanonicalHeaders];
+
+      for (const objRow of gsObjRows) {
+        const dataRow: (string | number | null)[] = gsCanonicalHeaders.map(h => {
+          let value = objRow[h] as string | number | null ?? "";
+          const hLower = h.toLowerCase();
+
+          if ((hLower.includes("net") || hLower.includes("amount") || hLower.includes("price") || hLower.includes("fx") ||
+               hLower === "difference" || hLower.includes("payable") || hLower.includes("dispute")) &&
+              typeof value === "number") {
+            return formatIndianNumber(value);
+          }
+          if (hLower.includes("date") && value) {
+            return formatDateValue(value as string | number);
+          }
+          if (hLower === "difference %" || hLower === "charged loss" || hLower === "chargedloss" || hLower === "charged_loss") {
+            return value != null ? String(value) : "";
+          }
+          return value;
+        });
+        hoReportData.push(dataRow);
+      }
 
       // Build sheet definitions
       const sheetDefs: { properties: { title: string } }[] = [
