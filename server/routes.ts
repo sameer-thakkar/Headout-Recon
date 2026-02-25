@@ -1715,7 +1715,7 @@ export async function registerRoutes(
       }
 
       const fileBuffer = fs.readFileSync(req.file.path);
-      const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+      const workbook = XLSX.read(fileBuffer, { type: "buffer", cellDates: true });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
@@ -1770,7 +1770,27 @@ export async function registerRoutes(
 
         if (beId && paidAmount !== 0) {
           const zendeskId = zendeskIdCol ? String(row[zendeskIdCol] || "").trim() || undefined : undefined;
-          const dateOfPayment = dateCol ? String(row[dateCol] || "").trim() || undefined : undefined;
+          let dateOfPayment: string | undefined;
+          if (dateCol) {
+            const rawDate = row[dateCol];
+            if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+              const dd = String(rawDate.getDate()).padStart(2, "0");
+              const mm = String(rawDate.getMonth() + 1).padStart(2, "0");
+              const yyyy = rawDate.getFullYear();
+              dateOfPayment = `${dd}/${mm}/${yyyy}`;
+            } else if (typeof rawDate === "number") {
+              const excelEpoch = new Date(1899, 11, 30);
+              const parsed = new Date(excelEpoch.getTime() + rawDate * 86400000);
+              if (!isNaN(parsed.getTime())) {
+                const dd = String(parsed.getDate()).padStart(2, "0");
+                const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+                const yyyy = parsed.getFullYear();
+                dateOfPayment = `${dd}/${mm}/${yyyy}`;
+              }
+            } else {
+              dateOfPayment = String(rawDate || "").trim() || undefined;
+            }
+          }
           let amountLoadedAtDate: number | undefined;
           if (amountLoadedCol) {
             const rawLoaded = row[amountLoadedCol];

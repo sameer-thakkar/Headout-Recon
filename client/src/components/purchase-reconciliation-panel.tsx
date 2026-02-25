@@ -1956,6 +1956,28 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
 
   const makeRow = (): AdjRow => ({ id: crypto.randomUUID(), type: "add", zendeskId: "", date: "", amountLoaded: "", paidAmount: "" });
 
+  const formatDateDisplay = useCallback((val: string | null | undefined): string => {
+    if (!val) return "-";
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) return val;
+    const num = Number(val);
+    if (!isNaN(num) && num > 10000 && num < 100000) {
+      const excelEpoch = new Date(1899, 11, 30);
+      const d = new Date(excelEpoch.getTime() + num * 86400000);
+      if (!isNaN(d.getTime())) {
+        const dd = String(d.getDate()).padStart(2, "0");
+        const mm = String(d.getMonth() + 1).padStart(2, "0");
+        return `${dd}/${mm}/${d.getFullYear()}`;
+      }
+    }
+    const d = new Date(val);
+    if (!isNaN(d.getTime()) && val.length > 4) {
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      return `${dd}/${mm}/${d.getFullYear()}`;
+    }
+    return val;
+  }, []);
+
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [rows, setRows] = useState<AdjRow[]>([makeRow()]);
@@ -2051,16 +2073,16 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                   <TableHeader>
                     <TableRow className="h-7">
                       <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
-                      <TableHead className="py-1 text-xs">Date of Payment</TableHead>
-                      <TableHead className="py-1 text-xs text-right">Amount Loaded</TableHead>
-                      <TableHead className="py-1 text-xs text-right">Paid Amount ({currency})</TableHead>
+                      <TableHead className="py-1 text-xs whitespace-nowrap">Date of Payment</TableHead>
+                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Amt Loaded at Date</TableHead>
+                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Paid Amount ({currency})</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {reloads.map((r, i) => (
                       <TableRow key={`reload-${r.id || i}`} className="h-7">
                         <TableCell className="py-1 font-mono">{r.zendeskId || "-"}</TableCell>
-                        <TableCell className="py-1">{r.dateOfPayment || "-"}</TableCell>
+                        <TableCell className="py-1">{formatDateDisplay(r.dateOfPayment)}</TableCell>
                         <TableCell className="py-1 text-right font-mono">{r.amountLoadedAtDate != null ? formatNumber(r.amountLoadedAtDate) : "-"}</TableCell>
                         <TableCell className="py-1 text-right font-mono">{formatNumber(r.paidAmount)}</TableCell>
                       </TableRow>
@@ -2091,9 +2113,9 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                     <TableRow className="h-7">
                       <TableHead className="py-1 text-xs w-14">Type</TableHead>
                       <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
-                      <TableHead className="py-1 text-xs">Date of Payment</TableHead>
-                      <TableHead className="py-1 text-xs text-right">Amount Loaded</TableHead>
-                      <TableHead className="py-1 text-xs text-right">Paid Amount ({currency})</TableHead>
+                      <TableHead className="py-1 text-xs whitespace-nowrap">Date of Payment</TableHead>
+                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Amt Loaded at Date</TableHead>
+                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Paid Amount ({currency})</TableHead>
                       <TableHead className="py-1 text-xs w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2106,7 +2128,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                           </Badge>
                         </TableCell>
                         <TableCell className="py-1 font-mono">{a.zendeskId || "-"}</TableCell>
-                        <TableCell className="py-1">{a.dateOfPayment || "-"}</TableCell>
+                        <TableCell className="py-1">{formatDateDisplay(a.dateOfPayment)}</TableCell>
                         <TableCell className="py-1 text-right font-mono">{a.amountLoadedAtDate != null ? formatNumber(a.amountLoadedAtDate) : "-"}</TableCell>
                         <TableCell className={`py-1 text-right font-mono ${a.adjustmentType === "add" ? "text-green-600" : "text-red-600"}`}>
                           {a.adjustmentType === "add" ? "+" : "-"}{formatNumber(a.paidAmount)}
