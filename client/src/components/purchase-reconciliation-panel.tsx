@@ -26,7 +26,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { PrimaryRow, VendorBalance, PaxBreakdown, PortalReload, ReloadAdjustment } from "@shared/schema";
+import type { PrimaryRow, VendorBalance, PaxBreakdown, PortalReload, ReloadAdjustment, UnmappedResolution } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type PurchaseBooking = {
@@ -99,6 +99,8 @@ interface BookingRowProps {
   reasonName: string;
   onUpdateFnp: (bookingId: string, value: number) => void;
   onOpenIssueModal: (booking: BookingForDispute) => void;
+  unmappedResolution?: UnmappedResolution;
+  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
 }
 
 const BookingRow = memo(function BookingRow({
@@ -116,6 +118,8 @@ const BookingRow = memo(function BookingRow({
   reasonName,
   onUpdateFnp,
   onOpenIssueModal,
+  unmappedResolution,
+  onManageUnmapped,
 }: BookingRowProps) {
   const [localFnp, setLocalFnp] = useState(String(fnpValue));
   const localFnpRef = useRef(localFnp);
@@ -181,6 +185,27 @@ const BookingRow = memo(function BookingRow({
         {runId && (
           <TableCell className="py-1">
             <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+              {reasonName === "Unmapped" && onManageUnmapped && (
+                <Button
+                  size="sm"
+                  variant={unmappedResolution ? "default" : "outline"}
+                  className={`text-xs ${unmappedResolution ? "bg-green-600 hover:bg-green-700 text-white" : "text-amber-600 border-amber-300"}`}
+                  onClick={() => onManageUnmapped(booking.bookingId, unmappedResolution)}
+                  data-testid={`button-manage-unmapped-${booking.bookingId}`}
+                >
+                  {unmappedResolution ? (
+                    <>
+                      <Check className="h-3 w-3 mr-1" />
+                      {unmappedResolution.resolutionType === "prepurchase" ? "Prepurchase" : "Other"}
+                    </>
+                  ) : (
+                    <>
+                      <Pencil className="h-3 w-3 mr-1" />
+                      Manage
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -1305,13 +1330,15 @@ interface TidGroupProps {
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
+  unmappedResolutions?: Map<string, UnmappedResolution>;
+  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
 }
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded: isExpandedProp, autoExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
-  openIssueModal,
+  openIssueModal, unmappedResolutions, onManageUnmapped,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
   const [userCollapsed, setUserCollapsed] = useState(false);
@@ -1391,6 +1418,8 @@ const TidGroup = memo(function TidGroup({
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
                     onOpenIssueModal={openIssueModal}
+                    unmappedResolution={unmappedResolutions?.get(booking.bookingId)}
+                    onManageUnmapped={onManageUnmapped}
                   />
                 );
               })}
@@ -1429,6 +1458,8 @@ interface ReasonGroupProps {
   openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
   openManageReasonModal: (reason: string, allBookings: PurchaseBooking[]) => void;
   openIssueModal: (booking: BookingForDispute) => void;
+  unmappedResolutions?: Map<string, UnmappedResolution>;
+  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
 }
 
 const ReasonGroup = memo(function ReasonGroup({
@@ -1437,7 +1468,7 @@ const ReasonGroup = memo(function ReasonGroup({
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
-  openManageReasonModal, openIssueModal,
+  openManageReasonModal, openIssueModal, unmappedResolutions, onManageUnmapped,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
   const tidEntries = reasonGroup.tidEntries;
@@ -1521,6 +1552,8 @@ const ReasonGroup = memo(function ReasonGroup({
                 updateFinalNetPrice={updateFinalNetPrice}
                 openManageTidModal={openManageTidModal}
                 openIssueModal={openIssueModal}
+                unmappedResolutions={unmappedResolutions}
+                onManageUnmapped={onManageUnmapped}
               />
             );
           })}
@@ -1563,6 +1596,8 @@ interface BreakupSectionProps {
   openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
   openManageReasonModal: (reason: string, allBookings: PurchaseBooking[]) => void;
   openIssueModal: (booking: BookingForDispute) => void;
+  unmappedResolutions?: Map<string, UnmappedResolution>;
+  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
 }
 
 const BreakupSection = memo(function BreakupSection({
@@ -1572,6 +1607,7 @@ const BreakupSection = memo(function BreakupSection({
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
   openManageTidModal, openManageReasonModal, openIssueModal,
+  unmappedResolutions, onManageUnmapped,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
   const [showAllReasons, setShowAllReasons] = useState(false);
@@ -1672,6 +1708,8 @@ const BreakupSection = memo(function BreakupSection({
             openManageTidModal={openManageTidModal}
             openManageReasonModal={openManageReasonModal}
             openIssueModal={openIssueModal}
+            unmappedResolutions={unmappedResolutions}
+            onManageUnmapped={onManageUnmapped}
           />
         );
       })}
@@ -1700,6 +1738,195 @@ const BreakupSection = memo(function BreakupSection({
     </div>
   );
 });
+
+interface UnmappedResolutionModalHandle {
+  open: (bookingId: string, existingResolution?: UnmappedResolution) => void;
+}
+
+interface UnmappedResolutionModalProps {
+  runId: string;
+  currency: string;
+  onSaved: () => void;
+}
+
+const UnmappedResolutionModal = memo(forwardRef<UnmappedResolutionModalHandle, UnmappedResolutionModalProps>(function UnmappedResolutionModal(
+  { runId, currency, onSaved },
+  ref
+) {
+  const { toast } = useToast();
+  const [isOpen, setIsOpen] = useState(false);
+  const [bookingId, setBookingId] = useState("");
+  const [resolutionType, setResolutionType] = useState<"prepurchase" | "other">("prepurchase");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [amountPaid, setAmountPaid] = useState("");
+  const [note, setNote] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [existingId, setExistingId] = useState<number | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    open: (bid: string, existing?: UnmappedResolution) => {
+      setBookingId(bid);
+      if (existing) {
+        setResolutionType(existing.resolutionType);
+        setReferenceNumber(existing.referenceNumber || "");
+        setAmountPaid(existing.amountPaid != null ? String(existing.amountPaid) : "");
+        setNote(existing.note || "");
+        setExistingId(existing.id);
+      } else {
+        setResolutionType("prepurchase");
+        setReferenceNumber("");
+        setAmountPaid("");
+        setNote("");
+        setExistingId(null);
+      }
+      setIsOpen(true);
+    },
+  }));
+
+  const handleSave = useCallback(async () => {
+    if (!bookingId) return;
+    setIsSaving(true);
+    try {
+      await apiRequest("POST", "/api/unmapped-resolutions", {
+        runId,
+        bookingId,
+        resolutionType,
+        referenceNumber: resolutionType === "prepurchase" ? referenceNumber || null : null,
+        amountPaid: resolutionType === "prepurchase" && amountPaid ? parseFloat(amountPaid) : null,
+        note: note || null,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/unmapped-resolutions', runId] });
+      onSaved();
+      toast({ title: "Resolution saved", description: `Booking ${bookingId} marked as ${resolutionType}` });
+      setIsOpen(false);
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to save resolution", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [runId, bookingId, resolutionType, referenceNumber, amountPaid, note, toast, onSaved]);
+
+  const handleDelete = useCallback(async () => {
+    if (existingId === null) return;
+    setIsSaving(true);
+    try {
+      await apiRequest("DELETE", `/api/unmapped-resolutions/${existingId}`);
+      queryClient.invalidateQueries({ queryKey: ['/api/unmapped-resolutions', runId] });
+      onSaved();
+      toast({ title: "Resolution removed" });
+      setIsOpen(false);
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to remove resolution", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [existingId, runId, toast, onSaved]);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            Resolve Unmapped Booking
+          </DialogTitle>
+          <DialogDescription>
+            Booking <span className="font-mono font-semibold">{bookingId}</span> — select a resolution type.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Resolution Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={resolutionType === "prepurchase" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setResolutionType("prepurchase")}
+                data-testid="button-type-prepurchase"
+              >
+                Prepurchase
+              </Button>
+              <Button
+                variant={resolutionType === "other" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setResolutionType("other")}
+                data-testid="button-type-other"
+              >
+                Other
+              </Button>
+            </div>
+          </div>
+
+          {resolutionType === "prepurchase" && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Reference Number</label>
+                <Input
+                  className="h-8 text-sm font-mono"
+                  placeholder="Enter reference number"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  data-testid="input-unmapped-reference"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Amount Paid ({currency})</label>
+                <Input
+                  className="h-8 text-sm font-mono"
+                  placeholder="Enter amount"
+                  type="number"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                  data-testid="input-unmapped-amount"
+                />
+              </div>
+            </div>
+          )}
+
+          {resolutionType === "other" && (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Note</label>
+              <Input
+                className="h-8 text-sm"
+                placeholder="Add a note (optional)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                data-testid="input-unmapped-note"
+              />
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          {existingId !== null && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDelete}
+              disabled={isSaving}
+              data-testid="button-delete-unmapped-resolution"
+            >
+              Remove
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => setIsOpen(false)} data-testid="button-cancel-unmapped">
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving || (resolutionType === "prepurchase" && !referenceNumber && !amountPaid)}
+            data-testid="button-save-unmapped-resolution"
+          >
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+            {existingId !== null ? "Update" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}));
 
 interface ManageReloadsModalHandle {
   open: () => void;
@@ -2083,6 +2310,8 @@ interface LineItemsTableCardProps {
   openIssueModal: (booking: BookingForDispute) => void;
   onManageReloads?: () => void;
   runId?: string | null;
+  unmappedResolutions?: Map<string, UnmappedResolution>;
+  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
 }
 
 const LineItemsTableCard = memo(function LineItemsTableCard({
@@ -2114,6 +2343,8 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   openIssueModal,
   onManageReloads,
   runId,
+  unmappedResolutions,
+  onManageUnmapped,
 }: LineItemsTableCardProps) {
   return (
     <Card>
@@ -2274,6 +2505,8 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                                   openManageTidModal={openManageTidModal}
                                   openManageReasonModal={openManageReasonModal}
                                   openIssueModal={openIssueModal}
+                                  unmappedResolutions={unmappedResolutions}
+                                  onManageUnmapped={onManageUnmapped}
                                 />
                               </TableCell>
                             </TableRow>
@@ -2686,6 +2919,7 @@ export function PurchaseReconciliationPanel({
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
   const manageReloadsModalRef = useRef<ManageReloadsModalHandle>(null);
+  const unmappedResolutionModalRef = useRef<UnmappedResolutionModalHandle>(null);
   
   const effectiveFxRate = useMemo(() => {
     if (fxRateToUsd) return fxRateToUsd;
@@ -2728,6 +2962,24 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId]); // Only depend on runId, reload when it changes
 
+  const { data: unmappedResolutionsData } = useQuery<UnmappedResolution[]>({
+    queryKey: ['/api/unmapped-resolutions', runId],
+    enabled: !!runId,
+  });
+
+  const unmappedResolutions = useMemo(() => {
+    const map = new Map<string, UnmappedResolution>();
+    if (unmappedResolutionsData) {
+      for (const r of unmappedResolutionsData) {
+        map.set(r.bookingId, r);
+      }
+    }
+    return map;
+  }, [unmappedResolutionsData]);
+
+  const handleManageUnmapped = useCallback((bookingId: string, existing?: UnmappedResolution) => {
+    unmappedResolutionModalRef.current?.open(bookingId, existing);
+  }, []);
 
   const [, startExpandTransition] = useTransition();
 
@@ -3736,6 +3988,8 @@ export function PurchaseReconciliationPanel({
         openIssueModal={openIssueModal}
         onManageReloads={() => manageReloadsModalRef.current?.open()}
         runId={runId}
+        unmappedResolutions={unmappedResolutions}
+        onManageUnmapped={handleManageUnmapped}
       />
 
       <InsightsCard
@@ -3846,6 +4100,14 @@ export function PurchaseReconciliationPanel({
         originalTotal={portalReloadOriginalTotal}
         adjustedTotal={portalReloadTotal}
       />
+      {runId && (
+        <UnmappedResolutionModal
+          ref={unmappedResolutionModalRef}
+          runId={runId}
+          currency={currency}
+          onSaved={() => {}}
+        />
+      )}
 
     </div>
   );

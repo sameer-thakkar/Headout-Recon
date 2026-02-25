@@ -2259,6 +2259,52 @@ export async function registerRoutes(
     }
   });
 
+  // Unmapped Resolutions
+  app.get("/api/unmapped-resolutions/:runId", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const resolutions = await storage.getUnmappedResolutions(runId);
+      res.json(resolutions);
+    } catch (error) {
+      console.error("Get unmapped resolutions error:", error);
+      res.status(500).json({ error: "Failed to get unmapped resolutions" });
+    }
+  });
+
+  app.post("/api/unmapped-resolutions", async (req, res) => {
+    try {
+      const { runId, bookingId, resolutionType, referenceNumber, amountPaid, note } = req.body;
+      if (!runId || !bookingId || !["prepurchase", "other"].includes(resolutionType)) {
+        return res.status(400).json({ error: "Missing required fields: runId, bookingId, resolutionType (prepurchase/other)" });
+      }
+      const resolution = await storage.upsertUnmappedResolution({
+        runId: String(runId).trim(),
+        bookingId: String(bookingId).trim(),
+        resolutionType,
+        referenceNumber: referenceNumber || null,
+        amountPaid: typeof amountPaid === "number" ? amountPaid : null,
+        note: note || null,
+      });
+      res.json({ resolution });
+    } catch (error) {
+      console.error("Create unmapped resolution error:", error);
+      res.status(500).json({ error: "Failed to save unmapped resolution" });
+    }
+  });
+
+  app.delete("/api/unmapped-resolutions/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const deleted = await storage.deleteUnmappedResolution(id);
+      if (!deleted) return res.status(404).json({ error: "Not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete unmapped resolution error:", error);
+      res.status(500).json({ error: "Failed to delete unmapped resolution" });
+    }
+  });
+
   // Rename a session
   app.patch("/api/sessions/:id/rename", async (req, res) => {
     try {

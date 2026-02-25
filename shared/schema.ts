@@ -757,3 +757,39 @@ export const insertReloadAdjustmentSchema = z.object({
   adjustmentType: z.enum(["add", "less"]),
 });
 export type InsertReloadAdjustment = z.infer<typeof insertReloadAdjustmentSchema>;
+
+// Unmapped Resolutions - for resolving unmapped bookings in purchase reconciliation
+export const unmappedResolutions = pgTable("unmapped_resolutions", {
+  id: serial("id").primaryKey(),
+  runId: varchar("run_id").notNull(),
+  bookingId: varchar("booking_id").notNull(),
+  resolutionType: varchar("resolution_type").notNull(),
+  referenceNumber: varchar("reference_number"),
+  amountPaid: real("amount_paid"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DbUnmappedResolution = typeof unmappedResolutions.$inferSelect;
+
+export const unmappedResolutionSchema = z.object({
+  id: z.number(),
+  runId: z.string(),
+  bookingId: z.string(),
+  resolutionType: z.enum(["prepurchase", "other"]),
+  referenceNumber: z.string().nullable().optional(),
+  amountPaid: z.number().nullable().optional(),
+  note: z.string().nullable().optional(),
+  createdAt: z.string(),
+});
+export type UnmappedResolution = z.infer<typeof unmappedResolutionSchema>;
+
+export const insertUnmappedResolutionSchema = z.object({
+  runId: z.string().min(1),
+  bookingId: z.string().min(1),
+  resolutionType: z.enum(["prepurchase", "other"]),
+  referenceNumber: z.string().nullable().optional(),
+  amountPaid: z.number().nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+export type InsertUnmappedResolution = z.infer<typeof insertUnmappedResolutionSchema>;

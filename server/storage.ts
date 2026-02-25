@@ -21,6 +21,8 @@ import type {
   InsertPortalReload,
   ReloadAdjustment,
   InsertReloadAdjustment,
+  UnmappedResolution,
+  InsertUnmappedResolution,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -95,6 +97,11 @@ export interface IStorage {
   getReloadAdjustmentsByBeId(beId: string): Promise<ReloadAdjustment[]>;
   createReloadAdjustment(data: InsertReloadAdjustment): Promise<ReloadAdjustment>;
   deleteReloadAdjustment(id: number): Promise<boolean>;
+
+  // Unmapped Resolutions
+  getUnmappedResolutions(runId: string): Promise<UnmappedResolution[]>;
+  upsertUnmappedResolution(data: InsertUnmappedResolution): Promise<UnmappedResolution>;
+  deleteUnmappedResolution(id: number): Promise<boolean>;
 
   // Dispute Overrides (per-run, per-booking edits from Manage Disputes modal)
   setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void>;
@@ -533,6 +540,41 @@ export class MemStorage implements IStorage {
     return true;
   }
 
+  // Unmapped Resolutions
+  private unmappedResolutionsList: UnmappedResolution[] = [];
+  private unmappedResolutionCounter: number = 0;
+
+  async getUnmappedResolutions(runId: string): Promise<UnmappedResolution[]> {
+    return this.unmappedResolutionsList.filter(r => r.runId === runId);
+  }
+
+  async upsertUnmappedResolution(data: InsertUnmappedResolution): Promise<UnmappedResolution> {
+    const existingIdx = this.unmappedResolutionsList.findIndex(r => r.runId === data.runId && r.bookingId === data.bookingId);
+    const resolution: UnmappedResolution = {
+      id: existingIdx >= 0 ? this.unmappedResolutionsList[existingIdx].id : ++this.unmappedResolutionCounter,
+      runId: data.runId,
+      bookingId: data.bookingId,
+      resolutionType: data.resolutionType,
+      referenceNumber: data.referenceNumber ?? null,
+      amountPaid: data.amountPaid ?? null,
+      note: data.note ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    if (existingIdx >= 0) {
+      this.unmappedResolutionsList[existingIdx] = resolution;
+    } else {
+      this.unmappedResolutionsList.push(resolution);
+    }
+    return resolution;
+  }
+
+  async deleteUnmappedResolution(id: number): Promise<boolean> {
+    const idx = this.unmappedResolutionsList.findIndex(r => r.id === id);
+    if (idx === -1) return false;
+    this.unmappedResolutionsList.splice(idx, 1);
+    return true;
+  }
+
   async setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void> {
     const existing = this.disputeOverrides.get(runId) || {};
     this.disputeOverrides.set(runId, { ...existing, ...overrides });
@@ -564,6 +606,7 @@ import {
   paxTypes as paxTypesTable,
   portalReloads as portalReloadsTable,
   reloadAdjustments as reloadAdjustmentsTable,
+  unmappedResolutions as unmappedResolutionsTable,
   counters,
   type ReconciliationSession,
 } from "@shared/schema";
@@ -1368,6 +1411,61 @@ export class DatabaseStorage implements ISessionStorage {
 
   async deleteReloadAdjustment(id: number): Promise<boolean> {
     const result = await db.delete(reloadAdjustmentsTable).where(eq(reloadAdjustmentsTable.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getUnmappedResolutions(runId: string): Promise<UnmappedResolution[]> {
+    const results = await db.select().from(unmappedResolutionsTable).where(eq(unmappedResolutionsTable.runId, runId));
+    return results.map(r => ({
+      id: r.id,
+      runId: r.runId,
+      bookingId: r.bookingId,
+      resolutionType: r.resolutionType as "prepurchase" | "other",
+      referenceNumber: r.referenceNumber,
+      amountPaid: r.amountPaid,
+      note: r.note,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async upsertUnmappedResolution(data: InsertUnmappedResolution): Promise<UnmappedResolution> {
+    const existing = await db.select().from(unmappedResolutionsTable)
+      .where(and(eq(unmappedResolutionsTable.runId, data.runId), eq(unmappedResolutionsTable.bookingId, data.bookingId)));
+    let result;
+    if (existing.length > 0) {
+      [result] = await db.update(unmappedResolutionsTable)
+        .set({
+          resolutionType: data.resolutionType,
+          referenceNumber: data.referenceNumber ?? null,
+          amountPaid: data.amountPaid ?? null,
+          note: data.note ?? null,
+        })
+        .where(eq(unmappedResolutionsTable.id, existing[0].id))
+        .returning();
+    } else {
+      [result] = await db.insert(unmappedResolutionsTable).values({
+        runId: data.runId,
+        bookingId: data.bookingId,
+        resolutionType: data.resolutionType,
+        referenceNumber: data.referenceNumber ?? null,
+        amountPaid: data.amountPaid ?? null,
+        note: data.note ?? null,
+      }).returning();
+    }
+    return {
+      id: result.id,
+      runId: result.runId,
+      bookingId: result.bookingId,
+      resolutionType: result.resolutionType as "prepurchase" | "other",
+      referenceNumber: result.referenceNumber,
+      amountPaid: result.amountPaid,
+      note: result.note,
+      createdAt: result.createdAt.toISOString(),
+    };
+  }
+
+  async deleteUnmappedResolution(id: number): Promise<boolean> {
+    const result = await db.delete(unmappedResolutionsTable).where(eq(unmappedResolutionsTable.id, id)).returning();
     return result.length > 0;
   }
 
