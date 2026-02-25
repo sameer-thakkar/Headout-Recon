@@ -122,6 +122,7 @@ const BookingRow = memo(function BookingRow({
   onManageUnmapped,
 }: BookingRowProps) {
   const [localFnp, setLocalFnp] = useState(fnpValue.toFixed(2));
+  const [fnpFocused, setFnpFocused] = useState(false);
   const localFnpRef = useRef(localFnp);
   localFnpRef.current = localFnp;
 
@@ -132,7 +133,10 @@ const BookingRow = memo(function BookingRow({
   }, [fnpValue]);
 
   const commitFnp = useCallback(() => {
-    const parsed = Math.round((parseFloat(localFnp) || 0) * 100) / 100;
+    const cleaned = localFnp.replace(/,/g, "");
+    const parsed = Math.round((parseFloat(cleaned) || 0) * 100) / 100;
+    setLocalFnp(parsed.toFixed(2));
+    setFnpFocused(false);
     if (parsed !== fnpValue) {
       onUpdateFnp(booking.bookingId, parsed);
     }
@@ -177,11 +181,15 @@ const BookingRow = memo(function BookingRow({
         <TableCell className="py-1 text-right" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-1">
             <Input
-              type="number"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               className="h-6 text-xs w-28 font-mono text-right border-transparent hover:border-input focus:border-input bg-transparent"
-              value={localFnp}
-              onChange={(e) => setLocalFnp(e.target.value)}
+              value={fnpFocused ? localFnp : formatNumber(parseFloat(localFnp) || 0)}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9.\-]/g, "");
+                setLocalFnp(raw);
+              }}
+              onFocus={() => setFnpFocused(true)}
               onBlur={commitFnp}
               onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
               data-testid={`input-fnp-${booking.bookingId}`}
