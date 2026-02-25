@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition, forwardRef, useImperativeHandle } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil, Search } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil, Search, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -1736,6 +1736,11 @@ export function PurchaseReconciliationPanel({
   const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
   const [disputesLoaded, setDisputesLoaded] = useState(false);
+
+  // Apply & confirm + export state
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Track bookings that have had issues logged (to suppress warning)
   const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
@@ -1918,6 +1923,65 @@ export function PurchaseReconciliationPanel({
       description: `Final Net Price set to ${source === "spNet" ? "SP Net" : "HO Net"} for ${bookings.length} bookings.`,
     });
   }, [toast]);
+
+  const handleConfirmApply = useCallback(() => {
+    setShowApplyConfirmation(false);
+    setIsConfirmed(true);
+  }, []);
+
+  const handleExportExcel = useCallback(async () => {
+    if (!runId) {
+      toast({ title: "No data to export", description: "Please run a reconciliation first", variant: "destructive" });
+      return;
+    }
+    try {
+      setIsExporting(true);
+      toast({ title: "Generating export...", description: "Please wait while the export files are being prepared" });
+      const [analysisResponse, financialResponse] = await Promise.all([
+        fetch(`/api/runs/${runId}/export/analysis`),
+        fetch(`/api/runs/${runId}/export/financial`),
+      ]);
+      if (!analysisResponse.ok || !financialResponse.ok) throw new Error("Failed to generate export");
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const analysisBlob = await analysisResponse.blob();
+      const analysisUrl = window.URL.createObjectURL(analysisBlob);
+      const a1 = document.createElement("a");
+      a1.href = analysisUrl;
+      a1.download = `reconciliation_analysis_${timestamp}.xlsx`;
+      document.body.appendChild(a1); a1.click(); window.URL.revokeObjectURL(analysisUrl); document.body.removeChild(a1);
+      const financialBlob = await financialResponse.blob();
+      const financialUrl = window.URL.createObjectURL(financialBlob);
+      const a2 = document.createElement("a");
+      a2.href = financialUrl;
+      a2.download = `financial_report_${timestamp}.xlsx`;
+      document.body.appendChild(a2); a2.click(); window.URL.revokeObjectURL(financialUrl); document.body.removeChild(a2);
+      toast({ title: "Export complete", description: "Your reconciliation reports have been downloaded" });
+    } catch (error) {
+      toast({ title: "Export failed", description: "Failed to generate export file", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [runId, toast]);
+
+  const handleExportGSheet = useCallback(async () => {
+    if (!runId) {
+      toast({ title: "No data to export", description: "Please run a reconciliation first", variant: "destructive" });
+      return;
+    }
+    try {
+      setIsExporting(true);
+      toast({ title: "Creating Google Sheets...", description: "Please wait while the spreadsheet is being created" });
+      const response = await fetch(`/api/runs/${runId}/export-gsheet/financial`, { method: "POST" });
+      if (!response.ok) throw new Error("Failed to create Google Sheet");
+      const data = await response.json();
+      if (data.url) window.open(data.url, "_blank");
+      toast({ title: "Google Sheets created", description: "Opening spreadsheet in a new tab" });
+    } catch (error) {
+      toast({ title: "Export failed", description: "Failed to create Google Sheet", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [runId, toast]);
 
   const handleApplySpNet = useCallback((bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     applyBulkFinalNetPrice("spNet", bookings);
@@ -2619,6 +2683,16 @@ export function PurchaseReconciliationPanel({
               BE: {beId}
             </Badge>
           )}
+          <Button
+            size="sm"
+            variant={isConfirmed ? "outline" : "default"}
+            onClick={() => setShowApplyConfirmation(true)}
+            data-testid="button-apply-confirm-purchase-reco"
+            className={isConfirmed ? "text-green-600 border-green-500 hover:bg-green-50 dark:hover:bg-green-950/20" : ""}
+          >
+            <Check className="h-3.5 w-3.5 mr-1" />
+            {isConfirmed ? "Confirmed" : "Apply & confirm"}
+          </Button>
         </div>
       </div>
 
@@ -3130,12 +3204,54 @@ export function PurchaseReconciliationPanel({
         </Card>
       )}
 
-      <div className="flex justify-end pt-2">
+      <div className="flex items-center justify-between pt-2">
         <Button variant="outline" size="sm" onClick={onClose} data-testid="button-close-purchase-reco">
           Close
         </Button>
+        {isConfirmed && (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              data-testid="button-export-excel-purchase-reco"
+            >
+              {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              Export Excel
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExportGSheet}
+              disabled={isExporting}
+              data-testid="button-export-gsheet-purchase-reco"
+            >
+              {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              Export Google Sheets
+            </Button>
+          </div>
+        )}
       </div>
-      
+
+      <Dialog open={showApplyConfirmation} onOpenChange={setShowApplyConfirmation}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Purchase Reconciliation</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to confirm this purchase reconciliation? This will lock in the current values and enable the financial report export.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApplyConfirmation(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmApply} data-testid="button-confirm-apply-purchase-reco">
+              Yes, confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ManageTidModal
         ref={manageTidModalRef}
         currency={currency}
