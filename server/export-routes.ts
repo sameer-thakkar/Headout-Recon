@@ -1111,6 +1111,11 @@ export function registerExportRoutes(app: Express) {
       // =====================================================
       // SHEET 2: SP Invoice Report
       // =====================================================
+      const spOriginalHeaders = originalSpData.length > 0
+        ? Object.keys(originalSpData[0] as Record<string, unknown>)
+        : [];
+      const spAllHeaders = [...spOriginalHeaders, "SP Net (HO Currency)", "FX Rate Used"];
+
       const spReportData = originalSpData.map((row: Record<string, unknown>) => {
         const bookingId = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
         const spFxRow = spFxMap.get(bookingId);
@@ -1121,7 +1126,10 @@ export function registerExportRoutes(app: Express) {
           "FX Rate Used": spFxRow?.fxRateUsed ?? "",
         };
       });
-      const spReportSheet = XLSX.utils.json_to_sheet(spReportData);
+
+      const spReportSheet = spReportData.length > 0
+        ? XLSX.utils.json_to_sheet(spReportData)
+        : XLSX.utils.aoa_to_sheet([spAllHeaders]);
       spReportSheet["!sheetViews"] = [{ showGridLines: false }];
       
       const spRange = XLSX.utils.decode_range(spReportSheet["!ref"] || "A1");
