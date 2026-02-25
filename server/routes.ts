@@ -1762,7 +1762,7 @@ export async function registerRoutes(
       });
       console.log("Portal reloads column detection:", { partnerIdCol, paidAmountCol, zendeskIdCol: zendeskIdCol || "(not found)", dateCol: dateCol || "(not found)", amountLoadedCol: amountLoadedCol || "(not found)", allHeaders: headers });
 
-      const parsed: { beId: string; paidAmount: number; zendeskId?: string; dateOfPayment?: string; amountLoadedAtDate?: number; rawRow: Record<string, unknown> }[] = [];
+      const parsed: { beId: string; paidAmount: number; zendeskId?: string; dateOfPayment?: string; amountLoadedAtDate?: string; rawRow: Record<string, unknown> }[] = [];
       for (const row of rawRows) {
         const beId = String(row[partnerIdCol] || "").trim();
         const rawAmount = row[paidAmountCol];
@@ -1791,10 +1791,26 @@ export async function registerRoutes(
               dateOfPayment = String(rawDate || "").trim() || undefined;
             }
           }
-          let amountLoadedAtDate: number | undefined;
+          let amountLoadedAtDate: string | undefined;
           if (amountLoadedCol) {
             const rawLoaded = row[amountLoadedCol];
-            amountLoadedAtDate = typeof rawLoaded === "number" ? rawLoaded : parseFloat(String(rawLoaded).replace(/,/g, "")) || undefined;
+            if (rawLoaded instanceof Date && !isNaN(rawLoaded.getTime())) {
+              const dd = String(rawLoaded.getDate()).padStart(2, "0");
+              const mm = String(rawLoaded.getMonth() + 1).padStart(2, "0");
+              const yyyy = rawLoaded.getFullYear();
+              amountLoadedAtDate = `${dd}/${mm}/${yyyy}`;
+            } else if (typeof rawLoaded === "number") {
+              const excelEpoch = new Date(1899, 11, 30);
+              const parsed = new Date(excelEpoch.getTime() + rawLoaded * 86400000);
+              if (!isNaN(parsed.getTime())) {
+                const dd = String(parsed.getDate()).padStart(2, "0");
+                const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+                const yyyy = parsed.getFullYear();
+                amountLoadedAtDate = `${dd}/${mm}/${yyyy}`;
+              }
+            } else {
+              amountLoadedAtDate = String(rawLoaded || "").trim() || undefined;
+            }
           }
           parsed.push({ beId, paidAmount, zendeskId, dateOfPayment, amountLoadedAtDate, rawRow: row as Record<string, unknown> });
         }
@@ -1830,7 +1846,7 @@ export async function registerRoutes(
           paidAmount: r.paidAmount,
           zendeskId: r.zendeskId || null,
           dateOfPayment: r.dateOfPayment || null,
-          amountLoadedAtDate: typeof r.amountLoadedAtDate === "number" ? r.amountLoadedAtDate : null,
+          amountLoadedAtDate: r.amountLoadedAtDate || null,
         }));
 
       if (validReloads.length === 0) {
@@ -1878,7 +1894,7 @@ export async function registerRoutes(
         beId: String(beId).trim(),
         zendeskId: zendeskId || null,
         dateOfPayment: dateOfPayment || null,
-        amountLoadedAtDate: typeof amountLoadedAtDate === "number" ? amountLoadedAtDate : null,
+        amountLoadedAtDate: amountLoadedAtDate || null,
         paidAmount,
         adjustmentType,
       });

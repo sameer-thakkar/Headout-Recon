@@ -2018,7 +2018,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
           beId,
           zendeskId: r.zendeskId || null,
           dateOfPayment: r.date || null,
-          amountLoadedAtDate: r.amountLoaded ? parseFloat(r.amountLoaded) || null : null,
+          amountLoadedAtDate: r.amountLoaded || null,
           paidAmount: parseFloat(r.paidAmount),
           adjustmentType: r.type,
         });
@@ -2083,7 +2083,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                       <TableRow key={`reload-${r.id || i}`} className="h-7">
                         <TableCell className="py-1 font-mono">{r.zendeskId || "-"}</TableCell>
                         <TableCell className="py-1">{formatDateDisplay(r.dateOfPayment)}</TableCell>
-                        <TableCell className="py-1 text-right font-mono">{r.amountLoadedAtDate != null ? formatNumber(r.amountLoadedAtDate) : "-"}</TableCell>
+                        <TableCell className="py-1 text-right">{formatDateDisplay(r.amountLoadedAtDate)}</TableCell>
                         <TableCell className="py-1 text-right font-mono">{formatNumber(r.paidAmount)}</TableCell>
                       </TableRow>
                     ))}
@@ -2129,7 +2129,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                         </TableCell>
                         <TableCell className="py-1 font-mono">{a.zendeskId || "-"}</TableCell>
                         <TableCell className="py-1">{formatDateDisplay(a.dateOfPayment)}</TableCell>
-                        <TableCell className="py-1 text-right font-mono">{a.amountLoadedAtDate != null ? formatNumber(a.amountLoadedAtDate) : "-"}</TableCell>
+                        <TableCell className="py-1 text-right">{formatDateDisplay(a.amountLoadedAtDate)}</TableCell>
                         <TableCell className={`py-1 text-right font-mono ${a.adjustmentType === "add" ? "text-green-600" : "text-red-600"}`}>
                           {a.adjustmentType === "add" ? "+" : "-"}{formatNumber(a.paidAmount)}
                         </TableCell>
