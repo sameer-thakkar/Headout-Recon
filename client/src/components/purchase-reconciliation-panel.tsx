@@ -1564,7 +1564,7 @@ interface BreakupSectionProps {
   openIssueModal: (booking: BookingForDispute) => void;
 }
 
-function BreakupSection({
+const BreakupSection = memo(function BreakupSection({
   itemId, breakupData, breakupWithTids, currency, runId, effectiveFxRate,
   expandedReasons, expandedTids, getVisibleTidCount,
   toggleReasonExpand, toggleTidExpand, showMoreTids,
@@ -1698,7 +1698,7 @@ function BreakupSection({
       </div>
     </div>
   );
-}
+});
 
 export function PurchaseReconciliationPanel({
   primaryRows,
