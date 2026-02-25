@@ -121,13 +121,13 @@ const BookingRow = memo(function BookingRow({
   unmappedResolution,
   onManageUnmapped,
 }: BookingRowProps) {
-  const [localFnp, setLocalFnp] = useState(String(fnpValue));
+  const [localFnp, setLocalFnp] = useState(fnpValue.toFixed(2));
   const localFnpRef = useRef(localFnp);
   localFnpRef.current = localFnp;
 
   useEffect(() => {
-    if (String(fnpValue) !== localFnpRef.current) {
-      setLocalFnp(String(fnpValue));
+    if (fnpValue.toFixed(2) !== localFnpRef.current) {
+      setLocalFnp(fnpValue.toFixed(2));
     }
   }, [fnpValue]);
 
