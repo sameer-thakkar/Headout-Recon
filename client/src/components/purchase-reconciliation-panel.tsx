@@ -2627,9 +2627,9 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
             <Badge variant={calculations.netDifference === 0 ? "default" : "destructive"} className="text-xs">
               {calculations.netDifference === 0 ? "Balanced" : "Unbalanced"}
             </Badge>
-            {effectiveFxRate && effectiveFxRate !== 1 && (
+            {(sumFxRate ?? effectiveFxRate) && (sumFxRate ?? effectiveFxRate) !== 1 && (
               <Badge variant="outline" className="text-xs">
-                FX: {effectiveFxRate.toFixed(4)}
+                {crossCcy ? `${sumCcy}→USD: ` : "FX: "}{(sumFxRate ?? effectiveFxRate)!.toFixed(4)}
               </Badge>
             )}
           </div>
@@ -2656,7 +2656,7 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                 <div className="flex items-center gap-2">
                   {!isSectionExpanded && lastItem && (
                     <span className={`font-mono text-xs ${lastItem.value < 0 ? "text-red-600 dark:text-red-400" : lastItem.value > 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
-                      {lastItem.label}: {formatNumber(lastItem.value)} {currency}
+                      {lastItem.label}: {formatNumber(lastItem.value)} {sumCcy || currency}
                     </span>
                   )}
                   <Badge variant="outline" className="text-[10px]">
@@ -4184,7 +4184,7 @@ export function PurchaseReconciliationPanel({
           <Calculator className="h-5 w-5 text-primary" />
           <span className="font-semibold">Purchase Reconciliation</span>
           <Badge variant="outline" className="text-xs">
-            {currency}
+            {isCrossCurrency ? `${summaryCurrency} (HO: ${currency})` : currency}
           </Badge>
           {isPriceUpdatePending && (
             <Badge variant="secondary" className="text-xs animate-pulse">
@@ -4249,7 +4249,7 @@ export function PurchaseReconciliationPanel({
             <span className="text-xs text-muted-foreground">Net Difference</span>
           </div>
           <p className={`font-mono text-sm font-semibold ${calculations.netDifference === 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-summary-net-diff">
-            {formatNumber(calculations.netDifference)}
+            {formatNumber(calculations.netDifference)} <span className="text-[10px] font-normal text-muted-foreground">{summaryCurrency}</span>
           </p>
           <p className="text-[10px] text-muted-foreground">{calculations.netDifference === 0 ? "Balanced" : "Unbalanced"}</p>
         </Card>
@@ -4259,7 +4259,7 @@ export function PurchaseReconciliationPanel({
             <span className="text-xs text-muted-foreground">Difference (Row 9)</span>
           </div>
           <p className="font-mono text-sm font-semibold" data-testid="text-summary-difference">
-            {formatNumber(calculations.difference)}
+            {formatNumber(calculations.difference)} <span className="text-[10px] font-normal text-muted-foreground">{summaryCurrency}</span>
           </p>
           <p className="text-[10px] text-muted-foreground">HO vs SP</p>
         </Card>
