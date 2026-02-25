@@ -152,9 +152,20 @@ const BookingRow = memo(function BookingRow({
               </Badge>
             )}
             {isNegativeSp && (
-              <Badge variant="outline" className="text-[10px] px-1 py-0 text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
-                Refund
-              </Badge>
+              <>
+                <Badge variant="outline" className="text-[10px] px-1 py-0 text-red-600 border-red-300 dark:text-red-400 dark:border-red-700">
+                  Refund
+                </Badge>
+                <Badge variant="outline" className={`text-[10px] px-1 py-0 ${
+                  booking.hoNet === 0
+                    ? "text-muted-foreground border-muted-foreground/40"
+                    : Math.abs(booking.spNet) === Math.abs(booking.hoNet)
+                      ? "text-green-600 border-green-300 dark:text-green-400 dark:border-green-700"
+                      : "text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700"
+                }`}>
+                  {booking.hoNet === 0 ? "Zero HO" : Math.abs(booking.spNet) === Math.abs(booking.hoNet) ? "Matched" : "Difference"}
+                </Badge>
+              </>
             )}
           </div>
         </TableCell>
@@ -1462,6 +1473,8 @@ interface ReasonGroupProps {
   openIssueModal: (booking: BookingForDispute) => void;
   unmappedResolutions?: Map<string, UnmappedResolution>;
   onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
+  negativeSpVerified?: boolean;
+  onSetNegativeSpVerified?: (val: boolean) => void;
 }
 
 const ReasonGroup = memo(function ReasonGroup({
@@ -1471,6 +1484,7 @@ const ReasonGroup = memo(function ReasonGroup({
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
   openManageReasonModal, openIssueModal, unmappedResolutions, onManageUnmapped,
+  negativeSpVerified, onSetNegativeSpVerified,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
   const tidEntries = reasonGroup.tidEntries;
@@ -1528,6 +1542,80 @@ const ReasonGroup = memo(function ReasonGroup({
       </div>
       {isReasonExpanded && (
         <div className="space-y-1 p-2">
+          {reasonGroup.reason === "Negative SP - Partial Refund" && (() => {
+            const allBookings = tidEntries.flatMap(([, b]) => b);
+            const zeroHo = allBookings.filter(b => b.hoNet === 0);
+            const matched = allBookings.filter(b => b.hoNet !== 0 && Math.abs(b.spNet) === Math.abs(b.hoNet));
+            const diff = allBookings.filter(b => b.hoNet !== 0 && Math.abs(b.spNet) !== Math.abs(b.hoNet));
+            const totalRefund = allBookings.reduce((s, b) => s + b.spNet, 0);
+            const totalFnp = allBookings.reduce((s, b) => {
+              if (b.hoNet === 0) return s;
+              if (Math.abs(b.spNet) === Math.abs(b.hoNet)) return s;
+              return s + Math.abs(Math.abs(b.hoNet) - Math.abs(b.spNet));
+            }, 0);
+            return (
+              <div className="space-y-2 mb-2">
+                <div className="rounded-md border bg-red-50/50 dark:bg-red-950/20 p-3 space-y-2">
+                  <div className="text-xs font-medium text-red-800 dark:text-red-300 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Negative SP Net Summary — {allBookings.length} refund bookings
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded border bg-background p-2">
+                      <div className="text-muted-foreground">Zero HO</div>
+                      <div className="font-mono font-semibold">{zeroHo.length} bookings</div>
+                      <div className="text-[10px] text-muted-foreground">FNP = 0</div>
+                    </div>
+                    <div className="rounded border bg-background p-2">
+                      <div className="text-muted-foreground">Matched</div>
+                      <div className="font-mono font-semibold text-green-600">{matched.length} bookings</div>
+                      <div className="text-[10px] text-muted-foreground">|SP| = |HO|, FNP = 0</div>
+                    </div>
+                    <div className="rounded border bg-background p-2">
+                      <div className="text-muted-foreground">Difference</div>
+                      <div className="font-mono font-semibold text-amber-600">{diff.length} bookings</div>
+                      <div className="text-[10px] text-muted-foreground">FNP = ||HO| - |SP||</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-1 border-t">
+                    <div>
+                      <span className="text-muted-foreground">Total Refund: </span>
+                      <span className="font-mono font-semibold text-red-600">{formatNumber(totalRefund)} {currency}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total Auto FNP: </span>
+                      <span className="font-mono font-semibold">{formatNumber(totalFnp)} {currency}</span>
+                    </div>
+                  </div>
+                </div>
+                {onSetNegativeSpVerified && (
+                  <div
+                    className={`rounded-md border-2 p-3 flex items-center justify-between transition-colors ${
+                      negativeSpVerified
+                        ? "border-green-500 dark:border-green-600 bg-green-50/50 dark:bg-green-950/20"
+                        : "border-amber-400 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-950/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-sm">
+                      {negativeSpVerified ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      )}
+                      <span className={negativeSpVerified ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300"}>
+                        {negativeSpVerified ? "Negative SP Net transactions verified" : "Please verify all negative SP Net refund transactions"}
+                      </span>
+                    </div>
+                    <Checkbox
+                      checked={negativeSpVerified}
+                      onCheckedChange={(checked) => onSetNegativeSpVerified(checked === true)}
+                      data-testid="checkbox-negative-sp-verified"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {visibleTids.map(([tid, tidBookings]) => {
             const tidKey = `${itemId}-${reasonGroup.reason}-${tid}`;
             const isTidExpanded = expandedTids.has(tidKey);
@@ -1600,6 +1688,8 @@ interface BreakupSectionProps {
   openIssueModal: (booking: BookingForDispute) => void;
   unmappedResolutions?: Map<string, UnmappedResolution>;
   onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
+  negativeSpVerified?: boolean;
+  onSetNegativeSpVerified?: (val: boolean) => void;
 }
 
 const BreakupSection = memo(function BreakupSection({
@@ -1610,6 +1700,7 @@ const BreakupSection = memo(function BreakupSection({
   getFinalNetPrice, updateFinalNetPrice,
   openManageTidModal, openManageReasonModal, openIssueModal,
   unmappedResolutions, onManageUnmapped,
+  negativeSpVerified, onSetNegativeSpVerified,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
   const [showAllReasons, setShowAllReasons] = useState(false);
@@ -1712,6 +1803,8 @@ const BreakupSection = memo(function BreakupSection({
             openIssueModal={openIssueModal}
             unmappedResolutions={unmappedResolutions}
             onManageUnmapped={onManageUnmapped}
+            negativeSpVerified={negativeSpVerified}
+            onSetNegativeSpVerified={onSetNegativeSpVerified}
           />
         );
       })}
@@ -2676,6 +2769,8 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                                   openIssueModal={openIssueModal}
                                   unmappedResolutions={unmappedResolutions}
                                   onManageUnmapped={onManageUnmapped}
+                                  negativeSpVerified={negativeSpVerified}
+                                  onSetNegativeSpVerified={setNegativeSpVerified}
                                 />
                               </TableCell>
                             </TableRow>
@@ -3082,6 +3177,10 @@ export function PurchaseReconciliationPanel({
   // Track bookings that have had issues logged (to suppress warning)
   const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
   
+  // Negative SP Net verification state
+  const [negativeSpVerified, setNegativeSpVerified] = useState(false);
+  const hasNegativeSpBookings = useMemo(() => primaryRows.some(r => r.spNetInHo < 0 && !r.isSecondaryVendor), [primaryRows]);
+  
   // Imperative refs for modals (state lives inside modal components, not here)
   const manageTidModalRef = useRef<ManageTidModalHandle>(null);
   const manageReasonModalRef = useRef<ManageReasonModalHandle>(null);
@@ -3130,6 +3229,32 @@ export function PurchaseReconciliationPanel({
       setDisputesLoaded(false);
     }
   }, [runId]); // Only depend on runId, reload when it changes
+
+  useEffect(() => {
+    const negativeSpBookings = primaryRows.filter(r => r.spNetInHo < 0 && !r.isSecondaryVendor);
+    if (negativeSpBookings.length === 0) return;
+    setFinalNetPrices(prev => {
+      const next = new Map(prev);
+      let changed = false;
+      for (const row of negativeSpBookings) {
+        if (next.has(row.bookingId)) continue;
+        const spAbs = Math.abs(row.spNetInHo);
+        const hoAbs = Math.abs(row.hoNet);
+        let fnp: number;
+        if (row.hoNet === 0) {
+          fnp = 0;
+        } else if (spAbs === hoAbs) {
+          fnp = 0;
+        } else {
+          fnp = Math.abs(hoAbs - spAbs);
+        }
+        next.set(row.bookingId, fnp);
+        changed = true;
+      }
+      if (!changed) return prev;
+      return next;
+    });
+  }, [primaryRows]);
 
   const { data: unmappedResolutionsData } = useQuery<UnmappedResolution[]>({
     queryKey: ['/api/unmapped-resolutions', runId],
@@ -4070,6 +4195,15 @@ export function PurchaseReconciliationPanel({
         </div>
       )}
 
+      {hasNegativeSpBookings && !negativeSpVerified && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-red-50/60 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-md text-xs" data-testid="banner-negative-sp-unverified">
+          <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+          <span className="text-red-700 dark:text-red-300">
+            Negative SP Net refund bookings require verification before export. Expand the "Negative SP - Partial Refund" reason group below and check the verification box.
+          </span>
+        </div>
+      )}
+
       {paymentMismatchData.hasData && (
         <div className="flex items-center gap-2 px-3 py-2 bg-violet-50/60 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-md text-xs" data-testid="banner-payment-mismatch">
           <AlertTriangle className="h-4 w-4 text-violet-500 shrink-0" />
@@ -4227,11 +4361,24 @@ export function PurchaseReconciliationPanel({
               Are you sure you want to confirm this purchase reconciliation? This will lock in the current values and enable the financial report export.
             </DialogDescription>
           </DialogHeader>
+          {hasNegativeSpBookings && !negativeSpVerified && (
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
+              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                <span className="font-medium">Negative SP Net bookings not verified.</span>{" "}
+                Please go to the "Negative SP - Partial Refund" reason group and verify all refund transactions before confirming.
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowApplyConfirmation(false)}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmApply} data-testid="button-confirm-apply-purchase-reco">
+            <Button
+              onClick={handleConfirmApply}
+              disabled={hasNegativeSpBookings && !negativeSpVerified}
+              data-testid="button-confirm-apply-purchase-reco"
+            >
               Yes, confirm
             </Button>
           </DialogFooter>
