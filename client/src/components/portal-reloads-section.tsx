@@ -1,58 +1,25 @@
 import { useState, useRef } from "react";
-import { Upload, Trash2, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, X, RefreshCw } from "lucide-react";
+import { Upload, Trash2, AlertCircle, Loader2, RefreshCw, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { PortalReload } from "@shared/schema";
 
-interface ParsedReload {
-  beId: string;
-  paidAmount: number;
-  zendeskId?: string;
-  dateOfPayment?: string;
-  amountLoadedAtDate?: number;
-  rawRow: Record<string, unknown>;
-}
-
 export function PortalReloadsSection() {
-  const [parsedReloads, setParsedReloads] = useState<ParsedReload[]>([]);
-  const [allHeaders, setAllHeaders] = useState<string[]>([]);
-  const [fileName, setFileName] = useState<string>("");
-  const [parseError, setParseError] = useState<string>("");
+  const [collapsed, setCollapsed] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [parseError, setParseError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const { data: reloadsData, isLoading: isLoadingReloads } = useQuery<{ reloads: PortalReload[] }>({
     queryKey: ["/api/portal-reloads"],
   });
 
   const reloads = reloadsData?.reloads || [];
-
-  const saveMutation = useMutation({
-    mutationFn: async (reloadsToSave: ParsedReload[]) => {
-      await apiRequest("POST", "/api/portal-reloads/save", {
-        reloads: reloadsToSave.map(r => ({
-          beId: r.beId,
-          paidAmount: r.paidAmount,
-          zendeskId: r.zendeskId,
-          dateOfPayment: r.dateOfPayment,
-          amountLoadedAtDate: r.amountLoadedAtDate,
-        })),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/portal-reloads"] });
-      setParsedReloads([]);
-      setAllHeaders([]);
-      setFileName("");
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -68,7 +35,6 @@ export function PortalReloadsSection() {
     if (!file) return;
 
     setParseError("");
-    setFileName(file.name);
     setIsUploading(true);
 
     try {
@@ -84,51 +50,39 @@ export function PortalReloadsSection() {
 
       if (!response.ok) {
         setParseError(result.error || "Failed to parse file");
-        setParsedReloads([]);
-        setAllHeaders([]);
         return;
       }
 
-      setParsedReloads(result.parsed);
-      setAllHeaders(result.headers || []);
+      const parsed = result.parsed || [];
+      if (parsed.length === 0) {
+        setParseError("No valid entries found");
+        return;
+      }
+
+      await apiRequest("POST", "/api/portal-reloads/save", {
+        reloads: parsed.map((r: any) => ({
+          beId: r.beId,
+          paidAmount: r.paidAmount,
+          zendeskId: r.zendeskId,
+          dateOfPayment: r.dateOfPayment,
+          amountLoadedAtDate: r.amountLoadedAtDate,
+        })),
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/portal-reloads"] });
+      toast({ title: "Saved", description: `${parsed.length} reload entries saved to database` });
     } catch (err) {
-      setParseError("Failed to upload file. Please ensure it's a valid Excel or CSV file.");
-      setParsedReloads([]);
-      setAllHeaders([]);
+      setParseError("Failed to upload or save file");
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  };
-
-  const handleClearPreview = () => {
-    setParsedReloads([]);
-    setAllHeaders([]);
-    setFileName("");
-    setParseError("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  const handleSaveAll = () => {
-    if (parsedReloads.length === 0) return;
-    saveMutation.mutate(parsedReloads);
   };
 
   const handleDeleteAll = () => {
-    if (confirm("Are you sure you want to delete all portal reload data?")) {
+    if (confirm("Delete all portal reload data?")) {
       deleteMutation.mutate();
     }
-  };
-
-  const formatNumber = (value: number): string => {
-    return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-  const formatCellValue = (value: unknown): string => {
-    if (value === null || value === undefined || value === "") return "—";
-    if (typeof value === "number") return formatNumber(value);
-    return String(value);
   };
 
   const aggregatedByBeId = reloads.reduce<Record<string, { total: number; count: number }>>((acc, r) => {
@@ -139,22 +93,27 @@ export function PortalReloadsSection() {
   }, {});
 
   return (
-    <section className="py-8 px-8">
-      <div className="max-w-7xl mx-auto">
+    <section className="py-4 px-8">
+      <div className="max-w-4xl mx-auto">
         <Card>
-          <CardHeader>
+          <CardHeader
+            className="cursor-pointer hover:bg-muted/30 transition-colors"
+            onClick={() => setCollapsed(!collapsed)}
+            data-testid="header-portal-reloads"
+          >
             <CardTitle className="flex items-center gap-2">
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               <RefreshCw className="h-5 w-5" />
               Portal Reloads
+              {reloads.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {Object.keys(aggregatedByBeId).length} BE{Object.keys(aggregatedByBeId).length !== 1 ? "s" : ""} | {reloads.length} entries
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Upload a file with <strong>"Finance Zendesk Tickets Portal Partner ID"</strong> and <strong>"Finance Zendesk Tickets Paid Amount"</strong> columns. 
-              The total paid amount per BE ID will be used as the Reloads value in Purchase Reconciliation.
-            </p>
-
-            <div className="space-y-4">
+          {!collapsed && (
+            <CardContent className="space-y-4">
               <div className="flex items-center gap-4 flex-wrap">
                 <input
                   ref={fileInputRef}
@@ -167,106 +126,14 @@ export function PortalReloadsSection() {
                 />
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
                   data-testid="button-upload-reloads"
                 >
-                  {isUploading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="mr-2 h-4 w-4" />
-                  )}
-                  Upload Reloads File
+                  {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                  Upload & Save
                 </Button>
-                {fileName && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">{fileName}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={handleClearPreview}
-                      data-testid="button-clear-reload-preview"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {parseError && (
-                <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-reload-parse-error">
-                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>{parseError}</span>
-                </div>
-              )}
-
-              {parsedReloads.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" data-testid="badge-reload-count">
-                        {parsedReloads.length} entries
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Showing all {allHeaders.length} columns from uploaded file
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={handleSaveAll}
-                      disabled={saveMutation.isPending}
-                      data-testid="button-save-reloads"
-                    >
-                      {saveMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                      )}
-                      Save All
-                    </Button>
-                  </div>
-
-                  <div className="border rounded-md overflow-hidden max-h-96 overflow-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="sticky left-0 z-10 bg-muted/80 backdrop-blur-sm text-xs whitespace-nowrap">#</TableHead>
-                          {allHeaders.map((header) => (
-                            <TableHead key={header} className="text-xs whitespace-nowrap">
-                              {header}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {parsedReloads.map((entry, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell className="sticky left-0 z-10 bg-background text-xs text-muted-foreground font-mono">
-                              {idx + 1}
-                            </TableCell>
-                            {allHeaders.map((header) => (
-                              <TableCell
-                                key={header}
-                                className="text-xs whitespace-nowrap font-mono"
-                                data-testid={`cell-reload-${idx}-${header.replace(/\s+/g, "-").toLowerCase()}`}
-                              >
-                                {formatCellValue(entry.rawRow[header])}
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t pt-6">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold">Saved Reloads</h4>
                 {reloads.length > 0 && (
                   <Button
                     variant="ghost"
@@ -280,42 +147,45 @@ export function PortalReloadsSection() {
                     Clear All
                   </Button>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  File uploads directly to database
+                </p>
               </div>
 
-              {isLoadingReloads ? (
-                <div className="text-center py-4">
-                  <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                </div>
-              ) : Object.keys(aggregatedByBeId).length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-reloads">
-                  No reload data uploaded yet
-                </p>
-              ) : (
-                <div className="border rounded-md overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>BE ID</TableHead>
-                        <TableHead className="text-right">Entries</TableHead>
-                        <TableHead className="text-right">Total Reload Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {Object.entries(aggregatedByBeId).map(([beId, data]) => (
-                        <TableRow key={beId}>
-                          <TableCell className="font-mono text-sm" data-testid={`text-saved-reload-beid-${beId}`}>{beId}</TableCell>
-                          <TableCell className="text-right text-sm">{data.count}</TableCell>
-                          <TableCell className="text-right font-mono text-sm font-medium" data-testid={`text-saved-reload-amount-${beId}`}>
-                            {formatNumber(data.total)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              {parseError && (
+                <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md" data-testid="text-reload-parse-error">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>{parseError}</span>
                 </div>
               )}
-            </div>
-          </CardContent>
+
+              {isLoadingReloads ? (
+                <div className="flex items-center gap-2 text-muted-foreground py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Loading...</span>
+                </div>
+              ) : Object.keys(aggregatedByBeId).length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2" data-testid="text-no-reloads">No reload data uploaded yet</p>
+              ) : (
+                <div className="space-y-1">
+                  {Object.entries(aggregatedByBeId).map(([beId, data]) => (
+                    <div
+                      key={beId}
+                      className="flex items-center justify-between px-3 py-1.5 rounded-md border text-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-medium" data-testid={`text-saved-reload-beid-${beId}`}>{beId}</span>
+                        <Badge variant="outline" className="text-[10px]">{data.count} entries</Badge>
+                        <span className="font-mono text-xs" data-testid={`text-saved-reload-amount-${beId}`}>
+                          {data.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          )}
         </Card>
       </div>
     </section>
