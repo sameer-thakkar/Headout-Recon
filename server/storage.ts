@@ -589,7 +589,22 @@ export class DatabaseStorage implements ISessionStorage {
 
   async getSessions(): Promise<ReconciliationSession[]> {
     return db
-      .select()
+      .select({
+        id: reconciliationSessions.id,
+        name: reconciliationSessions.name,
+        status: reconciliationSessions.status,
+        progressStep: reconciliationSessions.progressStep,
+        createdAt: reconciliationSessions.createdAt,
+        completedAt: reconciliationSessions.completedAt,
+        error: reconciliationSessions.error,
+        hoFileName: reconciliationSessions.hoFileName,
+        spFileName: reconciliationSessions.spFileName,
+        hoFileSize: reconciliationSessions.hoFileSize,
+        spFileSize: reconciliationSessions.spFileSize,
+        hoData: sql`null`.as("ho_data"),
+        spData: sql`null`.as("sp_data"),
+        runResult: sql`null`.as("run_result"),
+      })
       .from(reconciliationSessions)
       .orderBy(desc(reconciliationSessions.createdAt));
   }
