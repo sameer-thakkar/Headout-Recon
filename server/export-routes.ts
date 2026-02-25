@@ -2340,6 +2340,19 @@ export function registerExportRoutes(app: Express) {
 
       const { result, originalHoData, originalSpData, allRowsMap, spFxMap, disputesByBooking, disputeOverrides, priceOverrides } = exportData;
 
+      const gsVendorCorrections = await storage.getVendorCorrections(runId);
+      const gsVendorCorrectionsByBooking = new Map<string, string>();
+      for (const vc of gsVendorCorrections) {
+        gsVendorCorrectionsByBooking.set(vc.bookingId, vc.finalVendorId);
+      }
+      const gsSpTicketIdByBooking = new Map<string, string>();
+      for (const spRow of originalSpData) {
+        const row = spRow as Record<string, unknown>;
+        const bid = String(row["bookingId"] || row["Booking ID"] || row["booking_id"] || "");
+        const tid = String(row["ticketId"] || row["Ticket ID"] || row["ticket_id"] || row["TicketID"] || "");
+        if (bid && tid) gsSpTicketIdByBooking.set(bid, tid);
+      }
+
       const sheets = await getUncachableGoogleSheetClient();
       if (!sheets) {
         return res.status(500).json({ error: "Google Sheets API not configured. Please set up integration." });
@@ -2577,17 +2590,32 @@ export function registerExportRoutes(app: Express) {
       
       const gsOriginalKeys = originalHoData.length > 0 ? Object.keys(originalHoData[0] as Record<string, unknown>) : [];
       
+      const gsIsReconCol = (k: string) => {
+        const kl = k.toLowerCase().replace(/[\s_]+/g, "");
+        return kl === "finalvendorid" || kl === "ticketid" ||
+               kl === "disputeadjustment" || kl === "discrepancyamount" ||
+               kl === "disputedamount" || kl === "adjustedinticketid" ||
+               kl === "finaldisputeamount" || kl === "disputestatus" ||
+               kl === "reconcilednetprice" || kl === "utrnumber" || kl === "utr";
+      };
+
       const gsHeaderRow: string[] = [];
       let gsInsertedNewCols = false;
+      let gsHasAnyReconCol = false;
       for (const key of gsOriginalKeys) {
         if (gsIsErrorAttrCol(key) && !gsInsertedNewCols) {
           gsHeaderRow.push("SP Net", "Difference", "Difference %");
           gsInsertedNewCols = true;
         }
+        if (gsIsReconCol(key)) gsHasAnyReconCol = true;
         gsHeaderRow.push(key);
       }
       if (!gsInsertedNewCols) {
         gsHeaderRow.push("SP Net", "Difference", "Difference %", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss");
+      }
+      if (!gsHasAnyReconCol) {
+        gsHeaderRow.push("finalVendorId", "Ticket ID", "Dispute adjustment", "Discrepancy amount",
+          "Disputed amount", "Adjusted in Ticket ID", "Dispute status", "Reconciled Net price");
       }
       
       const gsDisputesByBooking = disputesByBooking;
@@ -2757,6 +2785,19 @@ export function registerExportRoutes(app: Express) {
           dataRow.push(String(errorBucket));
           dataRow.push(String(comments));
           dataRow.push(String(chargedLoss));
+        }
+
+        if (!gsHasAnyReconCol) {
+          const gsFinalVendorIdValue = gsVendorCorrectionsByBooking.get(bookingId) || "";
+          const gsTicketIdValue = gsSpTicketIdByBooking.get(bookingId) || "";
+          dataRow.push(gsFinalVendorIdValue);
+          dataRow.push(gsTicketIdValue);
+          dataRow.push(typeof gsDisputeAdjAmount === "number" ? formatIndianNumber(gsDisputeAdjAmount) : gsDisputeAdjAmount);
+          dataRow.push(typeof gsDiscrepancyAdjAmount === "number" ? formatIndianNumber(gsDiscrepancyAdjAmount) : gsDiscrepancyAdjAmount);
+          dataRow.push(typeof gsDisputedAmount === "number" ? formatIndianNumber(gsDisputedAmount) : gsDisputedAmount);
+          dataRow.push(String(gsAdjustedInTicketId || ""));
+          dataRow.push(String(gsDisputeStatus || ""));
+          dataRow.push(typeof gsReconciledNetPrice === "number" ? formatIndianNumber(gsReconciledNetPrice) : gsReconciledNetPrice);
         }
         
         hoReportData.push(dataRow);
