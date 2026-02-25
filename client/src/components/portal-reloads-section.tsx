@@ -11,6 +11,9 @@ import type { PortalReload } from "@shared/schema";
 interface ParsedReload {
   beId: string;
   paidAmount: number;
+  zendeskId?: string;
+  dateOfPayment?: string;
+  amountLoadedAtDate?: number;
   rawRow: Record<string, unknown>;
 }
 
@@ -31,7 +34,13 @@ export function PortalReloadsSection() {
   const saveMutation = useMutation({
     mutationFn: async (reloadsToSave: ParsedReload[]) => {
       await apiRequest("POST", "/api/portal-reloads/save", {
-        reloads: reloadsToSave.map(r => ({ beId: r.beId, paidAmount: r.paidAmount })),
+        reloads: reloadsToSave.map(r => ({
+          beId: r.beId,
+          paidAmount: r.paidAmount,
+          zendeskId: r.zendeskId,
+          dateOfPayment: r.dateOfPayment,
+          amountLoadedAtDate: r.amountLoadedAtDate,
+        })),
       });
     },
     onSuccess: () => {
