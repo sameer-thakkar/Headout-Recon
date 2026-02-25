@@ -147,7 +147,7 @@ const BookingRow = memo(function BookingRow({
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
       <TableRow className={`h-7 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : isNegativeSp ? "bg-red-50/60 dark:bg-red-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
-        <TableCell className="py-1 font-mono">
+        <TableCell className="py-1 font-mono w-[22%]">
           <div className="flex items-center gap-1">
             {booking.bookingId}
             {hasDispute && (
@@ -173,17 +173,17 @@ const BookingRow = memo(function BookingRow({
             )}
           </div>
         </TableCell>
-        <TableCell className={`py-1 text-right font-mono ${isNegativeSp ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>{formatNumber(booking.spNet)}</TableCell>
-        <TableCell className="py-1 text-right font-mono">{formatNumber(booking.hoNet)}</TableCell>
-        <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400">
+        <TableCell className={`py-1 text-right font-mono w-[16%] ${isNegativeSp ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>{formatNumber(booking.spNet)}</TableCell>
+        <TableCell className="py-1 text-right font-mono w-[16%]">{formatNumber(booking.hoNet)}</TableCell>
+        <TableCell className="py-1 text-right font-mono text-amber-600 dark:text-amber-400 w-[16%]">
           {formatNumber(booking.difference)}
         </TableCell>
-        <TableCell className="py-1 text-right" onClick={(e) => e.stopPropagation()}>
+        <TableCell className="py-1 text-right w-[22%]" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-1">
             <Input
               type="text"
               inputMode="decimal"
-              className="h-6 text-xs w-28 font-mono text-right border-transparent hover:border-input focus:border-input bg-transparent"
+              className="h-6 text-[length:inherit] w-full font-mono text-right border-transparent hover:border-input focus:border-input bg-transparent"
               value={fnpFocused ? localFnp : formatNumber(parseFloat(localFnp) || 0)}
               onChange={(e) => {
                 const raw = e.target.value.replace(/[^0-9.\-]/g, "");
@@ -1390,12 +1390,12 @@ const TidGroup = memo(function TidGroup({
           <Table className="text-xs">
             <TableHeader>
               <TableRow className="h-7">
-                <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                <TableHead className="py-1 text-xs text-right">SP Net</TableHead>
-                <TableHead className="py-1 text-xs text-right">HO Net</TableHead>
-                <TableHead className="py-1 text-xs text-right">Difference</TableHead>
-                <TableHead className="py-1 text-xs text-right">Final Net Price</TableHead>
-                {runId && <TableHead className="py-1 text-xs text-center">Actions</TableHead>}
+                <TableHead className="py-1 text-xs w-[22%]">Booking ID</TableHead>
+                <TableHead className="py-1 text-xs text-right w-[16%]">SP Net</TableHead>
+                <TableHead className="py-1 text-xs text-right w-[16%]">HO Net</TableHead>
+                <TableHead className="py-1 text-xs text-right w-[16%]">Difference</TableHead>
+                <TableHead className="py-1 text-xs text-right w-[22%]">Final Net Price</TableHead>
+                {runId && <TableHead className="py-1 text-xs text-center w-[8%]">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
