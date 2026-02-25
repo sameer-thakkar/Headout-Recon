@@ -1362,7 +1362,7 @@ const TidGroup = memo(function TidGroup({
         <div className="flex items-center gap-1.5 min-w-0">
           {isExpanded ? <ChevronDown className="h-3 w-3 text-primary shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
           <span className="font-mono text-xs shrink-0">{tid}</span>
-          <span className="text-[10px] text-muted-foreground shrink-0">({tidBookings.length})</span>
+          <span className="font-mono text-xs text-muted-foreground shrink-0">({tidBookings.length})</span>
           {expName && (
             <span className="font-mono text-xs truncate max-w-[750px]" title={expName}>· {expName}</span>
           )}
@@ -1387,7 +1387,7 @@ const TidGroup = memo(function TidGroup({
       </div>
       {isExpanded && (
         <div className="px-1 pb-1">
-          <Table className="text-xs">
+          <Table className="text-xs table-fixed">
             <TableHeader>
               <TableRow className="h-7">
                 <TableHead className="py-1 text-xs w-[22%]">Booking ID</TableHead>
