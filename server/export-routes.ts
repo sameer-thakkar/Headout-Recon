@@ -1485,23 +1485,39 @@ export function registerExportRoutes(app: Express) {
       const canonicalHeaders: string[] = [...firstRowKeys];
       
       const finalNetAliases = new Set(["finalnetprice", "final net price", "finalnet", "final net", "final payable", "amountpayable", "amount payable", "amount_payable"]);
-      const headerExists = (name: string) => {
+      const headerExistsIn = (name: string, headers: string[]) => {
         const nameLower = name.toLowerCase();
         if (finalNetAliases.has(nameLower)) {
-          return canonicalHeaders.some(h => finalNetAliases.has(h.toLowerCase()));
+          return headers.some(h => finalNetAliases.has(h.toLowerCase()));
         }
-        return canonicalHeaders.some(h => h.toLowerCase() === nameLower);
+        return headers.some(h => h.toLowerCase() === nameLower);
       };
       
-      const appendCols = [
-        "SP Net", "Difference", "Difference %",
-        "finalNetPrice", "errorTeamAttribution", "errorBucket", "comments", "chargedLoss",
-        "finalVendorId", "Ticket ID", "Dispute adjustment", "Discrepancy amount",
+      const isErrorAttrCol = (k: string) => {
+        const kl = k.toLowerCase();
+        return kl === "errorteamattribution" || kl === "error team attribution" ||
+               kl === "errorbucket" || kl === "error bucket" ||
+               kl === "comments" || kl === "comment" ||
+               kl === "chargedloss" || kl === "charged_loss" || kl === "charged loss";
+      };
+      
+      const insertCols = ["SP Net", "Difference", "Difference %"];
+      const colsToInsert = insertCols.filter(c => !headerExistsIn(c, canonicalHeaders));
+      
+      const firstErrorAttrIdx = canonicalHeaders.findIndex(h => isErrorAttrCol(h));
+      if (firstErrorAttrIdx !== -1 && colsToInsert.length > 0) {
+        canonicalHeaders.splice(firstErrorAttrIdx, 0, ...colsToInsert);
+      } else if (colsToInsert.length > 0) {
+        canonicalHeaders.push(...colsToInsert);
+      }
+      
+      const disputeAppendCols = [
+        "Ticket ID", "Dispute adjustment", "Discrepancy amount",
         "Disputed amount", "Adjusted in Ticket ID",
         "Dispute status", "Reconciled Net price"
       ];
-      for (const col of appendCols) {
-        if (!headerExists(col)) {
+      for (const col of disputeAppendCols) {
+        if (!headerExistsIn(col, canonicalHeaders)) {
           canonicalHeaders.push(col);
         }
       }
@@ -2543,11 +2559,12 @@ export function registerExportRoutes(app: Express) {
         }
       });
       
-      const gsIsFinalNetCol = (k: string) => {
-        const kLower = k.toLowerCase();
-        return kLower === "finalnetprice" || kLower === "final net price" || 
-               kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
-               kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
+      const gsIsErrorAttrCol = (k: string) => {
+        const kl = k.toLowerCase();
+        return kl === "errorteamattribution" || kl === "error team attribution" ||
+               kl === "errorbucket" || kl === "error bucket" ||
+               kl === "comments" || kl === "comment" ||
+               kl === "chargedloss" || kl === "charged_loss" || kl === "charged loss";
       };
       
       const gsOriginalKeys = originalHoData.length > 0 ? Object.keys(originalHoData[0] as Record<string, unknown>) : [];
@@ -2555,7 +2572,7 @@ export function registerExportRoutes(app: Express) {
       const gsHeaderRow: string[] = [];
       let gsInsertedNewCols = false;
       for (const key of gsOriginalKeys) {
-        if (gsIsFinalNetCol(key) && !gsInsertedNewCols) {
+        if (gsIsErrorAttrCol(key) && !gsInsertedNewCols) {
           gsHeaderRow.push("SP Net", "Difference", "Difference %");
           gsInsertedNewCols = true;
         }
@@ -2679,7 +2696,7 @@ export function registerExportRoutes(app: Express) {
         for (const key of gsOriginalKeys) {
           const keyLower = key.toLowerCase();
           
-          if (gsIsFinalNetCol(key) && !insertedNewCols) {
+          if (gsIsErrorAttrCol(key) && !insertedNewCols) {
             dataRow.push(typeof spNet === "number" ? formatIndianNumber(spNet) : spNet);
             dataRow.push(typeof difference === "number" ? formatIndianNumber(difference) : difference);
             dataRow.push(differencePercent);
