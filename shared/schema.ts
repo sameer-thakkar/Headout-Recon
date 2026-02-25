@@ -694,6 +694,9 @@ export const portalReloads = pgTable("portal_reloads", {
   id: serial("id").primaryKey(),
   beId: varchar("be_id").notNull(),
   paidAmount: real("paid_amount").notNull().default(0),
+  zendeskId: varchar("zendesk_id"),
+  dateOfPayment: varchar("date_of_payment"),
+  amountLoadedAtDate: real("amount_loaded_at_date"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -703,6 +706,9 @@ export const portalReloadSchema = z.object({
   id: z.number(),
   beId: z.string(),
   paidAmount: z.number(),
+  zendeskId: z.string().nullable().optional(),
+  dateOfPayment: z.string().nullable().optional(),
+  amountLoadedAtDate: z.number().nullable().optional(),
   createdAt: z.string(),
 });
 export type PortalReload = z.infer<typeof portalReloadSchema>;
@@ -710,5 +716,44 @@ export type PortalReload = z.infer<typeof portalReloadSchema>;
 export const insertPortalReloadSchema = z.object({
   beId: z.string().min(1),
   paidAmount: z.number(),
+  zendeskId: z.string().nullable().optional(),
+  dateOfPayment: z.string().nullable().optional(),
+  amountLoadedAtDate: z.number().nullable().optional(),
 });
 export type InsertPortalReload = z.infer<typeof insertPortalReloadSchema>;
+
+// Reload Adjustments - manual add/subtract entries for reloads
+export const reloadAdjustments = pgTable("reload_adjustments", {
+  id: serial("id").primaryKey(),
+  beId: varchar("be_id").notNull(),
+  zendeskId: varchar("zendesk_id"),
+  dateOfPayment: varchar("date_of_payment"),
+  amountLoadedAtDate: real("amount_loaded_at_date"),
+  paidAmount: real("paid_amount").notNull(),
+  adjustmentType: varchar("adjustment_type").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type DbReloadAdjustment = typeof reloadAdjustments.$inferSelect;
+
+export const reloadAdjustmentSchema = z.object({
+  id: z.number(),
+  beId: z.string(),
+  zendeskId: z.string().nullable().optional(),
+  dateOfPayment: z.string().nullable().optional(),
+  amountLoadedAtDate: z.number().nullable().optional(),
+  paidAmount: z.number(),
+  adjustmentType: z.enum(["add", "less"]),
+  createdAt: z.string(),
+});
+export type ReloadAdjustment = z.infer<typeof reloadAdjustmentSchema>;
+
+export const insertReloadAdjustmentSchema = z.object({
+  beId: z.string().min(1),
+  zendeskId: z.string().nullable().optional(),
+  dateOfPayment: z.string().nullable().optional(),
+  amountLoadedAtDate: z.number().nullable().optional(),
+  paidAmount: z.number(),
+  adjustmentType: z.enum(["add", "less"]),
+});
+export type InsertReloadAdjustment = z.infer<typeof insertReloadAdjustmentSchema>;

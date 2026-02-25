@@ -1696,7 +1696,12 @@ export async function registerRoutes(
       const { beId } = req.params;
       const total = await storage.getPortalReloadTotal(beId);
       const reloads = await storage.getPortalReloadsByBeId(beId);
-      res.json({ total, reloads });
+      const adjustments = await storage.getReloadAdjustmentsByBeId(beId);
+      const adjustmentTotal = adjustments.reduce((sum, a) => {
+        return sum + (a.adjustmentType === "add" ? a.paidAmount : -a.paidAmount);
+      }, 0);
+      const adjustedTotal = total + adjustmentTotal;
+      res.json({ total, reloads, adjustments, adjustedTotal });
     } catch (error) {
       console.error("Get portal reloads by beId error:", error);
       res.status(500).json({ error: "Failed to fetch portal reloads" });
@@ -1739,14 +1744,40 @@ export async function registerRoutes(
         });
       }
 
-      const parsed: { beId: string; paidAmount: number; rawRow: Record<string, unknown> }[] = [];
+      const zendeskIdCol = headers.find(h =>
+        h.toLowerCase().includes("zendesk") && h.toLowerCase().includes("id") ||
+        h.toLowerCase().includes("ticket id") ||
+        h.toLowerCase().includes("ticket number")
+      );
+      const dateCol = headers.find(h =>
+        h.toLowerCase().includes("date") && (
+          h.toLowerCase().includes("payment") ||
+          h.toLowerCase().includes("paid") ||
+          h.toLowerCase().includes("created")
+        ) ||
+        h.toLowerCase() === "date"
+      );
+      const amountLoadedCol = headers.find(h =>
+        h.toLowerCase().includes("amount loaded") ||
+        h.toLowerCase().includes("loaded at date") ||
+        h.toLowerCase().includes("reload amount")
+      );
+
+      const parsed: { beId: string; paidAmount: number; zendeskId?: string; dateOfPayment?: string; amountLoadedAtDate?: number; rawRow: Record<string, unknown> }[] = [];
       for (const row of rawRows) {
         const beId = String(row[partnerIdCol] || "").trim();
         const rawAmount = row[paidAmountCol];
         const paidAmount = typeof rawAmount === "number" ? rawAmount : parseFloat(String(rawAmount).replace(/,/g, "")) || 0;
 
         if (beId && paidAmount !== 0) {
-          parsed.push({ beId, paidAmount, rawRow: row as Record<string, unknown> });
+          const zendeskId = zendeskIdCol ? String(row[zendeskIdCol] || "").trim() || undefined : undefined;
+          const dateOfPayment = dateCol ? String(row[dateCol] || "").trim() || undefined : undefined;
+          let amountLoadedAtDate: number | undefined;
+          if (amountLoadedCol) {
+            const rawLoaded = row[amountLoadedCol];
+            amountLoadedAtDate = typeof rawLoaded === "number" ? rawLoaded : parseFloat(String(rawLoaded).replace(/,/g, "")) || undefined;
+          }
+          parsed.push({ beId, paidAmount, zendeskId, dateOfPayment, amountLoadedAtDate, rawRow: row as Record<string, unknown> });
         }
       }
 
@@ -1775,7 +1806,13 @@ export async function registerRoutes(
 
       const validReloads = reloads
         .filter((r: any) => r.beId && typeof r.paidAmount === "number")
-        .map((r: any) => ({ beId: String(r.beId).trim(), paidAmount: r.paidAmount }));
+        .map((r: any) => ({
+          beId: String(r.beId).trim(),
+          paidAmount: r.paidAmount,
+          zendeskId: r.zendeskId || null,
+          dateOfPayment: r.dateOfPayment || null,
+          amountLoadedAtDate: typeof r.amountLoadedAtDate === "number" ? r.amountLoadedAtDate : null,
+        }));
 
       if (validReloads.length === 0) {
         return res.status(400).json({ error: "No valid reload entries" });
@@ -1796,6 +1833,52 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Delete portal reloads error:", error);
       res.status(500).json({ error: "Failed to delete portal reloads" });
+    }
+  });
+
+  // ========== Reload Adjustments ==========
+
+  app.get("/api/reload-adjustments/:beId", async (req, res) => {
+    try {
+      const { beId } = req.params;
+      const adjustments = await storage.getReloadAdjustmentsByBeId(beId);
+      res.json({ adjustments });
+    } catch (error) {
+      console.error("Get reload adjustments error:", error);
+      res.status(500).json({ error: "Failed to fetch reload adjustments" });
+    }
+  });
+
+  app.post("/api/reload-adjustments", async (req, res) => {
+    try {
+      const { beId, zendeskId, dateOfPayment, amountLoadedAtDate, paidAmount, adjustmentType } = req.body;
+      if (!beId || typeof paidAmount !== "number" || !["add", "less"].includes(adjustmentType)) {
+        return res.status(400).json({ error: "Missing required fields: beId, paidAmount, adjustmentType (add/less)" });
+      }
+      const adjustment = await storage.createReloadAdjustment({
+        beId: String(beId).trim(),
+        zendeskId: zendeskId || null,
+        dateOfPayment: dateOfPayment || null,
+        amountLoadedAtDate: typeof amountLoadedAtDate === "number" ? amountLoadedAtDate : null,
+        paidAmount,
+        adjustmentType,
+      });
+      res.json({ adjustment });
+    } catch (error) {
+      console.error("Create reload adjustment error:", error);
+      res.status(500).json({ error: "Failed to create reload adjustment" });
+    }
+  });
+
+  app.delete("/api/reload-adjustments/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const deleted = await storage.deleteReloadAdjustment(id);
+      res.json({ success: deleted });
+    } catch (error) {
+      console.error("Delete reload adjustment error:", error);
+      res.status(500).json({ error: "Failed to delete reload adjustment" });
     }
   });
 

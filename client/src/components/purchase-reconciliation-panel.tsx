@@ -26,7 +26,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { PrimaryRow, VendorBalance, PaxBreakdown } from "@shared/schema";
+import type { PrimaryRow, VendorBalance, PaxBreakdown, PortalReload, ReloadAdjustment } from "@shared/schema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type PurchaseBooking = {
   bookingId: string;
@@ -1700,6 +1701,298 @@ const BreakupSection = memo(function BreakupSection({
   );
 });
 
+interface ManageReloadsModalHandle {
+  open: () => void;
+}
+
+interface ManageReloadsModalProps {
+  beId: string;
+  currency: string;
+  reloads: PortalReload[];
+  adjustments: ReloadAdjustment[];
+  originalTotal: number;
+  adjustedTotal: number;
+}
+
+const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloadsModalProps>(function ManageReloadsModal(
+  { beId, currency, reloads, adjustments, originalTotal, adjustedTotal },
+  ref
+) {
+  const { toast } = useToast();
+  const [isOpen, setIsOpen] = useState(false);
+  const [adjType, setAdjType] = useState<"add" | "less">("add");
+  const [adjZendeskId, setAdjZendeskId] = useState("");
+  const [adjDate, setAdjDate] = useState("");
+  const [adjAmountLoaded, setAdjAmountLoaded] = useState("");
+  const [adjPaidAmount, setAdjPaidAmount] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    open: () => setIsOpen(true),
+  }));
+
+  const resetForm = useCallback(() => {
+    setAdjZendeskId("");
+    setAdjDate("");
+    setAdjAmountLoaded("");
+    setAdjPaidAmount("");
+    setAdjType("add");
+  }, []);
+
+  const handleAddAdjustment = useCallback(async () => {
+    const amount = parseFloat(adjPaidAmount);
+    if (isNaN(amount) || amount === 0) {
+      toast({ title: "Invalid amount", description: "Please enter a valid non-zero paid amount", variant: "destructive" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await apiRequest("POST", "/api/reload-adjustments", {
+        beId,
+        zendeskId: adjZendeskId || null,
+        dateOfPayment: adjDate || null,
+        amountLoadedAtDate: adjAmountLoaded ? parseFloat(adjAmountLoaded) || null : null,
+        paidAmount: amount,
+        adjustmentType: adjType,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/portal-reloads', beId] });
+      resetForm();
+      toast({ title: "Adjustment added", description: `${adjType === "add" ? "+" : "-"}${formatNumber(amount)} ${currency}` });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to add adjustment", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [beId, adjType, adjZendeskId, adjDate, adjAmountLoaded, adjPaidAmount, currency, toast, resetForm]);
+
+  const handleDeleteAdjustment = useCallback(async (id: number) => {
+    try {
+      await apiRequest("DELETE", `/api/reload-adjustments/${id}`);
+      queryClient.invalidateQueries({ queryKey: ['/api/portal-reloads', beId] });
+      toast({ title: "Adjustment removed" });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to remove adjustment", variant: "destructive" });
+    }
+  }, [beId, toast]);
+
+  const addTotal = adjustments.filter(a => a.adjustmentType === "add").reduce((s, a) => s + a.paidAmount, 0);
+  const lessTotal = adjustments.filter(a => a.adjustmentType === "less").reduce((s, a) => s + a.paidAmount, 0);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Manage Reloads
+            <Badge variant="outline" className="text-xs font-mono">BE: {beId}</Badge>
+          </DialogTitle>
+          <DialogDescription>
+            View current reload breakup and add adjustments to correct the reloads value.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+              Current Reloads
+              <Badge variant="secondary" className="text-xs">{reloads.length} entries</Badge>
+              <span className="ml-auto font-mono text-sm">{formatNumber(originalTotal)} {currency}</span>
+            </h4>
+            {reloads.length > 0 ? (
+              <div className="rounded-md border overflow-hidden max-h-48 overflow-y-auto">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow className="h-7">
+                      <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
+                      <TableHead className="py-1 text-xs">Date of Payment</TableHead>
+                      <TableHead className="py-1 text-xs text-right">Amount Loaded</TableHead>
+                      <TableHead className="py-1 text-xs text-right">Paid Amount ({currency})</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {reloads.map((r, i) => (
+                      <TableRow key={`reload-${r.id || i}`} className="h-7">
+                        <TableCell className="py-1 font-mono">{r.zendeskId || "-"}</TableCell>
+                        <TableCell className="py-1">{r.dateOfPayment || "-"}</TableCell>
+                        <TableCell className="py-1 text-right font-mono">{r.amountLoadedAtDate != null ? formatNumber(r.amountLoadedAtDate) : "-"}</TableCell>
+                        <TableCell className="py-1 text-right font-mono">{formatNumber(r.paidAmount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground border rounded-md p-3 bg-muted/20">
+                No reload entries uploaded yet.
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {adjustments.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                Adjustments
+                <Badge variant="secondary" className="text-xs">{adjustments.length}</Badge>
+                {addTotal > 0 && <Badge className="text-[10px] bg-green-100 text-green-700 border-green-300" variant="outline">+{formatNumber(addTotal)}</Badge>}
+                {lessTotal > 0 && <Badge className="text-[10px] bg-red-100 text-red-700 border-red-300" variant="outline">-{formatNumber(lessTotal)}</Badge>}
+              </h4>
+              <div className="rounded-md border overflow-hidden max-h-48 overflow-y-auto">
+                <Table className="text-xs">
+                  <TableHeader>
+                    <TableRow className="h-7">
+                      <TableHead className="py-1 text-xs w-14">Type</TableHead>
+                      <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
+                      <TableHead className="py-1 text-xs">Date of Payment</TableHead>
+                      <TableHead className="py-1 text-xs text-right">Amount Loaded</TableHead>
+                      <TableHead className="py-1 text-xs text-right">Paid Amount ({currency})</TableHead>
+                      <TableHead className="py-1 text-xs w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adjustments.map((a) => (
+                      <TableRow key={`adj-${a.id}`} className={`h-7 ${a.adjustmentType === "add" ? "bg-green-50/50 dark:bg-green-950/10" : "bg-red-50/50 dark:bg-red-950/10"}`}>
+                        <TableCell className="py-1">
+                          <Badge variant={a.adjustmentType === "add" ? "default" : "destructive"} className="text-[10px]">
+                            {a.adjustmentType === "add" ? "+" : "-"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-1 font-mono">{a.zendeskId || "-"}</TableCell>
+                        <TableCell className="py-1">{a.dateOfPayment || "-"}</TableCell>
+                        <TableCell className="py-1 text-right font-mono">{a.amountLoadedAtDate != null ? formatNumber(a.amountLoadedAtDate) : "-"}</TableCell>
+                        <TableCell className={`py-1 text-right font-mono ${a.adjustmentType === "add" ? "text-green-600" : "text-red-600"}`}>
+                          {a.adjustmentType === "add" ? "+" : "-"}{formatNumber(a.paidAmount)}
+                        </TableCell>
+                        <TableCell className="py-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteAdjustment(a.id)}
+                            data-testid={`button-delete-adjustment-${a.id}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h4 className="text-sm font-medium mb-2">Add Adjustment</h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Type</label>
+                <Select value={adjType} onValueChange={(v) => setAdjType(v as "add" | "less")}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-adjustment-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="add">Add (+)</SelectItem>
+                    <SelectItem value="less">Less (-)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Zendesk ID</label>
+                <Input
+                  className="h-8 text-xs font-mono"
+                  placeholder="Optional"
+                  value={adjZendeskId}
+                  onChange={(e) => setAdjZendeskId(e.target.value)}
+                  data-testid="input-adjustment-zendesk"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Date of Payment</label>
+                <Input
+                  className="h-8 text-xs"
+                  placeholder="Optional"
+                  value={adjDate}
+                  onChange={(e) => setAdjDate(e.target.value)}
+                  data-testid="input-adjustment-date"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Amount Loaded at Date</label>
+                <Input
+                  className="h-8 text-xs font-mono"
+                  placeholder="Optional"
+                  type="number"
+                  value={adjAmountLoaded}
+                  onChange={(e) => setAdjAmountLoaded(e.target.value)}
+                  data-testid="input-adjustment-amount-loaded"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Paid Amount *</label>
+                <Input
+                  className="h-8 text-xs font-mono"
+                  placeholder="Required"
+                  type="number"
+                  value={adjPaidAmount}
+                  onChange={(e) => setAdjPaidAmount(e.target.value)}
+                  data-testid="input-adjustment-paid-amount"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={handleAddAdjustment}
+                  disabled={isSaving || !adjPaidAmount}
+                  data-testid="button-save-adjustment"
+                >
+                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                  Save Adjustment
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="rounded-md border p-3 bg-muted/20 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Original Reloads</span>
+              <span className="font-mono">{formatNumber(originalTotal)} {currency}</span>
+            </div>
+            {addTotal > 0 && (
+              <div className="flex items-center justify-between text-xs text-green-600">
+                <span>Additions</span>
+                <span className="font-mono">+{formatNumber(addTotal)} {currency}</span>
+              </div>
+            )}
+            {lessTotal > 0 && (
+              <div className="flex items-center justify-between text-xs text-red-600">
+                <span>Deductions</span>
+                <span className="font-mono">-{formatNumber(lessTotal)} {currency}</span>
+              </div>
+            )}
+            <Separator className="my-1" />
+            <div className="flex items-center justify-between text-sm font-semibold">
+              <span>Final Reloads</span>
+              <span className="font-mono">{formatNumber(adjustedTotal)} {currency}</span>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={() => setIsOpen(false)} data-testid="button-close-manage-reloads">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}));
+
 interface LineItemsTableCardProps {
   billingEntityName: string;
   calculations: {
@@ -1733,6 +2026,7 @@ interface LineItemsTableCardProps {
   openManageTidModal: (bookings: PurchaseBooking[], tid: string, itemId: number) => void;
   openManageReasonModal: (bookings: PurchaseBooking[], reason: string, itemId: number) => void;
   openIssueModal: (booking: BookingForDispute) => void;
+  onManageReloads?: () => void;
   runId?: string | null;
 }
 
@@ -1763,6 +2057,7 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   openManageTidModal,
   openManageReasonModal,
   openIssueModal,
+  onManageReloads,
   runId,
 }: LineItemsTableCardProps) {
   return (
@@ -1873,8 +2168,23 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                               {usdValue !== null ? formatNumber(usdValue) : "-"}
                             </TableCell>
                             <TableCell className="py-2 text-xs text-muted-foreground">
-                              {item.description}
-                              {hasBreakup && <span className="ml-1 text-primary">(click to expand)</span>}
+                              <div className="flex items-center gap-2">
+                                <span>
+                                  {item.description}
+                                  {hasBreakup && <span className="ml-1 text-primary">(click to expand)</span>}
+                                </span>
+                                {item.hasManage && onManageReloads && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-5 px-2 text-[10px]"
+                                    onClick={(e) => { e.stopPropagation(); onManageReloads(); }}
+                                    data-testid="button-manage-reloads"
+                                  >
+                                    Manage
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                           {hasBreakup && isExpanded && (
@@ -2313,6 +2623,7 @@ export function PurchaseReconciliationPanel({
   const manageReasonModalRef = useRef<ManageReasonModalHandle>(null);
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
+  const manageReloadsModalRef = useRef<ManageReloadsModalHandle>(null);
   
   const effectiveFxRate = useMemo(() => {
     if (fxRateToUsd) return fxRateToUsd;
@@ -2746,14 +3057,16 @@ export function PurchaseReconciliationPanel({
     enabled: !!beId,
   });
 
-  const { data: portalReloadData } = useQuery<{ total: number }>({
+  const { data: portalReloadData } = useQuery<{ total: number; adjustedTotal: number; reloads: PortalReload[]; adjustments: ReloadAdjustment[] }>({
     queryKey: ['/api/portal-reloads', beId],
     enabled: !!beId,
   });
 
   const balance = balanceData?.balance;
   const hasBalance = !!balance;
-  const portalReloadTotal = portalReloadData?.total ?? 0;
+  const portalReloadTotal = portalReloadData?.adjustedTotal ?? portalReloadData?.total ?? 0;
+  const portalReloadOriginalTotal = portalReloadData?.total ?? 0;
+  const hasReloadAdjustments = (portalReloadData?.adjustments?.length ?? 0) > 0;
 
   const calculations = useMemo(() => {
     const openingBalance = balance?.openingBalance ?? 0;
@@ -2984,9 +3297,12 @@ export function PurchaseReconciliationPanel({
       id: 2,
       label: "Reloads",
       value: calculations.reloads,
-      description: portalReloadTotal > 0 ? "From portal reloads upload" : "Not configured",
+      description: hasReloadAdjustments
+        ? `Adjusted (original: ${formatNumber(portalReloadOriginalTotal)})`
+        : portalReloadTotal > 0 ? "From portal reloads upload" : "Not configured",
       icon: Plus,
       isFromDb: true,
+      hasManage: true,
     },
     {
       id: 3,
@@ -3356,6 +3672,7 @@ export function PurchaseReconciliationPanel({
         openManageTidModal={openManageTidModal}
         openManageReasonModal={openManageReasonModal}
         openIssueModal={openIssueModal}
+        onManageReloads={() => manageReloadsModalRef.current?.open()}
         runId={runId}
       />
 
@@ -3458,6 +3775,15 @@ export function PurchaseReconciliationPanel({
       />
       <DisputeModal ref={disputeModalRef} currency={currency} onSave={handleDisputeSave} />
       <IssueModal ref={issueModalRef} currency={currency} billingEntityName={billingEntityName} effectiveFxRate={effectiveFxRate} onSave={handleIssueSave} />
+      <ManageReloadsModal
+        ref={manageReloadsModalRef}
+        beId={beId}
+        currency={currency}
+        reloads={portalReloadData?.reloads ?? []}
+        adjustments={portalReloadData?.adjustments ?? []}
+        originalTotal={portalReloadOriginalTotal}
+        adjustedTotal={portalReloadTotal}
+      />
 
     </div>
   );

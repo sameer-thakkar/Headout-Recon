@@ -19,6 +19,8 @@ import type {
   InsertPaxType,
   PortalReload,
   InsertPortalReload,
+  ReloadAdjustment,
+  InsertReloadAdjustment,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -88,6 +90,11 @@ export interface IStorage {
   getPortalReloadTotal(beId: string): Promise<number>;
   bulkCreatePortalReloads(reloads: InsertPortalReload[]): Promise<PortalReload[]>;
   deleteAllPortalReloads(): Promise<boolean>;
+
+  // Reload Adjustments
+  getReloadAdjustmentsByBeId(beId: string): Promise<ReloadAdjustment[]>;
+  createReloadAdjustment(data: InsertReloadAdjustment): Promise<ReloadAdjustment>;
+  deleteReloadAdjustment(id: number): Promise<boolean>;
 
   // Dispute Overrides (per-run, per-booking edits from Manage Disputes modal)
   setDisputeOverrides(runId: string, overrides: Record<string, DisputeOverride>): Promise<void>;
@@ -480,6 +487,9 @@ export class MemStorage implements IStorage {
         id: ++this.portalReloadCounter,
         beId: reload.beId,
         paidAmount: reload.paidAmount,
+        zendeskId: reload.zendeskId ?? null,
+        dateOfPayment: reload.dateOfPayment ?? null,
+        amountLoadedAtDate: reload.amountLoadedAtDate ?? null,
         createdAt: new Date().toISOString(),
       };
       this.portalReloadsList.push(newReload);
@@ -490,6 +500,36 @@ export class MemStorage implements IStorage {
 
   async deleteAllPortalReloads(): Promise<boolean> {
     this.portalReloadsList = [];
+    return true;
+  }
+
+  // Reload Adjustments
+  private reloadAdjustmentsList: ReloadAdjustment[] = [];
+  private reloadAdjustmentCounter: number = 0;
+
+  async getReloadAdjustmentsByBeId(beId: string): Promise<ReloadAdjustment[]> {
+    return this.reloadAdjustmentsList.filter(a => a.beId === beId);
+  }
+
+  async createReloadAdjustment(data: InsertReloadAdjustment): Promise<ReloadAdjustment> {
+    const newAdj: ReloadAdjustment = {
+      id: ++this.reloadAdjustmentCounter,
+      beId: data.beId,
+      zendeskId: data.zendeskId ?? null,
+      dateOfPayment: data.dateOfPayment ?? null,
+      amountLoadedAtDate: data.amountLoadedAtDate ?? null,
+      paidAmount: data.paidAmount,
+      adjustmentType: data.adjustmentType,
+      createdAt: new Date().toISOString(),
+    };
+    this.reloadAdjustmentsList.push(newAdj);
+    return newAdj;
+  }
+
+  async deleteReloadAdjustment(id: number): Promise<boolean> {
+    const idx = this.reloadAdjustmentsList.findIndex(a => a.id === id);
+    if (idx === -1) return false;
+    this.reloadAdjustmentsList.splice(idx, 1);
     return true;
   }
 
@@ -523,6 +563,7 @@ import {
   vendorBalances as vendorBalancesTable,
   paxTypes as paxTypesTable,
   portalReloads as portalReloadsTable,
+  reloadAdjustments as reloadAdjustmentsTable,
   counters,
   type ReconciliationSession,
 } from "@shared/schema";
@@ -1245,6 +1286,9 @@ export class DatabaseStorage implements ISessionStorage {
       id: r.id,
       beId: r.beId,
       paidAmount: r.paidAmount,
+      zendeskId: r.zendeskId,
+      dateOfPayment: r.dateOfPayment,
+      amountLoadedAtDate: r.amountLoadedAtDate,
       createdAt: r.createdAt.toISOString(),
     }));
   }
@@ -1255,6 +1299,9 @@ export class DatabaseStorage implements ISessionStorage {
       id: r.id,
       beId: r.beId,
       paidAmount: r.paidAmount,
+      zendeskId: r.zendeskId,
+      dateOfPayment: r.dateOfPayment,
+      amountLoadedAtDate: r.amountLoadedAtDate,
       createdAt: r.createdAt.toISOString(),
     }));
   }
@@ -1267,7 +1314,13 @@ export class DatabaseStorage implements ISessionStorage {
   async bulkCreatePortalReloads(reloads: InsertPortalReload[]): Promise<PortalReload[]> {
     if (reloads.length === 0) return [];
     await db.delete(portalReloadsTable);
-    const values = reloads.map(r => ({ beId: r.beId, paidAmount: r.paidAmount }));
+    const values = reloads.map(r => ({
+      beId: r.beId,
+      paidAmount: r.paidAmount,
+      zendeskId: r.zendeskId ?? null,
+      dateOfPayment: r.dateOfPayment ?? null,
+      amountLoadedAtDate: r.amountLoadedAtDate ?? null,
+    }));
     await db.insert(portalReloadsTable).values(values);
     return this.getPortalReloads();
   }
@@ -1275,6 +1328,47 @@ export class DatabaseStorage implements ISessionStorage {
   async deleteAllPortalReloads(): Promise<boolean> {
     await db.delete(portalReloadsTable);
     return true;
+  }
+
+  // Reload Adjustments
+  async getReloadAdjustmentsByBeId(beId: string): Promise<ReloadAdjustment[]> {
+    const results = await db.select().from(reloadAdjustmentsTable).where(eq(reloadAdjustmentsTable.beId, beId));
+    return results.map(r => ({
+      id: r.id,
+      beId: r.beId,
+      zendeskId: r.zendeskId,
+      dateOfPayment: r.dateOfPayment,
+      amountLoadedAtDate: r.amountLoadedAtDate,
+      paidAmount: r.paidAmount,
+      adjustmentType: r.adjustmentType as "add" | "less",
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async createReloadAdjustment(data: InsertReloadAdjustment): Promise<ReloadAdjustment> {
+    const [result] = await db.insert(reloadAdjustmentsTable).values({
+      beId: data.beId,
+      zendeskId: data.zendeskId ?? null,
+      dateOfPayment: data.dateOfPayment ?? null,
+      amountLoadedAtDate: data.amountLoadedAtDate ?? null,
+      paidAmount: data.paidAmount,
+      adjustmentType: data.adjustmentType,
+    }).returning();
+    return {
+      id: result.id,
+      beId: result.beId,
+      zendeskId: result.zendeskId,
+      dateOfPayment: result.dateOfPayment,
+      amountLoadedAtDate: result.amountLoadedAtDate,
+      paidAmount: result.paidAmount,
+      adjustmentType: result.adjustmentType as "add" | "less",
+      createdAt: result.createdAt.toISOString(),
+    };
+  }
+
+  async deleteReloadAdjustment(id: number): Promise<boolean> {
+    const result = await db.delete(reloadAdjustmentsTable).where(eq(reloadAdjustmentsTable.id, id)).returning();
+    return result.length > 0;
   }
 
   private disputeOverridesCache: Map<string, Record<string, DisputeOverride>> = new Map();
