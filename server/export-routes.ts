@@ -1022,9 +1022,6 @@ export function registerExportRoutes(app: Express) {
         const pdPushBreakupGroups = (groups: { reason: string; bookings: { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]; total: number }[]) => {
           for (const { reason, bookings, total } of groups) {
             appendAoa.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), "Reason subtotal"]);
-            for (const b of bookings) {
-              appendAoa.push(["", `    ${b.bookingId}`, formatIndianNumber(b.diff), `TID: ${b.tid} | SP Net: ${formatIndianNumber(b.spNet)} | HO Net: ${formatIndianNumber(b.hoNet)}`]);
-            }
           }
         };
 
@@ -1047,7 +1044,6 @@ export function registerExportRoutes(app: Express) {
       const subHeaderIndices = new Set<number>();
       const formulaRowIndices = new Set<number>(); // rows 5,7,9,12 in purchase recon
       const subReasonHeaderIndices = new Set<number>(); // reason group headers in rows 10/11 breakup
-      const subBookingRowIndices = new Set<number>(); // individual booking rows in rows 10/11 breakup
 
       let appendIdx = payableAppendStart;
       if (!isPortalDepositRun) {
@@ -1070,9 +1066,6 @@ export function registerExportRoutes(app: Express) {
           if (groups) {
             for (const { bookings } of groups) {
               subReasonHeaderIndices.add(appendIdx++); // reason group header
-              for (let bi = 0; bi < bookings.length; bi++) {
-                subBookingRowIndices.add(appendIdx++); // individual booking row
-              }
             }
           }
         }
@@ -1103,9 +1096,6 @@ export function registerExportRoutes(app: Express) {
           } else if (subReasonHeaderIndices.has(absRow)) {
             payableSheet[cellRef].s.font = { italic: true, sz: 9 };
             payableSheet[cellRef].s.fill = { fgColor: { rgb: "F3F4F6" }, patternType: "solid" };
-            payableSheet[cellRef].s.border = payAppendBorderStyle;
-          } else if (subBookingRowIndices.has(absRow)) {
-            payableSheet[cellRef].s.font = { sz: 9, color: { rgb: "555555" } };
             payableSheet[cellRef].s.border = payAppendBorderStyle;
           } else if (appendAoa[ra][0] !== "") {
             payableSheet[cellRef].s.border = payAppendBorderStyle;
@@ -1176,9 +1166,7 @@ export function registerExportRoutes(app: Express) {
         }
       }
       
-      if (!isPortalDepositRun) {
-        XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
-      }
+      XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
 
       // =====================================================
       // SHEET 3: HO Report Updated
@@ -1558,9 +1546,7 @@ export function registerExportRoutes(app: Express) {
         }
       }
       
-      if (!isPortalDepositRun) {
-        XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
-      }
+      XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
@@ -2439,9 +2425,6 @@ export function registerExportRoutes(app: Express) {
         const gsPushBreakupGroups = (groups: { reason: string; bookings: { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]; total: number }[]) => {
           for (const { reason, bookings, total } of groups) {
             payableSummaryData.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), "Reason subtotal"]);
-            for (const b of bookings) {
-              payableSummaryData.push(["", `    ${b.bookingId}`, formatIndianNumber(b.diff), `TID: ${b.tid} | SP Net: ${formatIndianNumber(b.spNet)} | HO Net: ${formatIndianNumber(b.hoNet)}`]);
-            }
           }
         };
 
@@ -2741,10 +2724,8 @@ export function registerExportRoutes(app: Express) {
       // Build sheet definitions
       const sheetDefs: { properties: { title: string } }[] = [
         { properties: { title: "Payable Summary" } },
-        ...(!gsIsPortalDepositRun ? [
-          { properties: { title: "SP Invoice Report" } },
-          { properties: { title: "HO Report Updated" } },
-        ] : []),
+        { properties: { title: "SP Invoice Report" } },
+        { properties: { title: "HO Report Updated" } },
       ];
 
       const spreadsheetTitle = `Reconciliation Report - ${new Date().toISOString().split("T")[0]}`;
@@ -2764,10 +2745,8 @@ export function registerExportRoutes(app: Express) {
 
       const batchData = [
         { range: "Payable Summary!A1", values: payableSummaryData },
-        ...(!gsIsPortalDepositRun ? [
-          { range: "SP Invoice Report!A1", values: spReportData },
-          { range: "HO Report Updated!A1", values: hoReportData },
-        ] : []),
+        { range: "SP Invoice Report!A1", values: spReportData },
+        { range: "HO Report Updated!A1", values: hoReportData },
       ];
 
       await sheets.spreadsheets.values.batchUpdate({
@@ -2841,20 +2820,18 @@ export function registerExportRoutes(app: Express) {
         addFinancialSheetFormatting(payableSheetId, payableSummaryData.length, 4, payableSummaryData[0]);
       }
 
-      if (!gsIsPortalDepositRun) {
-        // SP Invoice Report
-        const spSheetId = sheetIdMap.get("SP Invoice Report");
-        if (spSheetId !== undefined) {
-          const spCols = spReportData.length > 0 && Array.isArray(spReportData[0]) ? spReportData[0].length : 5;
-          addFinancialSheetFormatting(spSheetId, spReportData.length, spCols, spReportData[0]);
-        }
+      // SP Invoice Report
+      const spSheetId = sheetIdMap.get("SP Invoice Report");
+      if (spSheetId !== undefined) {
+        const spCols = spReportData.length > 0 && Array.isArray(spReportData[0]) ? spReportData[0].length : 5;
+        addFinancialSheetFormatting(spSheetId, spReportData.length, spCols, spReportData[0]);
+      }
 
-        // HO Report Updated
-        const hoSheetId = sheetIdMap.get("HO Report Updated");
-        if (hoSheetId !== undefined) {
-          const hoCols = hoReportData.length > 0 && Array.isArray(hoReportData[0]) ? hoReportData[0].length : 11;
-          addFinancialSheetFormatting(hoSheetId, hoReportData.length, hoCols, hoReportData[0]);
-        }
+      // HO Report Updated
+      const hoSheetId = sheetIdMap.get("HO Report Updated");
+      if (hoSheetId !== undefined) {
+        const hoCols = hoReportData.length > 0 && Array.isArray(hoReportData[0]) ? hoReportData[0].length : 11;
+        addFinancialSheetFormatting(hoSheetId, hoReportData.length, hoCols, hoReportData[0]);
       }
 
       if (formatRequests.length > 0) {
