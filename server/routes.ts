@@ -1744,24 +1744,23 @@ export async function registerRoutes(
         });
       }
 
-      const zendeskIdCol = headers.find(h =>
-        h.toLowerCase().includes("zendesk") && h.toLowerCase().includes("id") ||
-        h.toLowerCase().includes("ticket id") ||
-        h.toLowerCase().includes("ticket number")
-      );
-      const dateCol = headers.find(h =>
-        h.toLowerCase().includes("date") && (
-          h.toLowerCase().includes("payment") ||
-          h.toLowerCase().includes("paid") ||
-          h.toLowerCase().includes("created")
-        ) ||
-        h.toLowerCase() === "date"
-      );
-      const amountLoadedCol = headers.find(h =>
-        h.toLowerCase().includes("amount loaded") ||
-        h.toLowerCase().includes("loaded at date") ||
-        h.toLowerCase().includes("reload amount")
-      );
+      const remainingHeaders = headers.filter(h => h !== partnerIdCol && h !== paidAmountCol);
+      const zendeskIdCol = remainingHeaders.find(h => {
+        const lc = h.toLowerCase();
+        return (lc.includes("zendesk") && lc.includes("id") && !lc.includes("partner")) ||
+          lc.includes("ticket id") ||
+          lc.includes("ticket number");
+      });
+      const dateCol = remainingHeaders.find(h => {
+        const lc = h.toLowerCase();
+        return (lc.includes("date") && (lc.includes("payment") || lc.includes("paid") || lc.includes("created"))) ||
+          lc === "date" || lc === "date of payment";
+      });
+      const amountLoadedCol = remainingHeaders.find(h => {
+        const lc = h.toLowerCase();
+        return lc.includes("amount loaded") || lc.includes("loaded at date") || lc.includes("reload amount");
+      });
+      console.log("Portal reloads column detection:", { partnerIdCol, paidAmountCol, zendeskIdCol: zendeskIdCol || "(not found)", dateCol: dateCol || "(not found)", amountLoadedCol: amountLoadedCol || "(not found)", allHeaders: headers });
 
       const parsed: { beId: string; paidAmount: number; zendeskId?: string; dateOfPayment?: string; amountLoadedAtDate?: number; rawRow: Record<string, unknown> }[] = [];
       for (const row of rawRows) {
