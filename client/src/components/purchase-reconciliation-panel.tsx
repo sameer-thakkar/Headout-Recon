@@ -1351,6 +1351,12 @@ const TidGroup = memo(function TidGroup({
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
   const expName = useMemo(() => tidBookings.find(b => b.experienceName)?.experienceName, [tidBookings]);
+  const tidDiffPercent = useMemo(() => {
+    const hoTotal = tidBookings.reduce((s, b) => s + b.hoNet, 0);
+    if (hoTotal === 0) return null;
+    const spTotal = tidBookings.reduce((s, b) => s + b.spNet, 0);
+    return ((hoTotal - spTotal) / hoTotal) * 100;
+  }, [tidBookings]);
 
   return (
     <div className="border-t first:border-t-0">
@@ -1379,6 +1385,11 @@ const TidGroup = memo(function TidGroup({
             >
               <Pencil className="h-2.5 w-2.5" />
             </Button>
+          )}
+          {tidDiffPercent !== null && (
+            <span className="font-mono text-xs text-muted-foreground">
+              ({tidDiffPercent.toFixed(2)}%)
+            </span>
           )}
           <span className="font-mono text-amber-600 dark:text-amber-400 text-xs">
             {formatNumber(tidTotal)}
