@@ -74,7 +74,6 @@ interface PurchaseReconciliationPanelProps {
 
 const INITIAL_TID_LIMIT = 10;
 const INITIAL_REASON_LIMIT = 5;
-const AUTO_EXPAND_BOOKING_THRESHOLD = 3;
 
 function needsVendorCorrection(booking: PurchaseBooking): boolean {
   if (booking.isSecondaryVendor) return true;
@@ -142,7 +141,7 @@ const BookingRow = memo(function BookingRow({
 
   return (
     <Fragment key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}>
-      <TableRow className={`h-8 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : isNegativeSp ? "bg-red-50/60 dark:bg-red-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
+      <TableRow className={`h-7 ${hasDispute ? "bg-amber-50/50 dark:bg-amber-950/20" : isNegativeSp ? "bg-red-50/60 dark:bg-red-950/20" : needsDisputeWarning ? "bg-orange-50/50 dark:bg-orange-950/10" : ""}`}>
         <TableCell className="py-1 font-mono">
           <div className="flex items-center gap-1">
             {booking.bookingId}
@@ -179,7 +178,7 @@ const BookingRow = memo(function BookingRow({
             <Input
               type="number"
               step="0.01"
-              className="h-6 text-xs w-28 font-mono text-right"
+              className="h-6 text-xs w-28 font-mono text-right border-transparent hover:border-input focus:border-input bg-transparent"
               value={localFnp}
               onChange={(e) => setLocalFnp(e.target.value)}
               onBlur={commitFnp}
@@ -220,18 +219,7 @@ const BookingRow = memo(function BookingRow({
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-xs text-amber-600 opacity-50 cursor-not-allowed"
-                disabled
-                title="Dispute functionality coming soon"
-                data-testid={`button-raise-dispute-${booking.bookingId}`}
-              >
-                <FileWarning className="h-3 w-3 mr-1" />
-                Dispute
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-xs text-blue-600"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-blue-600"
                 onClick={() => onOpenIssueModal({
                   bookingId: booking.bookingId,
                   spNet: booking.spNet,
@@ -240,9 +228,9 @@ const BookingRow = memo(function BookingRow({
                   reason: reasonName,
                 })}
                 data-testid={`button-flag-issue-${booking.bookingId}`}
+                title="Log issue"
               >
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                Issue
+                <AlertTriangle className="h-3 w-3" />
               </Button>
             </div>
           </TableCell>
@@ -1331,7 +1319,6 @@ interface TidGroupProps {
   runId?: string | null;
   reasonName: string;
   isExpanded: boolean;
-  autoExpanded?: boolean;
   onToggle: (key: string) => void;
   activeDisputes: Set<string>;
   disputeAmounts: Map<string, number>;
@@ -1347,55 +1334,44 @@ interface TidGroupProps {
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
-  isExpanded: isExpandedProp, autoExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
+  isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
   openIssueModal, unmappedResolutions, onManageUnmapped,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
-  const [userCollapsed, setUserCollapsed] = useState(false);
-  const isExpanded = userCollapsed ? isExpandedProp : (isExpandedProp || (autoExpanded === true));
-
-  const handleToggle = useCallback(() => {
-    if (autoExpanded && !isExpandedProp) {
-      setUserCollapsed(prev => !prev);
-    } else {
-      onToggle(tidKey);
-      if (userCollapsed) setUserCollapsed(false);
-    }
-  }, [autoExpanded, isExpandedProp, userCollapsed, onToggle, tidKey]);
 
   return (
-    <div className="rounded-md border bg-background overflow-hidden">
+    <div className="border-t first:border-t-0">
       <div
-        className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
-        onClick={handleToggle}
+        className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-muted/40 transition-colors"
+        onClick={() => onToggle(tidKey)}
         data-testid={`tid-header-${itemId}-${groupIdx}-${tid}`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {isExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-          <span className="font-mono text-xs font-medium">TID: {tid}</span>
-          <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+          <span className="font-mono text-xs">{tid}</span>
+          <span className="text-[10px] text-muted-foreground">({tidBookings.length})</span>
         </div>
-        <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
           {reasonName !== "Unmapped" && (
             <Button
               size="sm"
-              variant="default"
-              className="text-xs"
+              variant="ghost"
+              className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
               onClick={() => openManageTidModal(tidBookings, tid, reasonName)}
               data-testid={`button-manage-tid-${tid}`}
+              title="Manage TID"
             >
-              <Pencil className="h-3 w-3 mr-1" />
-              Manage TID
+              <Pencil className="h-2.5 w-2.5" />
             </Button>
           )}
-          <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
-            {formatNumber(tidTotal)} {currency}
+          <span className="font-mono text-amber-600 dark:text-amber-400 text-xs">
+            {formatNumber(tidTotal)}
           </span>
         </div>
       </div>
       {isExpanded && (
-        <div>
+        <div className="px-1 pb-1">
           <Table className="text-xs">
             <TableHeader>
               <TableRow className="h-7">
@@ -1490,9 +1466,7 @@ const ReasonGroup = memo(function ReasonGroup({
   const tidEntries = reasonGroup.tidEntries;
   const visibleTids = tidEntries.slice(0, visibleTidCount);
   const hasMore = tidEntries.length > visibleTidCount;
-  const isSingleTid = tidEntries.length === 1;
   const percentage = grandTotal !== 0 ? Math.round((Math.abs(reasonGroup.totalDifference) / Math.abs(grandTotal)) * 100) : 0;
-  const barWidth = Math.max(percentage, 2);
 
   return (
     <div className="rounded-md border bg-background overflow-hidden">
@@ -1505,25 +1479,22 @@ const ReasonGroup = memo(function ReasonGroup({
           <div className="flex items-center gap-2 flex-wrap">
             {isReasonExpanded ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
             <span className="font-medium text-sm">{reasonGroup.reason}</span>
-            <Badge variant="secondary" className="text-xs">{reasonGroup.count} items</Badge>
-            <Badge variant="outline" className="text-xs">{tidEntries.length} TIDs</Badge>
-            {isSingleTid && (
-              <span className="text-[10px] text-muted-foreground italic">single TID</span>
-            )}
+            <Badge variant="secondary" className="text-xs">{reasonGroup.count}</Badge>
           </div>
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-2 text-xs">
             <Button
               size="sm"
-              variant="outline"
+              variant="ghost"
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
               onClick={(e) => {
                 e.stopPropagation();
                 const allBookings = tidEntries.flatMap(([, b]) => b);
                 openManageReasonModal(reasonGroup.reason, allBookings);
               }}
               data-testid={`button-manage-reason-${itemId}-${groupIdx}`}
+              title="Manage reason group"
             >
-              <Pencil className="h-3 w-3 mr-1" />
-              Manage
+              <Pencil className="h-3 w-3" />
             </Button>
             <Badge variant="outline" className="text-[10px] font-mono">{percentage}%</Badge>
             <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
@@ -1531,17 +1502,9 @@ const ReasonGroup = memo(function ReasonGroup({
             </span>
           </div>
         </div>
-        <div className="px-3 pb-1.5">
-          <div className="h-1 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-amber-500/70 dark:bg-amber-400/60 transition-all"
-              style={{ width: `${barWidth}%` }}
-            />
-          </div>
-        </div>
       </div>
       {isReasonExpanded && (
-        <div className="space-y-1 p-2">
+        <div className="px-2 pb-2 pt-1">
           {reasonGroup.reason === "Negative SP - Partial Refund" && (() => {
             const allBookings = tidEntries.flatMap(([, b]) => b);
             const zeroHo = allBookings.filter(b => b.hoNet === 0);
@@ -1619,7 +1582,6 @@ const ReasonGroup = memo(function ReasonGroup({
           {visibleTids.map(([tid, tidBookings]) => {
             const tidKey = `${itemId}-${reasonGroup.reason}-${tid}`;
             const isTidExpanded = expandedTids.has(tidKey);
-            const shouldAutoExpand = isSingleTid || tidBookings.length <= AUTO_EXPAND_BOOKING_THRESHOLD;
             return (
               <TidGroup
                 key={tidKey}
@@ -1632,7 +1594,6 @@ const ReasonGroup = memo(function ReasonGroup({
                 runId={runId}
                 reasonName={reasonGroup.reason}
                 isExpanded={isTidExpanded}
-                autoExpanded={shouldAutoExpand}
                 onToggle={onToggleTid}
                 activeDisputes={activeDisputes}
                 disputeAmounts={disputeAmounts}
