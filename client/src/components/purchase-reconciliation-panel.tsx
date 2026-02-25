@@ -50,6 +50,7 @@ type PurchaseBooking = {
   spBeId?: string;
   chargedLoss?: string;
   comment?: string;
+  experienceName?: string;
 };
 
 interface BookingForDispute {
@@ -1339,6 +1340,7 @@ const TidGroup = memo(function TidGroup({
   openIssueModal, unmappedResolutions, onManageUnmapped,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
+  const expName = useMemo(() => tidBookings.find(b => b.experienceName)?.experienceName, [tidBookings]);
 
   return (
     <div className="border-t first:border-t-0">
@@ -1347,10 +1349,13 @@ const TidGroup = memo(function TidGroup({
         onClick={() => onToggle(tidKey)}
         data-testid={`tid-header-${itemId}-${groupIdx}-${tid}`}
       >
-        <div className="flex items-center gap-1.5">
-          {isExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-          <span className="font-mono text-xs">{tid}</span>
-          <span className="text-[10px] text-muted-foreground">({tidBookings.length})</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {isExpanded ? <ChevronDown className="h-3 w-3 text-primary shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+          <span className="font-mono text-xs shrink-0">{tid}</span>
+          <span className="text-[10px] text-muted-foreground shrink-0">({tidBookings.length})</span>
+          {expName && (
+            <span className="text-[10px] text-muted-foreground truncate max-w-[200px]" title={expName}>· {expName}</span>
+          )}
         </div>
         <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
           {reasonName !== "Unmapped" && (
@@ -3738,6 +3743,7 @@ export function PurchaseReconciliationPanel({
           spBeId: row.spBeId || row.beId,
           chargedLoss: row.chargedLoss,
           comment: row.comment,
+          experienceName: row.experienceName,
         });
       });
     
@@ -3767,6 +3773,7 @@ export function PurchaseReconciliationPanel({
         spBeId: row.spBeId || row.beId,
         chargedLoss: row.chargedLoss,
         comment: row.comment,
+        experienceName: row.experienceName,
       });
     });
 
@@ -3788,6 +3795,7 @@ export function PurchaseReconciliationPanel({
         paymentBasis: row.paymentBasis,
         paymentMethod: row.paymentMethod,
         spPaymentMethod: row.spPaymentMethod,
+        experienceName: row.experienceName,
       });
     });
     
@@ -3829,6 +3837,7 @@ export function PurchaseReconciliationPanel({
           spBeId: row.spBeId || row.beId,
           chargedLoss: row.chargedLoss,
           comment: row.comment,
+          experienceName: row.experienceName,
         });
       });
     
