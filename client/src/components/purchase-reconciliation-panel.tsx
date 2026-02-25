@@ -2081,10 +2081,10 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                   <TableBody>
                     {reloads.map((r, i) => (
                       <TableRow key={`reload-${r.id || i}`} className="h-7">
-                        <TableCell className="py-1 font-mono">{r.zendeskId || "-"}</TableCell>
+                        <TableCell className="py-1 font-mono">{r.zendeskId ? String(r.zendeskId).replace(/\.0+$/, "") : "-"}</TableCell>
                         <TableCell className="py-1">{formatDateDisplay(r.dateOfPayment)}</TableCell>
                         <TableCell className="py-1 text-right">{formatDateDisplay(r.amountLoadedAtDate)}</TableCell>
-                        <TableCell className="py-1 text-right font-mono">{formatNumber(r.paidAmount)}</TableCell>
+                        <TableCell className="py-1 text-right font-mono">{formatNumber(Math.round(r.paidAmount * 100) / 100)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -2127,11 +2127,11 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                             {a.adjustmentType === "add" ? "+" : "-"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="py-1 font-mono">{a.zendeskId || "-"}</TableCell>
+                        <TableCell className="py-1 font-mono">{a.zendeskId ? String(a.zendeskId).replace(/\.0+$/, "") : "-"}</TableCell>
                         <TableCell className="py-1">{formatDateDisplay(a.dateOfPayment)}</TableCell>
                         <TableCell className="py-1 text-right">{formatDateDisplay(a.amountLoadedAtDate)}</TableCell>
                         <TableCell className={`py-1 text-right font-mono ${a.adjustmentType === "add" ? "text-green-600" : "text-red-600"}`}>
-                          {a.adjustmentType === "add" ? "+" : "-"}{formatNumber(a.paidAmount)}
+                          {a.adjustmentType === "add" ? "+" : "-"}{formatNumber(Math.round(a.paidAmount * 100) / 100)}
                         </TableCell>
                         <TableCell className="py-1">
                           <Button
@@ -2185,7 +2185,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                     <TableHead className="py-1 text-xs w-24">Type</TableHead>
                     <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
                     <TableHead className="py-1 text-xs">Date</TableHead>
-                    <TableHead className="py-1 text-xs">Amt Loaded</TableHead>
+                    <TableHead className="py-1 text-xs whitespace-nowrap">Amt Loaded at Date</TableHead>
                     <TableHead className="py-1 text-xs">Paid Amt *</TableHead>
                     <TableHead className="py-1 text-xs w-8"></TableHead>
                   </TableRow>
@@ -2224,9 +2224,9 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                       </TableCell>
                       <TableCell className="py-0.5 px-1">
                         <Input
-                          className="h-7 text-xs font-mono border-0 bg-transparent px-1"
-                          placeholder="-"
-                          type="number"
+                          className="h-7 text-xs border-0 bg-transparent px-1"
+                          placeholder="DD/MM/YYYY"
+                          type="text"
                           value={row.amountLoaded}
                           onChange={(e) => updateRow(row.id, "amountLoaded", e.target.value)}
                           data-testid={`input-adj-loaded-${idx}`}
