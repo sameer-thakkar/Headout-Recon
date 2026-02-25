@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition, forwardRef, useImperativeHandle } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, X, Pencil, Search, Download } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, CheckCircle2, X, Pencil, Search, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -1718,52 +1718,71 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
   { beId, currency, reloads, adjustments, originalTotal, adjustedTotal },
   ref
 ) {
+  interface AdjRow {
+    id: string;
+    type: "add" | "less";
+    zendeskId: string;
+    date: string;
+    amountLoaded: string;
+    paidAmount: string;
+  }
+
+  const makeRow = (): AdjRow => ({ id: crypto.randomUUID(), type: "add", zendeskId: "", date: "", amountLoaded: "", paidAmount: "" });
+
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
-  const [adjType, setAdjType] = useState<"add" | "less">("add");
-  const [adjZendeskId, setAdjZendeskId] = useState("");
-  const [adjDate, setAdjDate] = useState("");
-  const [adjAmountLoaded, setAdjAmountLoaded] = useState("");
-  const [adjPaidAmount, setAdjPaidAmount] = useState("");
+  const [rows, setRows] = useState<AdjRow[]>([makeRow()]);
   const [isSaving, setIsSaving] = useState(false);
 
   useImperativeHandle(ref, () => ({
     open: () => setIsOpen(true),
   }));
 
-  const resetForm = useCallback(() => {
-    setAdjZendeskId("");
-    setAdjDate("");
-    setAdjAmountLoaded("");
-    setAdjPaidAmount("");
-    setAdjType("add");
+  const updateRow = useCallback((rowId: string, field: keyof AdjRow, value: string) => {
+    setRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: value } : r));
   }, []);
 
-  const handleAddAdjustment = useCallback(async () => {
-    const amount = parseFloat(adjPaidAmount);
-    if (isNaN(amount) || amount === 0) {
-      toast({ title: "Invalid amount", description: "Please enter a valid non-zero paid amount", variant: "destructive" });
+  const removeRow = useCallback((rowId: string) => {
+    setRows(prev => {
+      const next = prev.filter(r => r.id !== rowId);
+      return next.length === 0 ? [makeRow()] : next;
+    });
+  }, []);
+
+  const addRow = useCallback(() => {
+    setRows(prev => [...prev, makeRow()]);
+  }, []);
+
+  const handleSaveAllAdjustments = useCallback(async () => {
+    const validRows = rows.filter(r => {
+      const amt = parseFloat(r.paidAmount);
+      return !isNaN(amt) && amt !== 0;
+    });
+    if (validRows.length === 0) {
+      toast({ title: "No valid rows", description: "Enter a paid amount in at least one row", variant: "destructive" });
       return;
     }
     setIsSaving(true);
     try {
-      await apiRequest("POST", "/api/reload-adjustments", {
-        beId,
-        zendeskId: adjZendeskId || null,
-        dateOfPayment: adjDate || null,
-        amountLoadedAtDate: adjAmountLoaded ? parseFloat(adjAmountLoaded) || null : null,
-        paidAmount: amount,
-        adjustmentType: adjType,
-      });
+      for (const r of validRows) {
+        await apiRequest("POST", "/api/reload-adjustments", {
+          beId,
+          zendeskId: r.zendeskId || null,
+          dateOfPayment: r.date || null,
+          amountLoadedAtDate: r.amountLoaded ? parseFloat(r.amountLoaded) || null : null,
+          paidAmount: parseFloat(r.paidAmount),
+          adjustmentType: r.type,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/portal-reloads', beId] });
-      resetForm();
-      toast({ title: "Adjustment added", description: `${adjType === "add" ? "+" : "-"}${formatNumber(amount)} ${currency}` });
+      setRows([makeRow()]);
+      toast({ title: "Adjustments saved", description: `${validRows.length} adjustment(s) added` });
     } catch (e) {
-      toast({ title: "Error", description: "Failed to add adjustment", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to save adjustments", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
-  }, [beId, adjType, adjZendeskId, adjDate, adjAmountLoaded, adjPaidAmount, currency, toast, resetForm]);
+  }, [beId, rows, toast]);
 
   const handleDeleteAdjustment = useCallback(async (id: number) => {
     try {
@@ -1885,74 +1904,110 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
           )}
 
           <div>
-            <h4 className="text-sm font-medium mb-2">Add Adjustment</h4>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Type</label>
-                <Select value={adjType} onValueChange={(v) => setAdjType(v as "add" | "less")}>
-                  <SelectTrigger className="h-8 text-xs" data-testid="select-adjustment-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="add">Add (+)</SelectItem>
-                    <SelectItem value="less">Less (-)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Zendesk ID</label>
-                <Input
-                  className="h-8 text-xs font-mono"
-                  placeholder="Optional"
-                  value={adjZendeskId}
-                  onChange={(e) => setAdjZendeskId(e.target.value)}
-                  data-testid="input-adjustment-zendesk"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Date of Payment</label>
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="Optional"
-                  value={adjDate}
-                  onChange={(e) => setAdjDate(e.target.value)}
-                  data-testid="input-adjustment-date"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Amount Loaded at Date</label>
-                <Input
-                  className="h-8 text-xs font-mono"
-                  placeholder="Optional"
-                  type="number"
-                  value={adjAmountLoaded}
-                  onChange={(e) => setAdjAmountLoaded(e.target.value)}
-                  data-testid="input-adjustment-amount-loaded"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Paid Amount *</label>
-                <Input
-                  className="h-8 text-xs font-mono"
-                  placeholder="Required"
-                  type="number"
-                  value={adjPaidAmount}
-                  onChange={(e) => setAdjPaidAmount(e.target.value)}
-                  data-testid="input-adjustment-paid-amount"
-                />
-              </div>
-              <div className="flex items-end">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium">Add Adjustments</h4>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={addRow}
+                  data-testid="button-add-adjustment-row"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Row
+                </Button>
                 <Button
                   size="sm"
-                  className="h-8 text-xs"
-                  onClick={handleAddAdjustment}
-                  disabled={isSaving || !adjPaidAmount}
+                  className="h-7 text-xs"
+                  onClick={handleSaveAllAdjustments}
+                  disabled={isSaving || rows.every(r => !r.paidAmount)}
                   data-testid="button-save-adjustment"
                 >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
-                  Save Adjustment
+                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+                  Save All ({rows.filter(r => { const a = parseFloat(r.paidAmount); return !isNaN(a) && a !== 0; }).length})
                 </Button>
               </div>
+            </div>
+            <div className="rounded-md border overflow-hidden">
+              <Table className="text-xs">
+                <TableHeader>
+                  <TableRow className="h-7">
+                    <TableHead className="py-1 text-xs w-24">Type</TableHead>
+                    <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
+                    <TableHead className="py-1 text-xs">Date</TableHead>
+                    <TableHead className="py-1 text-xs">Amt Loaded</TableHead>
+                    <TableHead className="py-1 text-xs">Paid Amt *</TableHead>
+                    <TableHead className="py-1 text-xs w-8"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row, idx) => (
+                    <TableRow key={row.id} className="h-8">
+                      <TableCell className="py-0.5 px-1">
+                        <Select value={row.type} onValueChange={(v) => updateRow(row.id, "type", v)}>
+                          <SelectTrigger className="h-7 text-xs border-0 bg-transparent px-1" data-testid={`select-adj-type-${idx}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="add">Add (+)</SelectItem>
+                            <SelectItem value="less">Less (-)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="py-0.5 px-1">
+                        <Input
+                          className="h-7 text-xs font-mono border-0 bg-transparent px-1"
+                          placeholder="-"
+                          value={row.zendeskId}
+                          onChange={(e) => updateRow(row.id, "zendeskId", e.target.value)}
+                          data-testid={`input-adj-zendesk-${idx}`}
+                        />
+                      </TableCell>
+                      <TableCell className="py-0.5 px-1">
+                        <Input
+                          className="h-7 text-xs border-0 bg-transparent px-1"
+                          placeholder="-"
+                          value={row.date}
+                          onChange={(e) => updateRow(row.id, "date", e.target.value)}
+                          data-testid={`input-adj-date-${idx}`}
+                        />
+                      </TableCell>
+                      <TableCell className="py-0.5 px-1">
+                        <Input
+                          className="h-7 text-xs font-mono border-0 bg-transparent px-1"
+                          placeholder="-"
+                          type="number"
+                          value={row.amountLoaded}
+                          onChange={(e) => updateRow(row.id, "amountLoaded", e.target.value)}
+                          data-testid={`input-adj-loaded-${idx}`}
+                        />
+                      </TableCell>
+                      <TableCell className="py-0.5 px-1">
+                        <Input
+                          className="h-7 text-xs font-mono border-0 bg-transparent px-1"
+                          placeholder="Required"
+                          type="number"
+                          value={row.paidAmount}
+                          onChange={(e) => updateRow(row.id, "paidAmount", e.target.value)}
+                          data-testid={`input-adj-paid-${idx}`}
+                        />
+                      </TableCell>
+                      <TableCell className="py-0.5 px-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeRow(row.id)}
+                          data-testid={`button-remove-adj-row-${idx}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </div>
 
