@@ -948,6 +948,11 @@ export function registerExportRoutes(app: Express) {
         });
       }
 
+      // Hoisted for styling index tracking after appendAoa is built
+      type PdBreakupGroup = { reason: string; bookings: { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]; total: number };
+      let pdRow10Groups: PdBreakupGroup[] = [];
+      let pdRow11Groups: PdBreakupGroup[] = [];
+
       // Purchase Reconciliation section (Portal Deposit vendors only)
       if (portalDepositBeId) {
         const pdVendorBalance = await storage.getVendorBalance(portalDepositBeId);
@@ -968,6 +973,37 @@ export function registerExportRoutes(app: Express) {
         const pdNetDifference = pdDifference + pdInSPNotInHO - pdInHONotInSP;
         const pdCurrency = portalDepositCurrency || "";
 
+        // Build row 10 & 11 breakup data for sub-rows
+        const pdRow10ByReason = new Map<string, { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]>();
+        result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.spNetInHo > r.hoNet).forEach((r: any) => {
+          const reason = r.reason || "Unknown";
+          if (!pdRow10ByReason.has(reason)) pdRow10ByReason.set(reason, []);
+          pdRow10ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: r.hoNet, diff: r.spNetInHo - r.hoNet });
+        });
+        result.secondaryVendorRows.forEach((r: any) => {
+          const reason = `SV: ${r.reason || "Secondary Vendor"}`;
+          if (!pdRow10ByReason.has(reason)) pdRow10ByReason.set(reason, []);
+          pdRow10ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: 0, diff: r.spNetInHo });
+        });
+        (result.unmappedRows || []).forEach((r: any) => {
+          const reason = r.reason || "Unmapped";
+          if (!pdRow10ByReason.has(reason)) pdRow10ByReason.set(reason, []);
+          pdRow10ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: 0, diff: r.spNetInHo });
+        });
+        pdRow10Groups = Array.from(pdRow10ByReason.entries())
+          .map(([reason, bookings]) => ({ reason, bookings: bookings.sort((a, b) => b.diff - a.diff), total: bookings.reduce((s, b) => s + b.diff, 0) }))
+          .sort((a, b) => b.total - a.total);
+
+        const pdRow11ByReason = new Map<string, { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]>();
+        result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.hoNet > r.spNetInHo).forEach((r: any) => {
+          const reason = r.reason || "Unknown";
+          if (!pdRow11ByReason.has(reason)) pdRow11ByReason.set(reason, []);
+          pdRow11ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: r.hoNet, diff: r.hoNet - r.spNetInHo });
+        });
+        pdRow11Groups = Array.from(pdRow11ByReason.entries())
+          .map(([reason, bookings]) => ({ reason, bookings: bookings.sort((a, b) => b.diff - a.diff), total: bookings.reduce((s, b) => s + b.diff, 0) }))
+          .sort((a, b) => b.total - a.total);
+
         const pdLineItems: [number, string, number, string][] = [
           [1, "Opening Balance", pdOpeningBalance, "From vendor balances"],
           [2, "Reloads", pdReloads, pdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
@@ -983,11 +1019,22 @@ export function registerExportRoutes(app: Express) {
           [12, "Net Difference", pdNetDifference, "= 9 + 10 - 11 (should be 0)"],
         ];
 
+        const pdPushBreakupGroups = (groups: { reason: string; bookings: { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]; total: number }[]) => {
+          for (const { reason, bookings, total } of groups) {
+            appendAoa.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), "Reason subtotal"]);
+            for (const b of bookings) {
+              appendAoa.push(["", `    ${b.bookingId}`, formatIndianNumber(b.diff), `TID: ${b.tid} | SP Net: ${formatIndianNumber(b.spNet)} | HO Net: ${formatIndianNumber(b.hoNet)}`]);
+            }
+          }
+        };
+
         if (!isPortalDepositRun) appendAoa.push(["", "", "", ""]);
         appendAoa.push([`Purchase Reconciliation Summary (BE ID: ${portalDepositBeId})`, "", "", ""]);
         appendAoa.push(["#", "Line Item", `Value (${pdCurrency})`, "Description"]);
         for (const [num, label, value, desc] of pdLineItems) {
           appendAoa.push([num, label, formatIndianNumber(value), desc]);
+          if (num === 10) pdPushBreakupGroups(pdRow10Groups);
+          if (num === 11) pdPushBreakupGroups(pdRow11Groups);
         }
       }
 
@@ -999,6 +1046,8 @@ export function registerExportRoutes(app: Express) {
       const sectionTitleIndices = new Set<number>();
       const subHeaderIndices = new Set<number>();
       const formulaRowIndices = new Set<number>(); // rows 5,7,9,12 in purchase recon
+      const subReasonHeaderIndices = new Set<number>(); // reason group headers in rows 10/11 breakup
+      const subBookingRowIndices = new Set<number>(); // individual booking rows in rows 10/11 breakup
 
       let appendIdx = payableAppendStart;
       if (!isPortalDepositRun) {
@@ -1016,6 +1065,16 @@ export function registerExportRoutes(app: Express) {
         for (let li = 1; li <= 12; li++) {
           if (formulaLineNums.has(li)) formulaRowIndices.add(appendIdx);
           appendIdx++;
+          // Track sub-row indices for rows 10 and 11
+          const groups = li === 10 ? pdRow10Groups : li === 11 ? pdRow11Groups : null;
+          if (groups) {
+            for (const { bookings } of groups) {
+              subReasonHeaderIndices.add(appendIdx++); // reason group header
+              for (let bi = 0; bi < bookings.length; bi++) {
+                subBookingRowIndices.add(appendIdx++); // individual booking row
+              }
+            }
+          }
         }
       }
 
@@ -1040,6 +1099,13 @@ export function registerExportRoutes(app: Express) {
             payableSheet[cellRef].s.fill = { fgColor: { rgb: "F5F5F5" }, patternType: "solid" };
           } else if (formulaRowIndices.has(absRow)) {
             payableSheet[cellRef].s.font = { bold: true };
+            payableSheet[cellRef].s.border = payAppendBorderStyle;
+          } else if (subReasonHeaderIndices.has(absRow)) {
+            payableSheet[cellRef].s.font = { italic: true, sz: 9 };
+            payableSheet[cellRef].s.fill = { fgColor: { rgb: "F3F4F6" }, patternType: "solid" };
+            payableSheet[cellRef].s.border = payAppendBorderStyle;
+          } else if (subBookingRowIndices.has(absRow)) {
+            payableSheet[cellRef].s.font = { sz: 9, color: { rgb: "555555" } };
             payableSheet[cellRef].s.border = payAppendBorderStyle;
           } else if (appendAoa[ra][0] !== "") {
             payableSheet[cellRef].s.border = payAppendBorderStyle;
@@ -2339,6 +2405,46 @@ export function registerExportRoutes(app: Express) {
         if (!gsIsPortalDepositRun) payableSummaryData.push(["", "", "", ""]);
         payableSummaryData.push([`Purchase Reconciliation Summary (BE ID: ${gsPortalDepositBeId})`, "", "", ""]);
         payableSummaryData.push(["#", "Line Item", `Value (${gsPdCurrency})`, "Description"]);
+        // Build row 10 & 11 breakup for sub-rows
+        const gsRow10ByReason = new Map<string, { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]>();
+        result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.spNetInHo > r.hoNet).forEach((r: any) => {
+          const reason = r.reason || "Unknown";
+          if (!gsRow10ByReason.has(reason)) gsRow10ByReason.set(reason, []);
+          gsRow10ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: r.hoNet, diff: r.spNetInHo - r.hoNet });
+        });
+        result.secondaryVendorRows.forEach((r: any) => {
+          const reason = `SV: ${r.reason || "Secondary Vendor"}`;
+          if (!gsRow10ByReason.has(reason)) gsRow10ByReason.set(reason, []);
+          gsRow10ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: 0, diff: r.spNetInHo });
+        });
+        (result.unmappedRows || []).forEach((r: any) => {
+          const reason = r.reason || "Unmapped";
+          if (!gsRow10ByReason.has(reason)) gsRow10ByReason.set(reason, []);
+          gsRow10ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: 0, diff: r.spNetInHo });
+        });
+        const gsRow10Groups = Array.from(gsRow10ByReason.entries())
+          .map(([reason, bookings]) => ({ reason, bookings: bookings.sort((a, b) => b.diff - a.diff), total: bookings.reduce((s, b) => s + b.diff, 0) }))
+          .sort((a, b) => b.total - a.total);
+
+        const gsRow11ByReason = new Map<string, { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]>();
+        result.primaryRows.filter((r: any) => !r.isSecondaryVendor && r.hoNet > r.spNetInHo).forEach((r: any) => {
+          const reason = r.reason || "Unknown";
+          if (!gsRow11ByReason.has(reason)) gsRow11ByReason.set(reason, []);
+          gsRow11ByReason.get(reason)!.push({ bookingId: r.bookingId, tid: r.tid || "Unknown", spNet: r.spNetInHo, hoNet: r.hoNet, diff: r.hoNet - r.spNetInHo });
+        });
+        const gsRow11Groups = Array.from(gsRow11ByReason.entries())
+          .map(([reason, bookings]) => ({ reason, bookings: bookings.sort((a, b) => b.diff - a.diff), total: bookings.reduce((s, b) => s + b.diff, 0) }))
+          .sort((a, b) => b.total - a.total);
+
+        const gsPushBreakupGroups = (groups: { reason: string; bookings: { bookingId: string; tid: string; spNet: number; hoNet: number; diff: number }[]; total: number }[]) => {
+          for (const { reason, bookings, total } of groups) {
+            payableSummaryData.push(["", `  → ${reason} (${bookings.length})`, formatIndianNumber(total), "Reason subtotal"]);
+            for (const b of bookings) {
+              payableSummaryData.push(["", `    ${b.bookingId}`, formatIndianNumber(b.diff), `TID: ${b.tid} | SP Net: ${formatIndianNumber(b.spNet)} | HO Net: ${formatIndianNumber(b.hoNet)}`]);
+            }
+          }
+        };
+
         const gsPdLineItems: [number, string, number, string][] = [
           [1, "Opening Balance", gsPdOpeningBalance, "From vendor balances"],
           [2, "Reloads", gsPdReloads, gsPdPortalReloadTotal > 0 ? "From portal reloads upload" : "Not configured"],
@@ -2355,6 +2461,8 @@ export function registerExportRoutes(app: Express) {
         ];
         for (const [num, label, value, desc] of gsPdLineItems) {
           payableSummaryData.push([num, label, formatIndianNumber(value), desc]);
+          if (num === 10) gsPushBreakupGroups(gsRow10Groups);
+          if (num === 11) gsPushBreakupGroups(gsRow11Groups);
         }
       }
 
