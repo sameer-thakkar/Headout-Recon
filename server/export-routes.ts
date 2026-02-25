@@ -834,6 +834,14 @@ export function registerExportRoutes(app: Express) {
       // =====================================================
       // SHEET 1: Payable Summary
       // =====================================================
+      // Detect portal deposit run early to conditionally skip SP/HO rows and extra sheets
+      const allPayableRowsCombined = [
+        ...result.primaryRows,
+        ...result.secondaryVendorRows,
+        ...(result.unmappedRows || []),
+      ];
+      const isPortalDepositRun = allPayableRowsCombined.some(r => (r.paymentMethod || "").toUpperCase() === "PORTAL_DEPOSIT");
+
       const spTotalByCurrency = new Map<string, number>();
       for (const r of result.spFxDebugRows) {
         const ccy = r.spCurrency;
@@ -848,23 +856,25 @@ export function registerExportRoutes(app: Express) {
       
       const payableSummaryData: { Description: string; Currency: string; Amount: number; Note: string }[] = [];
       
-      Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-        payableSummaryData.push({
-          "Description": "Payable as per SP",
-          "Currency": ccy,
-          "Amount": amount,
-          "Note": "Sum of SP Invoice",
+      if (!isPortalDepositRun) {
+        Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+          payableSummaryData.push({
+            "Description": "Payable as per SP",
+            "Currency": ccy,
+            "Amount": amount,
+            "Note": "Sum of SP Invoice",
+          });
         });
-      });
-      
-      Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-        payableSummaryData.push({
-          "Description": "Payable as per HO",
-          "Currency": ccy,
-          "Amount": amount,
-          "Note": "Sum of HO Net (Primary only)",
+        
+        Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+          payableSummaryData.push({
+            "Description": "Payable as per HO",
+            "Currency": ccy,
+            "Amount": amount,
+            "Note": "Sum of HO Net (Primary only)",
+          });
         });
-      });
+      }
       
       const payableSheet = XLSX.utils.json_to_sheet(payableSummaryData);
       payableSheet["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 30 }];
@@ -900,11 +910,6 @@ export function registerExportRoutes(app: Express) {
       // =====================================================
 
       // Compute amount payable by payment type (Invoice SP vs Portal Deposit)
-      const allPayableRowsCombined = [
-        ...result.primaryRows,
-        ...result.secondaryVendorRows,
-        ...(result.unmappedRows || []),
-      ];
       const seenBidsForPayable = new Set<string>();
       const invoiceSpPayableTotals = new Map<string, number>();
       const portalDepositPayableTotals = new Map<string, number>();
@@ -931,15 +936,17 @@ export function registerExportRoutes(app: Express) {
 
       // Build AOA rows to append
       const appendAoa: (string | number)[][] = [];
-      appendAoa.push(["", "", "", ""]);
-      appendAoa.push(["Amount Payable Summary", "", "", ""]);
-      appendAoa.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
-      Array.from(invoiceSpPayableTotals.entries()).forEach(([ccy, total]) => {
-        appendAoa.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
-      });
-      Array.from(portalDepositPayableTotals.entries()).forEach(([ccy, total]) => {
-        appendAoa.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
-      });
+      if (!isPortalDepositRun) {
+        appendAoa.push(["", "", "", ""]);
+        appendAoa.push(["Amount Payable Summary", "", "", ""]);
+        appendAoa.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
+        Array.from(invoiceSpPayableTotals.entries()).forEach(([ccy, total]) => {
+          appendAoa.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
+        });
+        Array.from(portalDepositPayableTotals.entries()).forEach(([ccy, total]) => {
+          appendAoa.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
+        });
+      }
 
       // Purchase Reconciliation section (Portal Deposit vendors only)
       if (portalDepositBeId) {
@@ -976,7 +983,7 @@ export function registerExportRoutes(app: Express) {
           [12, "Net Difference", pdNetDifference, "= 9 + 10 - 11 (should be 0)"],
         ];
 
-        appendAoa.push(["", "", "", ""]);
+        if (!isPortalDepositRun) appendAoa.push(["", "", "", ""]);
         appendAoa.push([`Purchase Reconciliation Summary (BE ID: ${portalDepositBeId})`, "", "", ""]);
         appendAoa.push(["#", "Line Item", `Value (${pdCurrency})`, "Description"]);
         for (const [num, label, value, desc] of pdLineItems) {
@@ -985,7 +992,7 @@ export function registerExportRoutes(app: Express) {
       }
 
       // Append the new rows to the payable sheet
-      const payableAppendStart = payableRowCount;
+      const payableAppendStart = isPortalDepositRun ? 0 : payableRowCount;
       XLSX.utils.sheet_add_aoa(payableSheet, appendAoa, { origin: { r: payableAppendStart, c: 0 } });
 
       // Style the appended rows
@@ -994,13 +1001,15 @@ export function registerExportRoutes(app: Express) {
       const formulaRowIndices = new Set<number>(); // rows 5,7,9,12 in purchase recon
 
       let appendIdx = payableAppendStart;
-      appendIdx++; // blank
-      sectionTitleIndices.add(appendIdx++); // "Amount Payable Summary"
-      subHeaderIndices.add(appendIdx++); // Payment Type header
-      appendIdx += invoiceSpPayableTotals.size;
-      appendIdx += portalDepositPayableTotals.size;
-      if (portalDepositBeId) {
+      if (!isPortalDepositRun) {
         appendIdx++; // blank
+        sectionTitleIndices.add(appendIdx++); // "Amount Payable Summary"
+        subHeaderIndices.add(appendIdx++); // Payment Type header
+        appendIdx += invoiceSpPayableTotals.size;
+        appendIdx += portalDepositPayableTotals.size;
+      }
+      if (portalDepositBeId) {
+        if (!isPortalDepositRun) appendIdx++; // blank separator before Purchase Reco
         sectionTitleIndices.add(appendIdx++); // "Purchase Reconciliation Summary..."
         subHeaderIndices.add(appendIdx++); // # | Line Item | Value | Description
         const formulaLineNums = new Set([5, 7, 9, 12]);
@@ -1101,7 +1110,9 @@ export function registerExportRoutes(app: Express) {
         }
       }
       
-      XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
+      if (!isPortalDepositRun) {
+        XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
+      }
 
       // =====================================================
       // SHEET 3: HO Report Updated
@@ -1481,7 +1492,9 @@ export function registerExportRoutes(app: Express) {
         }
       }
       
-      XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
+      if (!isPortalDepositRun) {
+        XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
+      }
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
@@ -2240,7 +2253,14 @@ export function registerExportRoutes(app: Express) {
         return res.status(500).json({ error: "Google Sheets API not configured. Please set up integration." });
       }
 
-      // Payable Summary
+      // Payable Summary - detect portal deposit run early
+      const gsAllPayableRows = [
+        ...result.primaryRows,
+        ...result.secondaryVendorRows,
+        ...(result.unmappedRows || []),
+      ];
+      const gsIsPortalDepositRun = gsAllPayableRows.some(r => (r.paymentMethod || "").toUpperCase() === "PORTAL_DEPOSIT");
+
       const spTotalByCurrency = new Map<string, number>();
       for (const r of result.spFxDebugRows) {
         spTotalByCurrency.set(r.spCurrency, (spTotalByCurrency.get(r.spCurrency) || 0) + r.spNetOriginal);
@@ -2251,19 +2271,16 @@ export function registerExportRoutes(app: Express) {
       }
 
       const payableSummaryData: (string | number)[][] = [["Description", "Currency", "Amount", "Note"]];
-      Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-        payableSummaryData.push(["Payable as per SP", ccy, formatIndianNumber(amount), "Sum of SP Invoice"]);
-      });
-      Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
-        payableSummaryData.push(["Payable as per HO", ccy, formatIndianNumber(amount), "Sum of HO Net (Primary only)"]);
-      });
+      if (!gsIsPortalDepositRun) {
+        Array.from(spTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+          payableSummaryData.push(["Payable as per SP", ccy, formatIndianNumber(amount), "Sum of SP Invoice"]);
+        });
+        Array.from(hoTotalByCurrency.entries()).forEach(([ccy, amount]) => {
+          payableSummaryData.push(["Payable as per HO", ccy, formatIndianNumber(amount), "Sum of HO Net (Primary only)"]);
+        });
+      }
 
       // Amount Payable Summary + Purchase Reconciliation (appended to Payable Summary)
-      const gsAllPayableRows = [
-        ...result.primaryRows,
-        ...result.secondaryVendorRows,
-        ...(result.unmappedRows || []),
-      ];
       const gsSeenBids = new Set<string>();
       const gsInvoiceSpTotals = new Map<string, number>();
       const gsPortalDepositTotals = new Map<string, number>();
@@ -2288,15 +2305,17 @@ export function registerExportRoutes(app: Express) {
         }
       }
 
-      payableSummaryData.push(["", "", "", ""]);
-      payableSummaryData.push(["Amount Payable Summary", "", "", ""]);
-      payableSummaryData.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
-      Array.from(gsInvoiceSpTotals.entries()).forEach(([ccy, total]) => {
-        payableSummaryData.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
-      });
-      Array.from(gsPortalDepositTotals.entries()).forEach(([ccy, total]) => {
-        payableSummaryData.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
-      });
+      if (!gsIsPortalDepositRun) {
+        payableSummaryData.push(["", "", "", ""]);
+        payableSummaryData.push(["Amount Payable Summary", "", "", ""]);
+        payableSummaryData.push(["Payment Type", "Currency", "Amount Payable", "Note"]);
+        Array.from(gsInvoiceSpTotals.entries()).forEach(([ccy, total]) => {
+          payableSummaryData.push(["Invoice SP", ccy, formatIndianNumber(total), "Confirmed payable to SP"]);
+        });
+        Array.from(gsPortalDepositTotals.entries()).forEach(([ccy, total]) => {
+          payableSummaryData.push(["Portal Deposit", ccy, formatIndianNumber(total), "Confirmed payable (portal deposit)"]);
+        });
+      }
 
       if (gsPortalDepositBeId) {
         const gsPdVendorBalance = await storage.getVendorBalance(gsPortalDepositBeId);
@@ -2317,7 +2336,7 @@ export function registerExportRoutes(app: Express) {
         const gsPdNetDifference = gsPdDifference + gsPdInSPNotInHO - gsPdInHONotInSP;
         const gsPdCurrency = gsPortalDepositCurrency || "";
 
-        payableSummaryData.push(["", "", "", ""]);
+        if (!gsIsPortalDepositRun) payableSummaryData.push(["", "", "", ""]);
         payableSummaryData.push([`Purchase Reconciliation Summary (BE ID: ${gsPortalDepositBeId})`, "", "", ""]);
         payableSummaryData.push(["#", "Line Item", `Value (${gsPdCurrency})`, "Description"]);
         const gsPdLineItems: [number, string, number, string][] = [
@@ -2614,8 +2633,10 @@ export function registerExportRoutes(app: Express) {
       // Build sheet definitions
       const sheetDefs: { properties: { title: string } }[] = [
         { properties: { title: "Payable Summary" } },
-        { properties: { title: "SP Invoice Report" } },
-        { properties: { title: "HO Report Updated" } },
+        ...(!gsIsPortalDepositRun ? [
+          { properties: { title: "SP Invoice Report" } },
+          { properties: { title: "HO Report Updated" } },
+        ] : []),
       ];
 
       const spreadsheetTitle = `Reconciliation Report - ${new Date().toISOString().split("T")[0]}`;
@@ -2635,8 +2656,10 @@ export function registerExportRoutes(app: Express) {
 
       const batchData = [
         { range: "Payable Summary!A1", values: payableSummaryData },
-        { range: "SP Invoice Report!A1", values: spReportData },
-        { range: "HO Report Updated!A1", values: hoReportData },
+        ...(!gsIsPortalDepositRun ? [
+          { range: "SP Invoice Report!A1", values: spReportData },
+          { range: "HO Report Updated!A1", values: hoReportData },
+        ] : []),
       ];
 
       await sheets.spreadsheets.values.batchUpdate({
@@ -2710,18 +2733,20 @@ export function registerExportRoutes(app: Express) {
         addFinancialSheetFormatting(payableSheetId, payableSummaryData.length, 4, payableSummaryData[0]);
       }
 
-      // SP Invoice Report
-      const spSheetId = sheetIdMap.get("SP Invoice Report");
-      if (spSheetId !== undefined) {
-        const spCols = spReportData.length > 0 && Array.isArray(spReportData[0]) ? spReportData[0].length : 5;
-        addFinancialSheetFormatting(spSheetId, spReportData.length, spCols, spReportData[0]);
-      }
+      if (!gsIsPortalDepositRun) {
+        // SP Invoice Report
+        const spSheetId = sheetIdMap.get("SP Invoice Report");
+        if (spSheetId !== undefined) {
+          const spCols = spReportData.length > 0 && Array.isArray(spReportData[0]) ? spReportData[0].length : 5;
+          addFinancialSheetFormatting(spSheetId, spReportData.length, spCols, spReportData[0]);
+        }
 
-      // HO Report Updated
-      const hoSheetId = sheetIdMap.get("HO Report Updated");
-      if (hoSheetId !== undefined) {
-        const hoCols = hoReportData.length > 0 && Array.isArray(hoReportData[0]) ? hoReportData[0].length : 11;
-        addFinancialSheetFormatting(hoSheetId, hoReportData.length, hoCols, hoReportData[0]);
+        // HO Report Updated
+        const hoSheetId = sheetIdMap.get("HO Report Updated");
+        if (hoSheetId !== undefined) {
+          const hoCols = hoReportData.length > 0 && Array.isArray(hoReportData[0]) ? hoReportData[0].length : 11;
+          addFinancialSheetFormatting(hoSheetId, hoReportData.length, hoCols, hoReportData[0]);
+        }
       }
 
       if (formatRequests.length > 0) {
