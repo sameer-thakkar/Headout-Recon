@@ -1741,6 +1741,7 @@ export function PurchaseReconciliationPanel({
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
   
   // Track bookings that have had issues logged (to suppress warning)
   const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
@@ -1974,8 +1975,8 @@ export function PurchaseReconciliationPanel({
       const response = await fetch(`/api/runs/${runId}/export-gsheet/financial`, { method: "POST" });
       if (!response.ok) throw new Error("Failed to create Google Sheet");
       const data = await response.json();
-      if (data.url) window.open(data.url, "_blank");
-      toast({ title: "Google Sheets created", description: "Opening spreadsheet in a new tab" });
+      if (data.url) setGSheetUrl(data.url);
+      toast({ title: "Google Sheet ready", description: "Click the link below to open it" });
     } catch (error) {
       toast({ title: "Export failed", description: "Failed to create Google Sheet", variant: "destructive" });
     } finally {
@@ -3204,12 +3205,12 @@ export function PurchaseReconciliationPanel({
         </Card>
       )}
 
-      <div className="flex items-center justify-between pt-2">
+      <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={onClose} data-testid="button-close-purchase-reco">
           Close
         </Button>
         {isConfirmed && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               size="sm"
               onClick={handleExportExcel}
@@ -3229,6 +3230,17 @@ export function PurchaseReconciliationPanel({
               {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
               Export Google Sheets
             </Button>
+            {gSheetUrl && (
+              <a
+                href={gSheetUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary underline underline-offset-2 hover:opacity-80 font-medium"
+                data-testid="link-gsheet-purchase-reco"
+              >
+                Open Google Sheet →
+              </a>
+            )}
           </div>
         )}
       </div>
