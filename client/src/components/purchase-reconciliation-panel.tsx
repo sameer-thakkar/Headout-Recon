@@ -242,7 +242,9 @@ const BookingRow = memo(function BookingRow({
 });
 
 function formatNumber(value: number): string {
+  if (isNaN(value)) return "0.00";
   return new Intl.NumberFormat("en-IN", {
+    style: "decimal",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
