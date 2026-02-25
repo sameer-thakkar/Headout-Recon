@@ -240,7 +240,7 @@ interface ManageTidModalHandle {
   open: (bookings: PurchaseBooking[], tid: string, reason: string) => void;
 }
 
-const ManageTidModal = forwardRef<ManageTidModalHandle, {
+const ManageTidModal = memo(forwardRef<ManageTidModalHandle, {
   currency: string;
   runId?: string | null;
   onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
@@ -728,13 +728,13 @@ const ManageTidModal = forwardRef<ManageTidModalHandle, {
       </DialogContent>
     </Dialog>
   );
-});
+}));
 
 interface ManageReasonModalHandle {
   open: (reason: string, allBookingsForReason: PurchaseBooking[]) => void;
 }
 
-const ManageReasonModal = forwardRef<ManageReasonModalHandle, {
+const ManageReasonModal = memo(forwardRef<ManageReasonModalHandle, {
   currency: string;
   runId?: string | null;
   onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
@@ -1014,13 +1014,13 @@ const ManageReasonModal = forwardRef<ManageReasonModalHandle, {
       </DialogContent>
     </Dialog>
   );
-});
+}));
 
 interface DisputeModalHandle {
   open: (booking: BookingForDispute) => void;
 }
 
-const DisputeModal = forwardRef<DisputeModalHandle, {
+const DisputeModal = memo(forwardRef<DisputeModalHandle, {
   currency: string;
   onSave: (booking: BookingForDispute, amount: number) => Promise<void>;
 }>(function DisputeModal({ currency, onSave }, ref) {
@@ -1142,13 +1142,13 @@ const DisputeModal = forwardRef<DisputeModalHandle, {
       </DialogContent>
     </Dialog>
   );
-});
+}));
 
 interface IssueModalHandle {
   open: (booking: BookingForDispute) => void;
 }
 
-const IssueModal = forwardRef<IssueModalHandle, {
+const IssueModal = memo(forwardRef<IssueModalHandle, {
   currency: string;
   billingEntityName: string;
   effectiveFxRate: number | null;
@@ -1282,7 +1282,7 @@ const IssueModal = forwardRef<IssueModalHandle, {
       </DialogContent>
     </Dialog>
   );
-});
+}));
 
 interface TidGroupProps {
   tidKey: string;

@@ -877,7 +877,7 @@ export function registerExportRoutes(app: Express) {
       }
       
       const payableSheet = XLSX.utils.json_to_sheet(payableSummaryData);
-      payableSheet["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 20 }, { wch: 30 }];
+      payableSheet["!cols"] = [{ wch: 6 }, { wch: 55 }, { wch: 20 }, { wch: 40 }];
       payableSheet["!sheetViews"] = [{ showGridLines: false }];
       
       const payableHeaders = ["Description", "Currency", "Amount", "Note"];
@@ -1166,7 +1166,15 @@ export function registerExportRoutes(app: Express) {
         }
       }
       
-      XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
+      const spColWidths = spAllHeaders.map((h) => {
+          const maxLen = Math.max(
+            String(h || "").length,
+            ...spReportData.map((r) => String((r as Record<string, unknown>)[h] ?? "").length)
+          );
+          return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
+        });
+        spReportSheet["!cols"] = spColWidths;
+              XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
 
       // =====================================================
       // SHEET 3: HO Report Updated
@@ -1546,7 +1554,15 @@ export function registerExportRoutes(app: Express) {
         }
       }
       
-      XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
+      const hoColWidths = canonicalHeaders.map((h) => {
+          const maxLen = Math.max(
+            String(h || "").length,
+            ...hoReportData.map((r) => String((r as Record<string, unknown>)[h] ?? "").length)
+          );
+          return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
+        });
+        hoReportSheet["!cols"] = hoColWidths;
+              XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
