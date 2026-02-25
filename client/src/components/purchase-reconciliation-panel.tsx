@@ -1354,7 +1354,7 @@ const TidGroup = memo(function TidGroup({
           <span className="font-mono text-xs shrink-0">{tid}</span>
           <span className="text-[10px] text-muted-foreground shrink-0">({tidBookings.length})</span>
           {expName && (
-            <span className="font-mono text-xs truncate max-w-[400px] lg:max-w-[600px]" title={expName}>· {expName}</span>
+            <span className="font-mono text-xs truncate max-w-[750px]" title={expName}>· {expName}</span>
           )}
         </div>
         <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
