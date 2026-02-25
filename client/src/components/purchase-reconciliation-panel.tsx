@@ -2576,6 +2576,9 @@ interface LineItemsTableCardProps {
   onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
   negativeSpVerified?: boolean;
   onSetNegativeSpVerified?: (val: boolean) => void;
+  summaryCurrency?: string;
+  summaryFxRateToUsd?: number | null;
+  isCrossCurrency?: boolean;
 }
 
 const LineItemsTableCard = memo(function LineItemsTableCard({
@@ -2611,6 +2614,9 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   onManageUnmapped,
   negativeSpVerified,
   onSetNegativeSpVerified,
+  summaryCurrency: sumCcy,
+  summaryFxRateToUsd: sumFxRate,
+  isCrossCurrency: crossCcy,
 }: LineItemsTableCardProps) {
   return (
     <Card>
@@ -2671,7 +2677,7 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                     <TableRow className="h-8">
                       <TableHead className="py-1.5 text-xs">#</TableHead>
                       <TableHead className="py-1.5 text-xs">Line Item</TableHead>
-                      <TableHead className="py-1.5 text-xs text-right">Amount ({currency})</TableHead>
+                      <TableHead className="py-1.5 text-xs text-right">Amount ({sumCcy || currency})</TableHead>
                       <TableHead className="py-1.5 text-xs text-right">Amount (USD)</TableHead>
                       <TableHead className="py-1.5 text-xs">Notes</TableHead>
                     </TableRow>
@@ -2681,7 +2687,8 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                       const IconComponent = item.icon;
                       const isNegative = item.value < 0;
                       const isPositive = item.value > 0;
-                      const usdValue = effectiveFxRate ? item.value * effectiveFxRate : null;
+                      const fxForUsd = sumFxRate ?? effectiveFxRate;
+                      const usdValue = fxForUsd ? item.value * fxForUsd : null;
                       const isUsdNegative = usdValue !== null && usdValue < 0;
                       const isUsdPositive = usdValue !== null && usdValue > 0;
                       const breakupData = item.id === 10 ? calculations.row10Breakup : item.id === 11 ? calculations.row11Breakup : [];
@@ -3198,6 +3205,25 @@ export function PurchaseReconciliationPanel({
     if (currency === "USD") return 1;
     return null;
   }, [fxRateToUsd, currency]);
+
+  const spCurrency = useMemo(() => {
+    const first = primaryRows.find(r => r.spCurrency);
+    return first?.spCurrency || currency;
+  }, [primaryRows, currency]);
+
+  const summaryCurrency = spCurrency;
+
+  const isCrossCurrency = useMemo(() => spCurrency !== currency, [spCurrency, currency]);
+
+  const summaryFxRateToUsd = useMemo(() => {
+    if (!isCrossCurrency) return effectiveFxRate;
+    if (spCurrency === "USD") return 1;
+    const firstRow = primaryRows.find(r => r.fxRateUsed && r.fxRateUsed !== 0);
+    if (firstRow && effectiveFxRate) {
+      return effectiveFxRate / firstRow.fxRateUsed;
+    }
+    return effectiveFxRate;
+  }, [isCrossCurrency, spCurrency, primaryRows, effectiveFxRate]);
   
   // Load existing disputes when runId changes
   useEffect(() => {
@@ -3684,43 +3710,42 @@ export function PurchaseReconciliationPanel({
     const openingBalance = balance?.openingBalance ?? 0;
     const reloads = portalReloadTotal;
     const closingBalance = balance?.closingBalance ?? 0;
+
+    const toSpCcy = (row: PrimaryRow) => row.fxRateUsed && row.fxRateUsed !== 0 ? 1 / row.fxRateUsed : 1;
     
-    // Refunds: All negative SP values from entire SP Invoice (primary + secondary)
+    // Summary values use spNetOriginal (SP/balance currency) for consistency with balances
     const refunds = allRows
-      .filter(row => row.spNetInHo < 0)
-      .reduce((sum, row) => sum + row.spNetInHo, 0);
+      .filter(row => row.spNetOriginal < 0)
+      .reduce((sum, row) => sum + row.spNetOriginal, 0);
     
     const computedPurchase = openingBalance + reloads + refunds - closingBalance;
     
-    // Actual Purchase: Total from entire SP Invoice data (primary + secondary)
-    const actualPurchase = allRows.reduce((sum, row) => sum + row.spNetInHo, 0);
+    const actualPurchase = allRows.reduce((sum, row) => sum + row.spNetOriginal, 0);
     
     const timingDifference = computedPurchase - actualPurchase;
     
-    // Purchases as per HO: Only primary vendor fulfillments (HO Net)
+    // Purchases as per HO: convert hoNet from HO currency to SP/balance currency
     const purchasesAsPerHO = primaryRows
       .filter(row => !row.isSecondaryVendor)
-      .reduce((sum, row) => sum + row.hoNet, 0);
+      .reduce((sum, row) => sum + row.hoNet * toSpCcy(row), 0);
     
     const difference = purchasesAsPerHO - actualPurchase;
     
-    // Secondary vendor rows (isSecondaryVendor=true) - separate from primaryRows and unmappedRows
     const secondaryRows = secondaryVendorRows;
 
-    // In SP not in HO: primary rows where SP > HO + all secondary SP + all unmapped SP
+    // Summary aggregates for rows 10/11 in SP/balance currency
     const inSPNotInHO_primary = primaryRows
       .filter(row => !row.isSecondaryVendor && row.spNetInHo > row.hoNet)
-      .reduce((sum, row) => sum + (row.spNetInHo - row.hoNet), 0);
+      .reduce((sum, row) => sum + (row.spNetOriginal - row.hoNet * toSpCcy(row)), 0);
     const inSPNotInHO_secondary = secondaryRows
-      .reduce((sum, row) => sum + row.spNetInHo, 0);
+      .reduce((sum, row) => sum + row.spNetOriginal, 0);
     const inSPNotInHO_unmapped = unmappedRows
-      .reduce((sum, row) => sum + row.spNetInHo, 0);
+      .reduce((sum, row) => sum + row.spNetOriginal, 0);
     const inSPNotInHO = inSPNotInHO_primary + inSPNotInHO_secondary + inSPNotInHO_unmapped;
     
-    // In HO not in SP: Only from primary rows where HO > SP (secondary/unmapped never go here)
     const inHONotInSP = primaryRows
       .filter(row => !row.isSecondaryVendor && row.hoNet > row.spNetInHo)
-      .reduce((sum, row) => sum + (row.hoNet - row.spNetInHo), 0);
+      .reduce((sum, row) => sum + (row.hoNet * toSpCcy(row) - row.spNetOriginal), 0);
 
     const netDifference = difference + inSPNotInHO - inHONotInSP;
     
@@ -3958,7 +3983,7 @@ export function PurchaseReconciliationPanel({
       id: 8,
       label: "Purchases as per HO",
       value: calculations.purchasesAsPerHO,
-      description: "Total of primary fulfillments (HO Net)",
+      description: isCrossCurrency ? `Total of primary fulfillments (HO Net → ${summaryCurrency})` : "Total of primary fulfillments (HO Net)",
       icon: TrendingUp,
     },
     {
@@ -4266,6 +4291,15 @@ export function PurchaseReconciliationPanel({
         </Card>
       </div>
 
+      {isCrossCurrency && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md text-xs" data-testid="banner-cross-currency">
+          <AlertCircle className="h-4 w-4 text-blue-500 shrink-0" />
+          <span className="text-blue-700 dark:text-blue-300">
+            Cross-currency reconciliation: Summary values in <span className="font-semibold">{summaryCurrency}</span> (balance/SP currency), transaction-level checks in <span className="font-semibold">{currency}</span> (HO currency). FX rate applied for conversion.
+          </span>
+        </div>
+      )}
+
       <LineItemsTableCard
         billingEntityName={billingEntityName}
         calculations={calculations}
@@ -4299,6 +4333,9 @@ export function PurchaseReconciliationPanel({
         onManageUnmapped={handleManageUnmapped}
         negativeSpVerified={negativeSpVerified}
         onSetNegativeSpVerified={setNegativeSpVerified}
+        summaryCurrency={summaryCurrency}
+        summaryFxRateToUsd={summaryFxRateToUsd}
+        isCrossCurrency={isCrossCurrency}
       />
 
       <InsightsCard
