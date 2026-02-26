@@ -204,6 +204,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         vid: row.vid,
         // Pax breakdown data
         paxBreakdown: row.paxBreakdown,
+        experienceName: row.experienceName,
         experienceDate: row.experienceDate,
         bookingCreationDate: row.bookingCreationDate,
         // Amount Paid & Dispute Settled from HO data

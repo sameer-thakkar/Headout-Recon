@@ -3373,21 +3373,6 @@ export function AmountPayablePanel({
                                                     {formatCurrency(finalNet)}
                                                   </TableCell>
                                                 </TableRow>
-                                                {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
-                                                  <TableRow>
-                                                    <TableCell colSpan={8} className="p-0">
-                                                      <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/30">
-                                                        <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
-                                                          {booking.paxBreakdown.map((pax, pi) => (
-                                                            <span key={pi} className="font-mono">
-                                                              {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
-                                                            </span>
-                                                          ))}
-                                                        </div>
-                                                      </div>
-                                                    </TableCell>
-                                                  </TableRow>
-                                                )}
                                               </Fragment>
                                             );
                                           })}
@@ -3601,21 +3586,6 @@ export function AmountPayablePanel({
                                                   {formatCurrency(getFinalNetPrice(booking))}
                                                 </TableCell>
                                               </TableRow>
-                                              {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
-                                                <TableRow>
-                                                  <TableCell colSpan={8} className="p-0">
-                                                    <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/30">
-                                                      <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
-                                                        {booking.paxBreakdown.map((pax, pi) => (
-                                                          <span key={pi} className="font-mono">
-                                                            {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
-                                                          </span>
-                                                        ))}
-                                                      </div>
-                                                    </div>
-                                                  </TableCell>
-                                                </TableRow>
-                                              )}
                                             </Fragment>
                                           );
                                         })}
@@ -3854,21 +3824,6 @@ export function AmountPayablePanel({
                                               {formatCurrency(finalNet)}
                                             </TableCell>
                                           </TableRow>
-                                          {booking.paxBreakdown && booking.paxBreakdown.length > 0 && (
-                                            <TableRow>
-                                              <TableCell colSpan={8} className="p-0">
-                                                <div className="px-3 pl-9 py-1 bg-violet-50/50 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/30">
-                                                  <div className="flex flex-wrap gap-3 text-xs text-violet-700 dark:text-violet-300">
-                                                    {booking.paxBreakdown.map((pax, pi) => (
-                                                      <span key={pi} className="font-mono">
-                                                        {pax.paxType}: {pax.count} x {formatCurrency(pax.unitPrice)} = {formatCurrency(pax.priceNet)}
-                                                      </span>
-                                                    ))}
-                                                  </div>
-                                                </div>
-                                              </TableCell>
-                                            </TableRow>
-                                          )}
                                         </Fragment>
                                       );
                                     })}

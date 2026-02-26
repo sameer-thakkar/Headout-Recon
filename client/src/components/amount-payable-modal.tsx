@@ -89,6 +89,7 @@ export interface BookingForPayable {
   vid?: string;
   // Pax breakdown data
   paxBreakdown?: { paxType: string; count: number; unitPrice: number; priceNet: number }[];
+  experienceName?: string;
   experienceDate?: string;
   bookingCreationDate?: string | null;
   // Amount Paid & Dispute Settled from HO data
