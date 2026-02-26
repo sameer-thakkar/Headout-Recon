@@ -731,14 +731,24 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                       Use SP Net for All
                     </Button>
                   ) : isCancellationType ? (
-                    <Button
-                      size="sm"
-                      className="bg-green-600 text-white"
-                      onClick={handleUseHoAll}
-                      data-testid="btn-accept-cancellation"
-                    >
-                      Accept Cancellation Pricing
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        className="bg-green-600 text-white"
+                        onClick={handleUseHoAll}
+                        data-testid="btn-accept-cancellation-ho"
+                      >
+                        Accept Cancellation (HO Net)
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-blue-600 text-white"
+                        onClick={handleUseSpAll}
+                        data-testid="btn-accept-cancellation-sp"
+                      >
+                        Accept Cancellation (SP Net)
+                      </Button>
+                    </>
                   ) : (
                     <>
                       <Button
