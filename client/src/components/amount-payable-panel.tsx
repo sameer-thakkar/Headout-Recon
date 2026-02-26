@@ -3230,47 +3230,50 @@ export function AmountPayablePanel({
                                   const isTidExpanded = expandedTids.has(tidKeyStr);
 
                                   return (
-                                    <div key={tid} className="rounded-md border bg-background overflow-hidden">
+                                    <div key={tid} className="border-t first:border-t-0">
                                       <div
-                                        className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                        className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-muted/40 transition-colors"
                                         onClick={() => toggleTid(tidKeyStr)}
                                       >
-                                        <div className="flex items-center gap-2">
-                                          {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                                          <span className="font-mono text-xs font-medium">TID: {tid}</span>
-                                          <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                          <span className="font-mono text-xs shrink-0">{tid}</span>
+                                          <span className="font-mono text-xs text-muted-foreground shrink-0">({tidBookings.length})</span>
+                                          {(() => { const en = tidBookings.find(b => b.experienceName)?.experienceName; return en ? <span className="font-mono text-xs truncate max-w-[750px]" title={en}>· {en}</span> : null; })()}
                                           {isTidFullyActioned(tidBookings) && (
-                                            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" data-testid={`tid-actioned-${tid}`} />
+                                            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" data-testid={`tid-actioned-${tid}`} />
                                           )}
                                         </div>
-                                        <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+                                        <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
                                           <Button
-                                            variant="outline"
                                             size="sm"
-                                            className="text-xs"
+                                            variant="ghost"
+                                            className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
                                             onClick={() => unifiedTidModalRef.current?.open(tidBookings, tid, reason)}
                                             data-testid={`btn-update-fnp-${tid}`}
+                                            title="Manage TID"
                                           >
-                                            <Pencil className="h-3 w-3 mr-1" />
-                                            Manage TID
+                                            <Pencil className="h-2.5 w-2.5" />
                                           </Button>
-                                          <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
-                                            {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
+                                          {(() => { const hoT = tidBookings.reduce((s, b) => s + b.hoNet, 0); const spT = tidBookings.reduce((s, b) => s + b.spNet, 0); const pct = hoT !== 0 ? ((hoT - spT) / hoT) * 100 : null; return pct !== null ? <span className="font-mono text-xs text-muted-foreground">({pct.toFixed(2)}%)</span> : null; })()}
+                                          <span className="font-mono text-amber-600 dark:text-amber-400 text-xs">
+                                            {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                           </span>
                                         </div>
                                       </div>
                                       {isTidExpanded && (
-                                        <Table className="text-xs">
+                                        <div className="px-1 pb-1">
+                                        <Table className="text-xs table-fixed">
                                           <TableHeader>
                                             <TableRow className="h-7">
-                                              <TableHead className="w-[18%]">Booking ID</TableHead>
-                                              <TableHead className="text-right w-[12%]">HO Net</TableHead>
-                                              <TableHead className="text-right w-[12%]">SP Net</TableHead>
-                                              <TableHead className="text-center w-[12%]">Net</TableHead>
-                                              <TableHead className="text-center w-[12%]">Dispute</TableHead>
-                                              <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
-                                              <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
-                                              <TableHead className="text-right w-[15%]">Price Payable</TableHead>
+                                              <TableHead className="py-1 text-xs w-[18%]">Booking ID</TableHead>
+                                              <TableHead className="py-1 text-xs text-right w-[12%]">HO Net</TableHead>
+                                              <TableHead className="py-1 text-xs text-right w-[12%]">SP Net</TableHead>
+                                              <TableHead className="py-1 text-xs text-center w-[12%]">Net</TableHead>
+                                              <TableHead className="py-1 text-xs text-center w-[10%]">Dispute</TableHead>
+                                              <TableHead className="py-1 text-xs text-center w-[15%]">Amt Payable</TableHead>
+                                              <TableHead className="py-1 text-xs text-right w-[13%]">Dispute Amt</TableHead>
+                                              <TableHead className="py-1 text-xs text-right w-[15%]">Price Payable</TableHead>
                                             </TableRow>
                                           </TableHeader>
                                           <TableBody>
@@ -3284,10 +3287,10 @@ export function AmountPayablePanel({
 
                                             return (
                                               <Fragment key={booking.bookingId}>
-                                                <TableRow data-testid={`booking-row-${booking.bookingId}`}>
-                                                  <TableCell className="font-mono">{booking.bookingId}</TableCell>
-                                                  <TableCell className="text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
-                                                  <TableCell className="text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
+                                                <TableRow className="h-7" data-testid={`booking-row-${booking.bookingId}`}>
+                                                  <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
+                                                  <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
+                                                  <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
                                                   <TableCell className="text-center">
                                                     <Select
                                                       value={netType}
@@ -3390,6 +3393,7 @@ export function AmountPayablePanel({
                                           })}
                                           </TableBody>
                                         </Table>
+                                        </div>
                                       )}
                                     </div>
                                   );
@@ -3468,47 +3472,50 @@ export function AmountPayablePanel({
                               const tidKeyStr = `${reason}:${tid}`;
                               const isTidExpanded = expandedTids.has(tidKeyStr);
                               return (
-                                <div key={tid} className="rounded-md border bg-background overflow-hidden">
+                                <div key={tid} className="border-t first:border-t-0">
                                   <div
-                                    className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                    className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-muted/40 transition-colors"
                                     onClick={() => toggleTid(tidKeyStr)}
                                   >
-                                    <div className="flex items-center gap-2">
-                                      {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                                      <span className="font-mono text-xs font-medium">TID: {tid}</span>
-                                      <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                      <span className="font-mono text-xs shrink-0">{tid}</span>
+                                      <span className="font-mono text-xs text-muted-foreground shrink-0">({tidBookings.length})</span>
+                                      {(() => { const en = tidBookings.find(b => b.experienceName)?.experienceName; return en ? <span className="font-mono text-xs truncate max-w-[750px]" title={en}>· {en}</span> : null; })()}
                                       {isTidFullyActioned(tidBookings) && (
-                                        <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" data-testid={`tid-actioned-canc-${tid}`} />
+                                        <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" data-testid={`tid-actioned-canc-${tid}`} />
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
                                       <Button
-                                        variant="outline"
                                         size="sm"
-                                        className="text-xs"
+                                        variant="ghost"
+                                        className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
                                         onClick={() => unifiedTidModalRef.current?.open(tidBookings, tid, reason)}
                                         data-testid={`btn-update-fnp-${tid}`}
+                                        title="Manage TID"
                                       >
-                                        <Pencil className="h-3 w-3 mr-1" />
-                                        Manage TID
+                                        <Pencil className="h-2.5 w-2.5" />
                                       </Button>
-                                      <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
-                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
+                                      {(() => { const hoT = tidBookings.reduce((s, b) => s + b.hoNet, 0); const spT = tidBookings.reduce((s, b) => s + b.spNet, 0); const pct = hoT !== 0 ? ((hoT - spT) / hoT) * 100 : null; return pct !== null ? <span className="font-mono text-xs text-muted-foreground">({pct.toFixed(2)}%)</span> : null; })()}
+                                      <span className="font-mono text-amber-600 dark:text-amber-400 text-xs">
+                                        {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                       </span>
                                     </div>
                                   </div>
                                   {isTidExpanded && (
-                                    <Table className="text-xs">
+                                    <div className="px-1 pb-1">
+                                    <Table className="text-xs table-fixed">
                                       <TableHeader>
                                         <TableRow className="h-7">
-                                          <TableHead className="w-[18%]">Booking ID</TableHead>
-                                          <TableHead className="text-right w-[12%]">HO Net</TableHead>
-                                          <TableHead className="text-right w-[12%]">SP Net</TableHead>
-                                          <TableHead className="text-center w-[12%]">Net</TableHead>
-                                          <TableHead className="text-center w-[12%]">Dispute</TableHead>
-                                          <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
-                                          <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
-                                          <TableHead className="text-right w-[15%]">Price Payable</TableHead>
+                                          <TableHead className="py-1 text-xs w-[18%]">Booking ID</TableHead>
+                                          <TableHead className="py-1 text-xs text-right w-[12%]">HO Net</TableHead>
+                                          <TableHead className="py-1 text-xs text-right w-[12%]">SP Net</TableHead>
+                                          <TableHead className="py-1 text-xs text-center w-[12%]">Net</TableHead>
+                                          <TableHead className="py-1 text-xs text-center w-[10%]">Dispute</TableHead>
+                                          <TableHead className="py-1 text-xs text-center w-[15%]">Amt Payable</TableHead>
+                                          <TableHead className="py-1 text-xs text-right w-[13%]">Dispute Amt</TableHead>
+                                          <TableHead className="py-1 text-xs text-right w-[15%]">Price Payable</TableHead>
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
@@ -3521,10 +3528,10 @@ export function AmountPayablePanel({
                                           const pricePayable = currentSelection === "ho" ? booking.hoNet : booking.spNet;
                                           return (
                                             <Fragment key={booking.bookingId}>
-                                              <TableRow>
-                                                <TableCell className="font-mono text-muted-foreground">{booking.bookingId}</TableCell>
-                                                <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(booking.hoNet)}</TableCell>
-                                                <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(booking.spNet)}</TableCell>
+                                              <TableRow className="h-7">
+                                                <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
+                                                <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
+                                                <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
                                                 <TableCell className="text-center">
                                                   {reason === "Unmapped" ? (
                                                     <span className="text-xs text-muted-foreground">SP</span>
@@ -3614,6 +3621,7 @@ export function AmountPayablePanel({
                                         })}
                                       </TableBody>
                                     </Table>
+                                    </div>
                                   )}
                                 </div>
                               );
@@ -3724,47 +3732,50 @@ export function AmountPayablePanel({
                             const tidKeyStr = svTidKey(tid);
                             const isTidExpanded = expandedTids.has(tidKeyStr);
                             return (
-                              <div key={tid} className="rounded-md border bg-background overflow-hidden">
+                              <div key={tid} className="border-t first:border-t-0">
                                 <div
-                                  className="flex items-center justify-between px-3 py-1.5 bg-muted/30 cursor-pointer hover-elevate"
+                                  className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-muted/40 transition-colors"
                                   onClick={() => toggleTid(tidKeyStr)}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                                    <span className="font-mono text-xs font-medium">TID: {tid}</span>
-                                    <Badge variant="secondary" className="text-[10px]">{tidBookings.length}</Badge>
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
+                                    <span className="font-mono text-xs shrink-0">{tid}</span>
+                                    <span className="font-mono text-xs text-muted-foreground shrink-0">({tidBookings.length})</span>
+                                    {(() => { const en = tidBookings.find(b => b.experienceName)?.experienceName; return en ? <span className="font-mono text-xs truncate max-w-[750px]" title={en}>· {en}</span> : null; })()}
                                     {isTidFullyActioned(tidBookings) && (
-                                      <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" data-testid={`tid-actioned-sv-${tid}`} />
+                                      <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" data-testid={`tid-actioned-sv-${tid}`} />
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2 text-xs" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
                                     <Button
-                                      variant="outline"
                                       size="sm"
-                                      className="text-xs"
+                                      variant="ghost"
+                                      className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
                                       onClick={() => unifiedTidModalRef.current?.open(tidBookings, tid, reason)}
                                       data-testid={`btn-update-fnp-sv-${tid}`}
+                                      title="Manage TID"
                                     >
-                                      <Pencil className="h-3 w-3 mr-1" />
-                                      Manage TID
+                                      <Pencil className="h-2.5 w-2.5" />
                                     </Button>
-                                    <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold ml-1">
-                                      {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))} {currency}
+                                    {(() => { const hoT = tidBookings.reduce((s, b) => s + b.hoNet, 0); const spT = tidBookings.reduce((s, b) => s + b.spNet, 0); const pct = hoT !== 0 ? ((hoT - spT) / hoT) * 100 : null; return pct !== null ? <span className="font-mono text-xs text-muted-foreground">({pct.toFixed(2)}%)</span> : null; })()}
+                                    <span className="font-mono text-amber-600 dark:text-amber-400 text-xs">
+                                      {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
                                     </span>
                                   </div>
                                 </div>
                                 {isTidExpanded && (
-                                  <Table className="text-xs">
+                                  <div className="px-1 pb-1">
+                                  <Table className="text-xs table-fixed">
                                     <TableHeader>
                                       <TableRow className="h-7">
-                                        <TableHead className="w-[18%]">Booking ID</TableHead>
-                                        <TableHead className="text-right w-[12%]">HO Net</TableHead>
-                                        <TableHead className="text-right w-[12%]">SP Net</TableHead>
-                                        <TableHead className="text-center w-[12%]">Net</TableHead>
-                                        <TableHead className="text-center w-[12%]">Dispute</TableHead>
-                                        <TableHead className="text-center w-[15%]">Amt Payable</TableHead>
-                                        <TableHead className="text-right w-[13%]">Dispute Amt</TableHead>
-                                        <TableHead className="text-right w-[15%]">Price Payable</TableHead>
+                                        <TableHead className="py-1 text-xs w-[18%]">Booking ID</TableHead>
+                                        <TableHead className="py-1 text-xs text-right w-[12%]">HO Net</TableHead>
+                                        <TableHead className="py-1 text-xs text-right w-[12%]">SP Net</TableHead>
+                                        <TableHead className="py-1 text-xs text-center w-[12%]">Net</TableHead>
+                                        <TableHead className="py-1 text-xs text-center w-[10%]">Dispute</TableHead>
+                                        <TableHead className="py-1 text-xs text-center w-[15%]">Amt Payable</TableHead>
+                                        <TableHead className="py-1 text-xs text-right w-[13%]">Dispute Amt</TableHead>
+                                        <TableHead className="py-1 text-xs text-right w-[15%]">Price Payable</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -3778,10 +3789,10 @@ export function AmountPayablePanel({
 
                                       return (
                                         <Fragment key={booking.bookingId}>
-                                          <TableRow>
-                                            <TableCell className="font-mono">{booking.bookingId}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
+                                          <TableRow className="h-7">
+                                            <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
+                                            <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
+                                            <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
                                             <TableCell className="text-center">
                                               {reason === "Reconciled" ? (
                                                 <span className="text-xs text-muted-foreground">SP</span>
@@ -3863,6 +3874,7 @@ export function AmountPayablePanel({
                                     })}
                                     </TableBody>
                                   </Table>
+                                  </div>
                                 )}
                               </div>
                             );
