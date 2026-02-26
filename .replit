@@ -41,3 +41,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["google-sheet:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+NODE_OPTIONS = "--max-old-space-size=2048"
