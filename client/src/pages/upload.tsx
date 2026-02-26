@@ -142,10 +142,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   }>({
     queryKey: ["/api/runs", currentRunId, "results"],
     enabled: !!currentRunId && !initialRunResult, // Only query if no initial result provided
-    staleTime: 0, // Always refetch fresh data
-    gcTime: 0, // Don't cache old results
+    staleTime: Infinity, // Cache permanently — run results don't change after processing
+    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false,
-    refetchOnMount: "always",
+    refetchOnMount: false,
     retry: 3,
     retryDelay: 1000,
   });
