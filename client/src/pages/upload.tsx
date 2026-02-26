@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from "react";
 import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -28,8 +28,12 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { Adjustment, BookingForPayable, FinalNetSelection } from "@/components/amount-payable-modal";
-import { AmountPayablePanel } from "@/components/amount-payable-panel";
-import { PurchaseReconciliationPanel } from "@/components/purchase-reconciliation-panel";
+const AmountPayablePanel = lazy(() =>
+  import("@/components/amount-payable-panel").then(m => ({ default: m.AmountPayablePanel }))
+);
+const PurchaseReconciliationPanel = lazy(() =>
+  import("@/components/purchase-reconciliation-panel").then(m => ({ default: m.PurchaseReconciliationPanel }))
+);
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow, FxData } from "@shared/schema";
 
 interface UploadPageProps {
@@ -1027,33 +1031,35 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             </CardHeader>
             {isComputeOpen && hasResults && (
               <CardContent className="pt-0">
-                {spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT" ? (
-                  <PurchaseReconciliationPanel
-                    primaryRows={primaryRows}
-                    secondaryVendorRows={secondaryVendorRows}
-                    unmappedRows={unmappedRows}
-                    currency={selectedPayableCurrency || actualCurrencies[0] || ""}
-                    billingEntityName={spDetails?.billingEntityName || ""}
-                    beId={spDetails?.beId || ""}
-                    onClose={() => setIsComputeOpen(false)}
-                    fxRateToUsd={fxData?.usdToCcy ? (1 / (fxData.usdToCcy[selectedPayableCurrency || actualCurrencies[0] || "USD"] || 1)) : undefined}
-                    runId={currentRunId}
-                  />
-                ) : (
-                  <AmountPayablePanel
-                    bookings={bookingsForPayableModal}
-                    currency={selectedPayableCurrency || actualCurrencies[0] || ""}
-                    adjustments={adjustmentsPerCurrency[selectedPayableCurrency || actualCurrencies[0] || ""] || []}
-                    finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency || actualCurrencies[0] || ""] || {}}
-                    onApply={handlePayableModalApply}
-                    onClose={() => setIsComputeOpen(false)}
-                    runId={currentRunId}
-                    allRows={primaryRows}
-                    onCurrencyChange={setSelectedPayableCurrency}
-                    availableCurrencies={actualCurrencies}
-                    dominantPaymentMethod={spDetails?.paymentMethod || ""}
-                  />
-                )}
+                <Suspense fallback={<div className="flex items-center justify-center py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading panel...</div>}>
+                  {spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT" ? (
+                    <PurchaseReconciliationPanel
+                      primaryRows={primaryRows}
+                      secondaryVendorRows={secondaryVendorRows}
+                      unmappedRows={unmappedRows}
+                      currency={selectedPayableCurrency || actualCurrencies[0] || ""}
+                      billingEntityName={spDetails?.billingEntityName || ""}
+                      beId={spDetails?.beId || ""}
+                      onClose={() => setIsComputeOpen(false)}
+                      fxRateToUsd={fxData?.usdToCcy ? (1 / (fxData.usdToCcy[selectedPayableCurrency || actualCurrencies[0] || "USD"] || 1)) : undefined}
+                      runId={currentRunId}
+                    />
+                  ) : (
+                    <AmountPayablePanel
+                      bookings={bookingsForPayableModal}
+                      currency={selectedPayableCurrency || actualCurrencies[0] || ""}
+                      adjustments={adjustmentsPerCurrency[selectedPayableCurrency || actualCurrencies[0] || ""] || []}
+                      finalNetSelections={finalNetSelectionsPerCurrency[selectedPayableCurrency || actualCurrencies[0] || ""] || {}}
+                      onApply={handlePayableModalApply}
+                      onClose={() => setIsComputeOpen(false)}
+                      runId={currentRunId}
+                      allRows={primaryRows}
+                      onCurrencyChange={setSelectedPayableCurrency}
+                      availableCurrencies={actualCurrencies}
+                      dominantPaymentMethod={spDetails?.paymentMethod || ""}
+                    />
+                  )}
+                </Suspense>
               </CardContent>
             )}
           </Card>
