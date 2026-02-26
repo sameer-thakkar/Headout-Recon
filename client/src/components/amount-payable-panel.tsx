@@ -2916,7 +2916,7 @@ export function AmountPayablePanel({
                 <CollapsibleContent>
                   <div className="max-h-[500px] overflow-y-auto">
                     {/* Header Row */}
-                    <div className="grid grid-cols-[90px_80px_60px_70px_70px_80px_120px_70px_80px_80px] gap-3 px-2 py-1.5 bg-muted/30 text-[10px] font-medium text-muted-foreground border-t sticky top-0 z-10">
+                    <div className="grid grid-cols-[110px_90px_60px_90px_90px_85px_140px_90px_100px_70px] gap-2 px-3 py-1.5 bg-muted/30 text-xs font-medium text-muted-foreground border-t sticky top-0 z-10">
                       <div>Pay Method</div>
                       <div className="text-right">Recon Net</div>
                       <div>BE ID</div>
@@ -2942,7 +2942,7 @@ export function AmountPayablePanel({
                       return (
                         <div 
                           key={booking.bookingId} 
-                          className={`grid grid-cols-[90px_80px_60px_70px_70px_80px_120px_70px_80px_80px] gap-3 px-2 py-1.5 border-t items-center text-xs ${isDontPay ? "opacity-50 bg-muted/20" : ""}`}
+                          className={`grid grid-cols-[110px_90px_60px_90px_90px_85px_140px_90px_100px_70px] gap-2 px-3 py-1.5 border-t items-center text-xs ${isDontPay ? "opacity-50 bg-muted/20" : ""}`}
                           data-testid={`already-reconciled-row-${booking.bookingId}`}
                         >
                           {/* Payment Method */}
@@ -2980,7 +2980,7 @@ export function AmountPayablePanel({
                                 setAlreadyReconciledDecisions(newDecisions);
                               }}
                             >
-                              <SelectTrigger className="h-6 text-[10px] px-1" data-testid={`select-decision-${booking.bookingId}`}>
+                              <SelectTrigger className="h-6 text-xs px-1" data-testid={`select-decision-${booking.bookingId}`}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -3004,7 +3004,7 @@ export function AmountPayablePanel({
                                 setAlreadyReconciledDecisions(newDecisions);
                               }}
                             >
-                              <SelectTrigger className="h-6 text-[10px] px-1 flex-1" data-testid={`select-reason-${booking.bookingId}`}>
+                              <SelectTrigger className="h-6 text-xs px-1 flex-1" data-testid={`select-reason-${booking.bookingId}`}>
                                 <SelectValue placeholder="-" />
                               </SelectTrigger>
                               <SelectContent>
@@ -3017,7 +3017,7 @@ export function AmountPayablePanel({
                             </Select>
                             {(isCustomReason || decision?.reason === "none") && (
                               <Input
-                                className="h-6 text-[10px] px-1 w-16"
+                                className="h-6 text-xs px-1 w-16"
                                 placeholder="Other..."
                                 value={isCustomReason ? decision?.reason : ""}
                                 onChange={(e) => {
@@ -3041,7 +3041,7 @@ export function AmountPayablePanel({
                                 <Input
                                   type="number"
                                   step="0.01"
-                                  className="h-6 text-[10px] px-1 w-14 text-right font-mono"
+                                  className="h-6 text-xs px-1 w-16 text-right font-mono"
                                   value={disputeAmount || ""}
                                   onChange={(e) => {
                                     const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
@@ -3078,7 +3078,7 @@ export function AmountPayablePanel({
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-6 text-[10px] px-2"
+                                className="h-6 text-xs px-2"
                                 onClick={() => {
                                   setActiveDisputes(prev => new Set(prev).add(booking.bookingId));
                                   setDisputeAmounts(prev => {
@@ -3099,7 +3099,7 @@ export function AmountPayablePanel({
                               <Input
                                 type="number"
                                 step="0.01"
-                                className="h-6 text-[10px] px-1 text-right font-mono"
+                                className="h-6 text-xs px-1 text-right font-mono"
                                 value={currentFinalAmount}
                                 onChange={(e) => {
                                   const newDecisions = new Map(alreadyReconciledDecisions);
@@ -3114,14 +3114,14 @@ export function AmountPayablePanel({
                                 data-testid={`input-final-amount-${booking.bookingId}`}
                               />
                             ) : (
-                              <span className="text-muted-foreground text-[10px]">-</span>
+                              <span className="text-muted-foreground text-xs">-</span>
                             )}
                           </div>
                           {/* Type Badge */}
                           <div className="text-right">
                             <Badge 
                               variant="secondary" 
-                              className="text-[9px]"
+                              className="text-[10px]"
                             >
                               {booking.reason.includes("Same") ? "Same BE" : "Diff BE"}
                             </Badge>
