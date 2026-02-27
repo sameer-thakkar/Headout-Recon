@@ -1,13 +1,14 @@
 import { useState, useCallback, useEffect } from "react";
-import { Switch, Route } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { Switch, Route, useLocation } from "wouter";
+import { queryClient, apiRequest } from "./lib/queryClient";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TopBar } from "@/components/top-bar";
+import { Loader2 } from "lucide-react";
 
 import { LandingPage } from "@/pages/landing";
 import { UploadPage } from "@/pages/upload";
@@ -20,6 +21,7 @@ import { ExportPage } from "@/pages/export";
 import { DisputeTrackerPage } from "@/pages/dispute-tracker";
 import { ReconTrackerPage } from "@/pages/recon-tracker";
 import { IssueTrackerPage } from "@/pages/issue-tracker";
+import { LoginPage } from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
 import type {
@@ -36,11 +38,10 @@ import type {
   RunResult,
 } from "@shared/schema";
 import { requiredFields, optionalFields, headerAliases } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
 
 const CURRENT_RUN_ID_KEY = "headout-recon-current-run-id";
 
-function AppContent() {
+function AppContent({ onLogout }: { onLogout?: () => void }) {
   
   // Global state - initialize currentRunId from localStorage
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -518,6 +519,7 @@ function AppContent() {
             lastFxRefresh={lastFxRefresh}
             onFxRefresh={handleFxRefresh}
             isRefreshing={isRefreshing}
+            onLogout={onLogout}
           />
           <main className="flex-1 overflow-auto bg-background">
             <Switch>
@@ -602,12 +604,42 @@ function AppContent() {
   );
 }
 
+function AuthGate() {
+  const [, setLocation] = useLocation();
+
+  const { data, isLoading } = useQuery<{ authenticated: boolean }>({
+    queryKey: ["/api/auth/status"],
+    retry: false,
+    staleTime: 0,
+  });
+
+  const handleLogout = useCallback(async () => {
+    await apiRequest("POST", "/api/auth/logout", {});
+    await queryClient.invalidateQueries({ queryKey: ["/api/auth/status"] });
+    setLocation("/");
+  }, [setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!data?.authenticated) {
+    return <LoginPage />;
+  }
+
+  return <AppContent onLogout={handleLogout} />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <AppContent />
+          <AuthGate />
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

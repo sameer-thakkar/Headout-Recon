@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggle } from "./theme-toggle";
@@ -20,6 +20,7 @@ interface TopBarProps {
   lastFxRefresh: string | null;
   onFxRefresh: () => void;
   isRefreshing?: boolean;
+  onLogout?: () => void;
 }
 
 export function TopBar({
@@ -30,6 +31,7 @@ export function TopBar({
   lastFxRefresh,
   onFxRefresh,
   isRefreshing,
+  onLogout,
 }: TopBarProps) {
   return (
     <header className="h-16 border-b border-border bg-background flex items-center justify-between px-4 gap-4">
@@ -73,6 +75,17 @@ export function TopBar({
           )}
         </div>
         <ThemeToggle />
+        {onLogout && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onLogout}
+            data-testid="button-logout"
+            title="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </header>
   );

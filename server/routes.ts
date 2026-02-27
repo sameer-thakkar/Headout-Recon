@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage, sessionStorage } from "./storage";
 import { randomUUID } from "crypto";
@@ -12,6 +12,12 @@ import { runReconciliation } from "./reconciliation";
 import { registerExportRoutes, generateIssueWorkingsSheet } from "./export-routes";
 import { formatIndianNumber } from "./export-utils";
 
+// Auth middleware — protects all /api/* routes except /api/auth/*
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.path.startsWith("/auth/")) return next();
+  if (req.session?.authenticated) return next();
+  res.status(401).json({ error: "Unauthorized" });
+}
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "server", "uploads");
@@ -85,6 +91,40 @@ export async function registerRoutes(
 ): Promise<Server> {
   // Initialize FX rates
   await storage.setFxRates(defaultFxRates);
+
+  // ==========================================
+  // AUTH ENDPOINTS (no auth required)
+  // ==========================================
+
+  app.get("/api/auth/status", (req, res) => {
+    res.json({ authenticated: !!req.session?.authenticated });
+  });
+
+  app.post("/api/auth/login", (req, res) => {
+    const { password } = req.body;
+    const appPassword = process.env.APP_PASSWORD;
+    if (!appPassword) {
+      return res.status(500).json({ error: "APP_PASSWORD is not configured" });
+    }
+    if (password === appPassword) {
+      req.session.authenticated = true;
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ error: "Session error" });
+        res.json({ success: true });
+      });
+    } else {
+      res.status(401).json({ error: "Incorrect password" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
+  // Apply auth middleware to all subsequent /api/* routes
+  app.use("/api", requireAuth);
 
   // ==========================================
   // NEW API ENDPOINTS (per specification)
