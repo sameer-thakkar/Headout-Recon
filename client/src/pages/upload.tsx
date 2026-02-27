@@ -1043,6 +1043,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       onClose={() => setIsComputeOpen(false)}
                       fxRateToUsd={fxData?.usdToCcy ? (1 / (fxData.usdToCcy[selectedPayableCurrency || actualCurrencies[0] || "USD"] || 1)) : undefined}
                       runId={currentRunId}
+                      onReconciliationFinalized={onReconciliationFinalized}
                     />
                   ) : (
                     <AmountPayablePanel

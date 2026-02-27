@@ -71,6 +71,7 @@ interface PurchaseReconciliationPanelProps {
   onClose: () => void;
   fxRateToUsd?: number; // FX rate to convert from local currency to USD
   runId?: string | null; // Run ID for saving disputes and issues
+  onReconciliationFinalized?: () => void; // Called when Apply & confirm is clicked
 }
 
 const INITIAL_TID_LIMIT = 10;
@@ -3139,6 +3140,7 @@ export function PurchaseReconciliationPanel({
   onClose,
   fxRateToUsd,
   runId,
+  onReconciliationFinalized,
 }: PurchaseReconciliationPanelProps) {
   const { toast } = useToast();
   
@@ -3428,8 +3430,9 @@ export function PurchaseReconciliationPanel({
     setShowApplyConfirmation(false);
     startConfirmTransition(() => {
       setIsConfirmed(true);
+      onReconciliationFinalized?.();
     });
-  }, []);
+  }, [onReconciliationFinalized]);
 
   const handleExportExcel = useCallback(async () => {
     if (!runId) {
