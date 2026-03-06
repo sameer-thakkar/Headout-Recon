@@ -97,7 +97,7 @@ export async function registerRoutes(
   // ==========================================
 
   app.get("/api/auth/status", (req, res) => {
-    res.json({ authenticated: !!req.session?.authenticated });
+    res.set("Cache-Control", "no-store").json({ authenticated: !!req.session?.authenticated });
   });
 
   app.post("/api/auth/login", (req, res) => {
