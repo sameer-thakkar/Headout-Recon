@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ExternalLink, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const RETOOL_URL = "https://headout.tryretool.com";
+const RETOOL_URL = "https://headout.tryretool.com/apps/Recon/Reconciliation%20Reports?embed=true";
 
 export function RetoolPage() {
   const [blocked, setBlocked] = useState(false);
