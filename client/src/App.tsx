@@ -22,6 +22,7 @@ import { DisputeTrackerPage } from "@/pages/dispute-tracker";
 import { ReconTrackerPage } from "@/pages/recon-tracker";
 import { IssueTrackerPage } from "@/pages/issue-tracker";
 import { LoginPage } from "@/pages/login";
+import { RetoolPage } from "@/pages/retool";
 import NotFound from "@/pages/not-found";
 
 import type {
@@ -594,6 +595,9 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
               </Route>
               <Route path="/issue-tracker">
                 <IssueTrackerPage runId={currentRunId} />
+              </Route>
+              <Route path="/retool">
+                <RetoolPage />
               </Route>
               <Route component={NotFound} />
             </Switch>

@@ -6,6 +6,7 @@ import {
   FileWarning,
   AlertTriangle,
   ClipboardCheck,
+  MonitorDot,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,6 +27,7 @@ const navItems = [
   { title: "Dispute Tracker", url: "/dispute-tracker", icon: FileWarning },
   { title: "Recon Tracker", url: "/recon-tracker", icon: ClipboardCheck },
   { title: "Issue Tracker", url: "/issue-tracker", icon: AlertTriangle },
+  { title: "Retool", url: "/retool", icon: MonitorDot },
 ];
 
 export function AppSidebar() {
