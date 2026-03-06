@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -20,8 +21,14 @@ declare module "express-session" {
   }
 }
 
+const PgStore = connectPgSimple(session);
+
 app.use(
   session({
+    store: new PgStore({
+      conString: process.env.DATABASE_URL,
+      tableName: "user_sessions",
+    }),
     secret: process.env.SESSION_SECRET || "fallback-secret",
     resave: false,
     saveUninitialized: false,
