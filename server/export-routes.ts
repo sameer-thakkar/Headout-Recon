@@ -2,7 +2,7 @@ import type { Express } from "express";
 import XLSX from "xlsx-js-style";
 import { storage } from "./storage";
 import { formatIndianNumber, formatDateValue, getUniqueSheetName, sanitizeSheetName, getExportData, getExcelExportData } from "./export-utils";
-import { getUncachableGoogleSheetClient } from "./google-sheets";
+import { getUncachableGoogleSheetClient, getUncachableGoogleDriveClient } from "./google-sheets";
 
 export function registerExportRoutes(app: Express) {
 
@@ -2040,6 +2040,17 @@ export function registerExportRoutes(app: Express) {
         throw new Error("Failed to create spreadsheet");
       }
 
+      try {
+        const driveClient = await getUncachableGoogleDriveClient();
+        await driveClient.permissions.create({
+          fileId: spreadsheetId,
+          requestBody: { type: "domain", role: "writer", domain: "headout.com" },
+          fields: "id",
+        });
+      } catch (permErr) {
+        console.warn("Could not set domain permissions on spreadsheet:", permErr);
+      }
+
       const batchData = [
         { range: "Discrepancy Analysis!A1", values: discrepancyData },
         { range: "Draft Messages!A1", values: draftMessagesData },
@@ -2886,6 +2897,17 @@ export function registerExportRoutes(app: Express) {
         throw new Error("Failed to create spreadsheet");
       }
 
+      try {
+        const driveClient = await getUncachableGoogleDriveClient();
+        await driveClient.permissions.create({
+          fileId: spreadsheetId,
+          requestBody: { type: "domain", role: "writer", domain: "headout.com" },
+          fields: "id",
+        });
+      } catch (permErr) {
+        console.warn("Could not set domain permissions on spreadsheet:", permErr);
+      }
+
       const batchData = [
         { range: "Payable Summary!A1", values: payableSummaryData },
         { range: "SP Invoice Report!A1", values: spReportData },
@@ -3217,6 +3239,17 @@ export async function generateIssueWorkingsSheet(issue: {
     const spreadsheetUrl = createResponse.data.spreadsheetUrl;
 
     if (!spreadsheetId) return null;
+
+    try {
+      const driveClient = await getUncachableGoogleDriveClient();
+      await driveClient.permissions.create({
+        fileId: spreadsheetId,
+        requestBody: { type: "domain", role: "writer", domain: "headout.com" },
+        fields: "id",
+      });
+    } catch (permErr) {
+      console.warn("Could not set domain permissions on spreadsheet:", permErr);
+    }
 
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
