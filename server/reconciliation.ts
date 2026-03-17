@@ -723,7 +723,7 @@ function assignReason(
     // 4) Reconciled rules (small differences)
     // Check if amounts are within tolerance
     const isReconciled = sameCurrency 
-      ? (Math.abs(differenceLc) < 0.50 && Math.abs(differencePct) < 0.005)
+      ? (differenceLc === 0 || Math.abs(differencePct) <= 0.001)
       : (Math.abs(differencePct) < 0.03);
     
     if (isReconciled) {
