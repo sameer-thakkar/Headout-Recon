@@ -95,6 +95,7 @@ interface HORow {
   finalDiscrepancyTotal?: number;
   disputeStatus?: string;
   adjustedInTicketId?: string;
+  reconciliationStatus?: string;
 }
 
 // Result from reason assignment
@@ -212,7 +213,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
     const bookingId = getRowValue(row, "bookingId", "Booking ID", "booking_id");
     const netPrice = getRowValue(row, "netPrice", "Net Price", "net_price", "finalNetPrice", "Final Net Price");
     const currency = getRowValue(row, "currency", "Currency", "Billing Currency");
-    const bookingStatus = getRowValue(row, "bookingStatus", "Booking Status", "booking_status", "status");
+    const bookingStatus = getRowValue(row, "bookingStatus", "Booking Status", "booking_status");
     const rawExpDate = getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "Fulfillment Date", "fulfillmentDate", "tour_date", "Tour Date", "Travel Date", "travelDate", "Date of Experience", "dateOfExperience", "Visit Date", "visitDate", "Activity Date", "activityDate", "Tour Start Date", "tourStartDate", "Service Date", "serviceDate", "Event Date", "eventDate");
     const convertedExpDate = excelSerialToDateString(rawExpDate);
     
@@ -259,6 +260,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       finalDiscrepancyTotal: Number(getRowValue(row, "finalDiscrepancyTotal", "Final Discrepancy Total", "final_discrepancy_total", "FinalDiscrepancyTotal")) || undefined,
       disputeStatus: String(getRowValue(row, "disputeStatus", "Dispute status", "Dispute Status", "dispute_status", "DisputeStatus") || "") || undefined,
       adjustedInTicketId: String(getRowValue(row, "adjustedInTicketId", "Adjusted in Ticket ID", "Adjusted In Ticket ID", "adjusted_in_ticket_id", "AdjustedInTicketID") || "") || undefined,
+      reconciliationStatus: getRowValue(row, "status", "Status", "reconciliation_status", "Reconciliation Status", "recon_status") ? String(getRowValue(row, "status", "Status", "reconciliation_status", "Reconciliation Status", "recon_status")) : undefined,
     };
   });
 
@@ -951,6 +953,7 @@ function computeReconciliationRows(
       finalDiscrepancyTotal: ho.finalDiscrepancyTotal,
       disputeStatus: ho.disputeStatus,
       adjustedInTicketId: ho.adjustedInTicketId,
+      reconciliationStatus: ho.reconciliationStatus,
     });
   });
   

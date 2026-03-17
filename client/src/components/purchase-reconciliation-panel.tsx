@@ -51,6 +51,7 @@ type PurchaseBooking = {
   chargedLoss?: string;
   comment?: string;
   experienceName?: string;
+  reconciliationStatus?: string;
 };
 
 interface BookingForDispute {
@@ -170,6 +171,11 @@ const BookingRow = memo(function BookingRow({
                 }`}>
                   {booking.hoNet === 0 ? "Zero HO" : Math.abs(booking.spNet) === Math.abs(booking.hoNet) ? "Matched" : "Difference"}
                 </Badge>
+                {booking.reconciliationStatus && (
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-300 dark:text-violet-400 dark:border-violet-700">
+                    {booking.reconciliationStatus}
+                  </Badge>
+                )}
               </>
             )}
           </div>
@@ -1567,6 +1573,25 @@ const ReasonGroup = memo(function ReasonGroup({
                       <div className="text-[10px] text-muted-foreground">FNP = ||HO| - |SP||</div>
                     </div>
                   </div>
+                  {(() => {
+                    const statusCounts = new Map<string, number>();
+                    allBookings.forEach(b => {
+                      const s = b.reconciliationStatus || "—";
+                      statusCounts.set(s, (statusCounts.get(s) || 0) + 1);
+                    });
+                    const hasStatuses = allBookings.some(b => b.reconciliationStatus);
+                    if (!hasStatuses) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1.5 text-xs pt-1">
+                        <span className="text-muted-foreground">Status:</span>
+                        {Array.from(statusCounts.entries()).map(([status, count]) => (
+                          <Badge key={status} variant="outline" className="text-[10px] px-1.5 py-0 text-violet-600 border-violet-300 dark:text-violet-400 dark:border-violet-700">
+                            {status} ({count})
+                          </Badge>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <div className="flex items-center justify-between text-xs pt-1 border-t">
                     <div>
                       <span className="text-muted-foreground">Total Refund: </span>
@@ -3748,11 +3773,12 @@ export function PurchaseReconciliationPanel({
       .forEach(row => {
         const reason = row.reason || "Unknown";
         if (!row10ByReason.has(reason)) row10ByReason.set(reason, []);
+        const diff = row.spNetInHo < 0 ? Math.abs(row.spNetInHo) - Math.abs(row.hoNet) : row.spNetInHo - row.hoNet;
         row10ByReason.get(reason)!.push({
           bookingId: row.bookingId,
           spNet: row.spNetInHo,
           hoNet: row.hoNet,
-          difference: row.spNetInHo - row.hoNet,
+          difference: diff,
           reason,
           tid: row.tid || "Unknown",
           ticketId: row.ticketId || "",
@@ -3768,6 +3794,7 @@ export function PurchaseReconciliationPanel({
           chargedLoss: row.chargedLoss,
           comment: row.comment,
           experienceName: row.experienceName,
+          reconciliationStatus: row.reconciliationStatus,
         });
       });
     
@@ -3776,11 +3803,12 @@ export function PurchaseReconciliationPanel({
       const baseReason = row.reason || "Secondary Vendor";
       const reason = `SV: ${baseReason}`;
       if (!row10ByReason.has(reason)) row10ByReason.set(reason, []);
+      const diff = row.spNetInHo < 0 ? Math.abs(row.spNetInHo) - Math.abs(row.hoNet) : row.spNetInHo - row.hoNet;
       row10ByReason.get(reason)!.push({
         bookingId: row.bookingId,
         spNet: row.spNetInHo,
         hoNet: row.hoNet,
-        difference: row.spNetInHo - row.hoNet,
+        difference: diff,
         reason,
         tid: row.tid || "Unknown",
         ticketId: row.ticketId || "",
@@ -3798,6 +3826,7 @@ export function PurchaseReconciliationPanel({
         chargedLoss: row.chargedLoss,
         comment: row.comment,
         experienceName: row.experienceName,
+        reconciliationStatus: row.reconciliationStatus,
       });
     });
 
@@ -3820,6 +3849,7 @@ export function PurchaseReconciliationPanel({
         paymentMethod: row.paymentMethod,
         spPaymentMethod: row.spPaymentMethod,
         experienceName: row.experienceName,
+        reconciliationStatus: row.reconciliationStatus,
       });
     });
     
@@ -3862,6 +3892,7 @@ export function PurchaseReconciliationPanel({
           chargedLoss: row.chargedLoss,
           comment: row.comment,
           experienceName: row.experienceName,
+          reconciliationStatus: row.reconciliationStatus,
         });
       });
     

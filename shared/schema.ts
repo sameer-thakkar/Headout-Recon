@@ -114,6 +114,7 @@ export const primaryRowSchema = z.object({
   finalDiscrepancyTotal: z.number().optional(),
   disputeStatus: z.string().optional(),
   adjustedInTicketId: z.string().optional(),
+  reconciliationStatus: z.string().optional(),
 });
 export type PrimaryRow = z.infer<typeof primaryRowSchema>;
 
