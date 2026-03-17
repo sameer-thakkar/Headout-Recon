@@ -672,56 +672,40 @@ function assignReason(
       }
     }
     
-    // Case 2: Cancellable = "No"
-    if (cancellable?.toLowerCase() === "no") {
-      if (spNetInHo === 0) {
-        // SP Net = 0 → Reconciled, Comment = "Cancelled-OK"
+    // Case 2: Cancellable = "No" or missing/other (same logic applies)
+    if (spNetInHo === 0) {
+      return {
+        reason: "Reconciled",
+        chargedLoss: chargedLossOriginal || "FALSE",
+        comment: "Cancelled-OK",
+        isSecondaryVendor
+      };
+    } else {
+      if (cancellationInsurance?.toLowerCase() === "yes") {
         return {
-          reason: "Reconciled",
-          chargedLoss: chargedLossOriginal || "FALSE",
-          comment: "Cancelled-OK",
+          reason: "Cancelled-Insured Booking",
+          chargedLoss: "TRUE",
+          comment: "Cancelled-Insured Booking",
           isSecondaryVendor
         };
       } else {
-        // SP Net > 0 - check Cancellation Insurance
-        if (cancellationInsurance?.toLowerCase() === "yes") {
-          // Cancellation Insurance = "Yes" → Cancelled-Insured Booking, chargedLoss = TRUE
+        if (isChargedLossTrue) {
           return {
-            reason: "Cancelled-Insured Booking",
+            reason: "Cancelled-DSS policy",
             chargedLoss: "TRUE",
-            comment: "Cancelled-Insured Booking",
+            comment: "Cancelled-DSS policy",
             isSecondaryVendor
           };
         } else {
-          // Cancellation Insurance = "No" - check chargedLoss
-          if (isChargedLossTrue) {
-            // chargedLoss = TRUE → "Cancelled-DSS policy"
-            return {
-              reason: "Cancelled-DSS policy",
-              chargedLoss: "TRUE",
-              comment: "Cancelled-DSS policy",
-              isSecondaryVendor
-            };
-          } else {
-            // chargedLoss = FALSE → "Cancelled-Check for Charge loss"
-            return {
-              reason: "Cancelled-Check for Charge loss",
-              chargedLoss: "FALSE",
-              comment: "Cancelled-Check for Charge loss",
-              isSecondaryVendor
-            };
-          }
+          return {
+            reason: "Cancelled-Check for Charge loss",
+            chargedLoss: "FALSE",
+            comment: "Cancelled-Check for Charge loss",
+            isSecondaryVendor
+          };
         }
       }
     }
-    
-    // Default for cancelled (if Cancellable field is missing/other)
-    return {
-      reason: "Reconciled",
-      chargedLoss: chargedLossOriginal || "FALSE",
-      comment: "Cancelled-OK",
-      isSecondaryVendor
-    };
   }
   
   // 3) MTB (Multiple Tickets Booked) - for non-cancelled cases
