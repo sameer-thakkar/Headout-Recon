@@ -261,6 +261,26 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Upload missing required data sheets" });
       }
 
+      // Validate: no booking ID should appear more than once in the SP Invoice Report
+      const spBookingIdCounts = new Map<string, number>();
+      for (const row of upload.spData.rows) {
+        const bid = String(
+          row["bookingId"] ?? row["Booking ID"] ?? row["booking_id"] ?? ""
+        ).trim();
+        if (bid) {
+          spBookingIdCounts.set(bid, (spBookingIdCounts.get(bid) ?? 0) + 1);
+        }
+      }
+      const duplicateSpBids = [...spBookingIdCounts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([bid]) => bid);
+      if (duplicateSpBids.length > 0) {
+        return res.status(400).json({
+          error: "Multiple Booking ids found in the report, Please reupload",
+          duplicateBookingIds: duplicateSpBids,
+        });
+      }
+
       // Use the same session ID as the upload - no new session needed
       const runId = uploadId;
       
