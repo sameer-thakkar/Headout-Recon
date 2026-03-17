@@ -12,6 +12,20 @@ import { runReconciliation } from "./reconciliation";
 import { registerExportRoutes, generateIssueWorkingsSheet } from "./export-routes";
 import { formatIndianNumber } from "./export-utils";
 
+// Temporary download route for documentation (no auth required)
+function registerDownloadRoute(app: Express) {
+  app.get("/download/reconciliation-doc", (_req: Request, res: Response) => {
+    const filePath = path.resolve("Reconciliation_Logic_Documentation.docx");
+    if (fs.existsSync(filePath)) {
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", "attachment; filename=Reconciliation_Logic_Documentation.docx");
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send("File not found");
+    }
+  });
+}
+
 // Auth middleware — protects all /api/* routes except /api/auth/*
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.path.startsWith("/auth/")) return next();
@@ -89,6 +103,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Register download route (before auth middleware)
+  registerDownloadRoute(app);
+
   // Initialize FX rates
   await storage.setFxRates(defaultFxRates);
 
