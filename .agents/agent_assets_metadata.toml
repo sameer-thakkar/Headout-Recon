@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "7QFdogSbQFaZSEM2fitd4"
+uri = "file://Reconciliation_Logic_Documentation.docx"
+type = "word_document"
+title = "Reconciliation Logic — Complete Documentation"
