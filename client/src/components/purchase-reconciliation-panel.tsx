@@ -3779,8 +3779,8 @@ export function PurchaseReconciliationPanel({
       row10ByReason.get(reason)!.push({
         bookingId: row.bookingId,
         spNet: row.spNetInHo,
-        hoNet: 0,
-        difference: row.spNetInHo,
+        hoNet: row.hoNet,
+        difference: row.spNetInHo - row.hoNet,
         reason,
         tid: row.tid || "Unknown",
         ticketId: row.ticketId || "",
