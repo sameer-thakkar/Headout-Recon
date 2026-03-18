@@ -76,15 +76,17 @@ export function registerExportRoutes(app: Express) {
           if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
           return 0;
         };
-        const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; tids: Set<string>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string; driTeams: Set<string>; fulfillmentMethods: Set<string> }>();
+        const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
         for (const b of cancellationBookings) {
           const cancellableVal = canonicalize(b.cancellable, "Missing");
           const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
           const insVal = canonicalize(b.cancellationInsurance, "Missing");
           const clVal = b.chargedLoss && String(b.chargedLoss).trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
-          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}`;
+          const fm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
+          const dri = b.driTeam ? String(b.driTeam) : "N/A";
+          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}|${fm}|${dri}`;
           if (!groups.has(key)) {
-            groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "", driTeams: new Set(), fulfillmentMethods: new Set() });
+            groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: fm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
           }
           const g = groups.get(key)!;
           g.count++;
@@ -92,8 +94,6 @@ export function registerExportRoutes(app: Express) {
           const hoRate = usdToCcyBreakup[b.hoCurrency] || 1;
           g.discrepancyUsd += -Math.abs(b.spNetInHo) / hoRate;
           if (b.tid) g.tids.add(String(b.tid));
-          if (b.driTeam) g.driTeams.add(String(b.driTeam));
-          if (b.fulfillmentMethod) g.fulfillmentMethods.add(String(b.fulfillmentMethod));
           const d = getDateForBasis(b);
           const ts = parseDateTs(d);
           if (ts > 0) {
@@ -116,8 +116,7 @@ export function registerExportRoutes(app: Express) {
             cancellable: g.cancellable, spNetSign: g.spNetSign, cancellationInsurance: g.cancellationInsurance,
             chargedLoss: g.chargedLoss, result: g.result, count: g.count,
             startDate: g.minDate, endDate: g.maxDate, totalBids,
-            driTeam: g.driTeams.size > 0 ? Array.from(g.driTeams).join(", ") : "N/A",
-            fulfillmentMethod: g.fulfillmentMethods.size > 0 ? Array.from(g.fulfillmentMethods).join(", ") : "",
+            driTeam: g.driTeam, fulfillmentMethod: g.fulfillmentMethod,
             discrepancyLc: g.discrepancyLc, discrepancyUsd: g.discrepancyUsd,
           });
         }
@@ -1799,15 +1798,17 @@ export function registerExportRoutes(app: Express) {
           if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
           return 0;
         };
-        const gsGroups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; tids: Set<string>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string; driTeams: Set<string>; fulfillmentMethods: Set<string> }>();
+        const gsGroups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
         for (const b of gsheetCancellationBookings) {
           const cancellableVal = gsCanon(b.cancellable, "Missing");
           const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
           const insVal = gsCanon(b.cancellationInsurance, "Missing");
           const clVal = b.chargedLoss && String(b.chargedLoss).trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
-          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}`;
+          const fm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
+          const dri = b.driTeam ? String(b.driTeam) : "N/A";
+          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}|${fm}|${dri}`;
           if (!gsGroups.has(key)) {
-            gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "", driTeams: new Set(), fulfillmentMethods: new Set() });
+            gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: fm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
           }
           const g = gsGroups.get(key)!;
           g.count++;
@@ -1815,8 +1816,6 @@ export function registerExportRoutes(app: Express) {
           const hoRate = gsBreakupUsdToCcy[b.hoCurrency] || 1;
           g.discrepancyUsd += -Math.abs(b.spNetInHo) / hoRate;
           if (b.tid) g.tids.add(String(b.tid));
-          if (b.driTeam) g.driTeams.add(String(b.driTeam));
-          if (b.fulfillmentMethod) g.fulfillmentMethods.add(String(b.fulfillmentMethod));
           const d = gsGetDate(b);
           const ts = gsParseDateTs(d);
           if (ts > 0) {
@@ -1839,8 +1838,7 @@ export function registerExportRoutes(app: Express) {
             cancellable: g.cancellable, spNetSign: g.spNetSign, cancellationInsurance: g.cancellationInsurance,
             chargedLoss: g.chargedLoss, result: g.result, count: g.count,
             startDate: g.minDate, endDate: g.maxDate, totalBids,
-            driTeam: g.driTeams.size > 0 ? Array.from(g.driTeams).join(", ") : "N/A",
-            fulfillmentMethod: g.fulfillmentMethods.size > 0 ? Array.from(g.fulfillmentMethods).join(", ") : "",
+            driTeam: g.driTeam, fulfillmentMethod: g.fulfillmentMethod,
             discrepancyLc: g.discrepancyLc, discrepancyUsd: g.discrepancyUsd,
           });
         }
