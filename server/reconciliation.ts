@@ -634,7 +634,7 @@ function assignReason(
     // CANCELLED + HO Net = 0 → Reconciled (SP refunded, we were never charged)
     if (bookingStatus.toLowerCase() === "cancelled" && hoNet === 0) {
       return {
-        reason: "Reconciled",
+        reason: "Cancelled-Refund OK",
         chargedLoss: chargedLossOriginal || "FALSE",
         comment: "Cancelled-Refund OK",
         isSecondaryVendor
@@ -654,9 +654,9 @@ function assignReason(
     // Case 1: Cancellable = "Yes"
     if (cancellable?.toLowerCase() === "yes") {
       if (spNetInHo === 0) {
-        // SP Net = 0 → Reconciled, Comment = "Cancelled-OK"
+        // SP Net = 0 → Cancelled-OK
         return {
-          reason: "Reconciled",
+          reason: "Cancelled-OK",
           chargedLoss: chargedLossOriginal || "FALSE",
           comment: "Cancelled-OK",
           isSecondaryVendor
@@ -675,7 +675,7 @@ function assignReason(
     // Case 2: Cancellable = "No" or missing/other (same logic applies)
     if (spNetInHo === 0) {
       return {
-        reason: "Reconciled",
+        reason: "Cancelled-OK",
         chargedLoss: chargedLossOriginal || "FALSE",
         comment: "Cancelled-OK",
         isSecondaryVendor

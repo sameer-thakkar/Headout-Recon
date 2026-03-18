@@ -30,6 +30,8 @@ export function registerExportRoutes(app: Express) {
         "Cancelled-Insured Booking",
         "Cancelled-Check for Charge loss",
         "Cancelled-DSS policy",
+        "Cancelled-OK",
+        "Cancelled-Refund OK",
       ];
       const cancellationBookings = result.primaryRows.filter((r: any) => cancellationReasons.includes(r.reason));
       const nonCancellationSummary = result.overallSummary.filter((r: any) => r.reason !== "Reconciled" && !cancellationReasons.includes(r.reason));
@@ -1712,6 +1714,8 @@ export function registerExportRoutes(app: Express) {
         "Cancelled-Insured Booking",
         "Cancelled-Check for Charge loss",
         "Cancelled-DSS policy",
+        "Cancelled-OK",
+        "Cancelled-Refund OK",
       ];
       const gsheetCancellationBookings = result.primaryRows.filter((r: any) => gsheetCancellationReasons.includes(r.reason));
       const gsheetNonCancellationSummary = [...result.overallSummary, ...result.secondaryVendorSummary].filter((r: any) => r.reason !== "Reconciled" && !gsheetCancellationReasons.includes(r.reason));
