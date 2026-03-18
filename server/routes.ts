@@ -206,13 +206,9 @@ export async function registerRoutes(
 
       Array.from(sheets.entries()).forEach(([name, data]) => {
         const normalizedName = name.toLowerCase().trim();
-        if (normalizedName === "reconciliation_report" || normalizedName.includes("ho data") || normalizedName === "ho data") {
+        if (normalizedName === "reconciliation_report") {
           hoData = data;
-        } else if (
-          normalizedName === "sp_invoice_report" ||
-          normalizedName.includes("sp invoice") ||
-          normalizedName === "sp invoice report"
-        ) {
+        } else if (normalizedName === "sp_invoice_report") {
           spData = data;
         }
       });
