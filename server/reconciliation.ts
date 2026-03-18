@@ -709,6 +709,16 @@ function assignReason(
   }
   
   // 3) MTB (Multiple Tickets Booked) - for non-cancelled cases
+  // If both HO and SP are zero, difference is exactly 0 — always reconciled
+  if (differenceLc === 0) {
+    return {
+      reason: "Reconciled",
+      chargedLoss: chargedLossOriginal || "FALSE",
+      comment: "",
+      isSecondaryVendor
+    };
+  }
+
   if (differencePct !== null) {
     // MTB rule: HO Net < SP Net (differencePct is negative) AND abs(differencePct) >= 95%
     if (differencePct <= -0.95) {
@@ -723,7 +733,7 @@ function assignReason(
     // 4) Reconciled rules (small differences)
     // Check if amounts are within tolerance
     const isReconciled = sameCurrency 
-      ? (differenceLc === 0 || Math.abs(differencePct) <= 0.001)
+      ? (Math.abs(differencePct) <= 0.001)
       : (Math.abs(differencePct) < 0.03);
     
     if (isReconciled) {
