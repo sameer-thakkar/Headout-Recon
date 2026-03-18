@@ -344,9 +344,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     // Group by cancellation type
     const breakdown = cancellationReasons.map(reason => {
       const bookings = cancellationBookings.filter(b => b.reason === reason);
-      // For cancellations, discrepancy is only SP Net (always negative)
+      // For cancellations, discrepancy is SP Net (what the supplier is charging)
       const discrepancyLc = bookings.reduce((sum, b) => sum + (-Math.abs(b.spNetInHo)), 0);
-      const discrepancyUsd = bookings.reduce((sum, b) => sum + (-Math.abs(b.differenceUsd)), 0);
+      // Convert spNetInHo to USD using the HO currency FX rate
+      const discrepancyUsd = bookings.reduce((sum, b) => {
+        const hoRate = fxData?.usdToCcy?.[b.hoCurrency] || 1;
+        return sum + (-Math.abs(b.spNetInHo) / hoRate);
+      }, 0);
       return {
         reason,
         displayName: reason.replace("Cancelled-", ""),
@@ -370,7 +374,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       totalDiscrepancyUsd,
       currency,
     };
-  }, [primaryRows]);
+  }, [primaryRows, fxData]);
 
   const processedSummary = useMemo(() => {
     // Remove individual Already Reconciled rows and Cancellation rows from summary
