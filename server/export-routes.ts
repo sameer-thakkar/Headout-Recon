@@ -55,11 +55,18 @@ export function registerExportRoutes(app: Express) {
       if (cancellationBookings.length > 0) {
         const usdToCcyBreakup = result.fx?.usdToCcy || {};
         const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string }>();
+        const canonicalize = (val: any, fallback: string) => {
+          if (!val) return fallback;
+          const s = String(val).trim().toLowerCase();
+          if (s === "yes" || s === "true") return "Yes";
+          if (s === "no" || s === "false") return "No";
+          return fallback;
+        };
         for (const b of cancellationBookings) {
-          const cancellableVal = b.cancellable ? String(b.cancellable).trim() : "Missing";
+          const cancellableVal = canonicalize(b.cancellable, "Missing");
           const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
-          const insVal = b.cancellationInsurance ? String(b.cancellationInsurance).trim() : "Missing";
-          const clVal = b.chargedLoss ? String(b.chargedLoss).toUpperCase().trim() : "FALSE";
+          const insVal = canonicalize(b.cancellationInsurance, "Missing");
+          const clVal = b.chargedLoss && String(b.chargedLoss).trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
           const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}`;
           if (!groups.has(key)) {
             groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason });
@@ -1729,11 +1736,18 @@ export function registerExportRoutes(app: Express) {
       if (gsheetCancellationBookings.length > 0) {
         const gsBreakupUsdToCcy = result.fx?.usdToCcy || {};
         const gsGroups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string }>();
+        const gsCanon = (val: any, fallback: string) => {
+          if (!val) return fallback;
+          const s = String(val).trim().toLowerCase();
+          if (s === "yes" || s === "true") return "Yes";
+          if (s === "no" || s === "false") return "No";
+          return fallback;
+        };
         for (const b of gsheetCancellationBookings) {
-          const cancellableVal = b.cancellable ? String(b.cancellable).trim() : "Missing";
+          const cancellableVal = gsCanon(b.cancellable, "Missing");
           const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
-          const insVal = b.cancellationInsurance ? String(b.cancellationInsurance).trim() : "Missing";
-          const clVal = b.chargedLoss ? String(b.chargedLoss).toUpperCase().trim() : "FALSE";
+          const insVal = gsCanon(b.cancellationInsurance, "Missing");
+          const clVal = b.chargedLoss && String(b.chargedLoss).trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
           const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}`;
           if (!gsGroups.has(key)) {
             gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason });
@@ -2303,7 +2317,7 @@ export function registerExportRoutes(app: Express) {
         for (let idx = 0; idx < discrepancyData.length; idx++) {
           const row = discrepancyData[idx];
           const firstCell = String(row[0] || "");
-          const isSectionHeader = row.length === 1 && (firstCell.includes("SUMMARY") || firstCell.includes("ANALYSIS"));
+          const isSectionHeader = row.length === 1 && (firstCell.includes("SUMMARY") || firstCell.includes("ANALYSIS") || firstCell.includes("BREAKUP"));
           
           if (isSectionHeader) {
             let tableHeaderRow = -1;
@@ -2311,11 +2325,11 @@ export function registerExportRoutes(app: Express) {
             for (let k = idx + 1; k < scanLimit; k++) {
               const candidateRow = discrepancyData[k];
               const candidateFirstCell = String(candidateRow[0] || "");
-              if (candidateRow.length > 1 && (candidateFirstCell === "Reason" || candidateFirstCell === "TID")) {
+              if (candidateRow.length > 1 && (candidateFirstCell === "Reason" || candidateFirstCell === "TID" || candidateFirstCell === "Cancellable")) {
                 tableHeaderRow = k;
                 break;
               }
-              const isAnotherSection = candidateRow.length === 1 && (candidateFirstCell.includes("SUMMARY") || candidateFirstCell.includes("ANALYSIS"));
+              const isAnotherSection = candidateRow.length === 1 && (candidateFirstCell.includes("SUMMARY") || candidateFirstCell.includes("ANALYSIS") || candidateFirstCell.includes("BREAKUP"));
               if (isAnotherSection) break;
             }
             
@@ -2327,7 +2341,7 @@ export function registerExportRoutes(app: Express) {
                 const dataRow = discrepancyData[j];
                 const dataFirstCell = String(dataRow[0] || "");
                 const isEmptyRow = dataRow.length === 0 || (dataRow.length === 1 && !dataFirstCell);
-                const isNextSection = dataRow.length === 1 && (dataFirstCell.includes("SUMMARY") || dataFirstCell.includes("ANALYSIS"));
+                const isNextSection = dataRow.length === 1 && (dataFirstCell.includes("SUMMARY") || dataFirstCell.includes("ANALYSIS") || dataFirstCell.includes("BREAKUP"));
                 if (isEmptyRow || isNextSection) break;
                 lastDataRow = j;
                 colCount = Math.max(colCount, dataRow.length);
