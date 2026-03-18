@@ -4,6 +4,36 @@ import { storage } from "./storage";
 import { formatIndianNumber, formatDateValue, getUniqueSheetName, sanitizeSheetName, getExportData, getExcelExportData } from "./export-utils";
 import { getUncachableGoogleSheetClient, getUncachableGoogleDriveClient } from "./google-sheets";
 
+function deriveDriTeamForBreakup(reason: string, fm: string): string {
+  const f = fm.toLowerCase().trim();
+  const isFreesale = f === "freesale";
+  const isManual = f === "manual";
+  const isSelenium = f === "selenium";
+  const isPrePurchase = f === "pre purchase" || f === "prepurchase" || f === "pre-purchase" || f === "pre_purchase";
+  const isVendorApi = f === "vendor api" || f === "vendorapi" || f === "vendor-api" || f === "vendor_api";
+  const isVendorRequest = f === "vendor request" || f === "vendorrequest" || f === "vendor-request" || f === "vendor_request";
+  if (reason === "Multiple Tickets Booked" || reason === "Cancelled-SP error" || reason === "Cancelled-Check for Charge loss") {
+    if (isFreesale) return "Tech";
+    if (isManual) return "Reservation Ops";
+    if (isSelenium) return "Selenium";
+    if (isPrePurchase) return "Inventory Ops";
+    if (isVendorApi || isVendorRequest) return "Tech";
+    return "Unknown";
+  }
+  if (reason === "Secondary Vendor") return "Supply";
+  if (reason === "Already Reconciled-Same BE" || reason === "Already Reconciled-Different BE") return "Finance";
+  if (reason === "Cancelled-Insured Booking" || reason === "Cancelled-DSS policy" || reason === "Cancelled-OK" || reason === "Cancelled-Refund OK") return "N/A";
+  if (reason === "Net Price Discrepancy") {
+    if (isFreesale || isManual) return "Biz Ops";
+    if (isSelenium) return "Selenium";
+    if (isPrePurchase) return "Inventory Ops";
+    if (isVendorApi) return "Biz Ops";
+    if (isVendorRequest) return "Tech";
+    return "Unknown";
+  }
+  return "Unknown";
+}
+
 export function registerExportRoutes(app: Express) {
 
   // =====================================================================
@@ -82,23 +112,29 @@ export function registerExportRoutes(app: Express) {
           const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
           const insVal = canonicalize(b.cancellationInsurance, "Missing");
           const clVal = b.chargedLoss && String(b.chargedLoss).trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
-          const fm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
-          const dri = b.driTeam ? String(b.driTeam) : "N/A";
-          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}|${fm}|${dri}`;
-          if (!groups.has(key)) {
-            groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: fm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
-          }
-          const g = groups.get(key)!;
-          g.count++;
-          g.discrepancyLc += -Math.abs(b.spNetInHo);
+          const rawFm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
+          const subFms = Array.from(new Set(rawFm.split(",").map((s: string) => s.trim()).filter(Boolean)));
+          const uniqueSubFms = subFms.length > 0 ? subFms : [""];
+          const discLc = -Math.abs(b.spNetInHo);
           const hoRate = usdToCcyBreakup[b.hoCurrency] || 1;
-          g.discrepancyUsd += -Math.abs(b.spNetInHo) / hoRate;
-          if (b.tid) g.tids.add(String(b.tid));
+          const discUsd = discLc / hoRate;
           const d = getDateForBasis(b);
           const ts = parseDateTs(d);
-          if (ts > 0) {
-            if (ts < g.minDateTs) { g.minDateTs = ts; g.minDate = formatDateValue(d!); }
-            if (ts > g.maxDateTs) { g.maxDateTs = ts; g.maxDate = formatDateValue(d!); }
+          for (const subFm of uniqueSubFms) {
+            const dri = deriveDriTeamForBreakup(b.reason, subFm);
+            const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}|${subFm}|${dri}`;
+            if (!groups.has(key)) {
+              groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
+            }
+            const g = groups.get(key)!;
+            g.count++;
+            g.discrepancyLc += discLc;
+            g.discrepancyUsd += discUsd;
+            if (b.tid) g.tids.add(String(b.tid));
+            if (ts > 0) {
+              if (ts < g.minDateTs) { g.minDateTs = ts; g.minDate = formatDateValue(d!); }
+              if (ts > g.maxDateTs) { g.maxDateTs = ts; g.maxDate = formatDateValue(d!); }
+            }
           }
         }
         const allRowsForTotalBids = [...result.primaryRows, ...result.secondaryVendorRows];
@@ -1804,23 +1840,29 @@ export function registerExportRoutes(app: Express) {
           const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
           const insVal = gsCanon(b.cancellationInsurance, "Missing");
           const clVal = b.chargedLoss && String(b.chargedLoss).trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
-          const fm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
-          const dri = b.driTeam ? String(b.driTeam) : "N/A";
-          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}|${fm}|${dri}`;
-          if (!gsGroups.has(key)) {
-            gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: fm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
-          }
-          const g = gsGroups.get(key)!;
-          g.count++;
-          g.discrepancyLc += -Math.abs(b.spNetInHo);
-          const hoRate = gsBreakupUsdToCcy[b.hoCurrency] || 1;
-          g.discrepancyUsd += -Math.abs(b.spNetInHo) / hoRate;
-          if (b.tid) g.tids.add(String(b.tid));
+          const rawFm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
+          const gsSubFms = Array.from(new Set(rawFm.split(",").map((s: string) => s.trim()).filter(Boolean)));
+          const gsUniqueSubFms = gsSubFms.length > 0 ? gsSubFms : [""];
+          const gsDiscLc = -Math.abs(b.spNetInHo);
+          const gsHoRate = gsBreakupUsdToCcy[b.hoCurrency] || 1;
+          const gsDiscUsd = gsDiscLc / gsHoRate;
           const d = gsGetDate(b);
           const ts = gsParseDateTs(d);
-          if (ts > 0) {
-            if (ts < g.minDateTs) { g.minDateTs = ts; g.minDate = formatDateValue(d!); }
-            if (ts > g.maxDateTs) { g.maxDateTs = ts; g.maxDate = formatDateValue(d!); }
+          for (const subFm of gsUniqueSubFms) {
+            const dri = deriveDriTeamForBreakup(b.reason, subFm);
+            const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}|${subFm}|${dri}`;
+            if (!gsGroups.has(key)) {
+              gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
+            }
+            const g = gsGroups.get(key)!;
+            g.count++;
+            g.discrepancyLc += gsDiscLc;
+            g.discrepancyUsd += gsDiscUsd;
+            if (b.tid) g.tids.add(String(b.tid));
+            if (ts > 0) {
+              if (ts < g.minDateTs) { g.minDateTs = ts; g.minDate = formatDateValue(d!); }
+              if (ts > g.maxDateTs) { g.maxDateTs = ts; g.maxDate = formatDateValue(d!); }
+            }
           }
         }
         const gsAllRows = [...result.primaryRows, ...result.secondaryVendorRows];
