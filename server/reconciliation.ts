@@ -602,7 +602,7 @@ function assignReason(
   // Values: "Already Auto Reconciled" or "Already Manually Reconciled"
   if (hoReason) {
     const normalizedHoReason = hoReason.trim().toLowerCase();
-    if (normalizedHoReason === "already auto reconciled" || normalizedHoReason === "already manually reconciled") {
+    if (normalizedHoReason.includes("already") && (normalizedHoReason.includes("auto reconciled") || normalizedHoReason.includes("manually reconciled"))) {
       // Sub-classify based on BE ID match
       const hoBeNorm = (hoBeId || "").trim().toLowerCase();
       const spBeNorm = (spBeId || "").trim().toLowerCase();
@@ -865,9 +865,6 @@ function computeReconciliationRows(
     const differenceLc = ho.netPrice - spNetInHo;
     const differencePct = ho.netPrice !== 0 ? differenceLc / ho.netPrice : null;
     
-    if (bookingId === "30194360") {
-      console.log(`[DEBUG BID 30194360] hoNet=${ho.netPrice}, spNetOriginal=${spNetOriginal}, spNetInHo=${spNetInHo}, fxRateUsed=${fxRateUsed}, sameCurrency=${sameCurrency}, differenceLc=${differenceLc}, differencePct=${differencePct}, spCurrency=${spCurrency}, hoCurrency=${ho.currency}, bookingStatus=${ho.bookingStatus}, cancellable=${ho.cancellable}, hoReason=${ho.hoReason}`);
-    }
     
     // STEP I: Convert to USD
     const hoRate = usdToCcy[ho.currency] || 1;
