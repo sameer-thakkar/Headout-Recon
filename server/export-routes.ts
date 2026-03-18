@@ -51,6 +51,30 @@ export function registerExportRoutes(app: Express) {
           countBid: cancellationBookings.length,
         });
       }
+      const cancellationBreakup: { cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; count: number; discrepancyLc: number; discrepancyUsd: number }[] = [];
+      if (cancellationBookings.length > 0) {
+        const usdToCcyBreakup = result.fx?.usdToCcy || {};
+        const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string }>();
+        for (const b of cancellationBookings) {
+          const cancellableVal = b.cancellable ? String(b.cancellable).trim() : "Missing";
+          const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
+          const insVal = b.cancellationInsurance ? String(b.cancellationInsurance).trim() : "Missing";
+          const clVal = b.chargedLoss ? String(b.chargedLoss).toUpperCase().trim() : "FALSE";
+          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}`;
+          if (!groups.has(key)) {
+            groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason });
+          }
+          const g = groups.get(key)!;
+          g.count++;
+          g.discrepancyLc += -Math.abs(b.spNetInHo);
+          const hoRate = usdToCcyBreakup[b.hoCurrency] || 1;
+          g.discrepancyUsd += -Math.abs(b.spNetInHo) / hoRate;
+        }
+        for (const g of groups.values()) {
+          cancellationBreakup.push(g);
+        }
+      }
+
       const discrepancySummary = consolidatedSummary.map((row: any) => ({
         "Reason": row.reason,
         "Currency": row.currency,
@@ -315,6 +339,22 @@ export function registerExportRoutes(app: Express) {
       XLSX.utils.sheet_add_aoa(discrepancySheet, summaryData, { origin: { r: currentRow + 1, c: 0 } });
       applyTableStyles(discrepancySheet, currentRow, 0, discrepancySummary.length + 1, summaryHeaders.length, summaryHeaders);
       currentRow += discrepancySummary.length + 2;
+
+      if (cancellationBreakup.length > 0) {
+        XLSX.utils.sheet_add_aoa(discrepancySheet, [["CANCELLATION BREAKUP"]], { origin: { r: currentRow, c: 0 } });
+        const breakupTitleCell = XLSX.utils.encode_cell({ r: currentRow, c: 0 });
+        discrepancySheet[breakupTitleCell].s = { font: { bold: true, sz: 12 } };
+        currentRow += 1;
+
+        const breakupHeaders = ["Cancellable", "SP Net", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Count of Bookings", "Discrepancy (LC)", "Discrepancy (USD)"];
+        XLSX.utils.sheet_add_aoa(discrepancySheet, [breakupHeaders], { origin: { r: currentRow, c: 0 } });
+        const breakupData = cancellationBreakup.map(g => [
+          g.cancellable, g.spNetSign, g.cancellationInsurance, g.chargedLoss, g.result, g.count, g.discrepancyLc, g.discrepancyUsd
+        ]);
+        XLSX.utils.sheet_add_aoa(discrepancySheet, breakupData, { origin: { r: currentRow + 1, c: 0 } });
+        applyTableStyles(discrepancySheet, currentRow, 0, cancellationBreakup.length + 1, breakupHeaders.length, breakupHeaders);
+        currentRow += cancellationBreakup.length + 2;
+      }
       
       for (const [reason, rows] of Array.from(tidByReason.entries())) {
         if (rows.length === 0) continue;
@@ -1685,6 +1725,30 @@ export function registerExportRoutes(app: Express) {
           countBid: gsheetCancellationBookings.length,
         });
       }
+      const gsheetCancellationBreakup: { cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; count: number; discrepancyLc: number; discrepancyUsd: number }[] = [];
+      if (gsheetCancellationBookings.length > 0) {
+        const gsBreakupUsdToCcy = result.fx?.usdToCcy || {};
+        const gsGroups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string }>();
+        for (const b of gsheetCancellationBookings) {
+          const cancellableVal = b.cancellable ? String(b.cancellable).trim() : "Missing";
+          const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
+          const insVal = b.cancellationInsurance ? String(b.cancellationInsurance).trim() : "Missing";
+          const clVal = b.chargedLoss ? String(b.chargedLoss).toUpperCase().trim() : "FALSE";
+          const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}`;
+          if (!gsGroups.has(key)) {
+            gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason });
+          }
+          const g = gsGroups.get(key)!;
+          g.count++;
+          g.discrepancyLc += -Math.abs(b.spNetInHo);
+          const hoRate = gsBreakupUsdToCcy[b.hoCurrency] || 1;
+          g.discrepancyUsd += -Math.abs(b.spNetInHo) / hoRate;
+        }
+        for (const g of gsGroups.values()) {
+          gsheetCancellationBreakup.push(g);
+        }
+      }
+
       const discrepancySummary = gsheetConsolidatedSummary;
 
       const tidGroups = new Map<string, {
@@ -1743,6 +1807,18 @@ export function registerExportRoutes(app: Express) {
         ]);
       });
       discrepancyData.push([]);
+
+      if (gsheetCancellationBreakup.length > 0) {
+        discrepancyData.push(["CANCELLATION BREAKUP"]);
+        discrepancyData.push(["Cancellable", "SP Net", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Count of Bookings", "Discrepancy (LC)", "Discrepancy (USD)"]);
+        for (const g of gsheetCancellationBreakup) {
+          discrepancyData.push([
+            g.cancellable, g.spNetSign, g.cancellationInsurance, g.chargedLoss, g.result,
+            g.count, formatIndianNumber(g.discrepancyLc), formatIndianNumber(g.discrepancyUsd)
+          ]);
+        }
+        discrepancyData.push([]);
+      }
 
       const tidByReason = new Map<string, any[]>();
       for (const [, group] of Array.from(tidGroups.entries())) {
