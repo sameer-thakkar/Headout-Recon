@@ -200,15 +200,16 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Empty file with no data sheets." });
       }
 
-      // Find HO Data and SP Invoice Report tabs
+      // Find RECONCILIATION_REPORT and SP_INVOICE_REPORT tabs (with backward compat for old names)
       let hoData: SheetData | null = null;
       let spData: SheetData | null = null;
 
       Array.from(sheets.entries()).forEach(([name, data]) => {
         const normalizedName = name.toLowerCase().trim();
-        if (normalizedName.includes("ho data") || normalizedName === "ho data") {
+        if (normalizedName === "reconciliation_report" || normalizedName.includes("ho data") || normalizedName === "ho data") {
           hoData = data;
         } else if (
+          normalizedName === "sp_invoice_report" ||
           normalizedName.includes("sp invoice") ||
           normalizedName === "sp invoice report"
         ) {
@@ -219,14 +220,14 @@ export async function registerRoutes(
       if (!hoData) {
         fs.unlinkSync(uploadedFile.path);
         return res.status(400).json({
-          error: 'Missing required sheet "HO Data". Please check your file.',
+          error: 'Missing required sheet "RECONCILIATION_REPORT". Please check your file.',
         });
       }
 
       if (!spData) {
         fs.unlinkSync(uploadedFile.path);
         return res.status(400).json({
-          error: 'Missing required sheet "SP Invoice Report". Please check your file.',
+          error: 'Missing required sheet "SP_INVOICE_REPORT". Please check your file.',
         });
       }
 
@@ -437,7 +438,7 @@ export async function registerRoutes(
       // BK012: Cancelled + Cancellable=No + Insurance=Yes + SP Net>0 → Cancelled-Insured Booking
       // BK013: Cancelled + Cancellable=No + Insurance=No + chargedLoss=TRUE → Cancelled-DSS policy
       const hoData: SheetData = {
-        name: "HO Data",
+        name: "RECONCILIATION_REPORT",
         headers: ["bookingId", "netPrice", "currency", "bookingCreationDate", "bookingStatus", "Cancellable", "Cancellation Insurance", "chargedLoss", "billingEntityName", "beId", "paymentBasis", "fulfillmentMethod"],
         rows: [
           { bookingId: "BK001", netPrice: 100, currency: "USD", bookingCreationDate: "2024-01-15", bookingStatus: "CONFIRMED", Cancellable: "Yes", "Cancellation Insurance": "No", chargedLoss: "FALSE", billingEntityName: "Acme Tours Ltd", beId: "BE-001", paymentBasis: "Per Booking", fulfillmentMethod: "Freesale" },
@@ -458,7 +459,7 @@ export async function registerRoutes(
       };
 
       const spData: SheetData = {
-        name: "SP Invoice Report",
+        name: "SP_INVOICE_REPORT",
         headers: ["bookingId", "netPrice", "Billing Currency", "fulfilmentDate", "ticketId"],
         rows: [
           { bookingId: "BK001", netPrice: 95, "Billing Currency": "USD", fulfilmentDate: "2024-01-16", ticketId: "TKT-2024-001" },
@@ -483,7 +484,7 @@ export async function registerRoutes(
         name: "Demo Reconciliation - " + new Date().toLocaleString(),
         size: 2048,
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        sheetNames: ["HO Data", "SP Invoice Report"],
+        sheetNames: ["RECONCILIATION_REPORT", "SP_INVOICE_REPORT"],
       };
       const uploadRecord = await storage.createUpload(fileInfo, hoData, spData);
 

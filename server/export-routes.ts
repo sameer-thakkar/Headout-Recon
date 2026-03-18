@@ -1185,7 +1185,7 @@ export function registerExportRoutes(app: Express) {
           return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
         });
         spReportSheet["!cols"] = spColWidths;
-              XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP Invoice Report", usedSheetNames));
+              XLSX.utils.book_append_sheet(workbook, spReportSheet, getUniqueSheetName("SP_INVOICE_REPORT", usedSheetNames));
 
       // =====================================================
       // SHEET 3: HO Report Updated
@@ -2878,7 +2878,7 @@ export function registerExportRoutes(app: Express) {
       // Build sheet definitions
       const sheetDefs: { properties: { title: string } }[] = [
         { properties: { title: "Payable Summary" } },
-        { properties: { title: "SP Invoice Report" } },
+        { properties: { title: "SP_INVOICE_REPORT" } },
         { properties: { title: "HO Report Updated" } },
       ];
 
@@ -2910,7 +2910,7 @@ export function registerExportRoutes(app: Express) {
 
       const batchData = [
         { range: "Payable Summary!A1", values: payableSummaryData },
-        { range: "SP Invoice Report!A1", values: spReportData },
+        { range: "SP_INVOICE_REPORT!A1", values: spReportData },
         { range: "HO Report Updated!A1", values: hoReportData },
       ];
 
@@ -2986,7 +2986,7 @@ export function registerExportRoutes(app: Express) {
       }
 
       // SP Invoice Report
-      const spSheetId = sheetIdMap.get("SP Invoice Report");
+      const spSheetId = sheetIdMap.get("SP_INVOICE_REPORT");
       if (spSheetId !== undefined) {
         const spCols = spReportData.length > 0 && Array.isArray(spReportData[0]) ? spReportData[0].length : 5;
         addFinancialSheetFormatting(spSheetId, spReportData.length, spCols, spReportData[0]);
