@@ -25,7 +25,33 @@ export function registerExportRoutes(app: Express) {
       // =====================================================
       // SHEET 1: Discrepancy Analysis
       // =====================================================
-      const discrepancySummary = result.overallSummary.filter((r: any) => r.reason !== "Reconciled").map((row: any) => ({
+      const cancellationReasons = [
+        "Cancelled-SP error",
+        "Cancelled-Insured Booking",
+        "Cancelled-Check for Charge loss",
+        "Cancelled-DSS policy",
+      ];
+      const cancellationBookings = result.primaryRows.filter((r: any) => cancellationReasons.includes(r.reason));
+      const nonCancellationSummary = result.overallSummary.filter((r: any) => r.reason !== "Reconciled" && !cancellationReasons.includes(r.reason));
+      const consolidatedSummary: any[] = [...nonCancellationSummary];
+      if (cancellationBookings.length > 0) {
+        const currencies = Array.from(new Set(cancellationBookings.map((b: any) => b.hoCurrency).filter(Boolean)));
+        const currency = currencies.length > 1 ? "Multiple currencies" : (currencies[0] || "USD");
+        const discrepancyLc = cancellationBookings.reduce((sum: number, b: any) => sum + (-Math.abs(b.spNetInHo)), 0);
+        const usdToCcy = result.fx?.usdToCcy || {};
+        const discrepancyUsd = cancellationBookings.reduce((sum: number, b: any) => {
+          const hoRate = usdToCcy[b.hoCurrency] || 1;
+          return sum + (-Math.abs(b.spNetInHo) / hoRate);
+        }, 0);
+        consolidatedSummary.push({
+          reason: "Cancellations",
+          currency,
+          discrepancyLc,
+          discrepancyUsd,
+          countBid: cancellationBookings.length,
+        });
+      }
+      const discrepancySummary = consolidatedSummary.map((row: any) => ({
         "Reason": row.reason,
         "Currency": row.currency,
         "Discrepancy (LC)": row.discrepancyLc,
@@ -1633,7 +1659,33 @@ export function registerExportRoutes(app: Express) {
         driReasonRowGroups.get(key)!.push(row);
       }
 
-      const discrepancySummary = [...result.overallSummary, ...result.secondaryVendorSummary].filter((r: any) => r.reason !== "Reconciled");
+      const gsheetCancellationReasons = [
+        "Cancelled-SP error",
+        "Cancelled-Insured Booking",
+        "Cancelled-Check for Charge loss",
+        "Cancelled-DSS policy",
+      ];
+      const gsheetCancellationBookings = result.primaryRows.filter((r: any) => gsheetCancellationReasons.includes(r.reason));
+      const gsheetNonCancellationSummary = [...result.overallSummary, ...result.secondaryVendorSummary].filter((r: any) => r.reason !== "Reconciled" && !gsheetCancellationReasons.includes(r.reason));
+      const gsheetConsolidatedSummary: any[] = [...gsheetNonCancellationSummary];
+      if (gsheetCancellationBookings.length > 0) {
+        const currencies = Array.from(new Set(gsheetCancellationBookings.map((b: any) => b.hoCurrency).filter(Boolean)));
+        const currency = currencies.length > 1 ? "Multiple currencies" : (currencies[0] || "USD");
+        const discLc = gsheetCancellationBookings.reduce((sum: number, b: any) => sum + (-Math.abs(b.spNetInHo)), 0);
+        const gsUsdToCcy = result.fx?.usdToCcy || {};
+        const discUsd = gsheetCancellationBookings.reduce((sum: number, b: any) => {
+          const hoRate = gsUsdToCcy[b.hoCurrency] || 1;
+          return sum + (-Math.abs(b.spNetInHo) / hoRate);
+        }, 0);
+        gsheetConsolidatedSummary.push({
+          reason: "Cancellations",
+          currency,
+          discrepancyLc: discLc,
+          discrepancyUsd: discUsd,
+          countBid: gsheetCancellationBookings.length,
+        });
+      }
+      const discrepancySummary = gsheetConsolidatedSummary;
 
       const tidGroups = new Map<string, {
         tid: string; currency: string; discrepancyLc: number; discrepancyUsd: number;
