@@ -865,6 +865,10 @@ function computeReconciliationRows(
     const differenceLc = ho.netPrice - spNetInHo;
     const differencePct = ho.netPrice !== 0 ? differenceLc / ho.netPrice : null;
     
+    if (bookingId === "30194360") {
+      console.log(`[DEBUG BID 30194360] hoNet=${ho.netPrice}, spNetOriginal=${spNetOriginal}, spNetInHo=${spNetInHo}, fxRateUsed=${fxRateUsed}, sameCurrency=${sameCurrency}, differenceLc=${differenceLc}, differencePct=${differencePct}, spCurrency=${spCurrency}, hoCurrency=${ho.currency}, bookingStatus=${ho.bookingStatus}, cancellable=${ho.cancellable}, hoReason=${ho.hoReason}`);
+    }
+    
     // STEP I: Convert to USD
     const hoRate = usdToCcy[ho.currency] || 1;
     const differenceUsd = differenceLc / hoRate;
