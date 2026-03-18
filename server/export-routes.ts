@@ -365,6 +365,7 @@ export function registerExportRoutes(app: Express) {
       
       for (const [reason, rows] of Array.from(tidByReason.entries())) {
         if (rows.length === 0) continue;
+        if (cancellationReasons.includes(reason)) continue;
         
         XLSX.utils.sheet_add_aoa(discrepancySheet, [[`${reason.toUpperCase()} ANALYSIS`]], { origin: { r: currentRow, c: 0 } });
         const reasonHeaderCell = XLSX.utils.encode_cell({ r: currentRow, c: 0 });
@@ -1845,6 +1846,7 @@ export function registerExportRoutes(app: Express) {
       }
 
       for (const [reason, groups] of Array.from(tidByReason.entries())) {
+        if (gsheetCancellationReasons.includes(reason)) continue;
         discrepancyData.push([`${reason.toUpperCase()} ANALYSIS`]);
         
         const isMtb = reason.toLowerCase().includes("multiple") || reason === "MTB";
