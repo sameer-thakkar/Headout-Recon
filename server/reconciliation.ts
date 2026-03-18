@@ -775,9 +775,8 @@ function getDriTeam(
   const isVendorApi = fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api" || fm === "vendor_api";
   const isVendorRequest = fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request" || fm === "vendor_request";
   
-  // MTB (Multiple Tickets Booked) and Cancelled-SP error - based on fulfillment method only
-  // Cancelled-SP error uses the same DRI logic as MTB
-  if (reason === "Multiple Tickets Booked" || reason === "Cancelled-SP error") {
+  // MTB, Cancelled-SP error, Cancelled-Check for Charge loss - based on fulfillment method only
+  if (reason === "Multiple Tickets Booked" || reason === "Cancelled-SP error" || reason === "Cancelled-Check for Charge loss") {
     if (isFreesale) return "Tech";
     if (isManual) return "Reservation Ops";
     if (isSelenium) return "Selenium";
@@ -797,14 +796,9 @@ function getDriTeam(
     return "Finance";
   }
   
-  // Cancelled-Insured Booking and Cancelled-DSS policy - no action needed, informational only
-  if (reason === "Cancelled-Insured Booking" || reason === "Cancelled-DSS policy") {
+  // Cancelled-Insured Booking, Cancelled-DSS policy, Cancelled-OK, Cancelled-Refund OK - no action needed
+  if (reason === "Cancelled-Insured Booking" || reason === "Cancelled-DSS policy" || reason === "Cancelled-OK" || reason === "Cancelled-Refund OK") {
     return "N/A";
-  }
-  
-  // Cancelled-Check for Charge loss - needs review by Biz Ops
-  if (reason === "Cancelled-Check for Charge loss") {
-    return "Biz Ops";
   }
   
   // NPD (Net Price Discrepancy) - based on fulfillment method and price sync
