@@ -27,7 +27,7 @@ function deriveDriTeamForBreakup(reason: string, fm: string): string {
     if (isFreesale || isManual) return "Biz Ops";
     if (isSelenium) return "Selenium";
     if (isPrePurchase) return "Inventory Ops";
-    if (isVendorApi) return "Biz Ops";
+    if (isVendorApi) return "Inventory Ops";
     if (isVendorRequest) return "Tech";
     return "Unknown";
   }

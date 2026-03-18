@@ -808,8 +808,8 @@ function getDriTeam(
     if (isSelenium) return "Selenium";
     if (isPrePurchase) return "Inventory Ops";
     if (isVendorApi) {
-      if (ps === "yes") return "Inventory Ops";
-      return "Biz Ops"; // No or blank
+      if (ps === "yes") return "Biz Ops";
+      return "Inventory Ops"; // No or blank
     }
     if (isVendorRequest) return "Tech";
     return "Unknown";
