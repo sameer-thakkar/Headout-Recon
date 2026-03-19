@@ -83,7 +83,7 @@ export function registerExportRoutes(app: Express) {
           countBid: cancellationBookings.length,
         });
       }
-      type CancellationBreakupRow = { cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; count: number; startDate: string; endDate: string; totalBids: number; driTeam: string; fulfillmentMethod: string; discrepancyLc: number; discrepancyUsd: number };
+      type CancellationBreakupRow = { cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; count: number; startDate: string; endDate: string; totalBids: number; driTeam: string; fulfillmentMethod: string; discrepancyLc: number; discrepancyUsd: number; tidConcentration: string };
       const cancellationBreakup: CancellationBreakupRow[] = [];
       if (cancellationBookings.length > 0) {
         const usdToCcyBreakup = result.fx?.usdToCcy || {};
@@ -106,7 +106,7 @@ export function registerExportRoutes(app: Express) {
           if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
           return 0;
         };
-        const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
+        const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; cancellable: string; spNetSign: string; cancellationInsurance: string; chargedLoss: string; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; tidCounts: Map<string, number>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
         for (const b of cancellationBookings) {
           const cancellableVal = canonicalize(b.cancellable, "Missing");
           const spSign = b.spNetInHo > 0 ? ">0" : b.spNetInHo === 0 ? "=0" : "<0";
@@ -124,13 +124,17 @@ export function registerExportRoutes(app: Express) {
             const dri = deriveDriTeamForBreakup(b.reason, subFm);
             const key = `${cancellableVal}|${spSign}|${insVal}|${clVal}|${b.reason}|${subFm}|${dri}`;
             if (!groups.has(key)) {
-              groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
+              groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, cancellable: cancellableVal, spNetSign: spSign, cancellationInsurance: insVal, chargedLoss: clVal, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), tidCounts: new Map(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
             }
             const g = groups.get(key)!;
             g.count++;
             g.discrepancyLc += discLc;
             g.discrepancyUsd += discUsd;
-            if (b.tid) g.tids.add(String(b.tid));
+            if (b.tid) {
+              const tidStr = String(b.tid);
+              g.tids.add(tidStr);
+              g.tidCounts.set(tidStr, (g.tidCounts.get(tidStr) || 0) + 1);
+            }
             if (ts > 0) {
               if (ts < g.minDateTs) { g.minDateTs = ts; g.minDate = formatDateValue(d!); }
               if (ts > g.maxDateTs) { g.maxDateTs = ts; g.maxDate = formatDateValue(d!); }
@@ -148,12 +152,19 @@ export function registerExportRoutes(app: Express) {
             if (g.maxDateTs !== -Infinity && ts > g.maxDateTs) return false;
             return true;
           }).length;
+          const tidConcentration = g.count > 0
+            ? Array.from(g.tidCounts.entries())
+                .filter(([, cnt]) => cnt / g.count > 0.25)
+                .map(([tid]) => tid)
+                .join(", ")
+            : "";
           cancellationBreakup.push({
             cancellable: g.cancellable, spNetSign: g.spNetSign, cancellationInsurance: g.cancellationInsurance,
             chargedLoss: g.chargedLoss, result: g.result, count: g.count,
             startDate: g.minDate, endDate: g.maxDate, totalBids,
             driTeam: g.driTeam, fulfillmentMethod: g.fulfillmentMethod,
             discrepancyLc: g.discrepancyLc, discrepancyUsd: g.discrepancyUsd,
+            tidConcentration,
           });
         }
       }
@@ -429,10 +440,10 @@ export function registerExportRoutes(app: Express) {
         discrepancySheet[breakupTitleCell].s = { font: { bold: true, sz: 12 } };
         currentRow += 1;
 
-        const breakupHeaders = ["Cancellable", "SP Net", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "BID Count", "Start Date", "End Date", "Total BIDs", "DRI Team", "Fulfillment Method", "Discrepancy (LC)", "Discrepancy (USD)"];
+        const breakupHeaders = ["Cancellable", "SP Net", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "BID Count", "Start Date", "End Date", "Total BIDs", "DRI Team", "Fulfillment Method", "Discrepancy (LC)", "Discrepancy (USD)", "TID Concentration"];
         XLSX.utils.sheet_add_aoa(discrepancySheet, [breakupHeaders], { origin: { r: currentRow, c: 0 } });
         const breakupData = cancellationBreakup.map(g => [
-          g.cancellable, g.spNetSign, g.cancellationInsurance, g.chargedLoss, g.result, g.count, g.startDate, g.endDate, g.totalBids, g.driTeam, g.fulfillmentMethod, g.discrepancyLc, g.discrepancyUsd
+          g.cancellable, g.spNetSign, g.cancellationInsurance, g.chargedLoss, g.result, g.count, g.startDate, g.endDate, g.totalBids, g.driTeam, g.fulfillmentMethod, g.discrepancyLc, g.discrepancyUsd, g.tidConcentration
         ]);
         XLSX.utils.sheet_add_aoa(discrepancySheet, breakupData, { origin: { r: currentRow + 1, c: 0 } });
         applyTableStyles(discrepancySheet, currentRow, 0, cancellationBreakup.length + 1, breakupHeaders.length, breakupHeaders);
@@ -473,6 +484,7 @@ export function registerExportRoutes(app: Express) {
       
       const maxColCount = Math.max(
         summaryHeaders.length,
+        14, // cancellation breakup has 14 columns (including TID Concentration)
         ...Array.from(tidByReason.values()).map(rows => rows.length > 0 ? getColumnsForReason(rows[0]["Reason"] as string).length : 0)
       );
       discrepancySheet["!cols"] = Array(maxColCount).fill(null).map((_: any, i: number) => {
