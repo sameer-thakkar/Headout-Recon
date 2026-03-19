@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  ChevronRight, ChevronDown, FileDown, ArrowLeft, ArrowRight,
-  AlertTriangle, XCircle, CheckCircle2, Flag, Search, TrendingUp, TrendingDown,
-  Calculator, Check, Gavel, FileWarning, Sparkles, Eye, X as XIcon,
-  ChevronUp, CircleDot, Circle, BarChart3, Info
+  ChevronRight, ChevronDown, FileDown, ArrowLeft,
+  AlertTriangle, XCircle, CheckCircle2, Search, TrendingUp, TrendingDown,
+  Calculator, Check, Gavel, FileWarning, Sparkles, X as XIcon,
+  BarChart3, PanelTopClose, PanelTop
 } from "lucide-react";
 
 const MOCK_SUMMARY = [
@@ -31,27 +31,27 @@ interface TidData {
   timesCharged?: string; driTeam?: string;
   startDate?: string; endDate?: string;
   bidCountWithDisc?: number; bidCountInDuration?: number;
-  insight?: string;
+  totalBids?: number;
 }
 
 const MOCK_TIDS_NPD: TidData[] = [
-  { tid: "TID-90234", spNet: 5_200.00, hoNet: 4_850.00, discLc: 350.00, discUsd: 379.40, bidCount: 6, fm: "FMTC", experience: "Sagrada Familia Guided Tour", hasPax: true, resolved: false,
-    hoTakeRate: 18.5, actualTakeRate: 12.3, discPercent: "-6.2%", soldAtLoss: false, lossUsd: 0, startDate: "01/01/2026", endDate: "31/01/2026", bidCountWithDisc: 5, bidCountInDuration: 6, insight: "Take Rate Compressed" },
-  { tid: "TID-90456", spNet: 18_400.00, hoNet: 12_300.00, discLc: 6_100.00, discUsd: 6_612.40, bidCount: 12, fm: "FMTC", experience: "Park Güell Skip-the-Line", hasPax: true, resolved: false,
-    hoTakeRate: 20.0, actualTakeRate: -3.2, discPercent: "-23.2%", soldAtLoss: true, lossUsd: 2_450.00, startDate: "05/01/2026", endDate: "28/01/2026", bidCountWithDisc: 12, bidCountInDuration: 12, insight: "Sold at Loss" },
-  { tid: "TID-90789", spNet: 8_900.00, hoNet: 3_900.00, discLc: 5_000.75, discUsd: 5_420.81, bidCount: 7, fm: "FMTB", experience: "Casa Batlló Night Experience", hasPax: false, resolved: false,
-    hoTakeRate: 15.0, actualTakeRate: 10.8, discPercent: "-4.2%", soldAtLoss: false, lossUsd: 0, startDate: "10/01/2026", endDate: "25/01/2026", bidCountWithDisc: 6, bidCountInDuration: 7, insight: "Pax Price Changed" },
-  { tid: "TID-91012", spNet: 3_100.00, hoNet: 2_100.00, discLc: 1_000.00, discUsd: 1_084.00, bidCount: 3, fm: "FMTC", experience: "Montserrat Day Trip", hasPax: false, resolved: false,
-    hoTakeRate: 22.0, actualTakeRate: 18.5, discPercent: "-3.5%", soldAtLoss: false, lossUsd: 0, startDate: "15/01/2026", endDate: "20/01/2026", bidCountWithDisc: 3, bidCountInDuration: 3, insight: "Rate Shift Detected" },
+  { tid: "TID-90234", spNet: 5_200.00, hoNet: 4_850.00, discLc: 350.00, discUsd: 379.40, bidCount: 6, fm: "Freesale", experience: "Sagrada Familia Guided Tour", hasPax: true, resolved: false,
+    hoTakeRate: 18.5, actualTakeRate: 12.3, discPercent: "-6.2%", soldAtLoss: false, lossUsd: 0, startDate: "01/01/2026", endDate: "31/01/2026", bidCountWithDisc: 5, bidCountInDuration: 6, totalBids: 6 },
+  { tid: "TID-90456", spNet: 18_400.00, hoNet: 12_300.00, discLc: 6_100.00, discUsd: 6_612.40, bidCount: 12, fm: "Freesale", experience: "Park Güell Skip-the-Line", hasPax: true, resolved: false,
+    hoTakeRate: 20.0, actualTakeRate: -3.2, discPercent: "-23.2%", soldAtLoss: true, lossUsd: 2_450.00, startDate: "05/01/2026", endDate: "28/01/2026", bidCountWithDisc: 12, bidCountInDuration: 12, totalBids: 12 },
+  { tid: "TID-90789", spNet: 8_900.00, hoNet: 3_900.00, discLc: 5_000.75, discUsd: 5_420.81, bidCount: 7, fm: "Manual", experience: "Casa Batlló Night Experience", hasPax: false, resolved: false,
+    hoTakeRate: 15.0, actualTakeRate: 10.8, discPercent: "-4.2%", soldAtLoss: false, lossUsd: 0, startDate: "10/01/2026", endDate: "25/01/2026", bidCountWithDisc: 6, bidCountInDuration: 7, totalBids: 7 },
+  { tid: "TID-91012", spNet: 3_100.00, hoNet: 2_100.00, discLc: 1_000.00, discUsd: 1_084.00, bidCount: 3, fm: "Freesale", experience: "Montserrat Day Trip", hasPax: false, resolved: false,
+    hoTakeRate: 22.0, actualTakeRate: 18.5, discPercent: "-3.5%", soldAtLoss: false, lossUsd: 0, startDate: "15/01/2026", endDate: "20/01/2026", bidCountWithDisc: 3, bidCountInDuration: 3, totalBids: 3 },
 ];
 
 const MOCK_TIDS_MTB: TidData[] = [
-  { tid: "TID-80111", spNet: 2_400.00, hoNet: 1_200.00, discLc: 1_200.00, discUsd: 1_300.80, bidCount: 4, fm: "FMTC", experience: "Colosseum Fast Track", hasPax: false, resolved: false,
-    timesCharged: "2x", driTeam: "Supply", startDate: "03/01/2026", endDate: "18/01/2026", bidCountWithDisc: 4, bidCountInDuration: 4 },
-  { tid: "TID-80222", spNet: 3_600.00, hoNet: 1_200.00, discLc: 2_400.00, discUsd: 2_601.60, bidCount: 6, fm: "FMTB", experience: "Vatican Museums Guided", hasPax: false, resolved: false,
-    timesCharged: "3x", driTeam: "Product", startDate: "01/01/2026", endDate: "28/01/2026", bidCountWithDisc: 6, bidCountInDuration: 6 },
-  { tid: "TID-80333", spNet: 720.00, hoNet: 720.00, discLc: 720.00, discUsd: 780.48, bidCount: 2, fm: "FMTC", experience: "Sistine Chapel Entry", hasPax: false, resolved: false,
-    timesCharged: "2x", driTeam: "Supply", startDate: "12/01/2026", endDate: "15/01/2026", bidCountWithDisc: 2, bidCountInDuration: 2 },
+  { tid: "TID-80111", spNet: 2_400.00, hoNet: 1_200.00, discLc: 1_200.00, discUsd: 1_300.80, bidCount: 4, fm: "Freesale", experience: "Colosseum Fast Track", hasPax: false, resolved: false,
+    timesCharged: "2x", driTeam: "Supply", startDate: "03/01/2026", endDate: "18/01/2026", bidCountWithDisc: 4, bidCountInDuration: 4, totalBids: 8 },
+  { tid: "TID-80222", spNet: 3_600.00, hoNet: 1_200.00, discLc: 2_400.00, discUsd: 2_601.60, bidCount: 6, fm: "Manual", experience: "Vatican Museums Guided", hasPax: false, resolved: false,
+    timesCharged: "3x", driTeam: "Product", startDate: "01/01/2026", endDate: "28/01/2026", bidCountWithDisc: 6, bidCountInDuration: 6, totalBids: 18 },
+  { tid: "TID-80333", spNet: 720.00, hoNet: 720.00, discLc: 720.00, discUsd: 780.48, bidCount: 2, fm: "Freesale", experience: "Sistine Chapel Entry", hasPax: false, resolved: false,
+    timesCharged: "2x", driTeam: "Supply", startDate: "12/01/2026", endDate: "15/01/2026", bidCountWithDisc: 2, bidCountInDuration: 2, totalBids: 4 },
 ];
 
 const MOCK_PAX_ROWS = [
@@ -96,12 +96,15 @@ export function ActionModalWorkspace() {
   const [issueChecked, setIssueChecked] = useState(false);
   const [expandedTid, setExpandedTid] = useState<string | null>(null);
   const [resolvedTids, setResolvedTids] = useState<Set<string>>(new Set());
-  const [showAnalysis, setShowAnalysis] = useState(true);
+  const [analysisOpen, setAnalysisOpen] = useState(true);
+  const [highlightedTid, setHighlightedTid] = useState<string | null>(null);
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({
     "Adult__12/01 - 28/01": "650.00",
     "Adult__01/02 - 15/02": "680.00",
     "Child__12/01 - 15/02": "420.00",
   });
+
+  const actionPanelRef = useRef<HTMLDivElement>(null);
 
   const showFeedback = (msg: string) => {
     setActionFeedback(msg);
@@ -123,6 +126,7 @@ export function ActionModalWorkspace() {
   const reasonData = MOCK_SUMMARY.find(r => r.reason === currentReason);
   const isNPD = (reasonData as any)?.reasonType === "npd";
   const isMTB = (reasonData as any)?.reasonType === "mtb";
+  const hasAnalysis = isNPD || isMTB;
   const currentTids = isNPD ? MOCK_TIDS_NPD : isMTB ? MOCK_TIDS_MTB : MOCK_TIDS_NPD;
   const tidData = currentTids.find(t => t.tid === currentTid);
 
@@ -132,11 +136,22 @@ export function ActionModalWorkspace() {
 
   const resolvedCount = currentTids.filter(t => resolvedTids.has(t.tid)).length;
 
+  const handleAnalysisTidClick = (tid: string) => {
+    setHighlightedTid(tid);
+    setExpandedTid(tid);
+    setTimeout(() => {
+      const el = document.getElementById(`action-tid-${tid}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+    setTimeout(() => setHighlightedTid(null), 3000);
+  };
+
   const openReason = (reason: string) => {
     setDisputeChecked(false);
     setIssueChecked(false);
     setExpandedTid(null);
-    setShowAnalysis(true);
+    setHighlightedTid(null);
+    setAnalysisOpen(true);
     setModalView({ level: "reason", reason });
   };
 
@@ -161,7 +176,6 @@ export function ActionModalWorkspace() {
             <span className="text-sm font-semibold tracking-tight">Reconciliation</span>
             <Badge variant="outline" className="text-xs font-mono">BE-4521 · Musement</Badge>
             <Badge variant="outline" className="text-xs font-mono">EUR</Badge>
-            <Badge variant="outline" className="text-xs">Credit</Badge>
           </div>
           <div className="flex items-center gap-2">
             <DropdownMenu>
@@ -302,11 +316,6 @@ export function ActionModalWorkspace() {
                     <>
                       <Badge variant="secondary" className="text-xs">{reasonData.count} bookings</Badge>
                       <Badge variant="outline" className="text-xs font-mono">{reasonData.currency}</Badge>
-                      {(isNPD || isMTB) && (
-                        <Badge variant="outline" className="text-xs bg-violet-50 text-violet-700 border-violet-200">
-                          <BarChart3 className="h-3 w-3 mr-1" />{isNPD ? "NPD Analysis" : "MTB Analysis"}
-                        </Badge>
-                      )}
                       {resolvedCount > 0 && (
                         <Badge className="text-xs bg-green-100 text-green-700 hover:bg-green-100">
                           <CheckCircle2 className="h-3 w-3 mr-1" />{resolvedCount}/{currentTids.length} TIDs resolved
@@ -319,97 +328,175 @@ export function ActionModalWorkspace() {
                   )}
                 </div>
                 {modalView.level === "reason" && (
-                  <div className="flex items-center gap-2">
-                    {(isNPD || isMTB) && (
-                      <Button variant={showAnalysis ? "secondary" : "outline"} size="sm" className="h-8 text-xs gap-1.5" onClick={() => setShowAnalysis(!showAnalysis)}>
-                        <BarChart3 className="h-3.5 w-3.5" />
-                        {showAnalysis ? "Hide Analysis" : "Show Analysis"}
-                      </Button>
-                    )}
-                    <div className="relative">
-                      <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input placeholder="Search TIDs..." className="h-8 pl-8 w-48 text-xs" value={tidSearch} onChange={(e) => setTidSearch(e.target.value)} />
-                    </div>
+                  <div className="relative">
+                    <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input placeholder="Search TIDs..." className="h-8 pl-8 w-48 text-xs" value={tidSearch} onChange={(e) => setTidSearch(e.target.value)} />
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto" ref={actionPanelRef}>
 
+              {/* ═══════ REASON LEVEL: Split Analysis + Actions ═══════ */}
               {modalView.level === "reason" && (
-                <div className="p-4 space-y-3">
-                  {isNPD && (
-                    <div className="flex items-start gap-2 px-1 py-2 rounded-md bg-violet-50/60 border border-violet-100">
-                      <Sparkles className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
-                      <div className="text-xs text-violet-800">
-                        <span className="font-medium">Predictive Insight:</span> Consistent margin gap — HO expected 18.2% take rate but actual is 12.8%, a 5.4pp shortfall across {currentTids.length} TIDs.
-                        {currentTids.some(t => t.soldAtLoss) && <span className="text-red-600 font-medium ml-1">⚠ {currentTids.filter(t => t.soldAtLoss).length} TID(s) sold at loss.</span>}
+                <div className="flex flex-col h-full">
+
+                  {/* ——— ANALYSIS PANEL (collapsible top) ——— */}
+                  {hasAnalysis && (
+                    <div className={`flex-shrink-0 border-b ${analysisOpen ? "" : ""}`}>
+                      <div
+                        className="flex items-center justify-between px-4 py-2 bg-violet-50/70 border-b cursor-pointer hover:bg-violet-50 transition-colors"
+                        onClick={() => setAnalysisOpen(!analysisOpen)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4 text-violet-600" />
+                          <span className="text-sm font-semibold text-violet-800">Discrepancy Analysis</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-100 text-violet-700 border-violet-200">
+                            {currentTids.length} TIDs
+                          </Badge>
+                          <span className="text-[11px] text-violet-600">Click a TID to jump to actions ↓</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {analysisOpen ? (
+                            <PanelTopClose className="h-4 w-4 text-violet-500" />
+                          ) : (
+                            <PanelTop className="h-4 w-4 text-violet-500" />
+                          )}
+                        </div>
                       </div>
+
+                      {analysisOpen && (
+                        <div className="max-h-[35vh] overflow-auto bg-white">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="h-8 bg-violet-50/40">
+                                <TableHead className="py-1.5 text-xs pl-4 font-medium">TID</TableHead>
+                                {isNPD && (
+                                  <>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">Disc. USD</TableHead>
+                                    <TableHead className="py-1.5 text-xs font-medium">Fulfilment</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">HO Take Rate</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">Actual Rate</TableHead>
+                                    <TableHead className="py-1.5 text-xs font-medium">Start Date</TableHead>
+                                    <TableHead className="py-1.5 text-xs font-medium">End Date</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">Disc. %</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">BIDs w/ Disc</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">BIDs Duration</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-center font-medium">Sold at Loss</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium pr-4">Loss USD</TableHead>
+                                  </>
+                                )}
+                                {isMTB && (
+                                  <>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">Disc. USD</TableHead>
+                                    <TableHead className="py-1.5 text-xs font-medium">Fulfilment</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-center font-medium">Times Charged</TableHead>
+                                    <TableHead className="py-1.5 text-xs font-medium">Start Date</TableHead>
+                                    <TableHead className="py-1.5 text-xs font-medium">End Date</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">BID Count</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">BID Count Duration</TableHead>
+                                    <TableHead className="py-1.5 text-xs text-right font-medium">Total BIDs</TableHead>
+                                    <TableHead className="py-1.5 text-xs font-medium pr-4">DRI Team</TableHead>
+                                  </>
+                                )}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {currentTids.map((tid) => (
+                                <TableRow
+                                  key={tid.tid}
+                                  className="h-9 cursor-pointer hover:bg-violet-50/60 transition-colors"
+                                  onClick={() => handleAnalysisTidClick(tid.tid)}
+                                >
+                                  <TableCell className="py-1.5 pl-4 font-mono text-sm text-primary font-medium">{tid.tid}</TableCell>
+                                  {isNPD && (
+                                    <>
+                                      <TableCell className={`py-1.5 text-right font-mono text-sm ${tid.discUsd > 0 ? "text-red-600" : ""}`}>{fmt(tid.discUsd)}</TableCell>
+                                      <TableCell className="py-1.5 text-sm">{tid.fm}</TableCell>
+                                      <TableCell className="py-1.5 text-right font-mono text-sm">{tid.hoTakeRate?.toFixed(2)}%</TableCell>
+                                      <TableCell className={`py-1.5 text-right font-mono text-sm ${(tid.actualTakeRate ?? 0) < 0 ? "text-red-600 font-semibold" : ""}`}>{tid.actualTakeRate?.toFixed(2)}%</TableCell>
+                                      <TableCell className="py-1.5 text-sm">{tid.startDate || "—"}</TableCell>
+                                      <TableCell className="py-1.5 text-sm">{tid.endDate || "—"}</TableCell>
+                                      <TableCell className={`py-1.5 text-right font-mono text-sm ${tid.discPercent?.startsWith("-") ? "text-red-600" : ""}`}>{tid.discPercent}</TableCell>
+                                      <TableCell className="py-1.5 text-right text-sm">{tid.bidCountWithDisc}</TableCell>
+                                      <TableCell className="py-1.5 text-right text-sm">{tid.bidCountInDuration}</TableCell>
+                                      <TableCell className="py-1.5 text-center">
+                                        <Badge variant={tid.soldAtLoss ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0">
+                                          {tid.soldAtLoss ? "Yes" : "No"}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell className={`py-1.5 text-right font-mono text-sm pr-4 ${(tid.lossUsd ?? 0) > 0 ? "text-red-600 font-semibold" : ""}`}>
+                                        {tid.lossUsd ? fmt(tid.lossUsd) : "—"}
+                                      </TableCell>
+                                    </>
+                                  )}
+                                  {isMTB && (
+                                    <>
+                                      <TableCell className={`py-1.5 text-right font-mono text-sm ${tid.discUsd > 0 ? "text-red-600" : ""}`}>{fmt(tid.discUsd)}</TableCell>
+                                      <TableCell className="py-1.5 text-sm">{tid.fm}</TableCell>
+                                      <TableCell className="py-1.5 text-center">
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-orange-50 text-orange-700 border-orange-200">{tid.timesCharged}</Badge>
+                                      </TableCell>
+                                      <TableCell className="py-1.5 text-sm">{tid.startDate || "—"}</TableCell>
+                                      <TableCell className="py-1.5 text-sm">{tid.endDate || "—"}</TableCell>
+                                      <TableCell className="py-1.5 text-right text-sm">{tid.bidCountWithDisc}</TableCell>
+                                      <TableCell className="py-1.5 text-right text-sm">{tid.bidCountInDuration}</TableCell>
+                                      <TableCell className="py-1.5 text-right text-sm">{tid.totalBids}</TableCell>
+                                      <TableCell className="py-1.5 pr-4">
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{tid.driTeam}</Badge>
+                                      </TableCell>
+                                    </>
+                                  )}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {isMTB && (
-                    <div className="flex items-start gap-2 px-1 py-2 rounded-md bg-violet-50/60 border border-violet-100">
-                      <Sparkles className="h-4 w-4 text-violet-500 flex-shrink-0 mt-0.5" />
-                      <div className="text-xs text-violet-800">
-                        <span className="font-medium">Predictive Insight:</span> {currentTids.length} TIDs charged multiple times — total overcharge of {fmt(currentTids.reduce((s, t) => s + t.discLc, 0))} EUR. Most common: 2x charge pattern.
+                  {/* ——— ACTION PANEL (bottom, scrollable) ——— */}
+                  <div className="flex-1 overflow-auto p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">Actions</span>
+                        <Badge variant="secondary" className="text-xs">{currentTids.length} TIDs</Badge>
                       </div>
                     </div>
-                  )}
 
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-md border p-2.5 cursor-pointer hover:bg-blue-50/80 transition-colors" onClick={() => setModalView({ level: "reason-spnet", reason: currentReason })}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="h-6 w-6 rounded bg-blue-100 flex items-center justify-center"><TrendingUp className="h-3 w-3 text-blue-600" /></div>
-                        <span className="text-xs font-medium">Set all SP Net</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="rounded-md border p-2.5 cursor-pointer hover:bg-blue-50/80 transition-colors" onClick={() => setModalView({ level: "reason-spnet", reason: currentReason })}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="h-6 w-6 rounded bg-blue-100 flex items-center justify-center"><TrendingUp className="h-3 w-3 text-blue-600" /></div>
+                          <span className="text-xs font-medium">Set all SP Net</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground font-mono">{fmt(currentTids.reduce((s, t) => s + t.spNet, 0))} EUR</p>
                       </div>
-                      <p className="text-[11px] text-muted-foreground font-mono">{fmt(currentTids.reduce((s, t) => s + t.spNet, 0))} EUR</p>
-                    </div>
-                    <div className="rounded-md border p-2.5 cursor-pointer hover:bg-green-50/80 transition-colors" onClick={() => { showFeedback(`All ${reasonData?.count} bookings → HO Net`); currentTids.forEach(t => markResolved(t.tid)); }}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="h-6 w-6 rounded bg-green-100 flex items-center justify-center"><TrendingDown className="h-3 w-3 text-green-600" /></div>
-                        <span className="text-xs font-medium">Set all HO Net</span>
+                      <div className="rounded-md border p-2.5 cursor-pointer hover:bg-green-50/80 transition-colors" onClick={() => { showFeedback(`All ${reasonData?.count} bookings → HO Net`); currentTids.forEach(t => markResolved(t.tid)); }}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="h-6 w-6 rounded bg-green-100 flex items-center justify-center"><TrendingDown className="h-3 w-3 text-green-600" /></div>
+                          <span className="text-xs font-medium">Set all HO Net</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground font-mono">{fmt(currentTids.reduce((s, t) => s + t.hoNet, 0))} EUR</p>
                       </div>
-                      <p className="text-[11px] text-muted-foreground font-mono">{fmt(currentTids.reduce((s, t) => s + t.hoNet, 0))} EUR</p>
-                    </div>
-                    <div className="rounded-md border p-2.5 cursor-pointer hover:bg-amber-50/80 transition-colors" onClick={() => showFeedback("Dispute raised for all TIDs")}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="h-6 w-6 rounded bg-amber-100 flex items-center justify-center"><Gavel className="h-3 w-3 text-amber-600" /></div>
-                        <span className="text-xs font-medium">Dispute All</span>
+                      <div className="rounded-md border p-2.5 cursor-pointer hover:bg-amber-50/80 transition-colors" onClick={() => showFeedback("Dispute raised for all TIDs")}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="h-6 w-6 rounded bg-amber-100 flex items-center justify-center"><Gavel className="h-3 w-3 text-amber-600" /></div>
+                          <span className="text-xs font-medium">Dispute All</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground font-mono">{fmt(Math.abs(reasonData?.discLc || 0))} EUR</p>
                       </div>
-                      <p className="text-[11px] text-muted-foreground font-mono">{fmt(Math.abs(reasonData?.discLc || 0))} EUR</p>
                     </div>
-                  </div>
 
-                  <div className="space-y-0 rounded-md border overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <div className={`grid items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b min-w-[900px] ${
-                        isNPD && showAnalysis ? "grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto]" :
-                        isMTB && showAnalysis ? "grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto]" :
-                        "grid-cols-[auto_1fr_auto_auto_auto_auto_auto]"
-                      }`}>
+                    <div className="space-y-0 rounded-md border overflow-hidden">
+                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
                         <div className="w-5" />
                         <div className="pl-2">TID / Experience</div>
-                        <div className="text-right px-2 w-[90px]">SP Net</div>
-                        <div className="text-right px-2 w-[90px]">HO Net</div>
-                        <div className="text-right px-2 w-[90px]">Disc.</div>
-                        {isNPD && showAnalysis && (
-                          <>
-                            <div className="text-right px-2 w-[70px]">HO Rate</div>
-                            <div className="text-right px-2 w-[70px]">Actual</div>
-                            <div className="text-right px-2 w-[65px]">Disc %</div>
-                            <div className="text-center px-1 w-[55px]">Loss?</div>
-                            <div className="text-right px-2 w-[80px]">Loss USD</div>
-                          </>
-                        )}
-                        {isMTB && showAnalysis && (
-                          <>
-                            <div className="text-center px-2 w-[65px]">Charged</div>
-                            <div className="text-center px-2 w-[80px]">DRI Team</div>
-                            <div className="text-right px-2 w-[60px]">BIDs</div>
-                          </>
-                        )}
+                        <div className="text-right px-3 w-24">SP Net</div>
+                        <div className="text-right px-3 w-24">HO Net</div>
+                        <div className="text-right px-3 w-24">Disc.</div>
                         <div className="text-center px-2 w-14">BIDs</div>
                         <div className="text-right pr-1 w-[170px]">Quick Actions</div>
                       </div>
@@ -417,16 +504,17 @@ export function ActionModalWorkspace() {
                       {filteredTids.map((tid) => {
                         const isExpanded = expandedTid === tid.tid;
                         const isResolved = resolvedTids.has(tid.tid);
+                        const isHighlighted = highlightedTid === tid.tid;
                         const pct = ((tid.discUsd / (reasonData?.discUsd || 1)) * 100).toFixed(0);
 
                         return (
-                          <div key={tid.tid} className={`min-w-[900px] ${isResolved ? "bg-green-50/40" : ""}`}>
+                          <div
+                            key={tid.tid}
+                            id={`action-tid-${tid.tid}`}
+                            className={`transition-all duration-500 ${isResolved ? "bg-green-50/40" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30" : ""}`}
+                          >
                             <div
-                              className={`grid items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""} ${
-                                isNPD && showAnalysis ? "grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto]" :
-                                isMTB && showAnalysis ? "grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto]" :
-                                "grid-cols-[auto_1fr_auto_auto_auto_auto_auto]"
-                              }`}
+                              className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
                               onClick={() => toggleExpand(tid.tid)}
                             >
                               <div className="w-5 flex items-center">
@@ -442,59 +530,15 @@ export function ActionModalWorkspace() {
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
                                   <Badge variant="outline" className="text-[10px] px-1 py-0 flex-shrink-0">{tid.fm}</Badge>
-                                  {tid.insight && showAnalysis && (
-                                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 flex-shrink-0 ${
-                                      tid.insight === "Sold at Loss" ? "bg-red-50 text-red-700 border-red-200" :
-                                      tid.insight === "Take Rate Compressed" ? "bg-amber-50 text-amber-700 border-amber-200" :
-                                      "bg-blue-50 text-blue-700 border-blue-200"
-                                    }`}>
-                                      {tid.insight}
-                                    </Badge>
-                                  )}
                                 </div>
                                 <div className="text-[11px] text-muted-foreground truncate">{tid.experience}</div>
                               </div>
-                              <div className="text-right px-2 w-[90px] font-mono text-sm">{fmt(tid.spNet)}</div>
-                              <div className="text-right px-2 w-[90px] font-mono text-sm">{fmt(tid.hoNet)}</div>
-                              <div className="text-right px-2 w-[90px]">
+                              <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.spNet)}</div>
+                              <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.hoNet)}</div>
+                              <div className="text-right px-3 w-24">
                                 <span className="font-mono text-sm text-red-600">{fmt(tid.discLc)}</span>
                                 <span className="text-[10px] text-muted-foreground ml-0.5">({pct}%)</span>
                               </div>
-
-                              {isNPD && showAnalysis && (
-                                <>
-                                  <div className="text-right px-2 w-[70px] font-mono text-xs">{tid.hoTakeRate?.toFixed(1)}%</div>
-                                  <div className={`text-right px-2 w-[70px] font-mono text-xs ${(tid.actualTakeRate ?? 0) < 0 ? "text-red-600 font-semibold" : ""}`}>
-                                    {tid.actualTakeRate?.toFixed(1)}%
-                                  </div>
-                                  <div className={`text-right px-2 w-[65px] font-mono text-xs ${tid.discPercent?.startsWith("-") ? "text-red-600" : ""}`}>
-                                    {tid.discPercent}
-                                  </div>
-                                  <div className="text-center px-1 w-[55px]">
-                                    {tid.soldAtLoss ? (
-                                      <Badge variant="destructive" className="text-[9px] px-1 py-0">Yes</Badge>
-                                    ) : (
-                                      <span className="text-[10px] text-muted-foreground">No</span>
-                                    )}
-                                  </div>
-                                  <div className={`text-right px-2 w-[80px] font-mono text-xs ${(tid.lossUsd ?? 0) > 0 ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
-                                    {tid.lossUsd ? fmt(tid.lossUsd) : "—"}
-                                  </div>
-                                </>
-                              )}
-
-                              {isMTB && showAnalysis && (
-                                <>
-                                  <div className="text-center px-2 w-[65px]">
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-orange-50 text-orange-700 border-orange-200">{tid.timesCharged}</Badge>
-                                  </div>
-                                  <div className="text-center px-2 w-[80px]">
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{tid.driTeam}</Badge>
-                                  </div>
-                                  <div className="text-right px-2 w-[60px] text-xs font-mono">{tid.bidCountWithDisc}</div>
-                                </>
-                              )}
-
                               <div className="text-center px-2 w-14 text-sm">{tid.bidCount}</div>
                               <div className="w-[170px] flex items-center justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
                                 <Tooltip>
@@ -549,68 +593,6 @@ export function ActionModalWorkspace() {
 
                             {isExpanded && (
                               <div className="border-b bg-muted/10 px-4 py-3 space-y-3">
-                                {showAnalysis && (isNPD || isMTB) && (
-                                  <div className="rounded-md border bg-gradient-to-r from-violet-50/80 to-blue-50/50 px-3 py-2.5">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <BarChart3 className="h-3.5 w-3.5 text-violet-600" />
-                                      <span className="text-xs font-semibold text-violet-800">Analysis Details</span>
-                                    </div>
-                                    <div className="grid grid-cols-4 gap-3 text-xs">
-                                      {isNPD && (
-                                        <>
-                                          <div>
-                                            <span className="text-muted-foreground">HO Take Rate:</span>
-                                            <span className="font-mono font-medium ml-1">{tid.hoTakeRate?.toFixed(1)}%</span>
-                                          </div>
-                                          <div>
-                                            <span className="text-muted-foreground">Actual Rate:</span>
-                                            <span className={`font-mono font-medium ml-1 ${(tid.actualTakeRate ?? 0) < 0 ? "text-red-600" : ""}`}>{tid.actualTakeRate?.toFixed(1)}%</span>
-                                          </div>
-                                          <div>
-                                            <span className="text-muted-foreground">Period:</span>
-                                            <span className="font-mono ml-1">{tid.startDate} — {tid.endDate}</span>
-                                          </div>
-                                          <div>
-                                            <span className="text-muted-foreground">BIDs w/ Disc:</span>
-                                            <span className="font-mono font-medium ml-1">{tid.bidCountWithDisc} / {tid.bidCountInDuration}</span>
-                                          </div>
-                                        </>
-                                      )}
-                                      {isMTB && (
-                                        <>
-                                          <div>
-                                            <span className="text-muted-foreground">Times Charged:</span>
-                                            <span className="font-mono font-medium ml-1">{tid.timesCharged}</span>
-                                          </div>
-                                          <div>
-                                            <span className="text-muted-foreground">DRI Team:</span>
-                                            <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">{tid.driTeam}</Badge>
-                                          </div>
-                                          <div>
-                                            <span className="text-muted-foreground">Period:</span>
-                                            <span className="font-mono ml-1">{tid.startDate} — {tid.endDate}</span>
-                                          </div>
-                                          <div>
-                                            <span className="text-muted-foreground">BIDs:</span>
-                                            <span className="font-mono font-medium ml-1">{tid.bidCountWithDisc} / {tid.bidCountInDuration}</span>
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                    {tid.insight && (
-                                      <div className="mt-2 pt-2 border-t border-violet-200/50 flex items-center gap-1.5">
-                                        <Sparkles className="h-3 w-3 text-violet-500" />
-                                        <span className="text-[11px] text-violet-700">
-                                          {tid.insight === "Sold at Loss" && "SP cost exceeds selling price — negative actual take rate indicates systematic loss."}
-                                          {tid.insight === "Take Rate Compressed" && "HO expected higher margin but actual rate is lower — likely a rate configuration mismatch."}
-                                          {tid.insight === "Pax Price Changed" && "Unit price shifted during the period — HO and SP may reference different rate cards."}
-                                          {tid.insight === "Rate Shift Detected" && "Discrepancy pattern changes sharply mid-period — a rate update may have been applied."}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
                                 <div className="rounded-md border overflow-hidden bg-background">
                                   <div className="grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
                                     <div>Booking ID</div>
@@ -654,6 +636,7 @@ export function ActionModalWorkspace() {
                 </div>
               )}
 
+              {/* ═══════ REASON-LEVEL SP NET CONFIRM ═══════ */}
               {modalView.level === "reason-spnet" && (
                 <div className="p-4 space-y-3">
                   <div className="rounded-md border overflow-hidden">
@@ -702,6 +685,7 @@ export function ActionModalWorkspace() {
                 </div>
               )}
 
+              {/* ═══════ TID SP NET CONFIRM ═══════ */}
               {modalView.level === "tid-spnet" && tidData && (
                 <div className="p-4 space-y-3">
                   <div className="rounded-md border overflow-hidden">
@@ -749,6 +733,7 @@ export function ActionModalWorkspace() {
                 </div>
               )}
 
+              {/* ═══════ TID PAX PRICING ═══════ */}
               {modalView.level === "tid-pax" && tidData && (
                 <div className="p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3 text-xs">
