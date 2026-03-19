@@ -22,6 +22,15 @@ const CANCELLATION_ACTION_POINTS: Record<string, string> = {
   "Cancelled-Check for Charge loss": "Raise this with RO why this is not marked as Charge loss TRUE",
 };
 
+const CANCELLATION_SORT_ORDER: Record<string, number> = {
+  "Cancelled-SP error":              0,
+  "Cancelled-Check for Charge loss": 1,
+  "Cancelled-DSS policy":            2,
+  "Cancelled-OK":                    3,
+};
+const cancellationSortKey = (result: string): number =>
+  CANCELLATION_SORT_ORDER[result] ?? 99;
+
 function deriveDriTeamForBreakup(reason: string, fm: string): string {
   const f = fm.toLowerCase().trim();
   const isFreesale = f === "freesale";
@@ -185,6 +194,7 @@ export function registerExportRoutes(app: Express) {
             tidConcentration,
           });
         }
+        cancellationBreakup.sort((a, b) => cancellationSortKey(a.result) - cancellationSortKey(b.result));
       }
 
       const discrepancySummary = consolidatedSummary.map((row: any) => ({
@@ -1915,6 +1925,7 @@ export function registerExportRoutes(app: Express) {
             tidConcentration: gsTidConcentration,
           });
         }
+        gsheetCancellationBreakup.sort((a, b) => cancellationSortKey(a.result) - cancellationSortKey(b.result));
       }
 
       const discrepancySummary = gsheetConsolidatedSummary;
