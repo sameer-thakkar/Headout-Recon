@@ -718,6 +718,64 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
   );
 });
 
+const CANCELLATION_CONDITIONS: Record<string, {
+  cancellable: string;
+  spNet: string;
+  hoNet: string;
+  cancellationInsurance: string;
+  chargeLoss: string;
+}> = {
+  "Cancelled-OK":                    { cancellable: "Yes / N/A", spNet: "= 0", hoNet: "= 0", cancellationInsurance: "N/A",   chargeLoss: "N/A" },
+  "Cancelled-Refund OK":             { cancellable: "Yes",       spNet: "< 0", hoNet: "= 0", cancellationInsurance: "N/A",   chargeLoss: "N/A" },
+  "Cancelled-SP error":              { cancellable: "Yes",       spNet: "> 0", hoNet: "= 0", cancellationInsurance: "N/A",   chargeLoss: "N/A" },
+  "Cancelled-Insured Booking":       { cancellable: "No",        spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "Yes",   chargeLoss: "N/A" },
+  "Cancelled-DSS policy":            { cancellable: "No",        spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",    chargeLoss: "Yes" },
+  "Cancelled-Check for Charge loss": { cancellable: "No",        spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",    chargeLoss: "No"  },
+};
+
+const CANCELLATION_ACTION_POINTS: Record<string, string> = {
+  "Cancelled-OK":                    "No action needed",
+  "Cancelled-Refund OK":             "No action needed",
+  "Cancelled-SP error":              "Raise debit note to SP",
+  "Cancelled-Insured Booking":       "Claim from insurance",
+  "Cancelled-DSS policy":            "Covered under DSS policy",
+  "Cancelled-Check for Charge loss": "Verify charge loss; raise debit note if applicable",
+};
+
+const CANCELLATION_FULFILLMENT_SPLIT = new Set(["Cancelled-SP error", "Cancelled-Check for Charge loss"]);
+
+function getCancellationDriTeam(reason: string, fulfillmentMethod: string): string {
+  const noAction = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-Insured Booking", "Cancelled-DSS policy"];
+  if (noAction.includes(reason)) return "N/A";
+  const fm = fulfillmentMethod.toLowerCase();
+  if (fm === "freesale" || fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api" || fm === "vendor_api" || fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request" || fm === "vendor_request") return "Tech";
+  if (fm === "manual") return "Reservation Ops";
+  if (fm === "selenium") return "Selenium";
+  if (fm === "prepurchase" || fm === "pre-purchase" || fm === "pre_purchase") return "Inventory Ops";
+  return "Unknown";
+}
+
+function formatCancDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch { return dateStr; }
+}
+
+interface CancellationSummaryRow {
+  reason: string;
+  fulfillmentMethod: string;
+  bidCount: number;
+  startDate: string;
+  endDate: string;
+  totalBIDs: number;
+  discrepancyLC: number;
+  discrepancyUSD: number;
+  bookings: BookingForPayable[];
+}
+
 interface AmountPayablePanelProps {
   bookings: BookingForPayable[];
   currency: string;
@@ -1331,21 +1389,79 @@ export function AmountPayablePanel({
     return grouped;
   }, [cancellationBookings]);
 
-  // Group cancellation bookings by reason AND tid
-  const cancellationsByReasonAndTid = useMemo(() => {
-    const result: Record<string, Record<string, BookingForPayable[]>> = {};
-    for (const booking of cancellationBookings) {
-      if (!result[booking.reason]) {
-        result[booking.reason] = {};
+  // Cancellation summary flat table rows
+  const cancellationSummaryRows = useMemo((): CancellationSummaryRow[] => {
+    const rows: CancellationSummaryRow[] = [];
+
+    Object.entries(cancellationsByReason).forEach(([reason, bkgs]) => {
+      if (CANCELLATION_FULFILLMENT_SPLIT.has(reason)) {
+        const byFm = new Map<string, BookingForPayable[]>();
+        for (const b of bkgs) {
+          const row = allRows.find(r => r.bookingId === b.bookingId);
+          const fm = row?.fulfillmentMethod || "Unknown";
+          if (!byFm.has(fm)) byFm.set(fm, []);
+          byFm.get(fm)!.push(b);
+        }
+        byFm.forEach((fmBookings, fm) => {
+          const dates = fmBookings.map(b => {
+            const r = allRows.find(r => r.bookingId === b.bookingId);
+            return b.experienceDate || r?.experienceDate || b.bookingCreationDate || r?.bookingCreationDate || "";
+          }).filter(Boolean).sort();
+          const discLC = fmBookings.reduce((s, b) => s + (b.hoNet - b.spNet), 0);
+          const discUSD = fmBookings.reduce((s, b) => {
+            const r = allRows.find(row => row.bookingId === b.bookingId);
+            return s + (r?.differenceUsd ?? (r?.fxRateUsed ? (b.hoNet - b.spNet) / r.fxRateUsed : (b.hoNet - b.spNet)));
+          }, 0);
+          rows.push({
+            reason,
+            fulfillmentMethod: fm,
+            bidCount: fmBookings.length,
+            startDate: dates[0] || "",
+            endDate: dates[dates.length - 1] || "",
+            totalBIDs: fmBookings.length,
+            discrepancyLC: discLC,
+            discrepancyUSD: discUSD,
+            bookings: fmBookings,
+          });
+        });
+      } else {
+        const fmSet = new Set<string>();
+        for (const b of bkgs) {
+          const row = allRows.find(r => r.bookingId === b.bookingId);
+          if (row?.fulfillmentMethod) fmSet.add(row.fulfillmentMethod);
+        }
+        const dates = bkgs.map(b => {
+          const r = allRows.find(r => r.bookingId === b.bookingId);
+          return b.experienceDate || r?.experienceDate || b.bookingCreationDate || r?.bookingCreationDate || "";
+        }).filter(Boolean).sort();
+        const discLC = bkgs.reduce((s, b) => s + (b.hoNet - b.spNet), 0);
+        const discUSD = bkgs.reduce((s, b) => {
+          const r = allRows.find(row => row.bookingId === b.bookingId);
+          return s + (r?.differenceUsd ?? (r?.fxRateUsed ? (b.hoNet - b.spNet) / r.fxRateUsed : (b.hoNet - b.spNet)));
+        }, 0);
+        rows.push({
+          reason,
+          fulfillmentMethod: fmSet.size > 0 ? Array.from(fmSet).join(", ") : "—",
+          bidCount: bkgs.length,
+          startDate: dates[0] || "",
+          endDate: dates[dates.length - 1] || "",
+          totalBIDs: bkgs.length,
+          discrepancyLC: discLC,
+          discrepancyUSD: discUSD,
+          bookings: bkgs,
+        });
       }
-      const tid = booking.tid || booking.bookingId;
-      if (!result[booking.reason][tid]) {
-        result[booking.reason][tid] = [];
-      }
-      result[booking.reason][tid].push(booking);
-    }
-    return result;
-  }, [cancellationBookings]);
+    });
+
+    const ORDER = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-SP error", "Cancelled-Insured Booking", "Cancelled-DSS policy", "Cancelled-Check for Charge loss"];
+    rows.sort((a, b) => {
+      const ai = ORDER.indexOf(a.reason);
+      const bi = ORDER.indexOf(b.reason);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    return rows;
+  }, [cancellationsByReason, allRows]);
 
   // Secondary Vendor bookings - using isSecondaryVendor flag
   const secondaryVendorBookings = useMemo(() => {
@@ -3164,231 +3280,95 @@ export function AmountPayablePanel({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <div className="space-y-2 p-3 border-t">
-                    {Object.entries(cancellationsByReasonAndTid).map(([reason, tidGroups]) => {
-                      const reasonBookings = cancellationsByReason[reason] || [];
-                      const reasonTotal = reasonBookings.reduce((sum, b) => {
-                        const netType = localSelections[b.bookingId] || "sp";
-                        const pricePayable = netType === "ho" ? b.hoNet : b.spNet;
-                        return sum + pricePayable;
-                      }, 0);
-                      const displayName = reason.replace("Cancelled-", "");
+                  <div className="p-3 border-t overflow-x-auto">
+                    <Table className="text-xs w-full min-w-[1100px]">
+                      <TableHeader>
+                        <TableRow className="h-8 bg-muted/30">
+                          <TableHead className="py-1 text-xs font-semibold">Sub Category</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center">Cancellable</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center">SP Net</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center">HO Net</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center">Canc. Insurance</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center">Charge Loss</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold">Result</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold">Action Point</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold">DRI Team</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold">Fulfillment</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right">BID Count</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center">Start Date</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center">End Date</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right">Total BIDs</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right">Disc. ({currency})</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right">Disc. (USD)</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cancellationSummaryRows.map((row, idx) => {
+                          const cond = CANCELLATION_CONDITIONS[row.reason];
+                          const actionPoint = CANCELLATION_ACTION_POINTS[row.reason] || "—";
+                          const driTeam = getCancellationDriTeam(row.reason, row.fulfillmentMethod);
+                          const displayName = row.reason.replace("Cancelled-", "");
+                          const isNoAction = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-Insured Booking", "Cancelled-DSS policy"].includes(row.reason);
+                          const isDebitNote = row.reason === "Cancelled-SP error";
 
-                      return (
-                        <Collapsible
-                          key={reason}
-                          open={expandedReasons.has(reason)}
-                          onOpenChange={() => toggleReason(reason)}
-                        >
-                          <div className="border rounded-lg overflow-hidden">
-                            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/20 items-center">
-                              <div className="col-span-4 flex items-center gap-2">
-                                <CollapsibleTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6">
-                                    {expandedReasons.has(reason) ? (
-                                      <ChevronDown className="h-4 w-4" />
-                                    ) : (
-                                      <ChevronRight className="h-4 w-4" />
-                                    )}
+                          return (
+                            <TableRow key={`${row.reason}-${row.fulfillmentMethod}-${idx}`} className="h-8 hover:bg-muted/20">
+                              <TableCell className="py-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-medium text-xs">{displayName}</span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary"
+                                    onClick={() => reasonModalRef.current?.open(row.reason, "cancellation")}
+                                    data-testid={`button-manage-cancellation-${row.reason}-${row.fulfillmentMethod}`}
+                                  >
+                                    <Settings className="h-2.5 w-2.5 mr-0.5" />
+                                    Manage
                                   </Button>
-                                </CollapsibleTrigger>
-                                <Button
-                                  variant="ghost"
-                                  className="p-0 h-auto font-semibold text-sm hover:text-primary hover:bg-transparent"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedReasonModal(reason);
-                                  }}
-                                  data-testid={`button-view-reason-${reason}`}
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellable ?? "—"}</TableCell>
+                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.spNet ?? "—"}</TableCell>
+                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.hoNet ?? "—"}</TableCell>
+                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellationInsurance ?? "—"}</TableCell>
+                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.chargeLoss ?? "—"}</TableCell>
+                              <TableCell className="py-1">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1.5 ${isNoAction ? "border-green-500 text-green-700 dark:text-green-400" : isDebitNote ? "border-orange-500 text-orange-700 dark:text-orange-400" : "border-blue-500 text-blue-700 dark:text-blue-400"}`}
                                 >
                                   {displayName}
-                                  <Eye className="h-3 w-3 ml-1 opacity-50" />
-                                </Button>
-                                <Badge variant="secondary" className="text-xs">
-                                  {reasonBookings.length}
                                 </Badge>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-xs"
-                                  onClick={(e) => { e.stopPropagation(); reasonModalRef.current?.open(reason, "cancellation"); }}
-                                  data-testid={`button-manage-cancellation-${reason}`}
-                                >
-                                  <Settings className="h-3 w-3 mr-1" />
-                                  Manage
-                                </Button>
-                              </div>
-                              <div className="col-span-8 text-right font-mono text-sm font-semibold">
-                                {formatCurrency(reasonTotal)} {currency}
-                              </div>
-                            </div>
-
-                            <CollapsibleContent>
-                              <div className="max-h-80 overflow-y-auto space-y-1.5 p-1.5">
-                                {Object.entries(tidGroups).map(([tid, tidBookings]) => {
-                                  const tidKeyStr = `${reason}:${tid}`;
-                                  const isTidExpanded = expandedTids.has(tidKeyStr);
-
-                                  return (
-                                    <div key={tid} className="border-t first:border-t-0">
-                                      <div
-                                        className="flex items-center justify-between px-2 py-1 cursor-pointer hover:bg-muted/40 transition-colors"
-                                        onClick={() => toggleTid(tidKeyStr)}
-                                      >
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                          {isTidExpanded ? <ChevronDown className="h-3 w-3 text-primary shrink-0" /> : <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
-                                          <span className="font-mono text-xs shrink-0">{tid}</span>
-                                          <span className="font-mono text-xs text-muted-foreground shrink-0">({tidBookings.length})</span>
-                                          {(() => { const en = tidBookings.find(b => b.experienceName)?.experienceName; return en ? <span className="font-mono text-xs truncate max-w-[750px]" title={en}>· {en}</span> : null; })()}
-                                          {isTidFullyActioned(tidBookings) && (
-                                            <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" data-testid={`tid-actioned-${tid}`} />
-                                          )}
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
-                                            onClick={() => unifiedTidModalRef.current?.open(tidBookings, tid, reason)}
-                                            data-testid={`btn-update-fnp-${tid}`}
-                                            title="Manage TID"
-                                          >
-                                            <Pencil className="h-2.5 w-2.5" />
-                                          </Button>
-                                          {(() => { const hoT = tidBookings.reduce((s, b) => s + b.hoNet, 0); const spT = tidBookings.reduce((s, b) => s + b.spNet, 0); const pct = hoT !== 0 ? ((hoT - spT) / hoT) * 100 : null; return pct !== null ? <span className="font-mono text-xs text-muted-foreground">({pct.toFixed(2)}%)</span> : null; })()}
-                                          <span className="font-mono text-amber-600 dark:text-amber-400 text-xs">
-                                            {formatCurrency(tidBookings.reduce((s, b) => s + getFinalNetPrice(b), 0))}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      {isTidExpanded && (
-                                        <div className="px-1 pb-1">
-                                        <Table className="text-xs table-fixed">
-                                          <TableHeader>
-                                            <TableRow className="h-7">
-                                              <TableHead className="py-1 text-xs w-[18%]">Booking ID</TableHead>
-                                              <TableHead className="py-1 text-xs text-right w-[12%]">HO Net</TableHead>
-                                              <TableHead className="py-1 text-xs text-right w-[12%]">SP Net</TableHead>
-                                              <TableHead className="py-1 text-xs text-center w-[12%]">Net</TableHead>
-                                              <TableHead className="py-1 text-xs text-center w-[10%]">Dispute</TableHead>
-                                              <TableHead className="py-1 text-xs text-center w-[15%]">Amt Payable</TableHead>
-                                              <TableHead className="py-1 text-xs text-right w-[13%]">Dispute Amt</TableHead>
-                                              <TableHead className="py-1 text-xs text-right w-[15%]">Price Payable</TableHead>
-                                            </TableRow>
-                                          </TableHeader>
-                                          <TableBody>
-                                          {tidBookings.map((booking) => {
-                                            const netType = localSelections[booking.bookingId] || "sp";
-                                            const pricePayable = netType === "ho" ? booking.hoNet : booking.spNet;
-                                            const disputeAmt = disputeAmounts.get(booking.bookingId) || 0;
-                                            const isDisputed = activeDisputes.has(booking.bookingId);
-                                            const finalNet = pricePayable;
-                                            const canDispute = isBookingDisputable(booking);
-
-                                            return (
-                                              <Fragment key={booking.bookingId}>
-                                                <TableRow className="h-7" data-testid={`booking-row-${booking.bookingId}`}>
-                                                  <TableCell className="py-1 font-mono">{booking.bookingId}</TableCell>
-                                                  <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
-                                                  <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
-                                                  <TableCell className="text-center">
-                                                    <Select
-                                                      value={netType}
-                                                      onValueChange={(v) => {
-                                                        updateSelection(booking.bookingId, v as "ho" | "sp", booking);
-                                                      }}
-                                                    >
-                                                      <SelectTrigger className="w-[4.5rem] h-7 text-sm border-dashed text-muted-foreground mx-auto">
-                                                        <SelectValue />
-                                                      </SelectTrigger>
-                                                      <SelectContent>
-                                                        <SelectItem value="ho">HO</SelectItem>
-                                                        <SelectItem value="sp">SP</SelectItem>
-                                                      </SelectContent>
-                                                    </Select>
-                                                  </TableCell>
-                                                  <TableCell className="text-center">
-                                                    {canDispute ? (
-                                                      <Checkbox
-                                                        checked={isDisputed}
-                                                        onCheckedChange={(checked) => {
-                                                          const newActive = new Set(activeDisputes);
-                                                          if (checked) {
-                                                            newActive.add(booking.bookingId);
-                                                            setDisputeAmounts((prev) => {
-                                                              const updated = new Map(prev);
-                                                              updated.set(booking.bookingId, Math.abs(booking.hoNet - booking.spNet));
-                                                              return updated;
-                                                            });
-                                                          } else {
-                                                            newActive.delete(booking.bookingId);
-                                                            setDisputeAmounts((prev) => {
-                                                              const updated = new Map(prev);
-                                                              updated.delete(booking.bookingId);
-                                                              return updated;
-                                                            });
-                                                          }
-                                                          setActiveDisputes(newActive);
-                                                          setActionedBookings(prev => { const next = new Set(prev); next.add(booking.bookingId); return next; });
-                                                        }}
-                                                        data-testid={`checkbox-dispute-${booking.bookingId}`}
-                                                      />
-                                                    ) : (
-                                                      <span className="text-xs text-muted-foreground">-</span>
-                                                    )}
-                                                  </TableCell>
-                                                  <TableCell className="text-center">
-                                                    <div className="flex justify-center">
-                                                      <Input
-                                                        type="number"
-                                                        step="0.01"
-                                                        value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : (netType === "ho" ? booking.hoNet : booking.spNet))}
-                                                        onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
-                                                        onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                        className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
-                                                        data-testid={`input-total-payable-${booking.bookingId}`}
-                                                      />
-                                                    </div>
-                                                  </TableCell>
-                                                  <TableCell className="text-right">
-                                                    {isDisputed && (
-                                                      <Input
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="w-full h-6 text-xs text-right font-mono"
-                                                        value={disputeAmt || ""}
-                                                        onChange={(e) => {
-                                                          const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
-                                                          setDisputeAmounts((prev) => {
-                                                            const updated = new Map(prev);
-                                                            updated.set(booking.bookingId, val);
-                                                            return updated;
-                                                          });
-                                                        }}
-                                                        data-testid={`input-dispute-${booking.bookingId}`}
-                                                      />
-                                                    )}
-                                                  </TableCell>
-                                                  <TableCell className="text-right font-mono font-semibold">
-                                                    {formatCurrency(finalNet)}
-                                                  </TableCell>
-                                                </TableRow>
-                                              </Fragment>
-                                            );
-                                          })}
-                                          </TableBody>
-                                        </Table>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </CollapsibleContent>
-                          </div>
-                        </Collapsible>
-                      );
-                    })}
+                              </TableCell>
+                              <TableCell className="py-1 text-xs text-muted-foreground max-w-[160px]">
+                                <span title={actionPoint} className="truncate block">{actionPoint}</span>
+                              </TableCell>
+                              <TableCell className="py-1">
+                                {driTeam === "N/A" ? (
+                                  <span className="text-xs text-muted-foreground">N/A</span>
+                                ) : (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5">{driTeam}</Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="py-1 text-xs text-muted-foreground max-w-[120px]">
+                                <span title={row.fulfillmentMethod} className="truncate block">{row.fulfillmentMethod}</span>
+                              </TableCell>
+                              <TableCell className="py-1 text-right font-mono">{row.bidCount}</TableCell>
+                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.startDate)}</TableCell>
+                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.endDate)}</TableCell>
+                              <TableCell className="py-1 text-right font-mono">{row.totalBIDs}</TableCell>
+                              <TableCell className={`py-1 text-right font-mono font-semibold ${row.discrepancyLC > 0 ? "text-green-700 dark:text-green-400" : row.discrepancyLC < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                                {row.discrepancyLC > 0 ? "+" : ""}{formatCurrency(row.discrepancyLC)}
+                              </TableCell>
+                              <TableCell className={`py-1 text-right font-mono ${row.discrepancyUSD > 0 ? "text-green-700 dark:text-green-400" : row.discrepancyUSD < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                                {row.discrepancyUSD > 0 ? "+" : ""}{formatCurrency(row.discrepancyUSD)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
                   </div>
                 </CollapsibleContent>
               </div>
