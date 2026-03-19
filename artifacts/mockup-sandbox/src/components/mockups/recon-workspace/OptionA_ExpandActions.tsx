@@ -57,6 +57,7 @@ export function OptionA_ExpandActions() {
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
   const [selectedTids, setSelectedTids] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
+  const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
 
   const flash = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(null), 2500); };
   const resolve = (tid: string) => setResolvedTids(prev => new Set(prev).add(tid));
@@ -90,8 +91,11 @@ export function OptionA_ExpandActions() {
     setTimeout(() => setHighlightedTid(null), 3000);
   };
 
+  const getBulkTids = () => bulkScope === "all" ? TIDS.map(t => t.tid) : Array.from(selectedTids);
+  const getBulkTidData = () => bulkScope === "all" ? TIDS : TIDS.filter(t => selectedTids.has(t.tid));
+
   const handleBulkAction = (action: string) => {
-    const tids = Array.from(selectedTids);
+    const tids = getBulkTids();
     if (action === "ho" || action === "sp") {
       resolveMultiple(tids);
       flash(`${tids.length} TIDs → ${action === "sp" ? "SP" : "HO"} Net applied`);
@@ -107,6 +111,9 @@ export function OptionA_ExpandActions() {
       setBulkConfirm(null);
     }
   };
+
+  const openDiscrepancyAction = (action: string) => { setBulkScope("all"); setBulkConfirm(action); };
+  const openSelectionAction = (action: string) => { setBulkScope("selected"); setBulkConfirm(action); };
 
   const filteredTids = TIDS.filter(t => !tidSearch || t.tid.toLowerCase().includes(tidSearch.toLowerCase()) || t.experience.toLowerCase().includes(tidSearch.toLowerCase()));
   const resolvedCount = TIDS.filter(t => resolvedTids.has(t.tid)).length;
@@ -204,7 +211,27 @@ export function OptionA_ExpandActions() {
             </div>
           </div>
 
-          {/* ★ BULK ACTION BAR — appears when 2+ TIDs selected */}
+          {/* ★ DISCREPANCY-LEVEL ACTION STRIP — always visible, applies to ALL TIDs */}
+          {!bulkConfirm && (
+            <div className="rounded-lg border bg-muted/30 px-3 py-2.5 flex items-center gap-2.5">
+              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {TIDS.length} TIDs:</span>
+              <div className="h-4 w-px bg-border" />
+              <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openDiscrepancyAction("sp")}>
+                <TrendingUp className="h-3 w-3" /> SP Net
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openDiscrepancyAction("ho")}>
+                <TrendingDown className="h-3 w-3" /> HO Net
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openDiscrepancyAction("dispute")}>
+                <Gavel className="h-3 w-3" /> Raise Dispute
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => openDiscrepancyAction("issue")}>
+                <FileWarning className="h-3 w-3" /> Log Issue
+              </Button>
+            </div>
+          )}
+
+          {/* ★ CHECKBOX BULK ACTION BAR — appears when 2+ TIDs selected */}
           {selectedTids.size >= 2 && !bulkConfirm && (
             <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-center gap-2">
@@ -212,17 +239,17 @@ export function OptionA_ExpandActions() {
                 <span className="text-sm font-semibold">{selectedTids.size} TIDs selected</span>
               </div>
               <div className="h-5 w-px bg-border" />
-              <Button size="sm" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setBulkConfirm("sp")}>
-                <TrendingUp className="h-3 w-3" /> All → SP Net
+              <Button size="sm" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openSelectionAction("sp")}>
+                <TrendingUp className="h-3 w-3" /> SP Net
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => setBulkConfirm("ho")}>
-                <TrendingDown className="h-3 w-3" /> All → HO Net
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openSelectionAction("ho")}>
+                <TrendingDown className="h-3 w-3" /> HO Net
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => setBulkConfirm("dispute")}>
-                <Gavel className="h-3 w-3" /> Dispute All
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openSelectionAction("dispute")}>
+                <Gavel className="h-3 w-3" /> Dispute
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => setBulkConfirm("issue")}>
-                <FileWarning className="h-3 w-3" /> Issue All
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => openSelectionAction("issue")}>
+                <FileWarning className="h-3 w-3" /> Issue
               </Button>
               <div className="flex-1" />
               <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedTids(new Set())}>
@@ -233,7 +260,7 @@ export function OptionA_ExpandActions() {
 
           {/* ★ BULK CONFIRM — detailed table for SP/HO Net, simple for others */}
           {bulkConfirm && (bulkConfirm === "sp" || bulkConfirm === "ho") && (() => {
-            const selectedTidData = TIDS.filter(t => selectedTids.has(t.tid));
+            const selectedTidData = getBulkTidData();
             const isSp = bulkConfirm === "sp";
             const totalPayable = selectedTidData.reduce((s, t) => s + (isSp ? t.spNet : t.hoNet), 0);
             const totalSp = selectedTidData.reduce((s, t) => s + t.spNet, 0);
@@ -244,7 +271,10 @@ export function OptionA_ExpandActions() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
                     {isSp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                    Bulk {isSp ? "SP Net" : "HO Net"} — {selectedTidData.length} TIDs
+                    Bulk {isSp ? "SP Net" : "HO Net"} —
+                    {bulkScope === "all"
+                      ? <span>All {selectedTidData.length} TIDs</span>
+                      : <span>{selectedTidData.length} selected TIDs</span>}
                   </div>
                   <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}>
                     <XIcon className="h-3.5 w-3.5" />
@@ -299,25 +329,33 @@ export function OptionA_ExpandActions() {
             );
           })()}
 
-          {bulkConfirm && bulkConfirm !== "sp" && bulkConfirm !== "ho" && (
-            <div className="rounded-lg border-2 border-amber-300 bg-amber-50/80 p-3 space-y-2 animate-in fade-in duration-200">
-              <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
-                <AlertTriangle className="h-4 w-4" />
-                Confirm: {bulkConfirm === "dispute" ? "Raise Dispute" : "Log Issue"} for {selectedTids.size} TIDs
+          {bulkConfirm && bulkConfirm !== "sp" && bulkConfirm !== "ho" && (() => {
+            const confirmTidData = getBulkTidData();
+            return (
+              <div className="rounded-lg border-2 border-amber-300 bg-amber-50/80 p-3 space-y-2 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                    <AlertTriangle className="h-4 w-4" />
+                    {bulkConfirm === "dispute" ? "Raise Dispute" : "Log Issue"} for {bulkScope === "all" ? `all ${confirmTidData.length}` : `${confirmTidData.length} selected`} TIDs
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}>
+                    <XIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {confirmTidData.map(t => (
+                    <Badge key={t.tid} variant="outline" className="text-xs font-mono">{t.tid}</Badge>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
+                  <Button size="sm" className="h-7 text-xs gap-1" onClick={() => handleBulkAction(bulkConfirm)}>
+                    <Check className="h-3 w-3" /> Confirm & Apply
+                  </Button>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {Array.from(selectedTids).map(tid => (
-                  <Badge key={tid} variant="outline" className="text-xs font-mono">{tid}</Badge>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
-                <Button size="sm" className="h-7 text-xs gap-1" onClick={() => handleBulkAction(bulkConfirm)}>
-                  <Check className="h-3 w-3" /> Confirm & Apply
-                </Button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="rounded-md border overflow-hidden">
             <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
