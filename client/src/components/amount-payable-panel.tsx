@@ -725,12 +725,12 @@ const CANCELLATION_CONDITIONS: Record<string, {
   cancellationInsurance: string;
   chargeLoss: string;
 }> = {
-  "Cancelled-OK":                    { cancellable: "Any",  spNet: "= 0", hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "N/A" },
-  "Cancelled-Refund OK":             { cancellable: "Any",  spNet: "< 0", hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "N/A" },
-  "Cancelled-SP error":              { cancellable: "Yes",  spNet: "> 0", hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "N/A" },
-  "Cancelled-Insured Booking":       { cancellable: "No",   spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "Yes", chargeLoss: "N/A" },
-  "Cancelled-DSS policy":            { cancellable: "No",   spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",  chargeLoss: "Yes" },
-  "Cancelled-Check for Charge loss": { cancellable: "No",   spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",  chargeLoss: "No"  },
+  "Cancelled-OK":                    { cancellable: "Any", spNet: "= 0",  hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "Any"   },
+  "Cancelled-Refund OK":             { cancellable: "Any", spNet: "< 0",  hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "Any"   },
+  "Cancelled-SP error":              { cancellable: "Yes", spNet: "> 0",  hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "TRUE"  },
+  "Cancelled-Insured Booking":       { cancellable: "No",  spNet: "> 0",  hoNet: "Any", cancellationInsurance: "Yes", chargeLoss: "TRUE"  },
+  "Cancelled-DSS policy":            { cancellable: "No",  spNet: "> 0",  hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "TRUE"  },
+  "Cancelled-Check for Charge loss": { cancellable: "No",  spNet: "> 0",  hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "FALSE" },
 };
 
 const CANCELLATION_ACTION_POINTS: Record<string, string> = {
@@ -747,11 +747,19 @@ const CANCELLATION_FULFILLMENT_SPLIT = new Set(["Cancelled-SP error", "Cancelled
 function getCancellationDriTeam(reason: string, fulfillmentMethod: string): string {
   const noAction = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-Insured Booking", "Cancelled-DSS policy"];
   if (noAction.includes(reason)) return "N/A";
-  const fm = fulfillmentMethod.toLowerCase();
-  if (fm === "freesale" || fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api" || fm === "vendor_api" || fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request" || fm === "vendor_request") return "Tech";
-  if (fm === "manual") return "Reservation Ops";
-  if (fm === "selenium") return "Selenium";
-  if (fm === "prepurchase" || fm === "pre-purchase" || fm === "pre_purchase") return "Inventory Ops";
+  const fm = fulfillmentMethod.trim().toLowerCase();
+  const isFreesale = fm === "freesale";
+  const isManual = fm === "manual";
+  const isSelenium = fm === "selenium";
+  const isPrePurchase = fm === "prepurchase" || fm === "pre-purchase" || fm === "pre_purchase" || fm === "pre purchase";
+  const isVendorApi = fm === "vendor api" || fm === "vendorapi" || fm === "vendor-api" || fm === "vendor_api";
+  const isVendorRequest = fm === "vendor request" || fm === "vendorrequest" || fm === "vendor-request" || fm === "vendor_request";
+  if (isFreesale) return "Tech";
+  if (isManual) return "Reservation Ops";
+  if (isSelenium) return "Selenium";
+  if (isPrePurchase) return "Inventory Ops";
+  if (isVendorApi) return "Tech";
+  if (isVendorRequest) return "Tech";
   return "Unknown";
 }
 
