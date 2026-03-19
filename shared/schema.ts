@@ -425,7 +425,7 @@ export const headerAliases: Record<string, string[]> = {
   creationDate: ["creation_date", "creationdate", "created_at", "booking_date", "bookingCreationDate"],
   experienceDate: ["experience_date", "experiencedate", "tour_date", "travel_date", "experienceDate", "fulfilmentDate"],
   currency: ["currency", "curr", "ccy", "billing currency", "billingCurrency"],
-  hoNet: ["ho_net", "honet", "ho net", "headout_net", "headoutSellingPrice", "finalNetPrice", "headout_selling_price"],
+  hoNet: ["ho_net", "honet", "ho net", "headout_net", "headoutSellingPrice", "headout_selling_price"],
   spNet: ["sp_net", "spnet", "sp net", "supplier_net", "netPrice", "net_price", "supplierNetPrice"],
   bookingStatus: ["booking_status", "bookingstatus", "status", "bookingStatus", "fulfilmentStatus"],
   experienceName: ["experience_name", "experiencename", "tour_name", "experienceName", "tourName"],

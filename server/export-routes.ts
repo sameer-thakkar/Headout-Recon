@@ -1412,11 +1412,9 @@ export function registerExportRoutes(app: Express) {
         
         const originalKeys = firstRowKeys;
         const finalNetPriceKey = originalKeys.find((k: string) => {
-          const kLower = k.toLowerCase();
-          return kLower === "finalnetprice" || kLower === "final net price" || 
-                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
-                 kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
-        }) || "finalNetPrice";
+          const kLower = k.toLowerCase().replace(/[\s_]+/g, "");
+          return kLower === "totalamountpayable";
+        }) || "Total Amount Payable";
         
         const spNet = reconRow?.spNetInHo ?? "";
         const hoNet = reconRow?.hoNet ?? 0;
@@ -1524,10 +1522,8 @@ export function registerExportRoutes(app: Express) {
         }
         
         const isFinalNetCol = (k: string) => {
-          const kLower = k.toLowerCase();
-          return kLower === "finalnetprice" || kLower === "final net price" || 
-                 kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
-                 kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
+          const kLower = k.toLowerCase().replace(/[\s_]+/g, "");
+          return kLower === "totalamountpayable";
         };
         
         const newRow: Record<string, unknown> = {};
@@ -1645,7 +1641,7 @@ export function registerExportRoutes(app: Express) {
       
       const canonicalHeaders: string[] = [...firstRowKeys];
       
-      const finalNetAliases = new Set(["finalnetprice", "final net price", "finalnet", "final net", "final payable", "amountpayable", "amount payable", "amount_payable"]);
+      const finalNetAliases = new Set(["totalamountpayable", "total amount payable", "total_amount_payable"]);
       const headerExistsIn = (name: string, headers: string[]) => {
         const nameLower = name.toLowerCase();
         if (finalNetAliases.has(nameLower)) {
@@ -2877,10 +2873,8 @@ export function registerExportRoutes(app: Express) {
       };
 
       const gsIsFinalNetCol = (k: string) => {
-        const kLower = k.toLowerCase();
-        return kLower === "finalnetprice" || kLower === "final net price" ||
-               kLower === "finalnet" || kLower === "final net" || kLower === "final payable" ||
-               kLower === "amountpayable" || kLower === "amount payable" || kLower === "amount_payable";
+        const kLower = k.toLowerCase().replace(/[\s_]+/g, "");
+        return kLower === "totalamountpayable";
       };
 
       const gsIsTotalAmountPayableCol = (k: string) => {
@@ -3089,7 +3083,7 @@ export function registerExportRoutes(app: Express) {
 
       const gsCanonicalHeaders: string[] = [...gsOriginalKeys];
 
-      const gsFinalNetAliases = new Set(["finalnetprice", "final net price", "finalnet", "final net", "final payable", "amountpayable", "amount payable", "amount_payable"]);
+      const gsFinalNetAliases = new Set(["totalamountpayable", "total amount payable", "total_amount_payable"]);
       const gsHeaderExistsIn = (name: string, headers: string[]) => {
         const nameLower = name.toLowerCase();
         if (gsFinalNetAliases.has(nameLower)) {

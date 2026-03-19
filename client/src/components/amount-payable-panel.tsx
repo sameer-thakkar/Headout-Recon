@@ -371,7 +371,7 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
                     <div>
                       <div className="text-sm font-medium">Confirm: Update to SP Net</div>
                       <div className="text-xs text-muted-foreground">
-                        Set Final Net Price = SP Net for all {bookings.length} bookings
+                        Set Total Amount Payable = SP Net for all {bookings.length} bookings
                       </div>
                     </div>
                   </div>
@@ -491,7 +491,7 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
                 <div>
                   <div className="text-sm font-medium">Update to SP Net</div>
                   <div className="text-xs text-muted-foreground">
-                    Set Final Net Price = SP Net for all bookings (Total: {formatNumberModal(spTotal)} {currency})
+                    Set Total Amount Payable = SP Net for all bookings (Total: {formatNumberModal(spTotal)} {currency})
                   </div>
                 </div>
               </div>
@@ -512,7 +512,7 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
                 <div>
                   <div className="text-sm font-medium">Update to HO Net</div>
                   <div className="text-xs text-muted-foreground">
-                    Set Final Net Price = HO Net for all bookings (Total: {formatNumberModal(hoTotal)} {currency})
+                    Set Total Amount Payable = HO Net for all bookings (Total: {formatNumberModal(hoTotal)} {currency})
                   </div>
                 </div>
               </div>
@@ -529,7 +529,7 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
                   </div>
                   <div>
                     <div className="text-sm font-medium">Update based on Pax Type</div>
-                    <div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate Final Net Price</div>
+                    <div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate Total Amount Payable</div>
                   </div>
                 </div>
               </div>
@@ -1097,7 +1097,7 @@ export function AmountPayablePanel({
       return next;
     });
     setActionedBookings(prev => { const next = new Set(prev); for (const b of paxBookings) next.add(b.bookingId); return next; });
-    toast({ title: "Pax prices updated", description: `Final Net Price recalculated for ${paxBookings.length} bookings in TID ${paxTid}.` });
+    toast({ title: "Pax prices updated", description: `Total Amount Payable recalculated for ${paxBookings.length} bookings in TID ${paxTid}.` });
   }, [toast]);
 
   const handleBulkVendorId = useCallback((bookingIds: string[], bulkVendorId: string) => {

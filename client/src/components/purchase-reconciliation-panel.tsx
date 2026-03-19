@@ -560,7 +560,7 @@ const ManageTidModal = memo(forwardRef<ManageTidModalHandle, {
                 <div>
                   <div className="text-sm font-medium">Update to SP Net</div>
                   <div className="text-xs text-muted-foreground">
-                    Set Final Net Price = SP Net for all bookings (Total: {formatNumber(spTotal)} {currency})
+                    Set Total Amount Payable = SP Net for all bookings (Total: {formatNumber(spTotal)} {currency})
                   </div>
                 </div>
               </div>
@@ -581,7 +581,7 @@ const ManageTidModal = memo(forwardRef<ManageTidModalHandle, {
                 <div>
                   <div className="text-sm font-medium">Update to HO Net</div>
                   <div className="text-xs text-muted-foreground">
-                    Set Final Net Price = HO Net for all bookings (Total: {formatNumber(hoTotal)} {currency})
+                    Set Total Amount Payable = HO Net for all bookings (Total: {formatNumber(hoTotal)} {currency})
                   </div>
                 </div>
               </div>
@@ -598,7 +598,7 @@ const ManageTidModal = memo(forwardRef<ManageTidModalHandle, {
                   </div>
                   <div>
                     <div className="text-sm font-medium">Update based on Pax Type</div>
-                    <div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate Final Net Price</div>
+                    <div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate Total Amount Payable</div>
                   </div>
                 </div>
               </div>
@@ -898,7 +898,7 @@ const ManageReasonModal = memo(forwardRef<ManageReasonModalHandle, {
                 <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
                   <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <div className="text-sm font-medium">Bulk Final Net Price Update</div>
+                <div className="text-sm font-medium">Bulk Total Amount Payable Update</div>
               </div>
             </div>
             <div className="p-4 space-y-3">
@@ -933,7 +933,7 @@ const ManageReasonModal = memo(forwardRef<ManageReasonModalHandle, {
                     </div>
                     <div>
                       <div className="text-sm font-medium">{isCancellation ? "Accept Cancellation (SP Net)" : "Use SP Net for All"}</div>
-                      <div className="text-xs text-muted-foreground">Set Final Net Price = SP Net for {bookings.length} bookings (Total: {formatNumber(totalSpNet)} {currency})</div>
+                      <div className="text-xs text-muted-foreground">Set Total Amount Payable = SP Net for {bookings.length} bookings (Total: {formatNumber(totalSpNet)} {currency})</div>
                     </div>
                   </div>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -950,7 +950,7 @@ const ManageReasonModal = memo(forwardRef<ManageReasonModalHandle, {
                       </div>
                       <div>
                         <div className="text-sm font-medium">{isCancellation ? "Accept Cancellation (HO Net)" : "Use HO Net for All"}</div>
-                        <div className="text-xs text-muted-foreground">Set Final Net Price = HO Net for {bookings.length} bookings (Total: {formatNumber(totalHoNet)} {currency})</div>
+                        <div className="text-xs text-muted-foreground">Set Total Amount Payable = HO Net for {bookings.length} bookings (Total: {formatNumber(totalHoNet)} {currency})</div>
                       </div>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -1412,7 +1412,7 @@ const TidGroup = memo(function TidGroup({
                 <TableHead className="py-1 text-xs text-right w-[16%]">SP Net</TableHead>
                 <TableHead className="py-1 text-xs text-right w-[16%]">HO Net</TableHead>
                 <TableHead className="py-1 text-xs text-right w-[16%]">Difference</TableHead>
-                <TableHead className="py-1 text-xs text-right w-[22%]">Final Net Price</TableHead>
+                <TableHead className="py-1 text-xs text-right w-[22%]">Total Amount Payable</TableHead>
                 {runId && <TableHead className="py-1 text-xs text-center w-[8%]">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -2096,7 +2096,7 @@ const UnmappedResolutionModal = memo(forwardRef<UnmappedResolutionModalHandle, U
                   <div>
                     <div className="text-sm font-medium">Update to SP Net</div>
                     <div className="text-xs text-muted-foreground">
-                      Set Final Net Price = SP Net ({formatNumber(spNet)} {currency})
+                      Set Total Amount Payable = SP Net ({formatNumber(spNet)} {currency})
                     </div>
                   </div>
                 </div>
@@ -3177,7 +3177,7 @@ export function PurchaseReconciliationPanel({
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
   // State for visible TID count per reason group (pagination)
   const [visibleTidCounts, setVisibleTidCounts] = useState<Map<string, number>>(new Map());
-  // Final Net Price state: bookingId → final net price (defaults to SP Net)
+  // Total Amount Payable state: bookingId → total amount payable (defaults to SP Net)
   const [finalNetPrices, setFinalNetPrices] = useState<Map<string, number>>(new Map());
   const [fnpVersion, setFnpVersion] = useState(0);
   const finalNetPricesRef = useRef(finalNetPrices);
@@ -3431,7 +3431,7 @@ export function PurchaseReconciliationPanel({
     setFnpVersion(v => v + 1);
     toast({
       title: "Pax prices updated",
-      description: `Final Net Price recalculated for ${bookings.length} bookings in TID ${tid}.`,
+      description: `Total Amount Payable recalculated for ${bookings.length} bookings in TID ${tid}.`,
     });
   }, [toast]);
 
@@ -3446,7 +3446,7 @@ export function PurchaseReconciliationPanel({
     setFnpVersion(v => v + 1);
     toast({
       title: "Bulk Update Applied",
-      description: `Final Net Price set to ${source === "spNet" ? "SP Net" : "HO Net"} for ${bookings.length} bookings.`,
+      description: `Total Amount Payable set to ${source === "spNet" ? "SP Net" : "HO Net"} for ${bookings.length} bookings.`,
     });
   }, [toast]);
 

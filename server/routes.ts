@@ -2154,7 +2154,7 @@ export async function registerRoutes(
         details: { missingCount: missingPriceBookings.length, bookingIds: missingPriceBookings.slice(0, 5).map((r: any) => r.bookingId) },
       });
       
-      // CHECK 3: No zero Final Net Price on non-cancelled active bookings
+      // CHECK 3: No zero Total Amount Payable on non-cancelled active bookings
       const zeroActiveBookings = allRows.filter((r: any) => {
         const isCancelled = r.reason?.toLowerCase().includes("cancell") || r.reason === "Cancelled-Refund OK";
         const isNegativeSp = r.reason === "Negative SP - Partial Refund";

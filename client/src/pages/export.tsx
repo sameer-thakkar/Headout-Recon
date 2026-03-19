@@ -171,7 +171,7 @@ export function ExportPage({
   const financialSheets = [
     { name: "Payable Summary", desc: "Net payable amounts by currency with adjustments" },
     { name: "SP_INVOICE_REPORT", desc: "Supplier invoice data with FX conversion applied" },
-    { name: "HO Report Updated", desc: "Full booking details with final net prices and reasons" },
+    { name: "HO Report Updated", desc: "Full booking details with total amount payable and reasons" },
   ];
 
   return (

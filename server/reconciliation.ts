@@ -211,7 +211,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
   const result = sheet.rows.map((row) => {
     const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
     const bookingId = getRowValue(row, "bookingId", "Booking ID", "booking_id");
-    const netPrice = getRowValue(row, "netPrice", "Net Price", "net_price", "finalNetPrice", "Final Net Price");
+    const netPrice = getRowValue(row, "netPrice", "Net Price", "net_price", "totalAmountPayable", "Total Amount Payable");
     const currency = getRowValue(row, "currency", "Currency", "Billing Currency");
     const bookingStatus = getRowValue(row, "bookingStatus", "Booking Status", "booking_status");
     const rawExpDate = getRowValue(row, "experienceDate", "Experience Date", "experience_date", "fulfilmentDate", "Fulfilment Date", "Fulfillment Date", "fulfillmentDate", "tour_date", "Tour Date", "Travel Date", "travelDate", "Date of Experience", "dateOfExperience", "Visit Date", "visitDate", "Activity Date", "activityDate", "Tour Start Date", "tourStartDate", "Service Date", "serviceDate", "Event Date", "eventDate");
