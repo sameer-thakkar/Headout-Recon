@@ -871,7 +871,11 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                       <div className="flex items-center justify-center h-8 w-8 rounded-md bg-orange-100 dark:bg-orange-900/30">
                         <FileWarning className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                       </div>
-                      <div className="text-sm font-medium">Flag Issue</div>
+                      <div>
+                        <div className="text-sm font-medium">Raise Issue</div>
+                        <div className="text-xs text-muted-foreground">This is HO error</div>
+                        <div className="text-xs text-muted-foreground">To be checked with internal teams at Headout</div>
+                      </div>
                     </div>
                     {issueOpen ? (
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -964,7 +968,7 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                       data-testid="btn-flag-issue"
                     >
                       <FileWarning className="h-3.5 w-3.5 mr-1.5" />
-                      Flag Issue
+                      Raise Issue
                     </Button>
                   </div>
                 </CollapsibleContent>
@@ -982,7 +986,10 @@ export const ReasonLevelModal = forwardRef<ReasonLevelModalHandle, ReasonLevelMo
                       <div className="flex items-center justify-center h-8 w-8 rounded-md bg-amber-100 dark:bg-amber-900/30">
                         <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       </div>
-                      <div className="text-sm font-medium">Raise Dispute</div>
+                      <div>
+                        <div className="text-sm font-medium">Raise Dispute</div>
+                        <div className="text-xs text-muted-foreground">This is SP error and refund to be claimed</div>
+                      </div>
                     </div>
                     {disputeOpen ? (
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />

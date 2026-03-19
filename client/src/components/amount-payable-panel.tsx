@@ -422,6 +422,7 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
                           data-testid={`switch-dispute-${tid}`}
                         />
                       </div>
+                      <div className="text-xs text-muted-foreground mb-1">This is SP error and refund to be claimed</div>
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         Paying SP Net now. The difference of{" "}
                         <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
@@ -441,10 +442,9 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
                       <FileWarning className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                     </div>
                     <div>
-                      <div className="text-sm font-medium">Flag Issue</div>
-                      <div className="text-xs text-muted-foreground">
-                        Log this TID as an issue for the {reason} team to review
-                      </div>
+                      <div className="text-sm font-medium">Raise Issue</div>
+                      <div className="text-xs text-muted-foreground">This is HO error</div>
+                      <div className="text-xs text-muted-foreground">To be checked with internal teams at Headout</div>
                     </div>
                   </div>
                   <Checkbox
@@ -690,10 +690,9 @@ const UnifiedTidActionModal = forwardRef<UnifiedTidActionModalHandle, {
                   <FileWarning className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium">Flag Issue</div>
-                  <div className="text-xs text-muted-foreground">
-                    Log this TID as an issue for the {reason} team to review
-                  </div>
+                  <div className="text-sm font-medium">Raise Issue</div>
+                  <div className="text-xs text-muted-foreground">This is HO error</div>
+                  <div className="text-xs text-muted-foreground">To be checked with internal teams at Headout</div>
                 </div>
               </div>
               <Checkbox
