@@ -462,7 +462,7 @@ export function registerExportRoutes(app: Express) {
         XLSX.utils.sheet_add_aoa(discrepancySheet, [breakupHeaders], { origin: { r: currentRow, c: 0 } });
         const breakupData = cancellationBreakup.map(g => {
           const cond = CANCELLATION_CONDITIONS[g.result] ?? { cancellable: "—", spNet: "—", hoNet: "—", cancellationInsurance: "—", chargeLoss: "—" };
-          return [g.subCategory, cond.cancellable, g.spNetTotal, g.hoNetTotal, cond.cancellationInsurance, cond.chargeLoss, g.actionPoint, g.driTeam, g.fulfillmentMethod, g.count, g.startDate, g.endDate, g.totalBids, g.discrepancyLc, g.discrepancyUsd, g.tidConcentration];
+          return [g.subCategory, cond.cancellable, formatIndianNumber(g.spNetTotal), formatIndianNumber(g.hoNetTotal), cond.cancellationInsurance, cond.chargeLoss, g.actionPoint, g.driTeam, g.fulfillmentMethod, g.count, g.startDate, g.endDate, g.totalBids, formatIndianNumber(g.discrepancyLc), formatIndianNumber(g.discrepancyUsd), g.tidConcentration];
         });
         XLSX.utils.sheet_add_aoa(discrepancySheet, breakupData, { origin: { r: currentRow + 1, c: 0 } });
         applyTableStyles(discrepancySheet, currentRow, 0, cancellationBreakup.length + 1, breakupHeaders.length, breakupHeaders);
@@ -2363,7 +2363,7 @@ export function registerExportRoutes(app: Express) {
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId,
         requestBody: {
-          valueInputOption: "USER_ENTERED",
+          valueInputOption: "RAW",
           data: batchData,
         },
       });
