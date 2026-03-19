@@ -458,11 +458,11 @@ export function registerExportRoutes(app: Express) {
         discrepancySheet[breakupTitleCell].s = { font: { bold: true, sz: 12 } };
         currentRow += 1;
 
-        const breakupHeaders = ["Sub category", "Cancellable", "SP Net (LC)", "HO Net (LC)", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)", "TID Concentration"];
+        const breakupHeaders = ["Sub category", "Cancellable", "SP Net (LC)", "HO Net (LC)", "Cancellation Insurance", "Charge Loss", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)", "TID Concentration"];
         XLSX.utils.sheet_add_aoa(discrepancySheet, [breakupHeaders], { origin: { r: currentRow, c: 0 } });
         const breakupData = cancellationBreakup.map(g => {
           const cond = CANCELLATION_CONDITIONS[g.result] ?? { cancellable: "—", spNet: "—", hoNet: "—", cancellationInsurance: "—", chargeLoss: "—" };
-          return [g.subCategory, cond.cancellable, g.spNetTotal, g.hoNetTotal, cond.cancellationInsurance, cond.chargeLoss, g.result, g.actionPoint, g.driTeam, g.fulfillmentMethod, g.count, g.startDate, g.endDate, g.totalBids, g.discrepancyLc, g.discrepancyUsd, g.tidConcentration];
+          return [g.subCategory, cond.cancellable, g.spNetTotal, g.hoNetTotal, cond.cancellationInsurance, cond.chargeLoss, g.actionPoint, g.driTeam, g.fulfillmentMethod, g.count, g.startDate, g.endDate, g.totalBids, g.discrepancyLc, g.discrepancyUsd, g.tidConcentration];
         });
         XLSX.utils.sheet_add_aoa(discrepancySheet, breakupData, { origin: { r: currentRow + 1, c: 0 } });
         applyTableStyles(discrepancySheet, currentRow, 0, cancellationBreakup.length + 1, breakupHeaders.length, breakupHeaders);
@@ -503,7 +503,7 @@ export function registerExportRoutes(app: Express) {
       
       const maxColCount = Math.max(
         summaryHeaders.length,
-        17, // cancellation breakup has 17 columns
+        16, // cancellation breakup has 16 columns
         ...Array.from(tidByReason.values()).map(rows => rows.length > 0 ? getColumnsForReason(rows[0]["Reason"] as string).length : 0)
       );
       discrepancySheet["!cols"] = Array(maxColCount).fill(null).map((_: any, i: number) => {
@@ -1978,12 +1978,12 @@ export function registerExportRoutes(app: Express) {
 
       if (gsheetCancellationBreakup.length > 0) {
         discrepancyData.push(["CANCELLATION BREAKUP"]);
-        discrepancyData.push(["Sub category", "Cancellable", "SP Net (LC)", "HO Net (LC)", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)", "TID Concentration"]);
+        discrepancyData.push(["Sub category", "Cancellable", "SP Net (LC)", "HO Net (LC)", "Cancellation Insurance", "Charge Loss", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)", "TID Concentration"]);
         for (const g of gsheetCancellationBreakup) {
           const cond = CANCELLATION_CONDITIONS[g.result] ?? { cancellable: "—", spNet: "—", hoNet: "—", cancellationInsurance: "—", chargeLoss: "—" };
           discrepancyData.push([
             g.subCategory, cond.cancellable, g.spNetTotal, g.hoNetTotal, cond.cancellationInsurance, cond.chargeLoss,
-            g.result, g.actionPoint, g.driTeam, g.fulfillmentMethod,
+            g.actionPoint, g.driTeam, g.fulfillmentMethod,
             g.count, g.startDate, g.endDate, g.totalBids,
             formatIndianNumber(g.discrepancyLc), formatIndianNumber(g.discrepancyUsd), g.tidConcentration
           ]);
