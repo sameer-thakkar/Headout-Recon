@@ -2483,7 +2483,7 @@ export function registerExportRoutes(app: Express) {
             for (let k = idx + 1; k < scanLimit; k++) {
               const candidateRow = discrepancyData[k];
               const candidateFirstCell = String(candidateRow[0] || "");
-              if (candidateRow.length > 1 && (candidateFirstCell === "Reason" || candidateFirstCell === "TID" || candidateFirstCell === "Cancellable")) {
+              if (candidateRow.length > 1 && (candidateFirstCell === "Reason" || candidateFirstCell === "TID" || candidateFirstCell === "Cancellable" || candidateFirstCell === "Sub category")) {
                 tableHeaderRow = k;
                 break;
               }
