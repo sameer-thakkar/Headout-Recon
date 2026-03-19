@@ -116,8 +116,6 @@ export function OptionA_ExpandActions() {
   const filteredTids = TIDS.filter(t => !tidSearch || t.tid.toLowerCase().includes(tidSearch.toLowerCase()) || t.experience.toLowerCase().includes(tidSearch.toLowerCase()));
   const resolvedCount = TIDS.filter(t => resolvedTids.has(t.tid)).length;
   const totalDisc = TIDS.reduce((s, t) => s + t.discUsd, 0);
-  const progressPct = (resolvedCount / TIDS.length) * 100;
-
   return (
     <div className="min-h-screen bg-background font-sans flex flex-col">
       <div className="border-b bg-card px-5 py-3 flex items-center justify-between flex-shrink-0">
@@ -197,31 +195,6 @@ export function OptionA_ExpandActions() {
           )}
         </div>
 
-        {/* ★ RESOLUTION PROGRESS BAR */}
-        <div className="flex-shrink-0 px-4 pt-3 pb-1">
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Resolution Progress
-                </span>
-                <span className="text-xs font-semibold">
-                  {resolvedCount === TIDS.length ? (
-                    <span className="text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> All resolved</span>
-                  ) : (
-                    <span>{resolvedCount} of {TIDS.length} TIDs</span>
-                  )}
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ease-out ${resolvedCount === TIDS.length ? "bg-green-500" : "bg-primary"}`}
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Action Panel */}
         <div className="flex-1 overflow-auto px-4 pb-4 pt-2 space-y-3">
