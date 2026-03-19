@@ -16,10 +16,10 @@ const CANCELLATION_CONDITIONS: Record<string, { cancellable: string; spNet: stri
 const CANCELLATION_ACTION_POINTS: Record<string, string> = {
   "Cancelled-OK":                    "No action needed",
   "Cancelled-Refund OK":             "No action needed",
-  "Cancelled-SP error":              "Raise debit note to SP",
+  "Cancelled-SP error":              "Check why did we cancel the booking with SP? If cancelled on time- raise with SP, if cancellation was delayed- Raise with RO.",
   "Cancelled-Insured Booking":       "Claim from insurance",
   "Cancelled-DSS policy":            "Covered under DSS policy",
-  "Cancelled-Check for Charge loss": "Verify charge loss; raise debit note if applicable",
+  "Cancelled-Check for Charge loss": "Check for charge loss why Charge loss is not marked TRUE",
 };
 
 function deriveDriTeamForBreakup(reason: string, fm: string): string {
