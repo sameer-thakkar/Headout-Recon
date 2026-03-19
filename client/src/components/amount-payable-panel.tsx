@@ -725,12 +725,12 @@ const CANCELLATION_CONDITIONS: Record<string, {
   cancellationInsurance: string;
   chargeLoss: string;
 }> = {
-  "Cancelled-OK":                    { cancellable: "Any", spNet: "= 0",  hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "Any"   },
-  "Cancelled-Refund OK":             { cancellable: "Any", spNet: "< 0",  hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "Any"   },
-  "Cancelled-SP error":              { cancellable: "Yes", spNet: "> 0",  hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "TRUE"  },
-  "Cancelled-Insured Booking":       { cancellable: "No",  spNet: "> 0",  hoNet: "Any", cancellationInsurance: "Yes", chargeLoss: "TRUE"  },
-  "Cancelled-DSS policy":            { cancellable: "No",  spNet: "> 0",  hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "TRUE"  },
-  "Cancelled-Check for Charge loss": { cancellable: "No",  spNet: "> 0",  hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "FALSE" },
+  "Cancelled-OK":                    { cancellable: "Any", spNet: "= 0", hoNet: "Any", cancellationInsurance: "Any", chargeLoss: "Any"   },
+  "Cancelled-Refund OK":             { cancellable: "Any", spNet: "< 0", hoNet: "= 0", cancellationInsurance: "Any", chargeLoss: "Any"   },
+  "Cancelled-SP error":              { cancellable: "Yes", spNet: "> 0", hoNet: "Any", cancellationInsurance: "Any", chargeLoss: "Any"   },
+  "Cancelled-Insured Booking":       { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "Yes", chargeLoss: "Any"   },
+  "Cancelled-DSS policy":            { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "TRUE"  },
+  "Cancelled-Check for Charge loss": { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "FALSE" },
 };
 
 const CANCELLATION_ACTION_POINTS: Record<string, string> = {
@@ -3331,6 +3331,7 @@ export function AmountPayablePanel({
                           const uniqueReasons = Array.from(new Set(cancellationSummaryRows.map(r => r.reason)));
                           uniqueReasons.sort((a, b) => (ORDER.indexOf(a) === -1 ? 99 : ORDER.indexOf(a)) - (ORDER.indexOf(b) === -1 ? 99 : ORDER.indexOf(b)));
                           const reasonGroupIndex = new Map(uniqueReasons.map((r, i) => [r, i]));
+                          const seenReasons = new Set<string>();
 
                           return cancellationSummaryRows.map((row, idx) => {
                             const cond = CANCELLATION_CONDITIONS[row.reason];
@@ -3340,6 +3341,9 @@ export function AmountPayablePanel({
                             const isDebitNote = row.reason === "Cancelled-SP error";
                             const groupIdx = reasonGroupIndex.get(row.reason) ?? 0;
                             const isOddGroup = groupIdx % 2 === 1;
+                            const isSplit = CANCELLATION_FULFILLMENT_SPLIT.has(row.reason);
+                            const isFirstForReason = !seenReasons.has(row.reason);
+                            seenReasons.add(row.reason);
 
                             return (
                               <TableRow
@@ -3349,40 +3353,44 @@ export function AmountPayablePanel({
                                 <TableCell className="py-1">
                                   <div className="flex items-center gap-1.5">
                                     <span className="font-medium text-xs">{row.reason.replace("Cancelled-", "")}</span>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary"
-                                      onClick={() => reasonModalRef.current?.open(row.reason, "cancellation")}
-                                      data-testid={`button-manage-cancellation-${row.reason}-${row.fulfillmentMethod}`}
-                                    >
-                                      <Settings className="h-2.5 w-2.5 mr-0.5" />
-                                      Manage
-                                    </Button>
+                                    {isFirstForReason && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary"
+                                        onClick={() => reasonModalRef.current?.open(row.reason, "cancellation")}
+                                        data-testid={`button-manage-cancellation-${row.reason}-${row.fulfillmentMethod}`}
+                                      >
+                                        <Settings className="h-2.5 w-2.5 mr-0.5" />
+                                        Manage
+                                      </Button>
+                                    )}
                                   </div>
                                 </TableCell>
-                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellable ?? "—"}</TableCell>
-                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.spNet ?? "—"}</TableCell>
-                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.hoNet ?? "—"}</TableCell>
-                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellationInsurance ?? "—"}</TableCell>
-                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.chargeLoss ?? "—"}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{isFirstForReason ? (cond?.cancellable ?? "—") : ""}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{isFirstForReason ? (cond?.spNet ?? "—") : ""}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{isFirstForReason ? (cond?.hoNet ?? "—") : ""}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{isFirstForReason ? (cond?.cancellationInsurance ?? "—") : ""}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{isFirstForReason ? (cond?.chargeLoss ?? "—") : ""}</TableCell>
                                 <TableCell className="py-1">
-                                  <Badge
-                                    variant="outline"
-                                    className={`text-[10px] px-1.5 whitespace-nowrap ${isNoAction ? "border-green-500 text-green-700 dark:text-green-400" : isDebitNote ? "border-orange-500 text-orange-700 dark:text-orange-400" : "border-blue-500 text-blue-700 dark:text-blue-400"}`}
-                                  >
-                                    {row.reason}
-                                  </Badge>
+                                  {isFirstForReason && (
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] px-1.5 whitespace-nowrap ${isNoAction ? "border-green-500 text-green-700 dark:text-green-400" : isDebitNote ? "border-orange-500 text-orange-700 dark:text-orange-400" : "border-blue-500 text-blue-700 dark:text-blue-400"}`}
+                                    >
+                                      {row.reason}
+                                    </Badge>
+                                  )}
                                 </TableCell>
                                 <TableCell className="py-1 text-xs text-muted-foreground max-w-[180px]">
-                                  <span title={actionPoint} className="truncate block">{actionPoint}</span>
+                                  {isFirstForReason && <span title={actionPoint} className="truncate block">{actionPoint}</span>}
                                 </TableCell>
                                 <TableCell className="py-1">
-                                  {driTeam === "N/A" ? (
+                                  {isFirstForReason && (driTeam === "N/A" ? (
                                     <span className="text-xs text-muted-foreground">N/A</span>
                                   ) : (
                                     <Badge variant="secondary" className="text-[10px] px-1.5">{driTeam}</Badge>
-                                  )}
+                                  ))}
                                 </TableCell>
                                 <TableCell className="py-1 text-xs text-muted-foreground max-w-[120px]">
                                   <span title={row.fulfillmentMethod} className="truncate block">{row.fulfillmentMethod}</span>
@@ -3390,7 +3398,9 @@ export function AmountPayablePanel({
                                 <TableCell className="py-1 text-right font-mono">{row.bidCount}</TableCell>
                                 <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.startDate)}</TableCell>
                                 <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.endDate)}</TableCell>
-                                <TableCell className="py-1 text-right font-mono">{row.totalBIDs}</TableCell>
+                                <TableCell className="py-1 text-right font-mono text-muted-foreground">
+                                  {isSplit ? (isFirstForReason ? row.totalBIDs : <span className="text-muted-foreground/40">—</span>) : row.totalBIDs}
+                                </TableCell>
                                 <TableCell className={`py-1 text-right font-mono font-semibold ${row.discrepancyLC > 0 ? "text-green-700 dark:text-green-400" : row.discrepancyLC < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
                                   {row.discrepancyLC > 0 ? "+" : ""}{formatCurrency(row.discrepancyLC)}
                                 </TableCell>
