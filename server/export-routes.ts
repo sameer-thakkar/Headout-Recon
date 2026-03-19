@@ -1982,7 +1982,7 @@ export function registerExportRoutes(app: Express) {
         for (const g of gsheetCancellationBreakup) {
           const cond = CANCELLATION_CONDITIONS[g.result] ?? { cancellable: "—", spNet: "—", hoNet: "—", cancellationInsurance: "—", chargeLoss: "—" };
           discrepancyData.push([
-            g.subCategory, cond.cancellable, g.spNetTotal, g.hoNetTotal, cond.cancellationInsurance, cond.chargeLoss,
+            g.subCategory, cond.cancellable, formatIndianNumber(g.spNetTotal), formatIndianNumber(g.hoNetTotal), cond.cancellationInsurance, cond.chargeLoss,
             g.actionPoint, g.driTeam, g.fulfillmentMethod,
             g.count, g.startDate, g.endDate, g.totalBids,
             formatIndianNumber(g.discrepancyLc), formatIndianNumber(g.discrepancyUsd), g.tidConcentration
