@@ -101,7 +101,7 @@ export function registerExportRoutes(app: Express) {
           countBid: cancellationBookings.length,
         });
       }
-      type CancellationBreakupRow = { subCategory: string; result: string; actionPoint: string; count: number; startDate: string; endDate: string; totalBids: number; driTeam: string; fulfillmentMethod: string; discrepancyLc: number; discrepancyUsd: number };
+      type CancellationBreakupRow = { subCategory: string; result: string; actionPoint: string; spNetTotal: number; hoNetTotal: number; count: number; startDate: string; endDate: string; totalBids: number; driTeam: string; fulfillmentMethod: string; discrepancyLc: number; discrepancyUsd: number; tidConcentration: string };
       const cancellationBreakup: CancellationBreakupRow[] = [];
       if (cancellationBookings.length > 0) {
         const usdToCcyBreakup = result.fx?.usdToCcy || {};
@@ -124,7 +124,7 @@ export function registerExportRoutes(app: Express) {
           if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
           return 0;
         };
-        const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
+        const groups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; spNetTotal: number; hoNetTotal: number; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; tidCounts: Map<string, number>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
         for (const b of cancellationBookings) {
           const rawFm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
           const subFms = Array.from(new Set(rawFm.split(",").map((s: string) => s.trim()).filter(Boolean)));
@@ -138,13 +138,19 @@ export function registerExportRoutes(app: Express) {
             const dri = deriveDriTeamForBreakup(b.reason, subFm);
             const key = `${b.reason}|${subFm}|${dri}`;
             if (!groups.has(key)) {
-              groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
+              groups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, spNetTotal: 0, hoNetTotal: 0, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), tidCounts: new Map(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
             }
             const g = groups.get(key)!;
             g.count++;
             g.discrepancyLc += discLc;
             g.discrepancyUsd += discUsd;
-            if (b.tid) g.tids.add(String(b.tid));
+            g.spNetTotal += b.spNetInHo;
+            g.hoNetTotal += b.hoNet;
+            if (b.tid) {
+              const tidStr = String(b.tid);
+              g.tids.add(tidStr);
+              g.tidCounts.set(tidStr, (g.tidCounts.get(tidStr) || 0) + 1);
+            }
             if (ts > 0) {
               if (ts < g.minDateTs) { g.minDateTs = ts; g.minDate = formatDateValue(d!); }
               if (ts > g.maxDateTs) { g.maxDateTs = ts; g.maxDate = formatDateValue(d!); }
@@ -162,13 +168,21 @@ export function registerExportRoutes(app: Express) {
             if (g.maxDateTs !== -Infinity && ts > g.maxDateTs) return false;
             return true;
           }).length;
+          const tidConcentration = g.count > 0
+            ? Array.from(g.tidCounts.entries())
+                .filter(([, cnt]) => cnt / g.count > 0.25)
+                .map(([tid]) => tid)
+                .join(", ")
+            : "";
           cancellationBreakup.push({
             subCategory: g.result.replace("Cancelled-", ""),
             result: g.result, count: g.count,
             actionPoint: CANCELLATION_ACTION_POINTS[g.result] ?? "—",
+            spNetTotal: g.spNetTotal, hoNetTotal: g.hoNetTotal,
             startDate: g.minDate, endDate: g.maxDate, totalBids,
             driTeam: g.driTeam, fulfillmentMethod: g.fulfillmentMethod,
             discrepancyLc: g.discrepancyLc, discrepancyUsd: g.discrepancyUsd,
+            tidConcentration,
           });
         }
       }
@@ -444,11 +458,11 @@ export function registerExportRoutes(app: Express) {
         discrepancySheet[breakupTitleCell].s = { font: { bold: true, sz: 12 } };
         currentRow += 1;
 
-        const breakupHeaders = ["Sub category", "Cancellable", "SP Net", "HO Net", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)"];
+        const breakupHeaders = ["Sub category", "Cancellable", "SP Net (LC)", "HO Net (LC)", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)", "TID Concentration"];
         XLSX.utils.sheet_add_aoa(discrepancySheet, [breakupHeaders], { origin: { r: currentRow, c: 0 } });
         const breakupData = cancellationBreakup.map(g => {
           const cond = CANCELLATION_CONDITIONS[g.result] ?? { cancellable: "—", spNet: "—", hoNet: "—", cancellationInsurance: "—", chargeLoss: "—" };
-          return [g.subCategory, cond.cancellable, cond.spNet, cond.hoNet, cond.cancellationInsurance, cond.chargeLoss, g.result, g.actionPoint, g.driTeam, g.fulfillmentMethod, g.count, g.startDate, g.endDate, g.totalBids, g.discrepancyLc, g.discrepancyUsd];
+          return [g.subCategory, cond.cancellable, g.spNetTotal, g.hoNetTotal, cond.cancellationInsurance, cond.chargeLoss, g.result, g.actionPoint, g.driTeam, g.fulfillmentMethod, g.count, g.startDate, g.endDate, g.totalBids, g.discrepancyLc, g.discrepancyUsd, g.tidConcentration];
         });
         XLSX.utils.sheet_add_aoa(discrepancySheet, breakupData, { origin: { r: currentRow + 1, c: 0 } });
         applyTableStyles(discrepancySheet, currentRow, 0, cancellationBreakup.length + 1, breakupHeaders.length, breakupHeaders);
@@ -489,7 +503,7 @@ export function registerExportRoutes(app: Express) {
       
       const maxColCount = Math.max(
         summaryHeaders.length,
-        16, // cancellation breakup has 16 columns
+        17, // cancellation breakup has 17 columns
         ...Array.from(tidByReason.values()).map(rows => rows.length > 0 ? getColumnsForReason(rows[0]["Reason"] as string).length : 0)
       );
       discrepancySheet["!cols"] = Array(maxColCount).fill(null).map((_: any, i: number) => {
@@ -1824,7 +1838,7 @@ export function registerExportRoutes(app: Express) {
           countBid: gsheetCancellationBookings.length,
         });
       }
-      type GsCancellationBreakupRow = { subCategory: string; result: string; actionPoint: string; count: number; startDate: string; endDate: string; totalBids: number; driTeam: string; fulfillmentMethod: string; discrepancyLc: number; discrepancyUsd: number };
+      type GsCancellationBreakupRow = { subCategory: string; result: string; actionPoint: string; spNetTotal: number; hoNetTotal: number; count: number; startDate: string; endDate: string; totalBids: number; driTeam: string; fulfillmentMethod: string; discrepancyLc: number; discrepancyUsd: number; tidConcentration: string };
       const gsheetCancellationBreakup: GsCancellationBreakupRow[] = [];
       if (gsheetCancellationBookings.length > 0) {
         const gsBreakupUsdToCcy = result.fx?.usdToCcy || {};
@@ -1840,7 +1854,7 @@ export function registerExportRoutes(app: Express) {
           if (parts.length === 3) return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
           return 0;
         };
-        const gsGroups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
+        const gsGroups = new Map<string, { count: number; discrepancyLc: number; discrepancyUsd: number; spNetTotal: number; hoNetTotal: number; result: string; fulfillmentMethod: string; driTeam: string; tids: Set<string>; tidCounts: Map<string, number>; minDateTs: number; maxDateTs: number; minDate: string; maxDate: string }>();
         for (const b of gsheetCancellationBookings) {
           const rawFm = b.fulfillmentMethod ? String(b.fulfillmentMethod) : "";
           const gsSubFms = Array.from(new Set(rawFm.split(",").map((s: string) => s.trim()).filter(Boolean)));
@@ -1854,13 +1868,19 @@ export function registerExportRoutes(app: Express) {
             const dri = deriveDriTeamForBreakup(b.reason, subFm);
             const key = `${b.reason}|${subFm}|${dri}`;
             if (!gsGroups.has(key)) {
-              gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
+              gsGroups.set(key, { count: 0, discrepancyLc: 0, discrepancyUsd: 0, spNetTotal: 0, hoNetTotal: 0, result: b.reason, fulfillmentMethod: subFm, driTeam: dri, tids: new Set(), tidCounts: new Map(), minDateTs: Infinity, maxDateTs: -Infinity, minDate: "", maxDate: "" });
             }
             const g = gsGroups.get(key)!;
             g.count++;
             g.discrepancyLc += gsDiscLc;
             g.discrepancyUsd += gsDiscUsd;
-            if (b.tid) g.tids.add(String(b.tid));
+            g.spNetTotal += b.spNetInHo;
+            g.hoNetTotal += b.hoNet;
+            if (b.tid) {
+              const tidStr = String(b.tid);
+              g.tids.add(tidStr);
+              g.tidCounts.set(tidStr, (g.tidCounts.get(tidStr) || 0) + 1);
+            }
             if (ts > 0) {
               if (ts < g.minDateTs) { g.minDateTs = ts; g.minDate = formatDateValue(d!); }
               if (ts > g.maxDateTs) { g.maxDateTs = ts; g.maxDate = formatDateValue(d!); }
@@ -1878,13 +1898,21 @@ export function registerExportRoutes(app: Express) {
             if (g.maxDateTs !== -Infinity && ts > g.maxDateTs) return false;
             return true;
           }).length;
+          const gsTidConcentration = g.count > 0
+            ? Array.from(g.tidCounts.entries())
+                .filter(([, cnt]) => cnt / g.count > 0.25)
+                .map(([tid]) => tid)
+                .join(", ")
+            : "";
           gsheetCancellationBreakup.push({
             subCategory: g.result.replace("Cancelled-", ""),
             result: g.result, count: g.count,
             actionPoint: CANCELLATION_ACTION_POINTS[g.result] ?? "—",
+            spNetTotal: g.spNetTotal, hoNetTotal: g.hoNetTotal,
             startDate: g.minDate, endDate: g.maxDate, totalBids,
             driTeam: g.driTeam, fulfillmentMethod: g.fulfillmentMethod,
             discrepancyLc: g.discrepancyLc, discrepancyUsd: g.discrepancyUsd,
+            tidConcentration: gsTidConcentration,
           });
         }
       }
@@ -1950,14 +1978,14 @@ export function registerExportRoutes(app: Express) {
 
       if (gsheetCancellationBreakup.length > 0) {
         discrepancyData.push(["CANCELLATION BREAKUP"]);
-        discrepancyData.push(["Sub category", "Cancellable", "SP Net", "HO Net", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)"]);
+        discrepancyData.push(["Sub category", "Cancellable", "SP Net (LC)", "HO Net (LC)", "Cancellation Insurance", "Charge Loss", "Result (Sub-category)", "Action point", "DRI Team", "Fulfillment", "BID Count", "Start Date", "End Date", "Total BIDs", "Discrepancy (LC)", "Discrepancy (USD)", "TID Concentration"]);
         for (const g of gsheetCancellationBreakup) {
           const cond = CANCELLATION_CONDITIONS[g.result] ?? { cancellable: "—", spNet: "—", hoNet: "—", cancellationInsurance: "—", chargeLoss: "—" };
           discrepancyData.push([
-            g.subCategory, cond.cancellable, cond.spNet, cond.hoNet, cond.cancellationInsurance, cond.chargeLoss,
+            g.subCategory, cond.cancellable, g.spNetTotal, g.hoNetTotal, cond.cancellationInsurance, cond.chargeLoss,
             g.result, g.actionPoint, g.driTeam, g.fulfillmentMethod,
             g.count, g.startDate, g.endDate, g.totalBids,
-            formatIndianNumber(g.discrepancyLc), formatIndianNumber(g.discrepancyUsd)
+            formatIndianNumber(g.discrepancyLc), formatIndianNumber(g.discrepancyUsd), g.tidConcentration
           ]);
         }
         discrepancyData.push([]);
