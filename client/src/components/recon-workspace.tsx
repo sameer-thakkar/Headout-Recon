@@ -6,17 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Check, Gavel, FileWarning, AlertTriangle, X as XIcon, BarChart3,
-  PanelTopClose, PanelTop, CheckCheck, Loader2,
+  PanelTopClose, PanelTop, CheckCheck, Loader2, Calculator, Link2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
+import { driTeams, errorBucketRcaMapping, errorBucketOptions } from "@shared/schema";
 import type { BookingForPayable } from "@/components/amount-payable-modal";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -48,6 +53,7 @@ interface TidAggregate {
   totalSpNet: number;
   totalHoNet: number;
   discrepancy: number;
+  hasPax: boolean;
 }
 
 function buildTidAggregates(bookings: BookingForPayable[]): TidAggregate[] {
@@ -61,7 +67,12 @@ function buildTidAggregates(bookings: BookingForPayable[]): TidAggregate[] {
     .map(([tid, bs]) => {
       const totalSpNet = Math.round(bs.reduce((s, b) => s + b.spNet, 0) * 100) / 100;
       const totalHoNet = Math.round(bs.reduce((s, b) => s + b.hoNet, 0) * 100) / 100;
-      return { tid, bookings: bs, totalSpNet, totalHoNet, discrepancy: Math.round((totalHoNet - totalSpNet) * 100) / 100 };
+      const hasPax = bs.some(b => b.paxBreakdown && b.paxBreakdown.length > 0);
+      return {
+        tid, bookings: bs, totalSpNet, totalHoNet,
+        discrepancy: Math.round((totalHoNet - totalSpNet) * 100) / 100,
+        hasPax,
+      };
     })
     .sort((a, b) => Math.abs(b.discrepancy) - Math.abs(a.discrepancy));
 }
@@ -81,8 +92,18 @@ export interface ReconWorkspaceProps {
   fxRateToUsd?: number;
   billingEntityName: string;
   beId: string;
-  /** Called when user applies SP or HO Net to a set of booking IDs so parent can update finalNetSelections */
   onApplyFinalNet?: (bookingIds: string[], mode: "sp" | "ho") => void;
+}
+
+// ─── Issue form state ────────────────────────────────────────────────────────
+
+interface IssueForm {
+  driTeam: string;
+  errorBucket: string;
+  rca: string;
+  priority: string;
+  slackLink: string;
+  description: string;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -109,10 +130,24 @@ export function ReconWorkspace({
   // Per-TID action UI state
   const [showSpConfirmTid, setShowSpConfirmTid] = useState<string | null>(null);
   const [spDisputeChecked, setSpDisputeChecked] = useState(false);
+  const [showPaxTid, setShowPaxTid] = useState<string | null>(null);
+  const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
+
+  // Bottom section state
+  const [disputeSectionOpen, setDisputeSectionOpen] = useState(false);
+  const [issueSectionOpen, setIssueSectionOpen] = useState(false);
+  const [issueSubmitting, setIssueSubmitting] = useState(false);
+  const [issueForm, setIssueForm] = useState<IssueForm>({
+    driTeam: "",
+    errorBucket: reason,
+    rca: "",
+    priority: "Medium",
+    slackLink: "",
+    description: "",
+  });
 
   // API pending state
   const [pendingDisputeTids, setPendingDisputeTids] = useState<Set<string>>(new Set());
-  const [pendingIssueTids, setPendingIssueTids] = useState<Set<string>>(new Set());
 
   const isNPD = reason === "Net Price Discrepancy";
   const isMTB = reason === "Multiple Tickets Booked";
@@ -124,11 +159,27 @@ export function ReconWorkspace({
 
   const filteredAggregates = useMemo(() =>
     tidAggregates.filter(t =>
-      !tidSearch ||
-      t.tid.toLowerCase().includes(tidSearch.toLowerCase())
+      !tidSearch || t.tid.toLowerCase().includes(tidSearch.toLowerCase())
     ), [tidAggregates, tidSearch]);
 
   const totalDisc = tidAggregates.reduce((s, t) => s + Math.abs(t.discrepancy), 0);
+
+  // Disputeable bookings
+  const { disputableCount, disputableTotal } = useMemo(() => {
+    let count = 0; let total = 0;
+    for (const agg of tidAggregates) {
+      for (const b of agg.bookings) {
+        const d = Math.abs(b.hoNet - b.spNet);
+        if (d > 0) { count++; total += d; }
+      }
+    }
+    return { disputableCount: count, disputableTotal: total };
+  }, [tidAggregates]);
+
+  // RCA options derived from error bucket
+  const rcaOptions = useMemo(() =>
+    errorBucketRcaMapping[issueForm.errorBucket] || []
+  , [issueForm.errorBucket]);
 
   // ── Analysis row lookup by TID ────────────────────────────────────────────
   const analysisRowByTid = useMemo(() => {
@@ -159,11 +210,19 @@ export function ReconWorkspace({
     setHighlightedTid(tid);
     setExpandedTid(tid);
     setShowSpConfirmTid(null);
+    setShowPaxTid(null);
     setTimeout(() => {
       document.getElementById(`ws-tid-${tid}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
     setTimeout(() => setHighlightedTid(null), 3000);
   }, []);
+
+  const clearTidActionPanels = () => {
+    setShowSpConfirmTid(null);
+    setShowPaxTid(null);
+    setSpDisputeChecked(false);
+    setPaxPrices({});
+  };
 
   // ── Resolve helpers ───────────────────────────────────────────────────────
   const resolveMultiple = useCallback((tids: string[]) => {
@@ -218,45 +277,43 @@ export function ReconWorkspace({
     }
   }, [runId, beId, billingEntityName, currency, toast]);
 
-  // ── Action: Log Issue ─────────────────────────────────────────────────────
-  const logIssues = useCallback(async (tids: TidAggregate[]) => {
+  // ── Action: Log Issue (single, from bottom form) ──────────────────────────
+  const submitIssue = useCallback(async () => {
     if (!runId) return;
-    const tidIds = tids.map(t => t.tid);
-    setPendingIssueTids(prev => { const next = new Set(prev); tidIds.forEach(id => next.add(id)); return next; });
+    setIssueSubmitting(true);
     const fxRate = fxRateToUsd || 1;
-    let count = 0;
-    for (const t of tids) {
-      const totalDisc = Math.abs(t.discrepancy);
-      try {
-        await apiRequest("POST", `/api/issues`, {
-          runId,
-          createdDate: new Date().toISOString(),
-          billingEntityId: beId,
-          billingEntityName,
-          currency,
-          discrepancyLocal: totalDisc,
-          discrepancyUsd: totalDisc * fxRate,
-          reason,
-          driTeam: reason.includes("Cancelled") ? "Operations"
-            : reason.includes("NPD") || reason.includes("MTB") ? "Supplier Management"
-              : "Finance",
-          bookingIds: t.bookings.map(b => b.bookingId),
-          ticketId: t.bookings[0]?.ticketId || "",
-          tid: t.tid,
-          paymentMethod: t.bookings[0]?.paymentMethod || "",
-          errorBucket: reason,
-        });
-        count++;
-      } catch (err) {
-        console.error(`Issue log failed for ${t.tid}:`, err);
-      }
-    }
-    setPendingIssueTids(prev => { const next = new Set(prev); tidIds.forEach(id => next.delete(id)); return next; });
-    if (count > 0) {
+    const allBookingIds = tidAggregates.flatMap(t => t.bookings.map(b => b.bookingId));
+    try {
+      await apiRequest("POST", `/api/issues`, {
+        runId,
+        createdDate: new Date().toISOString(),
+        billingEntityId: beId,
+        billingEntityName,
+        currency,
+        discrepancyLocal: totalDisc,
+        discrepancyUsd: totalDisc * fxRate,
+        reason,
+        driTeam: issueForm.driTeam,
+        bookingIds: allBookingIds,
+        ticketId: tidAggregates[0]?.bookings[0]?.ticketId || "",
+        tid: tidAggregates[0]?.tid || "",
+        paymentMethod: tidAggregates[0]?.bookings[0]?.paymentMethod || "",
+        errorBucket: issueForm.errorBucket,
+        rca: issueForm.rca,
+        slackLink: issueForm.slackLink,
+        description: issueForm.description,
+      });
       queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
-      toast({ title: "Issues logged", description: `${count} issue${count !== 1 ? "s" : ""} created.` });
+      toast({ title: "Issue logged", description: "Issue created and linked to this reconciliation." });
+      setIssueSectionOpen(false);
+      setIssueForm(prev => ({ ...prev, rca: "", slackLink: "", description: "" }));
+    } catch (err) {
+      console.error("Issue submit failed:", err);
+      toast({ title: "Failed to log issue", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setIssueSubmitting(false);
     }
-  }, [runId, beId, billingEntityName, currency, fxRateToUsd, reason, toast]);
+  }, [runId, beId, billingEntityName, currency, fxRateToUsd, reason, issueForm, tidAggregates, totalDisc, toast]);
 
   // ── Bulk action helpers ───────────────────────────────────────────────────
   const getBulkTids = useCallback(() =>
@@ -272,12 +329,10 @@ export function ReconWorkspace({
       applyFinalNet(tids, action as "sp" | "ho");
     } else if (action === "dispute") {
       await raiseDisputes(tids);
-    } else if (action === "issue") {
-      await logIssues(tids);
     }
     setSelectedTids(new Set());
     setBulkConfirm(null);
-  }, [getBulkTids, applyFinalNet, raiseDisputes, logIssues]);
+  }, [getBulkTids, applyFinalNet, raiseDisputes]);
 
   const resolvedCount = resolvedTids.size;
 
@@ -287,7 +342,9 @@ export function ReconWorkspace({
         <DialogHeader className="px-5 py-3 border-b flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
             <span>{reason}</span>
-            <Badge variant="secondary" className="text-xs">{tidAggregates.length} TIDs · {bookings.filter(b => b.reason === reason).length} bookings</Badge>
+            <Badge variant="secondary" className="text-xs">
+              {tidAggregates.length} TIDs · {bookings.filter(b => b.reason === reason).length} bookings
+            </Badge>
             {resolvedCount > 0 && (
               <Badge className="text-xs bg-green-100 text-green-700 border-green-200">
                 <CheckCircle2 className="h-3 w-3 mr-1" />{resolvedCount}/{tidAggregates.length} resolved
@@ -309,7 +366,9 @@ export function ReconWorkspace({
               <div className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-violet-600" />
                 <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Discrepancy Analysis</span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-100 text-violet-700 border-violet-200">{discrepancyRows.length} TIDs</Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-violet-100 text-violet-700 border-violet-200">
+                  {discrepancyRows.length} TIDs
+                </Badge>
                 {!isDiscrepancyLoading && discrepancyRows.length > 0 && (
                   <span className="text-[11px] text-violet-600 dark:text-violet-400">Click a row to jump to actions ↓</span>
                 )}
@@ -368,8 +427,15 @@ export function ReconWorkspace({
                           onClick={() => handleAnalysisRowClick(row.tid)}
                           data-testid={`analysis-row-${row.tid}`}
                         >
-                          <TableCell className="py-1.5 pl-4 font-mono text-sm text-primary font-medium">{row.tid}</TableCell>
-                          <TableCell className="py-1.5 text-right font-mono text-sm text-red-600 dark:text-red-400">{formatNumber(row.discrepancyUsd)}</TableCell>
+                          <TableCell className="py-1.5 pl-4 font-mono text-sm text-primary font-medium">
+                            <div className="flex items-center gap-1.5">
+                              {resolvedTids.has(row.tid) && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />}
+                              {row.tid}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-1.5 text-right font-mono text-sm text-red-600 dark:text-red-400">
+                            {formatNumber(row.discrepancyUsd)}
+                          </TableCell>
                           <TableCell className="py-1.5 text-sm">{row.fulfillmentMethod}</TableCell>
                           {isMTB && (
                             <>
@@ -384,15 +450,23 @@ export function ReconWorkspace({
                           )}
                           {isNPD && (
                             <>
-                              <TableCell className="py-1.5 text-right font-mono text-sm">{row.hoTakeRatePercent?.toFixed(2) ?? "—"}%</TableCell>
-                              <TableCell className={`py-1.5 text-right font-mono text-sm ${(row.actualTakeRatePercent ?? 0) < 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>{row.actualTakeRatePercent?.toFixed(2) ?? "—"}%</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono text-sm">
+                                {row.hoTakeRatePercent?.toFixed(2) ?? "—"}%
+                              </TableCell>
+                              <TableCell className={`py-1.5 text-right font-mono text-sm ${(row.actualTakeRatePercent ?? 0) < 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
+                                {row.actualTakeRatePercent?.toFixed(2) ?? "—"}%
+                              </TableCell>
                               <TableCell className="py-1.5 text-sm">{formatDateDDMMYYYY(row.startDate) || "—"}</TableCell>
                               <TableCell className="py-1.5 text-sm">{formatDateDDMMYYYY(row.endDate) || "—"}</TableCell>
-                              <TableCell className={`py-1.5 text-right font-mono text-sm ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>{row.discrepancyPercentRange || "—"}</TableCell>
+                              <TableCell className={`py-1.5 text-right font-mono text-sm ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
+                                {row.discrepancyPercentRange || "—"}
+                              </TableCell>
                               <TableCell className="py-1.5 text-right text-sm">{row.countBidWithDiscrepancy}</TableCell>
                               <TableCell className="py-1.5 text-right text-sm">{row.countBidsInDuration}</TableCell>
                               <TableCell className="py-1.5 text-center">
-                                <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0">{row.soldAtLoss || "—"}</Badge>
+                                <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0">
+                                  {row.soldAtLoss || "—"}
+                                </Badge>
                               </TableCell>
                               <TableCell className={`py-1.5 text-right font-mono text-sm pr-4 ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
                                 {row.lossUsd != null && row.lossUsd > 0 ? formatNumber(row.lossUsd) : "—"}
@@ -434,7 +508,9 @@ export function ReconWorkspace({
             {/* ★ DISCREPANCY-LEVEL BULK STRIP — always visible */}
             {!bulkConfirm && (
               <div className="rounded-lg border bg-muted/30 px-3 py-2 flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tidAggregates.length} TIDs:</span>
+                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                  All {tidAggregates.length} TIDs:
+                </span>
                 <div className="h-4 w-px bg-border" />
                 <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openDiscrepancyAction("sp")} data-testid="bulk-all-sp">
                   <TrendingUp className="h-3 w-3" /> SP Net
@@ -444,9 +520,6 @@ export function ReconWorkspace({
                 </Button>
                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openDiscrepancyAction("dispute")} data-testid="bulk-all-dispute">
                   <Gavel className="h-3 w-3" /> Raise Dispute
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => openDiscrepancyAction("issue")} data-testid="bulk-all-issue">
-                  <FileWarning className="h-3 w-3" /> Log Issue
                 </Button>
               </div>
             )}
@@ -459,12 +532,19 @@ export function ReconWorkspace({
                   <span className="text-sm font-semibold">{selectedTids.size} TIDs selected</span>
                 </div>
                 <div className="h-4 w-px bg-border" />
-                <Button size="sm" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openSelectionAction("sp")} data-testid="bulk-sel-sp"><TrendingUp className="h-3 w-3" /> SP Net</Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openSelectionAction("ho")} data-testid="bulk-sel-ho"><TrendingDown className="h-3 w-3" /> HO Net</Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openSelectionAction("dispute")} data-testid="bulk-sel-dispute"><Gavel className="h-3 w-3" /> Dispute</Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => openSelectionAction("issue")} data-testid="bulk-sel-issue"><FileWarning className="h-3 w-3" /> Issue</Button>
+                <Button size="sm" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openSelectionAction("sp")} data-testid="bulk-sel-sp">
+                  <TrendingUp className="h-3 w-3" /> SP Net
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openSelectionAction("ho")} data-testid="bulk-sel-ho">
+                  <TrendingDown className="h-3 w-3" /> HO Net
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openSelectionAction("dispute")} data-testid="bulk-sel-dispute">
+                  <Gavel className="h-3 w-3" /> Dispute
+                </Button>
                 <div className="flex-1" />
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedTids(new Set())}><XIcon className="h-3 w-3 mr-1" /> Clear</Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedTids(new Set())}>
+                  <XIcon className="h-3 w-3 mr-1" /> Clear
+                </Button>
               </div>
             )}
 
@@ -481,7 +561,9 @@ export function ReconWorkspace({
                       {isSp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                       Bulk {isSp ? "SP Net" : "HO Net"} — {bulkScope === "all" ? `All ${selectedData.length}` : `${selectedData.length} selected`} TIDs
                     </div>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}><XIcon className="h-3.5 w-3.5" /></Button>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}>
+                      <XIcon className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                   <div className="rounded-md border overflow-hidden bg-background">
                     <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
@@ -497,7 +579,9 @@ export function ReconWorkspace({
                         <div className={`text-right w-28 px-2 font-mono ${isSp ? "font-semibold text-blue-700" : "text-muted-foreground"}`}>{formatNumber(t.totalSpNet)}</div>
                         <div className={`text-right w-28 px-2 font-mono ${!isSp ? "font-semibold text-green-700" : "text-muted-foreground"}`}>{formatNumber(t.totalHoNet)}</div>
                         <div className="text-right w-24 px-2 font-mono text-red-500">{formatNumber(Math.abs(t.discrepancy))}</div>
-                        <div className={`text-right w-28 px-2 font-mono font-semibold ${isSp ? "text-blue-700" : "text-green-700"}`}>{formatNumber(isSp ? t.totalSpNet : t.totalHoNet)}</div>
+                        <div className={`text-right w-28 px-2 font-mono font-semibold ${isSp ? "text-blue-700" : "text-green-700"}`}>
+                          {formatNumber(isSp ? t.totalSpNet : t.totalHoNet)}
+                        </div>
                       </div>
                     ))}
                     <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center px-3 h-8 bg-muted/30 border-t text-xs font-semibold">
@@ -511,7 +595,9 @@ export function ReconWorkspace({
                   {isSp && overpay > 0 && (
                     <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-xs">
                       <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
-                      <span className="text-amber-800 dark:text-amber-300">Paying <span className="font-mono font-semibold">{formatNumber(overpay)} {currency}</span> above HO Net — consider raising disputes.</span>
+                      <span className="text-amber-800 dark:text-amber-300">
+                        Paying <span className="font-mono font-semibold">{formatNumber(overpay)} {currency}</span> above HO Net — consider raising disputes.
+                      </span>
                     </div>
                   )}
                   <div className="flex items-center justify-between pt-1">
@@ -530,20 +616,20 @@ export function ReconWorkspace({
               );
             })()}
 
-            {/* ★ BULK CONFIRM — dispute/issue badge list */}
-            {bulkConfirm && bulkConfirm !== "sp" && bulkConfirm !== "ho" && (() => {
+            {/* ★ BULK CONFIRM — dispute */}
+            {bulkConfirm === "dispute" && (() => {
               const selectedData = getBulkTids();
-              const isLoading = bulkConfirm === "dispute"
-                ? selectedData.some(t => pendingDisputeTids.has(t.tid))
-                : selectedData.some(t => pendingIssueTids.has(t.tid));
+              const isLoading = selectedData.some(t => pendingDisputeTids.has(t.tid));
               return (
                 <div className="rounded-lg border-2 border-amber-300 bg-amber-50/80 dark:bg-amber-950/20 p-3 space-y-2 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
                       <AlertTriangle className="h-4 w-4" />
-                      {bulkConfirm === "dispute" ? "Raise Dispute" : "Log Issue"} for {bulkScope === "all" ? `all ${selectedData.length}` : `${selectedData.length} selected`} TIDs
+                      Raise Dispute for {bulkScope === "all" ? `all ${selectedData.length}` : `${selectedData.length} selected`} TIDs
                     </div>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}><XIcon className="h-3.5 w-3.5" /></Button>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}>
+                      <XIcon className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {selectedData.map(t => <Badge key={t.tid} variant="outline" className="text-xs font-mono">{t.tid}</Badge>)}
@@ -555,10 +641,10 @@ export function ReconWorkspace({
                       className="h-7 text-xs gap-1"
                       disabled={isLoading}
                       onClick={() => handleBulkConfirm(bulkConfirm)}
-                      data-testid={`confirm-bulk-${bulkConfirm}`}
+                      data-testid="confirm-bulk-dispute"
                     >
                       {isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
-                      Confirm &amp; Apply
+                      Confirm &amp; Raise
                     </Button>
                   </div>
                 </div>
@@ -592,6 +678,7 @@ export function ReconWorkspace({
                   const isSelected = selectedTids.has(agg.tid);
                   const discPct = totalDisc > 0 ? ((Math.abs(agg.discrepancy) / totalDisc) * 100).toFixed(0) : "0";
                   const analysisRow = analysisRowByTid.get(agg.tid);
+                  const isShowingAction = showSpConfirmTid === agg.tid || showPaxTid === agg.tid;
 
                   return (
                     <div
@@ -608,13 +695,14 @@ export function ReconWorkspace({
                         className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
                         onClick={() => {
                           setExpandedTid(isExpanded ? null : agg.tid);
-                          setShowSpConfirmTid(null);
-                          setSpDisputeChecked(false);
+                          clearTidActionPanels();
                         }}
                         data-testid={`tid-row-${agg.tid}`}
                       >
                         <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(agg.tid); }}>
-                          {!isResolved && <Checkbox checked={isSelected} className="h-3.5 w-3.5" data-testid={`checkbox-tid-${agg.tid}`} />}
+                          {!isResolved && (
+                            <Checkbox checked={isSelected} className="h-3.5 w-3.5" data-testid={`checkbox-tid-${agg.tid}`} />
+                          )}
                         </div>
                         <div className="w-5 flex items-center">
                           {isResolved
@@ -629,6 +717,9 @@ export function ReconWorkspace({
                             )}
                             {analysisRow?.soldAtLoss === "Yes" && (
                               <Badge variant="destructive" className="text-[10px] px-1 py-0">Loss</Badge>
+                            )}
+                            {agg.hasPax && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-300">Pax</Badge>
                             )}
                           </div>
                           <div className="text-[11px] text-muted-foreground truncate">
@@ -660,14 +751,18 @@ export function ReconWorkspace({
                                     {analysisRow.actualTakeRatePercent?.toFixed(1) ?? "—"}%
                                   </span>
                                   {analysisRow.discrepancyPercentRange && (
-                                    <span className={`text-[10px] font-medium ${analysisRow.discrepancyPercentRange.startsWith("-") ? "text-red-500" : "text-green-500"}`}>({analysisRow.discrepancyPercentRange})</span>
+                                    <span className={`text-[10px] font-medium ${analysisRow.discrepancyPercentRange.startsWith("-") ? "text-red-500" : "text-green-500"}`}>
+                                      ({analysisRow.discrepancyPercentRange})
+                                    </span>
                                   )}
                                 </div>
                               )}
                               {(analysisRow.startDate || analysisRow.endDate) && (
                                 <div className="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs">
                                   <span className="text-muted-foreground">Period:</span>
-                                  <span className="font-medium">{formatDateDDMMYYYY(analysisRow.startDate) || "?"} – {formatDateDDMMYYYY(analysisRow.endDate) || "?"}</span>
+                                  <span className="font-medium">
+                                    {formatDateDDMMYYYY(analysisRow.startDate) || "?"} – {formatDateDDMMYYYY(analysisRow.endDate) || "?"}
+                                  </span>
                                 </div>
                               )}
                               {analysisRow.countBidWithDiscrepancy > 0 && (
@@ -680,7 +775,11 @@ export function ReconWorkspace({
                                 <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 dark:bg-red-950/20 px-2.5 py-1.5 text-xs">
                                   <AlertTriangle className="h-3 w-3 text-red-600" />
                                   <span className="font-medium text-red-700 dark:text-red-400">Sold at Loss</span>
-                                  {analysisRow.lossUsd != null && <span className="font-mono font-semibold text-red-600 dark:text-red-400">{formatNumber(analysisRow.lossUsd)} USD</span>}
+                                  {analysisRow.lossUsd != null && (
+                                    <span className="font-mono font-semibold text-red-600 dark:text-red-400">
+                                      {formatNumber(analysisRow.lossUsd)} USD
+                                    </span>
+                                  )}
                                 </div>
                               )}
                               {isMTB && analysisRow.timesCharged && (
@@ -693,7 +792,7 @@ export function ReconWorkspace({
                           )}
 
                           {/* TID action strip */}
-                          {showSpConfirmTid !== agg.tid && (
+                          {!isShowingAction && (
                             <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 flex-wrap">
                               <span className="text-xs text-muted-foreground font-medium">{agg.tid}:</span>
                               <Button
@@ -713,6 +812,17 @@ export function ReconWorkspace({
                               >
                                 <TrendingDown className="h-3 w-3" /> HO Net
                               </Button>
+                              {agg.hasPax && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs gap-1 text-violet-700 border-violet-300 hover:bg-violet-50"
+                                  onClick={() => { setShowPaxTid(agg.tid); setShowSpConfirmTid(null); setPaxPrices({}); }}
+                                  data-testid={`tid-btn-pax-${agg.tid}`}
+                                >
+                                  <Calculator className="h-3 w-3" /> Pax Pricing
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -721,19 +831,10 @@ export function ReconWorkspace({
                                 onClick={() => raiseDisputes([agg])}
                                 data-testid={`tid-btn-dispute-${agg.tid}`}
                               >
-                                {pendingDisputeTids.has(agg.tid) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gavel className="h-3 w-3" />}
+                                {pendingDisputeTids.has(agg.tid)
+                                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                                  : <Gavel className="h-3 w-3" />}
                                 Dispute
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50"
-                                disabled={pendingIssueTids.has(agg.tid)}
-                                onClick={() => logIssues([agg])}
-                                data-testid={`tid-btn-issue-${agg.tid}`}
-                              >
-                                {pendingIssueTids.has(agg.tid) ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileWarning className="h-3 w-3" />}
-                                Issue
                               </Button>
                             </div>
                           )}
@@ -745,7 +846,9 @@ export function ReconWorkspace({
                                 <div className="flex items-center gap-2 text-sm font-semibold text-blue-800 dark:text-blue-300">
                                   <TrendingUp className="h-4 w-4" /> Apply SP Net to {agg.tid}
                                 </div>
-                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowSpConfirmTid(null)}><XIcon className="h-3.5 w-3.5" /></Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowSpConfirmTid(null)}>
+                                  <XIcon className="h-3.5 w-3.5" />
+                                </Button>
                               </div>
                               <p className="text-xs text-muted-foreground">
                                 TAP = SP Net <span className="font-mono font-semibold text-blue-700 dark:text-blue-300">{formatNumber(agg.totalSpNet)} {currency}</span>
@@ -779,6 +882,76 @@ export function ReconWorkspace({
                             </div>
                           )}
 
+                          {/* Pax Pricing panel */}
+                          {showPaxTid === agg.tid && (() => {
+                            const paxTypes = Array.from(
+                              new Map(
+                                agg.bookings.flatMap(b => b.paxBreakdown || [])
+                                  .map(p => [p.paxType, p])
+                              ).values()
+                            );
+                            const allFilled = paxTypes.every(p => paxPrices[`${agg.tid}-${p.paxType}`]);
+                            return (
+                              <div className="rounded-md border border-violet-200 bg-violet-50/60 dark:bg-violet-950/20 p-3 space-y-2 animate-in fade-in duration-200">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-violet-800 dark:text-violet-300">
+                                    <Calculator className="h-4 w-4" /> Pax Pricing — {agg.tid}
+                                  </div>
+                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowPaxTid(null)}>
+                                    <XIcon className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                                {paxTypes.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">No pax breakdown data available for this TID.</p>
+                                ) : (
+                                  <div className="rounded-md border overflow-hidden bg-background">
+                                    <div className="grid grid-cols-[1fr_auto_auto_auto] px-3 h-7 bg-muted/30 items-center border-b text-[11px] font-medium text-muted-foreground">
+                                      <div>Pax Type</div>
+                                      <div className="w-16 text-right px-2">Count</div>
+                                      <div className="w-24 text-right px-2">SP Unit Price</div>
+                                      <div className="w-28 text-right px-2 text-violet-600">Final Price</div>
+                                    </div>
+                                    {paxTypes.map(p => (
+                                      <div key={p.paxType} className="grid grid-cols-[1fr_auto_auto_auto] px-3 h-9 items-center border-b last:border-0 text-xs">
+                                        <div className="font-medium">{p.paxType}</div>
+                                        <div className="w-16 text-right px-2 font-mono">{p.count}</div>
+                                        <div className="w-24 text-right px-2 font-mono text-muted-foreground">{formatNumber(p.unitPrice)}</div>
+                                        <div className="w-28 px-2">
+                                          <Input
+                                            type="number"
+                                            placeholder="Enter"
+                                            className="h-7 text-xs font-mono text-right w-full"
+                                            value={paxPrices[`${agg.tid}-${p.paxType}`] ?? ""}
+                                            onChange={e => setPaxPrices(prev => ({ ...prev, [`${agg.tid}-${p.paxType}`]: e.target.value }))}
+                                            data-testid={`pax-price-${agg.tid}-${p.paxType}`}
+                                          />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2">
+                                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowPaxTid(null)}>Cancel</Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs gap-1"
+                                    disabled={!allFilled || paxTypes.length === 0}
+                                    onClick={() => {
+                                      applyFinalNet([agg], "sp");
+                                      setShowPaxTid(null);
+                                      setPaxPrices({});
+                                      setExpandedTid(null);
+                                      toast({ title: "Pax prices applied", description: `${agg.tid} updated with custom pax pricing.` });
+                                    }}
+                                    data-testid={`confirm-pax-${agg.tid}`}
+                                  >
+                                    <Check className="h-3 w-3" /> Apply Pax Prices
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                           {/* Booking table */}
                           <div className="rounded-md border overflow-hidden">
                             <div className="grid grid-cols-[1fr_auto_auto] px-3 h-7 bg-muted/30 items-center border-b text-[11px] font-medium text-muted-foreground">
@@ -793,7 +966,9 @@ export function ReconWorkspace({
                                 data-testid={`booking-row-${b.bookingId}`}
                               >
                                 <div className="font-mono font-medium">{b.bookingId}</div>
-                                <div className={`w-28 text-right px-2 font-mono ${b.spNet > b.hoNet ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>{formatNumber(b.spNet)}</div>
+                                <div className={`w-28 text-right px-2 font-mono ${b.spNet > b.hoNet ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
+                                  {formatNumber(b.spNet)}
+                                </div>
                                 <div className="w-28 text-right px-3 font-mono text-muted-foreground">{formatNumber(b.hoNet)}</div>
                               </div>
                             ))}
@@ -805,6 +980,187 @@ export function ReconWorkspace({
                 })}
               </div>
             )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                RAISE DISPUTE SECTION — collapsible, bottom of action panel
+            ══════════════════════════════════════════════════════════════ */}
+            <div className="rounded-lg border overflow-hidden" data-testid="section-raise-dispute">
+              <div
+                className="flex items-center justify-between px-4 py-2.5 bg-amber-50/60 dark:bg-amber-950/10 cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                onClick={() => setDisputeSectionOpen(o => !o)}
+              >
+                <div className="flex items-center gap-2">
+                  <Gavel className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Raise Disputes</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 border-amber-200">
+                    {disputableCount} bookings · {formatNumber(disputableTotal)} {currency}
+                  </Badge>
+                </div>
+                {disputeSectionOpen
+                  ? <ChevronDown className="h-4 w-4 text-amber-500" />
+                  : <ChevronRight className="h-4 w-4 text-amber-500" />}
+              </div>
+              {disputeSectionOpen && (
+                <div className="px-4 py-3 space-y-3 bg-amber-50/20 dark:bg-amber-950/10 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-md border bg-background p-3 text-center">
+                      <div className="text-xs text-muted-foreground mb-1">Disputable Bookings</div>
+                      <div className="font-mono text-lg font-semibold">{disputableCount}</div>
+                      <div className="text-[11px] text-muted-foreground">where |SP − HO| &gt; 0</div>
+                    </div>
+                    <div className="rounded-md border bg-background p-3 text-center">
+                      <div className="text-xs text-muted-foreground mb-1">Total Disputable Amount</div>
+                      <div className="font-mono text-lg font-semibold text-amber-700">{formatNumber(disputableTotal)}</div>
+                      <div className="text-[11px] text-muted-foreground">{currency}</div>
+                    </div>
+                    <div className="rounded-md border bg-background p-3 text-center">
+                      <div className="text-xs text-muted-foreground mb-1">TIDs Affected</div>
+                      <div className="font-mono text-lg font-semibold">{tidAggregates.filter(t => Math.abs(t.discrepancy) > 0).length}</div>
+                      <div className="text-[11px] text-muted-foreground">out of {tidAggregates.length} total</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+                      disabled={disputableCount === 0 || tidAggregates.some(t => pendingDisputeTids.has(t.tid))}
+                      onClick={() => raiseDisputes(tidAggregates)}
+                      data-testid="btn-raise-all-disputes"
+                    >
+                      {tidAggregates.some(t => pendingDisputeTids.has(t.tid))
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Gavel className="h-3.5 w-3.5" />}
+                      Raise All Disputes
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Creates one dispute per booking where a discrepancy exists.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ══════════════════════════════════════════════════════════════
+                LOG ISSUE SECTION — collapsible, bottom of action panel
+            ══════════════════════════════════════════════════════════════ */}
+            <div className="rounded-lg border overflow-hidden" data-testid="section-log-issue">
+              <div
+                className="flex items-center justify-between px-4 py-2.5 bg-orange-50/60 dark:bg-orange-950/10 cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                onClick={() => setIssueSectionOpen(o => !o)}
+              >
+                <div className="flex items-center gap-2">
+                  <FileWarning className="h-4 w-4 text-orange-600" />
+                  <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">Log Issue</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-orange-100 text-orange-700 border-orange-200">
+                    {tidAggregates.length} TIDs · {formatNumber(totalDisc)} {currency}
+                  </Badge>
+                </div>
+                {issueSectionOpen
+                  ? <ChevronDown className="h-4 w-4 text-orange-500" />
+                  : <ChevronRight className="h-4 w-4 text-orange-500" />}
+              </div>
+              {issueSectionOpen && (
+                <div className="px-4 py-3 space-y-3 bg-orange-50/20 dark:bg-orange-950/10 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">DRI Team</label>
+                      <Select
+                        value={issueForm.driTeam}
+                        onValueChange={v => setIssueForm(prev => ({ ...prev, driTeam: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-dri-team">
+                          <SelectValue placeholder="Select DRI team…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {driTeams.map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Priority</label>
+                      <Select
+                        value={issueForm.priority}
+                        onValueChange={v => setIssueForm(prev => ({ ...prev, priority: v }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-priority">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["High", "Medium", "Low"].map(p => <SelectItem key={p} value={p} className="text-xs">{p}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Error Bucket</label>
+                      <Select
+                        value={issueForm.errorBucket}
+                        onValueChange={v => setIssueForm(prev => ({ ...prev, errorBucket: v, rca: "" }))}
+                      >
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-error-bucket">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {errorBucketOptions.map(b => <SelectItem key={b} value={b} className="text-xs">{b}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">RCA</label>
+                      <Select
+                        value={issueForm.rca}
+                        onValueChange={v => setIssueForm(prev => ({ ...prev, rca: v }))}
+                        disabled={rcaOptions.length === 0}
+                      >
+                        <SelectTrigger className="h-8 text-xs" data-testid="select-rca">
+                          <SelectValue placeholder={rcaOptions.length === 0 ? "Select Error Bucket first" : "Select RCA…"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {rcaOptions.map(r => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <Link2 className="h-3 w-3" /> Slack Link <span className="font-normal">(optional)</span>
+                    </label>
+                    <Input
+                      placeholder="https://headout.slack.com/archives/…"
+                      className="h-8 text-xs"
+                      value={issueForm.slackLink}
+                      onChange={e => setIssueForm(prev => ({ ...prev, slackLink: e.target.value }))}
+                      data-testid="input-slack-link"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span></label>
+                    <Textarea
+                      placeholder="Additional context or notes for this issue…"
+                      className="text-xs min-h-[60px] resize-none"
+                      value={issueForm.description}
+                      onChange={e => setIssueForm(prev => ({ ...prev, description: e.target.value }))}
+                      data-testid="textarea-issue-description"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-xs text-muted-foreground">
+                      Issue covers all {tidAggregates.length} TIDs · {formatNumber(totalDisc)} {currency} discrepancy
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs gap-1.5 bg-orange-600 hover:bg-orange-700 text-white"
+                      disabled={!issueForm.driTeam || !issueForm.rca || issueSubmitting}
+                      onClick={submitIssue}
+                      data-testid="btn-submit-issue"
+                    >
+                      {issueSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileWarning className="h-3.5 w-3.5" />}
+                      Log Issue
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
       </DialogContent>
