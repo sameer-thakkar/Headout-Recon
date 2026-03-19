@@ -725,9 +725,9 @@ const CANCELLATION_CONDITIONS: Record<string, {
   cancellationInsurance: string;
   chargeLoss: string;
 }> = {
-  "Cancelled-OK":                    { cancellable: "Any", spNet: "= 0", hoNet: "Any", cancellationInsurance: "Any", chargeLoss: "Any"   },
+  "Cancelled-OK":                    { cancellable: "Any", spNet: "= 0", hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "Any"   },
   "Cancelled-Refund OK":             { cancellable: "Any", spNet: "< 0", hoNet: "= 0", cancellationInsurance: "Any", chargeLoss: "Any"   },
-  "Cancelled-SP error":              { cancellable: "Yes", spNet: "> 0", hoNet: "Any", cancellationInsurance: "Any", chargeLoss: "Any"   },
+  "Cancelled-SP error":              { cancellable: "Yes", spNet: "> 0", hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "Any"   },
   "Cancelled-Insured Booking":       { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "Yes", chargeLoss: "Any"   },
   "Cancelled-DSS policy":            { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "TRUE"  },
   "Cancelled-Check for Charge loss": { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "FALSE" },
@@ -3386,11 +3386,11 @@ export function AmountPayablePanel({
                                   {isFirstForReason && <span title={actionPoint} className="truncate block">{actionPoint}</span>}
                                 </TableCell>
                                 <TableCell className="py-1">
-                                  {isFirstForReason && (driTeam === "N/A" ? (
+                                  {driTeam === "N/A" ? (
                                     <span className="text-xs text-muted-foreground">N/A</span>
                                   ) : (
                                     <Badge variant="secondary" className="text-[10px] px-1.5">{driTeam}</Badge>
-                                  ))}
+                                  )}
                                 </TableCell>
                                 <TableCell className="py-1 text-xs text-muted-foreground max-w-[120px]">
                                   <span title={row.fulfillmentMethod} className="truncate block">{row.fulfillmentMethod}</span>
