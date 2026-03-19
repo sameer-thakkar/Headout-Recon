@@ -92,14 +92,9 @@ export function OptionA_ExpandActions() {
 
   const handleBulkAction = (action: string) => {
     const tids = Array.from(selectedTids);
-    if (action === "ho") {
+    if (action === "ho" || action === "sp") {
       resolveMultiple(tids);
-      flash(`${tids.length} TIDs → HO Net applied`);
-      setSelectedTids(new Set());
-      setBulkConfirm(null);
-    } else if (action === "sp") {
-      resolveMultiple(tids);
-      flash(`${tids.length} TIDs → SP Net applied`);
+      flash(`${tids.length} TIDs → ${action === "sp" ? "SP" : "HO"} Net applied`);
       setSelectedTids(new Set());
       setBulkConfirm(null);
     } else if (action === "dispute") {
@@ -236,12 +231,79 @@ export function OptionA_ExpandActions() {
             </div>
           )}
 
-          {/* ★ BULK CONFIRM */}
-          {bulkConfirm && (
+          {/* ★ BULK CONFIRM — detailed table for SP/HO Net, simple for others */}
+          {bulkConfirm && (bulkConfirm === "sp" || bulkConfirm === "ho") && (() => {
+            const selectedTidData = TIDS.filter(t => selectedTids.has(t.tid));
+            const isSp = bulkConfirm === "sp";
+            const totalPayable = selectedTidData.reduce((s, t) => s + (isSp ? t.spNet : t.hoNet), 0);
+            const totalSp = selectedTidData.reduce((s, t) => s + t.spNet, 0);
+            const totalHo = selectedTidData.reduce((s, t) => s + t.hoNet, 0);
+            const totalDiscount = isSp ? totalSp - totalHo : 0;
+            return (
+              <div className="rounded-lg border-2 border-blue-200 bg-blue-50/60 p-3 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+                    {isSp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    Bulk {isSp ? "SP Net" : "HO Net"} — {selectedTidData.length} TIDs
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}>
+                    <XIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                {/* Per-TID value table */}
+                <div className="rounded-md border overflow-hidden bg-white">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
+                    <div>TID</div>
+                    <div className="text-right w-24 px-2 text-blue-600">SP Net</div>
+                    <div className="text-right w-24 px-2 text-green-600">HO Net</div>
+                    <div className="text-right w-24 px-2">Disc. LC</div>
+                    <div className="text-right w-28 px-2 font-semibold text-foreground">Payable</div>
+                  </div>
+                  {selectedTidData.map(t => (
+                    <div key={t.tid} className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center px-3 h-8 border-b last:border-0 text-xs">
+                      <div>
+                        <span className="font-mono font-medium text-primary">{t.tid}</span>
+                        <span className="text-muted-foreground ml-1.5 text-[10px]">{t.experience.slice(0, 22)}{t.experience.length > 22 ? "…" : ""}</span>
+                      </div>
+                      <div className={`text-right w-24 px-2 font-mono ${isSp ? "font-semibold text-blue-700" : "text-muted-foreground"}`}>{fmt(t.spNet)}</div>
+                      <div className={`text-right w-24 px-2 font-mono ${!isSp ? "font-semibold text-green-700" : "text-muted-foreground"}`}>{fmt(t.hoNet)}</div>
+                      <div className="text-right w-24 px-2 font-mono text-red-500">{fmt(t.discLc)}</div>
+                      <div className={`text-right w-28 px-2 font-mono font-semibold ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(isSp ? t.spNet : t.hoNet)}</div>
+                    </div>
+                  ))}
+                  {/* Totals row */}
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center px-3 h-8 bg-muted/30 border-t text-xs font-semibold">
+                    <div className="text-muted-foreground">Total ({selectedTidData.length} TIDs)</div>
+                    <div className="text-right w-24 px-2 font-mono text-blue-600">{fmt(totalSp)}</div>
+                    <div className="text-right w-24 px-2 font-mono text-green-600">{fmt(totalHo)}</div>
+                    <div className="text-right w-24 px-2 font-mono text-red-500">{fmt(selectedTidData.reduce((s, t) => s + t.discLc, 0))}</div>
+                    <div className={`text-right w-28 px-2 font-mono text-sm ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(totalPayable)}</div>
+                  </div>
+                </div>
+
+                {isSp && totalDiscount > 0 && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
+                    <span className="text-amber-800">Paying <span className="font-mono font-semibold">{fmt(totalDiscount)}</span> above HO Net across {selectedTidData.length} TIDs — consider raising disputes.</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
+                  <Button size="sm" className={`h-7 text-xs gap-1 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} variant={isSp ? "default" : "outline"} onClick={() => handleBulkAction(bulkConfirm)}>
+                    <Check className="h-3 w-3" /> Apply {isSp ? "SP Net" : "HO Net"} to {selectedTidData.length} TIDs
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {bulkConfirm && bulkConfirm !== "sp" && bulkConfirm !== "ho" && (
             <div className="rounded-lg border-2 border-amber-300 bg-amber-50/80 p-3 space-y-2 animate-in fade-in duration-200">
               <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
                 <AlertTriangle className="h-4 w-4" />
-                Confirm bulk action: {bulkConfirm === "sp" ? "Set SP Net" : bulkConfirm === "ho" ? "Set HO Net" : bulkConfirm === "dispute" ? "Raise Dispute" : "Log Issue"} for {selectedTids.size} TIDs
+                Confirm: {bulkConfirm === "dispute" ? "Raise Dispute" : "Log Issue"} for {selectedTids.size} TIDs
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {Array.from(selectedTids).map(tid => (
