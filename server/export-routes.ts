@@ -19,7 +19,7 @@ const CANCELLATION_ACTION_POINTS: Record<string, string> = {
   "Cancelled-SP error":              "Check why did we cancel the booking with SP? If cancelled on time- raise with SP, if cancellation was delayed- Raise with RO.",
   "Cancelled-Insured Booking":       "Claim from insurance",
   "Cancelled-DSS policy":            "Covered under DSS policy",
-  "Cancelled-Check for Charge loss": "Check for charge loss why Charge loss is not marked TRUE",
+  "Cancelled-Check for Charge loss": "Raise this with RO why this is not marked as Charge loss TRUE",
 };
 
 function deriveDriTeamForBreakup(reason: string, fm: string): string {
