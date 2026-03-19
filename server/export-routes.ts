@@ -175,7 +175,7 @@ export function registerExportRoutes(app: Express) {
                 .join(", ")
             : "";
           cancellationBreakup.push({
-            subCategory: g.result.replace("Cancelled-", ""),
+            subCategory: g.result,
             result: g.result, count: g.count,
             actionPoint: CANCELLATION_ACTION_POINTS[g.result] ?? "—",
             spNetTotal: g.spNetTotal, hoNetTotal: g.hoNetTotal,
@@ -1905,7 +1905,7 @@ export function registerExportRoutes(app: Express) {
                 .join(", ")
             : "";
           gsheetCancellationBreakup.push({
-            subCategory: g.result.replace("Cancelled-", ""),
+            subCategory: g.result,
             result: g.result, count: g.count,
             actionPoint: CANCELLATION_ACTION_POINTS[g.result] ?? "—",
             spNetTotal: g.spNetTotal, hoNetTotal: g.hoNetTotal,
