@@ -1052,6 +1052,7 @@ export class DatabaseStorage implements ISessionStorage {
       slackLink: i.slackLink ?? undefined,
       workingsLink: i.workingsLink ?? undefined,
       issueStatus: i.issueStatus ?? undefined,
+      priority: i.priority ?? undefined,
     };
   }
 
@@ -1081,6 +1082,7 @@ export class DatabaseStorage implements ISessionStorage {
         slackLink: issue.slackLink,
         workingsLink: issue.workingsLink,
         issueStatus: issue.issueStatus,
+        priority: issue.priority,
       })
       .returning();
     

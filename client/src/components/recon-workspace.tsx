@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -16,7 +15,7 @@ import {
 import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Check, Gavel, FileWarning, AlertTriangle, X as XIcon, BarChart3,
-  PanelTopClose, PanelTop, CheckCheck, Loader2, Calculator, Link2,
+  PanelTopClose, PanelTop, CheckCheck, Loader2, Calculator, Link2, Wand2, RotateCcw,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -103,7 +102,6 @@ interface IssueForm {
   rca: string;
   priority: string;
   slackLink: string;
-  description: string;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -143,11 +141,11 @@ export function ReconWorkspace({
     rca: "",
     priority: "Medium",
     slackLink: "",
-    description: "",
   });
 
   // API pending state
   const [pendingDisputeTids, setPendingDisputeTids] = useState<Set<string>>(new Set());
+  const [raisedDisputeTids, setRaisedDisputeTids] = useState<Set<string>>(new Set());
 
   const isNPD = reason === "Net Price Discrepancy";
   const isMTB = reason === "Multiple Tickets Booked";
@@ -272,6 +270,7 @@ export function ReconWorkspace({
     }
     setPendingDisputeTids(prev => { const next = new Set(prev); tidIds.forEach(id => next.delete(id)); return next; });
     if (count > 0) {
+      setRaisedDisputeTids(prev => { const next = new Set(prev); tidIds.forEach(id => next.add(id)); return next; });
       queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
       toast({ title: "Disputes raised", description: `${count} dispute${count !== 1 ? "s" : ""} created.` });
     }
@@ -286,7 +285,6 @@ export function ReconWorkspace({
     try {
       await apiRequest("POST", `/api/issues`, {
         runId,
-        createdDate: new Date().toISOString(),
         billingEntityId: beId,
         billingEntityName,
         currency,
@@ -295,18 +293,17 @@ export function ReconWorkspace({
         reason,
         driTeam: issueForm.driTeam,
         bookingIds: allBookingIds,
-        ticketId: tidAggregates[0]?.bookings[0]?.ticketId || "",
-        tid: tidAggregates[0]?.tid || "",
         paymentMethod: tidAggregates[0]?.bookings[0]?.paymentMethod || "",
         errorBucket: issueForm.errorBucket,
         rca: issueForm.rca,
         slackLink: issueForm.slackLink,
-        description: issueForm.description,
+        priority: issueForm.priority,
+        issueStatus: "open",
       });
       queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
       toast({ title: "Issue logged", description: "Issue created and linked to this reconciliation." });
       setIssueSectionOpen(false);
-      setIssueForm(prev => ({ ...prev, rca: "", slackLink: "", description: "" }));
+      setIssueForm(prev => ({ ...prev, rca: "", slackLink: "" }));
     } catch (err) {
       console.error("Issue submit failed:", err);
       toast({ title: "Failed to log issue", description: "Please try again.", variant: "destructive" });
@@ -834,7 +831,23 @@ export function ReconWorkspace({
                                 {pendingDisputeTids.has(agg.tid)
                                   ? <Loader2 className="h-3 w-3 animate-spin" />
                                   : <Gavel className="h-3 w-3" />}
-                                Dispute
+                                {raisedDisputeTids.has(agg.tid) ? "Re-raise Dispute" : "Dispute"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50"
+                                onClick={() => {
+                                  const driTeam = analysisRowByTid.get(agg.tid)?.driTeam || "";
+                                  setIssueForm(prev => ({ ...prev, driTeam: driTeam || prev.driTeam }));
+                                  setIssueSectionOpen(true);
+                                  setTimeout(() => {
+                                    document.querySelector("[data-testid='section-log-issue']")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 100);
+                                }}
+                                data-testid={`tid-btn-issue-${agg.tid}`}
+                              >
+                                <FileWarning className="h-3 w-3" /> Issue
                               </Button>
                             </div>
                           )}
@@ -1019,7 +1032,7 @@ export function ReconWorkspace({
                       <div className="text-[11px] text-muted-foreground">out of {tidAggregates.length} total</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex items-center gap-2 pt-1 flex-wrap">
                     <Button
                       size="sm"
                       className="h-8 text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
@@ -1032,8 +1045,21 @@ export function ReconWorkspace({
                         : <Gavel className="h-3.5 w-3.5" />}
                       Raise All Disputes
                     </Button>
+                    {raisedDisputeTids.size > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs gap-1.5 text-muted-foreground"
+                        onClick={() => setRaisedDisputeTids(new Set())}
+                        data-testid="btn-clear-disputes"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" /> Clear Raised State
+                      </Button>
+                    )}
                     <span className="text-xs text-muted-foreground">
-                      Creates one dispute per booking where a discrepancy exists.
+                      {raisedDisputeTids.size > 0
+                        ? `${raisedDisputeTids.size} TID${raisedDisputeTids.size !== 1 ? "s" : ""} raised · "Clear" resets to allow re-raising`
+                        : "Creates one dispute per booking where a discrepancy exists."}
                     </span>
                   </div>
                 </div>
@@ -1061,6 +1087,39 @@ export function ReconWorkspace({
               </div>
               {issueSectionOpen && (
                 <div className="px-4 py-3 space-y-3 bg-orange-50/20 dark:bg-orange-950/10 animate-in fade-in duration-200">
+                  {/* Auto-analyze: pre-fill from reconciliation data */}
+                  <div className="flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 dark:bg-orange-950/30 px-3 py-2">
+                    <Wand2 className="h-3.5 w-3.5 text-orange-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-orange-800 dark:text-orange-300">Auto-analyze</div>
+                      <div className="text-[11px] text-orange-600 dark:text-orange-400 truncate">
+                        Fills DRI team from analysis data · Error Bucket auto-set to "{reason}" · Discrepancy {formatNumber(totalDisc)} {currency}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1 border-orange-300 text-orange-700 hover:bg-orange-50 flex-shrink-0"
+                      onClick={() => {
+                        const inferredDriTeam = discrepancyRows.find(r => r.driTeam)?.driTeam || "";
+                        setIssueForm(prev => ({
+                          ...prev,
+                          errorBucket: reason,
+                          rca: "",
+                          driTeam: inferredDriTeam || prev.driTeam,
+                        }));
+                        toast({
+                          title: "Auto-analyze applied",
+                          description: inferredDriTeam
+                            ? `DRI Team set to "${inferredDriTeam}", Error Bucket set to reason.`
+                            : "Error Bucket set to reason. Select DRI Team manually.",
+                        });
+                      }}
+                      data-testid="btn-auto-analyze"
+                    >
+                      <Wand2 className="h-3 w-3" /> Apply
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground">DRI Team</label>
@@ -1130,16 +1189,6 @@ export function ReconWorkspace({
                       value={issueForm.slackLink}
                       onChange={e => setIssueForm(prev => ({ ...prev, slackLink: e.target.value }))}
                       data-testid="input-slack-link"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">Description <span className="font-normal">(optional)</span></label>
-                    <Textarea
-                      placeholder="Additional context or notes for this issue…"
-                      className="text-xs min-h-[60px] resize-none"
-                      value={issueForm.description}
-                      onChange={e => setIssueForm(prev => ({ ...prev, description: e.target.value }))}
-                      data-testid="textarea-issue-description"
                     />
                   </div>
                   <div className="flex items-center justify-between pt-1">

@@ -1431,7 +1431,7 @@ export async function registerRoutes(
   app.post("/api/issues", async (req, res) => {
     try {
       const { runId, billingEntityId, billingEntityName, currency, discrepancyLocal, discrepancyUsd, reason, driTeam, bookingIds,
-        paymentMethod, period, assignee, errorBucket, rca, slackLink, workingsLink, issueStatus } = req.body;
+        paymentMethod, period, assignee, errorBucket, rca, slackLink, workingsLink, issueStatus, priority } = req.body;
       
       if (!runId || !billingEntityId || !reason || !driTeam) {
         res.status(400).json({ error: "Missing required fields: runId, billingEntityId, reason, driTeam" });
@@ -1456,6 +1456,7 @@ export async function registerRoutes(
         slackLink,
         workingsLink,
         issueStatus,
+        priority,
       });
 
       if (!workingsLink && issue.issueId) {
