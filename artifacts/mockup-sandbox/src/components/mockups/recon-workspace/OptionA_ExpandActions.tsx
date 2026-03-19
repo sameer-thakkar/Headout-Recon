@@ -4,10 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Calculator, Check, Gavel, FileWarning, AlertTriangle, X as XIcon,
-  BarChart3, PanelTopClose, PanelTop
+  BarChart3, PanelTopClose, PanelTop, CheckCheck
 } from "lucide-react";
 
 interface TidData {
@@ -54,9 +55,29 @@ export function OptionA_ExpandActions() {
   const [showSpConfirm, setShowSpConfirm] = useState<string | null>(null);
   const [disputeChecked, setDisputeChecked] = useState(false);
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
+  const [selectedTids, setSelectedTids] = useState<Set<string>>(new Set());
+  const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
 
   const flash = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(null), 2500); };
   const resolve = (tid: string) => setResolvedTids(prev => new Set(prev).add(tid));
+  const resolveMultiple = (tids: string[]) => setResolvedTids(prev => { const next = new Set(prev); tids.forEach(t => next.add(t)); return next; });
+
+  const toggleSelect = (tid: string) => {
+    setSelectedTids(prev => {
+      const next = new Set(prev);
+      if (next.has(tid)) next.delete(tid); else next.add(tid);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const unresolvedTids = filteredTids.filter(t => !resolvedTids.has(t.tid));
+    if (selectedTids.size === unresolvedTids.length) {
+      setSelectedTids(new Set());
+    } else {
+      setSelectedTids(new Set(unresolvedTids.map(t => t.tid)));
+    }
+  };
 
   const handleAnalysisClick = (tid: string) => {
     setHighlightedTid(tid);
@@ -69,16 +90,40 @@ export function OptionA_ExpandActions() {
     setTimeout(() => setHighlightedTid(null), 3000);
   };
 
+  const handleBulkAction = (action: string) => {
+    const tids = Array.from(selectedTids);
+    if (action === "ho") {
+      resolveMultiple(tids);
+      flash(`${tids.length} TIDs → HO Net applied`);
+      setSelectedTids(new Set());
+      setBulkConfirm(null);
+    } else if (action === "sp") {
+      resolveMultiple(tids);
+      flash(`${tids.length} TIDs → SP Net applied`);
+      setSelectedTids(new Set());
+      setBulkConfirm(null);
+    } else if (action === "dispute") {
+      flash(`Dispute raised for ${tids.length} TIDs`);
+      setSelectedTids(new Set());
+      setBulkConfirm(null);
+    } else if (action === "issue") {
+      flash(`Issue logged for ${tids.length} TIDs`);
+      setSelectedTids(new Set());
+      setBulkConfirm(null);
+    }
+  };
+
   const filteredTids = TIDS.filter(t => !tidSearch || t.tid.toLowerCase().includes(tidSearch.toLowerCase()) || t.experience.toLowerCase().includes(tidSearch.toLowerCase()));
   const resolvedCount = TIDS.filter(t => resolvedTids.has(t.tid)).length;
   const totalDisc = TIDS.reduce((s, t) => s + t.discUsd, 0);
+  const progressPct = (resolvedCount / TIDS.length) * 100;
 
   return (
     <div className="min-h-screen bg-background font-sans flex flex-col">
       <div className="border-b bg-card px-5 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">Option A: Action Strip on Expand</span>
-          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Recommended</Badge>
+          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Enhanced</Badge>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>Net Price Discrepancy</span>
@@ -88,7 +133,7 @@ export function OptionA_ExpandActions() {
       </div>
 
       {feedback && (
-        <div className="mx-4 mt-2 px-3 py-2 bg-green-50 border border-green-200 rounded-md flex items-center gap-2 text-sm text-green-700">
+        <div className="mx-4 mt-2 px-3 py-2 bg-green-50 border border-green-200 rounded-md flex items-center gap-2 text-sm text-green-700 animate-in fade-in duration-200">
           <CheckCircle2 className="h-4 w-4" />{feedback}
         </div>
       )}
@@ -126,8 +171,13 @@ export function OptionA_ExpandActions() {
                 </TableHeader>
                 <TableBody>
                   {TIDS.map(t => (
-                    <TableRow key={t.tid} className="h-9 cursor-pointer hover:bg-violet-50/60" onClick={() => handleAnalysisClick(t.tid)}>
-                      <TableCell className="py-1.5 pl-4 font-mono text-sm text-primary font-medium">{t.tid}</TableCell>
+                    <TableRow key={t.tid} className={`h-9 cursor-pointer hover:bg-violet-50/60 ${resolvedTids.has(t.tid) ? "opacity-50" : ""}`} onClick={() => handleAnalysisClick(t.tid)}>
+                      <TableCell className="py-1.5 pl-4 font-mono text-sm text-primary font-medium">
+                        <div className="flex items-center gap-1.5">
+                          {resolvedTids.has(t.tid) && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />}
+                          {t.tid}
+                        </div>
+                      </TableCell>
                       <TableCell className="py-1.5 text-right font-mono text-sm text-red-600">{fmt(t.discUsd)}</TableCell>
                       <TableCell className="py-1.5 text-sm">{t.fm}</TableCell>
                       <TableCell className="py-1.5 text-right font-mono text-sm">{t.hoTakeRate.toFixed(2)}%</TableCell>
@@ -147,8 +197,34 @@ export function OptionA_ExpandActions() {
           )}
         </div>
 
-        {/* Action Panel — clean rows, actions only on expand */}
-        <div className="flex-1 overflow-auto p-4 space-y-3">
+        {/* ★ RESOLUTION PROGRESS BAR */}
+        <div className="flex-shrink-0 px-4 pt-3 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Resolution Progress
+                </span>
+                <span className="text-xs font-semibold">
+                  {resolvedCount === TIDS.length ? (
+                    <span className="text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> All resolved</span>
+                  ) : (
+                    <span>{resolvedCount} of {TIDS.length} TIDs</span>
+                  )}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ease-out ${resolvedCount === TIDS.length ? "bg-green-500" : "bg-primary"}`}
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Panel */}
+        <div className="flex-1 overflow-auto px-4 pb-4 pt-2 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold">Actions</span>
@@ -160,8 +236,62 @@ export function OptionA_ExpandActions() {
             </div>
           </div>
 
+          {/* ★ BULK ACTION BAR — appears when 2+ TIDs selected */}
+          {selectedTids.size >= 2 && !bulkConfirm && (
+            <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-2">
+                <CheckCheck className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">{selectedTids.size} TIDs selected</span>
+              </div>
+              <div className="h-5 w-px bg-border" />
+              <Button size="sm" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setBulkConfirm("sp")}>
+                <TrendingUp className="h-3 w-3" /> All → SP Net
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => setBulkConfirm("ho")}>
+                <TrendingDown className="h-3 w-3" /> All → HO Net
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => setBulkConfirm("dispute")}>
+                <Gavel className="h-3 w-3" /> Dispute All
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => setBulkConfirm("issue")}>
+                <FileWarning className="h-3 w-3" /> Issue All
+              </Button>
+              <div className="flex-1" />
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedTids(new Set())}>
+                <XIcon className="h-3 w-3 mr-1" /> Clear
+              </Button>
+            </div>
+          )}
+
+          {/* ★ BULK CONFIRM */}
+          {bulkConfirm && (
+            <div className="rounded-lg border-2 border-amber-300 bg-amber-50/80 p-3 space-y-2 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+                <AlertTriangle className="h-4 w-4" />
+                Confirm bulk action: {bulkConfirm === "sp" ? "Set SP Net" : bulkConfirm === "ho" ? "Set HO Net" : bulkConfirm === "dispute" ? "Raise Dispute" : "Log Issue"} for {selectedTids.size} TIDs
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(selectedTids).map(tid => (
+                  <Badge key={tid} variant="outline" className="text-xs font-mono">{tid}</Badge>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
+                <Button size="sm" className="h-7 text-xs gap-1" onClick={() => handleBulkAction(bulkConfirm)}>
+                  <Check className="h-3 w-3" /> Confirm & Apply
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-md border overflow-hidden">
-            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
+            <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
+              <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
+                <Checkbox
+                  checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length}
+                  className="h-3.5 w-3.5"
+                />
+              </div>
               <div className="w-5" />
               <div className="pl-2">TID / Experience</div>
               <div className="text-right px-3 w-24">SP Net</div>
@@ -174,12 +304,18 @@ export function OptionA_ExpandActions() {
               const isExpanded = expandedTid === tid.tid;
               const isResolved = resolvedTids.has(tid.tid);
               const isHighlighted = highlightedTid === tid.tid;
+              const isSelected = selectedTids.has(tid.tid);
               const pct = ((tid.discUsd / totalDisc) * 100).toFixed(0);
 
               return (
-                <div key={tid.tid} id={`a-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30" : ""}`}>
-                  <div className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
+                <div key={tid.tid} id={`a-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`}>
+                  <div className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
                     onClick={() => { setExpandedTid(isExpanded ? null : tid.tid); setShowPax(null); setShowSpConfirm(null); setDisputeChecked(false); }}>
+                    <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
+                      {!isResolved && (
+                        <Checkbox checked={isSelected} className="h-3.5 w-3.5" />
+                      )}
+                    </div>
                     <div className="w-5 flex items-center">
                       {isResolved ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                     </div>
@@ -187,6 +323,7 @@ export function OptionA_ExpandActions() {
                       <div className="flex items-center gap-1.5">
                         <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
                         <Badge variant="outline" className="text-[10px] px-1 py-0">{tid.fm}</Badge>
+                        {tid.soldAtLoss && <Badge variant="destructive" className="text-[10px] px-1 py-0">Loss</Badge>}
                       </div>
                       <div className="text-[11px] text-muted-foreground truncate">{tid.experience}</div>
                     </div>
@@ -201,7 +338,33 @@ export function OptionA_ExpandActions() {
 
                   {isExpanded && (
                     <div className="border-b bg-muted/10 px-4 py-3 space-y-3">
-                      {/* ★ ACTION STRIP — prominent, full-text buttons */}
+                      {/* ★ INLINE ANALYSIS SUMMARY — key metrics at a glance */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs">
+                          <span className="text-muted-foreground">Take Rate:</span>
+                          <span className="font-mono font-medium">{tid.hoTakeRate}%</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className={`font-mono font-semibold ${tid.actualTakeRate < 0 ? "text-red-600" : tid.actualTakeRate < tid.hoTakeRate ? "text-amber-600" : "text-green-600"}`}>{tid.actualTakeRate}%</span>
+                          <span className={`text-[10px] font-medium ${tid.discPercent.startsWith("-") ? "text-red-500" : "text-green-500"}`}>({tid.discPercent})</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs">
+                          <span className="text-muted-foreground">Period:</span>
+                          <span className="font-medium">{tid.startDate} – {tid.endDate}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs">
+                          <span className="text-muted-foreground">BIDs w/ disc:</span>
+                          <span className="font-mono font-medium">{tid.bidCountWithDisc}/{tid.bidCountInDuration}</span>
+                        </div>
+                        {tid.soldAtLoss && (
+                          <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs">
+                            <AlertTriangle className="h-3 w-3 text-red-600" />
+                            <span className="font-medium text-red-700">Sold at Loss</span>
+                            <span className="font-mono font-semibold text-red-600">{fmt(tid.lossUsd)} USD</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ACTION STRIP */}
                       {!showPax && !showSpConfirm && (
                         <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10">
                           <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setShowSpConfirm(tid.tid); setDisputeChecked(false); }}>
@@ -225,7 +388,6 @@ export function OptionA_ExpandActions() {
                         </div>
                       )}
 
-                      {/* SP Net Confirm inline */}
                       {showSpConfirm === tid.tid && (
                         <div className="rounded-md border bg-blue-50/50 p-3 space-y-3">
                           <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
@@ -252,7 +414,6 @@ export function OptionA_ExpandActions() {
                         </div>
                       )}
 
-                      {/* Pax Pricing inline */}
                       {showPax === tid.tid && (
                         <div className="rounded-md border bg-violet-50/30 p-3 space-y-2">
                           <div className="flex items-center gap-2 text-sm font-medium text-violet-800">
@@ -287,7 +448,6 @@ export function OptionA_ExpandActions() {
                         </div>
                       )}
 
-                      {/* Bookings table */}
                       {!showPax && !showSpConfirm && (
                         <div className="rounded-md border overflow-hidden bg-background">
                           <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
