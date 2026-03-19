@@ -5,12 +5,12 @@ import { formatIndianNumber, formatDateValue, getUniqueSheetName, sanitizeSheetN
 import { getUncachableGoogleSheetClient, getUncachableGoogleDriveClient } from "./google-sheets";
 
 const CANCELLATION_CONDITIONS: Record<string, { cancellable: string; spNet: string; hoNet: string; cancellationInsurance: string; chargeLoss: string }> = {
-  "Cancelled-OK":                    { cancellable: "Any", spNet: "= 0", hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "Any"   },
-  "Cancelled-Refund OK":             { cancellable: "Any", spNet: "< 0", hoNet: "= 0", cancellationInsurance: "Any", chargeLoss: "Any"   },
-  "Cancelled-SP error":              { cancellable: "Yes", spNet: "> 0", hoNet: "Any", cancellationInsurance: "N/A", chargeLoss: "Any"   },
-  "Cancelled-Insured Booking":       { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "Yes", chargeLoss: "Any"   },
-  "Cancelled-DSS policy":            { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "TRUE"  },
-  "Cancelled-Check for Charge loss": { cancellable: "No",  spNet: "> 0", hoNet: "Any", cancellationInsurance: "No",  chargeLoss: "FALSE" },
+  "Cancelled-OK":                    { cancellable: "",    spNet: "= 0", hoNet: "", cancellationInsurance: "N/A", chargeLoss: ""      },
+  "Cancelled-Refund OK":             { cancellable: "",    spNet: "< 0", hoNet: "", cancellationInsurance: "",    chargeLoss: ""      },
+  "Cancelled-SP error":              { cancellable: "Yes", spNet: "> 0", hoNet: "", cancellationInsurance: "N/A", chargeLoss: ""      },
+  "Cancelled-Insured Booking":       { cancellable: "No",  spNet: "> 0", hoNet: "", cancellationInsurance: "Yes", chargeLoss: ""      },
+  "Cancelled-DSS policy":            { cancellable: "No",  spNet: "> 0", hoNet: "", cancellationInsurance: "No",  chargeLoss: "TRUE"  },
+  "Cancelled-Check for Charge loss": { cancellable: "No",  spNet: "> 0", hoNet: "", cancellationInsurance: "No",  chargeLoss: "FALSE" },
 };
 
 const CANCELLATION_ACTION_POINTS: Record<string, string> = {
