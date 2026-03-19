@@ -325,7 +325,6 @@ export const issueRecordSchema = z.object({
   slackLink: z.string().optional(),
   workingsLink: z.string().optional(),
   issueStatus: z.string().optional(),
-  priority: z.string().optional(),
 });
 export type IssueRecord = z.infer<typeof issueRecordSchema>;
 
@@ -622,7 +621,6 @@ export const issues = pgTable("issues", {
   slackLink: text("slack_link"),
   workingsLink: text("workings_link"),
   issueStatus: text("issue_status"),
-  priority: text("priority"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 });

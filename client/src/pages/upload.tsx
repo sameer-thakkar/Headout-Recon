@@ -1,6 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from "react";
 import { authFetch } from "@/lib/queryClient";
-import { ReconWorkspace } from "@/components/recon-workspace";
 import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -159,7 +158,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const { data: discrepancyData, isLoading: isDiscrepancyLoading } = useQuery<{ analysisRows: DiscrepancyAnalysisRow[] }>({
     queryKey: ["/api/runs", currentRunId, "discrepancy-analysis", selectedReason],
     enabled: !!currentRunId && !!selectedReason && isModalOpen,
-    staleTime: Infinity,
   });
 
   // Use initialRunResult if available, otherwise fall back to query result
@@ -182,72 +180,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
     return filtered;
   }, [discrepancyData?.analysisRows, selectedReason]);
-
-  // Bookings for the ReconWorkspace — all primary rows so component can filter by reason
-  const workspaceBookings = useMemo(() => {
-    const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
-    return allRows.map(row => ({
-      bookingId: row.bookingId,
-      tid: row.tid || row.bookingId,
-      reason: row.reason,
-      hoNet: row.hoNet,
-      spNet: row.spNetInHo,
-      currency: row.hoCurrency,
-      beId: row.beId,
-      billingEntityName: row.billingEntityName,
-      ticketId: row.ticketId,
-      paymentBasis: row.paymentBasis,
-      isSecondaryVendor: row.isSecondaryVendor || false,
-      hoBeId: row.hoBeId,
-      spBeId: row.spBeId,
-      paymentMethod: row.paymentMethod,
-      spPaymentMethod: row.spPaymentMethod,
-      vid: row.vid,
-      paxBreakdown: row.paxBreakdown,
-      experienceName: row.experienceName,
-      experienceDate: row.experienceDate,
-      bookingCreationDate: row.bookingCreationDate,
-      amountPaid: row.amountPaid,
-      disputeSettled: row.disputeSettled,
-      disputedAmount: row.disputedAmount,
-      disputeAdjustedTotal: row.disputeAdjustedTotal,
-      discrepancyAmount: row.discrepancyAmount,
-      disputeAdjustment: row.disputeAdjustment,
-      finalDiscrepancyTotal: row.finalDiscrepancyTotal,
-      disputeStatus: row.disputeStatus,
-      adjustedInTicketId: row.adjustedInTicketId,
-    }));
-  }, [primaryRows, secondaryVendorRows, unmappedRows]);
-
-  // Workspace currency — from the selected reason's summary row
-  const workspaceCurrency = useMemo(() => {
-    if (!selectedReason) return "";
-    const summaryRow = overallSummary.find(r => r.reason === selectedReason);
-    return summaryRow?.currency || (primaryRows[0]?.hoCurrency ?? "");
-  }, [selectedReason, overallSummary, primaryRows]);
-
-  // Apply SP/HO Net from workspace back into finalNetSelectionsPerCurrency
-  const handleApplyFinalNet = useCallback((bookingIds: string[], mode: "sp" | "ho") => {
-    const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
-    // Group updates by currency
-    const byCurrency = new Map<string, string[]>();
-    for (const bid of bookingIds) {
-      const row = allRows.find(r => r.bookingId === bid);
-      if (!row) continue;
-      const cur = row.hoCurrency;
-      if (!byCurrency.has(cur)) byCurrency.set(cur, []);
-      byCurrency.get(cur)!.push(bid);
-    }
-    byCurrency.forEach((ids, cur) => {
-      setFinalNetSelectionsPerCurrency(prev => ({
-        ...prev,
-        [cur]: {
-          ...(prev[cur] || {}),
-          ...Object.fromEntries(ids.map(id => [id, mode])),
-        },
-      }));
-    });
-  }, [primaryRows, secondaryVendorRows, unmappedRows]);
 
   const bookingsForPayableModal = useMemo((): BookingForPayable[] => {
     if (!selectedPayableCurrency) return [];
@@ -697,6 +629,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
 
   const hasResults = currentRunId && overallSummary.length > 0;
+  const isMTBReason = selectedReason === "Multiple Tickets Booked";
+  const isNPDReason = selectedReason === "Net Price Discrepancy";
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -1138,24 +1072,123 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         </div>
       </ScrollArea>
 
-      {/* Unified Reconciliation Workspace — replaces old read-only analysis Dialog */}
-      {isModalOpen && selectedReason && (
-        <ReconWorkspace
-          open={isModalOpen}
-          onOpenChange={handleModalClose}
-          reason={selectedReason}
-          discrepancyRows={filteredDiscrepancyRows}
-          isDiscrepancyLoading={isDiscrepancyLoading}
-          bookings={workspaceBookings}
-          allRows={[...primaryRows, ...secondaryVendorRows, ...unmappedRows]}
-          currency={workspaceCurrency}
-          runId={currentRunId}
-          fxRateToUsd={fxData?.usdToCcy?.[workspaceCurrency] ? 1 / fxData.usdToCcy[workspaceCurrency] : undefined}
-          billingEntityName={primaryRows[0]?.billingEntityName ?? ""}
-          beId={primaryRows[0]?.beId ?? ""}
-          onApplyFinalNet={handleApplyFinalNet}
-        />
-      )}
+      <Dialog open={isModalOpen} onOpenChange={handleModalClose}>
+        <DialogContent className="max-w-[95vw] max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Discrepancy Analysis: {selectedReason}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            <Table className="min-w-max">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>TID</TableHead>
+                  {isMTBReason && (
+                    <>
+                      <TableHead className="text-right">Discrepancy USD</TableHead>
+                      <TableHead>Fulfilment Method</TableHead>
+                      <TableHead>Times Charged</TableHead>
+                      <TableHead>Start Date</TableHead>
+                      <TableHead>End Date</TableHead>
+                      <TableHead className="text-right">BID Count</TableHead>
+                      <TableHead className="text-right">BID Count Duration</TableHead>
+                      <TableHead className="text-right">Total BIDs</TableHead>
+                      <TableHead>DRI Team</TableHead>
+                    </>
+                  )}
+                  {isNPDReason && (
+                    <>
+                      <TableHead className="text-right">Discrepancy USD</TableHead>
+                      <TableHead>Fulfilment Method</TableHead>
+                      <TableHead className="text-right">HO Take Rate</TableHead>
+                      <TableHead className="text-right">Actual Rate</TableHead>
+                      <TableHead>Start Date</TableHead>
+                      <TableHead>End Date</TableHead>
+                      <TableHead className="text-right">Discrepancy %</TableHead>
+                      <TableHead className="text-right">BID Count with Discrepancy</TableHead>
+                      <TableHead className="text-right">BID Count in Duration</TableHead>
+                      <TableHead>Sold at Loss</TableHead>
+                      <TableHead className="text-right">Loss USD</TableHead>
+                    </>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredDiscrepancyRows.map((row, index) => (
+                  <TableRow key={`${row.tid}-${index}`} data-testid={`modal-row-${row.tid}`}>
+                    <TableCell className="font-mono">{row.tid}</TableCell>
+                    {isMTBReason && (
+                      <>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(row.discrepancyUsd)}
+                        </TableCell>
+                        <TableCell>{row.fulfillmentMethod}</TableCell>
+                        <TableCell>{row.timesCharged}</TableCell>
+                        <TableCell>{formatDateDDMMYYYY(row.startDate) || "-"}</TableCell>
+                        <TableCell>{formatDateDDMMYYYY(row.endDate) || "-"}</TableCell>
+                        <TableCell className="text-right">{row.countBidWithDiscrepancy}</TableCell>
+                        <TableCell className="text-right">{row.countBidsInDuration}</TableCell>
+                        <TableCell className="text-right">{row.totalBidsInReport}</TableCell>
+                        <TableCell>{row.driTeam}</TableCell>
+                      </>
+                    )}
+                    {isNPDReason && (
+                      <>
+                        <TableCell className={`text-right font-mono ${(row.discrepancyUsd ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {formatNumber(row.discrepancyUsd)}
+                        </TableCell>
+                        <TableCell>{row.fulfillmentMethod}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {row.hoTakeRatePercent?.toFixed(2) ?? "-"}%
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {row.actualTakeRatePercent?.toFixed(2) ?? "-"}%
+                        </TableCell>
+                        <TableCell>{formatDateDDMMYYYY(row.startDate) || "-"}</TableCell>
+                        <TableCell>{formatDateDDMMYYYY(row.endDate) || "-"}</TableCell>
+                        <TableCell className={`text-right font-mono ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {row.discrepancyPercentRange || "-"}
+                        </TableCell>
+                        <TableCell className="text-right">{row.countBidWithDiscrepancy}</TableCell>
+                        <TableCell className="text-right">{row.countBidsInDuration}</TableCell>
+                        <TableCell>
+                          <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"}>
+                            {row.soldAtLoss || "-"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {row.lossUsd != null ? formatNumber(row.lossUsd) : "-"}
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                ))}
+                {isDiscrepancyLoading && (
+                  <TableRow>
+                    <TableCell 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 12 : 6} 
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      Loading discrepancy data...
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!isDiscrepancyLoading && filteredDiscrepancyRows.length === 0 && (
+                  <TableRow>
+                    <TableCell 
+                      colSpan={isMTBReason ? 10 : isNPDReason ? 12 : 6} 
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      No discrepancy data available for this reason
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Already Reconciled - First Level Modal (Classification Breakdown) */}
       <Dialog open={isAlreadyReconciledModalOpen} onOpenChange={setIsAlreadyReconciledModalOpen}>
