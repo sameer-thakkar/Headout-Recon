@@ -497,6 +497,7 @@ export class MemStorage implements IStorage {
         zendeskId: reload.zendeskId ?? null,
         dateOfPayment: reload.dateOfPayment ?? null,
         amountLoadedAtDate: reload.amountLoadedAtDate ?? null,
+        currency: reload.currency ?? null,
         createdAt: new Date().toISOString(),
       };
       this.portalReloadsList.push(newReload);
@@ -1332,6 +1333,7 @@ export class DatabaseStorage implements ISessionStorage {
       zendeskId: r.zendeskId,
       dateOfPayment: r.dateOfPayment,
       amountLoadedAtDate: r.amountLoadedAtDate,
+      currency: r.currency,
       createdAt: r.createdAt.toISOString(),
     }));
   }
@@ -1345,6 +1347,7 @@ export class DatabaseStorage implements ISessionStorage {
       zendeskId: r.zendeskId,
       dateOfPayment: r.dateOfPayment,
       amountLoadedAtDate: r.amountLoadedAtDate,
+      currency: r.currency,
       createdAt: r.createdAt.toISOString(),
     }));
   }
@@ -1363,6 +1366,7 @@ export class DatabaseStorage implements ISessionStorage {
       zendeskId: r.zendeskId ?? null,
       dateOfPayment: r.dateOfPayment ?? null,
       amountLoadedAtDate: r.amountLoadedAtDate ?? null,
+      currency: r.currency ?? null,
     }));
     await db.insert(portalReloadsTable).values(values);
     return this.getPortalReloads();

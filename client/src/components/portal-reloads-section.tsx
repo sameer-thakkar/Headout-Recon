@@ -66,6 +66,7 @@ export function PortalReloadsSection() {
           zendeskId: r.zendeskId,
           dateOfPayment: r.dateOfPayment,
           amountLoadedAtDate: r.amountLoadedAtDate,
+          currency: r.currency,
         })),
       });
 
