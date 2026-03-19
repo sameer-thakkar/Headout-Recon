@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from "react";
+import { authFetch } from "@/lib/queryClient";
 import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2 } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -577,7 +578,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         description: "Please wait while the export file is being prepared",
       });
 
-      const analysisResponse = await fetch(`/api/runs/${currentRunId}/export/analysis`);
+      const analysisResponse = await authFetch(`/api/runs/${currentRunId}/export/analysis`);
       if (!analysisResponse.ok) {
         throw new Error("Failed to generate export");
       }

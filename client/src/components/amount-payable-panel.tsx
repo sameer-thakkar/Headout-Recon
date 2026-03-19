@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect, forwardRef, useImperativeHan
 import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, TrendingUp, TrendingDown, ArrowRight, ArrowLeft, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -1049,14 +1049,14 @@ export function AmountPayablePanel({
     try {
       if (finalVendorId.trim()) {
         // Save the vendor correction
-        await fetch(`/api/vendor-corrections/${runId}`, {
+        await authFetch(`/api/vendor-corrections/${runId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ bookingId, finalVendorId: finalVendorId.trim() }),
         });
       } else {
         // Delete the vendor correction if value is cleared
-        await fetch(`/api/vendor-corrections/${runId}/${bookingId}`, {
+        await authFetch(`/api/vendor-corrections/${runId}/${bookingId}`, {
           method: "DELETE",
         });
       }
@@ -1069,7 +1069,7 @@ export function AmountPayablePanel({
   const saveBulkVendorCorrections = useCallback(async (corrections: { bookingId: string; finalVendorId: string }[]) => {
     if (!runId || corrections.length === 0) return;
     try {
-      await fetch(`/api/vendor-corrections/${runId}/bulk`, {
+      await authFetch(`/api/vendor-corrections/${runId}/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ corrections }),
@@ -2129,7 +2129,7 @@ export function AmountPayablePanel({
     
     try {
       // Fetch booking details for each dispute ID
-      const response = await fetch(`/api/disputes/details`, {
+      const response = await authFetch(`/api/disputes/details`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ disputeIds: dispute.actualDisputeIds, runId }),
@@ -2254,7 +2254,7 @@ export function AmountPayablePanel({
       
       // Download HO Error report if any HO errors were closed
       if (result.hoErrorDisputeIds && result.hoErrorDisputeIds.length > 0) {
-        const downloadResponse = await fetch("/api/disputes/accept-ho-error/download", {
+        const downloadResponse = await authFetch("/api/disputes/accept-ho-error/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ disputeIds: result.hoErrorDisputeIds }),
@@ -2443,7 +2443,7 @@ export function AmountPayablePanel({
         throw new Error(errorData.error || "Failed to close disputes");
       }
       
-      const downloadResponse = await fetch("/api/disputes/accept-ho-error/download", {
+      const downloadResponse = await authFetch("/api/disputes/accept-ho-error/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ disputeIds }),
@@ -2698,7 +2698,7 @@ export function AmountPayablePanel({
   const handleReopenDispute = useCallback(async (disputeId: string) => {
     setIsReopeningDispute(disputeId);
     try {
-      const response = await fetch("/api/disputes/reopen", {
+      const response = await authFetch("/api/disputes/reopen", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ disputeId }),
@@ -2761,7 +2761,7 @@ export function AmountPayablePanel({
     setIsSavingClosedDispute(disputeId);
     try {
       // Update the dispute on the backend with new closure amount
-      const response = await fetch(`/api/disputes/${encodeURIComponent(disputeId)}/update-closure`, {
+      const response = await authFetch(`/api/disputes/${encodeURIComponent(disputeId)}/update-closure`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ closedByAdjustmentAmount: editClosedDisputeAmount }),

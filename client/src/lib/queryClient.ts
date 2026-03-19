@@ -28,6 +28,13 @@ function getAuthHeaders(): Record<string, string> {
   return {};
 }
 
+export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = getAuthToken();
+  const existing = options.headers ? new Headers(options.headers as HeadersInit) : new Headers();
+  if (token) existing.set("Authorization", `Bearer ${token}`);
+  return fetch(url, { credentials: "include", ...options, headers: existing });
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;

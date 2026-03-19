@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
-import { queryClient, apiRequest, clearAuthToken } from "./lib/queryClient";
+import { queryClient, apiRequest, clearAuthToken, authFetch, getAuthToken } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -89,7 +89,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
   useEffect(() => {
     async function loadSavedSessions() {
       try {
-        const response = await fetch("/api/sessions");
+        const response = await authFetch("/api/sessions");
         const data = await response.json();
         if (data.sessions && Array.isArray(data.sessions)) {
           const sessionRuns: RunRecord[] = data.sessions.map((session: ReconciliationSession) => ({
@@ -194,6 +194,8 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
         xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
         
         xhr.open("POST", "/api/upload");
+        const authToken = getAuthToken();
+        if (authToken) xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
         xhr.send(formData);
       });
       
@@ -420,7 +422,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
   }, []);
 
   const handleExportZip = useCallback(async () => {
-    const response = await fetch("/api/export/zip");
+    const response = await authFetch("/api/export/zip");
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -439,7 +441,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
 
   const handleExportAnalysisXlsx = useCallback(async () => {
     if (!currentRunId) return;
-    const response = await fetch(`/api/runs/${currentRunId}/export/analysis`);
+    const response = await authFetch(`/api/runs/${currentRunId}/export/analysis`);
     if (!response.ok) throw new Error("Failed to export analysis");
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -453,7 +455,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
 
   const handleExportFinancialXlsx = useCallback(async () => {
     if (!currentRunId) return;
-    const response = await fetch(`/api/runs/${currentRunId}/export/financial`);
+    const response = await authFetch(`/api/runs/${currentRunId}/export/financial`);
     if (!response.ok) throw new Error("Failed to export financial report");
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -467,7 +469,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
 
   const handleExportAnalysisGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
     if (!currentRunId) return {};
-    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/analysis`, { method: "POST" });
+    const response = await authFetch(`/api/runs/${currentRunId}/export-gsheet/analysis`, { method: "POST" });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "Failed to export to Google Sheets");
@@ -481,7 +483,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
 
   const handleExportFinancialGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
     if (!currentRunId) return {};
-    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/financial`, { method: "POST" });
+    const response = await authFetch(`/api/runs/${currentRunId}/export-gsheet/financial`, { method: "POST" });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "Failed to export to Google Sheets");

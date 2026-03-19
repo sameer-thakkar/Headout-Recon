@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { authFetch } from "@/lib/queryClient";
 import { Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -302,7 +303,7 @@ export function DiscrepancyAnalysisPage({ runId }: DiscrepancyAnalysisPageProps)
       const url = selectedReason 
         ? `/api/runs/${runId}/discrepancy-analysis?reason=${encodeURIComponent(selectedReason)}`
         : `/api/runs/${runId}/discrepancy-analysis`;
-      const response = await fetch(url);
+      const response = await authFetch(url);
       if (!response.ok) throw new Error("Failed to fetch discrepancy analysis");
       return response.json();
     },

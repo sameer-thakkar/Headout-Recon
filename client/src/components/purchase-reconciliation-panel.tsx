@@ -24,7 +24,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { PrimaryRow, VendorBalance, PaxBreakdown, PortalReload, ReloadAdjustment, UnmappedResolution } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -3505,7 +3505,7 @@ export function PurchaseReconciliationPanel({
     try {
       setIsExporting(true);
       toast({ title: "Creating Google Sheets...", description: "Please wait while the spreadsheet is being created" });
-      const response = await fetch(`/api/runs/${runId}/export-gsheet/financial`, { method: "POST" });
+      const response = await authFetch(`/api/runs/${runId}/export-gsheet/financial`, { method: "POST" });
       if (!response.ok) throw new Error("Failed to create Google Sheet");
       const data = await response.json();
       if (data.spreadsheetUrl) setGSheetUrl(data.spreadsheetUrl);

@@ -42,7 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 interface DisputeRecord {
@@ -149,7 +149,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
       });
       
       // Trigger Excel download - only for the bookings we just closed
-      const blob = await fetch("/api/disputes/accept-ho-error/download", {
+      const blob = await authFetch("/api/disputes/accept-ho-error/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ disputeIds: openDisputeIds }),
@@ -210,7 +210,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
         });
         
         // Trigger Excel download for the TID bookings
-        const blob = await fetch("/api/disputes/accept-ho-error/download", {
+        const blob = await authFetch("/api/disputes/accept-ho-error/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ disputeIds: openDisputeIds }),
@@ -275,7 +275,7 @@ export function DisputeTrackerPage({ runId }: DisputeTrackerPageProps) {
           customAmount,
         });
         
-        const blob = await fetch("/api/disputes/accept-ho-error/download", {
+        const blob = await authFetch("/api/disputes/accept-ho-error/download", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ disputeIds: [disputeId], customAmount }),

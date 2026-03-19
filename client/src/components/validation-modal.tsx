@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { authFetch } from "@/lib/queryClient";
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, Shield, ShieldCheck, ShieldAlert } from "lucide-react";
 import {
   Dialog,
@@ -56,7 +57,7 @@ export function ValidationModal({ open, onClose, onProceed, runId, exportFormat 
     setCurrentCheckIndex(0);
 
     try {
-      const response = await fetch(`/api/runs/${runId}/validate-financial`);
+      const response = await authFetch(`/api/runs/${runId}/validate-financial`);
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Validation failed");

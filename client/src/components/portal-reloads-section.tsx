@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { PortalReload } from "@shared/schema";
 
@@ -41,7 +41,7 @@ export function PortalReloadsSection() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("/api/portal-reloads/upload", {
+      const response = await authFetch("/api/portal-reloads/upload", {
         method: "POST",
         body: formData,
       });

@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import {
   Dialog,
   DialogContent,
@@ -678,7 +678,7 @@ export function AmountPayableModal({
       
       // Delete removed disputes
       for (const bookingId of disputesToDelete) {
-        await fetch(`/api/disputes/${runId}/${bookingId}`, { method: "DELETE" })
+        await authFetch(`/api/disputes/${runId}/${bookingId}`, { method: "DELETE" })
           .catch(err => console.error("Failed to delete dispute:", err));
       }
       
