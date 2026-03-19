@@ -1,17 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   ChevronRight, ChevronDown, FileDown, ArrowLeft, ArrowRight,
   AlertTriangle, XCircle, CheckCircle2, Flag, Search, TrendingUp, TrendingDown,
-  Calculator, Check, Gavel, FileWarning, Sparkles, Eye, X as XIcon
+  Calculator, Check, Gavel, FileWarning, Sparkles, Eye, X as XIcon,
+  ChevronUp, CircleDot, Circle
 } from "lucide-react";
 
 const MOCK_SUMMARY = [
@@ -23,12 +24,17 @@ const MOCK_SUMMARY = [
   { reason: "Reconciled", currency: "EUR", discLc: 0, discUsd: 0, count: 312, type: "reconciled" },
 ];
 
-const MOCK_TIDS = [
-  { tid: "TID-90234", spNet: 5_200.00, hoNet: 4_850.00, discLc: 350.00, discUsd: 379.40, bidCount: 6, fm: "FMTC", experience: "Sagrada Familia Guided Tour" },
-  { tid: "TID-90456", spNet: 18_400.00, hoNet: 12_300.00, discLc: 6_100.00, discUsd: 6_612.40, bidCount: 12, fm: "FMTC", experience: "Park Güell Skip-the-Line" },
-  { tid: "TID-90789", spNet: 8_900.00, hoNet: 3_900.00, discLc: 5_000.75, discUsd: 5_420.81, bidCount: 7, fm: "FMTB", experience: "Casa Batlló Night Experience" },
-  { tid: "TID-91012", spNet: 3_100.00, hoNet: 2_100.00, discLc: 1_000.00, discUsd: 1_084.00, bidCount: 3, fm: "FMTC", experience: "Montserrat Day Trip" },
+const MOCK_TIDS: TidData[] = [
+  { tid: "TID-90234", spNet: 5_200.00, hoNet: 4_850.00, discLc: 350.00, discUsd: 379.40, bidCount: 6, fm: "FMTC", experience: "Sagrada Familia Guided Tour", hasPax: true, resolved: false },
+  { tid: "TID-90456", spNet: 18_400.00, hoNet: 12_300.00, discLc: 6_100.00, discUsd: 6_612.40, bidCount: 12, fm: "FMTC", experience: "Park Güell Skip-the-Line", hasPax: true, resolved: false },
+  { tid: "TID-90789", spNet: 8_900.00, hoNet: 3_900.00, discLc: 5_000.75, discUsd: 5_420.81, bidCount: 7, fm: "FMTB", experience: "Casa Batlló Night Experience", hasPax: false, resolved: false },
+  { tid: "TID-91012", spNet: 3_100.00, hoNet: 2_100.00, discLc: 1_000.00, discUsd: 1_084.00, bidCount: 3, fm: "FMTC", experience: "Montserrat Day Trip", hasPax: false, resolved: false },
 ];
+
+interface TidData {
+  tid: string; spNet: number; hoNet: number; discLc: number; discUsd: number;
+  bidCount: number; fm: string; experience: string; hasPax: boolean; resolved: boolean;
+}
 
 const MOCK_PAX_ROWS = [
   { paxType: "Adult", dateRange: "12/01 - 28/01", count: 8, spUnit: 650.00, hoUnit: 600.00 },
@@ -37,12 +43,12 @@ const MOCK_PAX_ROWS = [
 ];
 
 const MOCK_BOOKINGS = [
-  { bookingId: "BID-1001", spNet: 850.00, hoNet: 800.00, selected: "sp" as const, amountPayable: 850.00, disputed: false, date: "12/01/2026", pax: "1 Adult" },
-  { bookingId: "BID-1002", spNet: 920.00, hoNet: 850.00, selected: "ho" as const, amountPayable: 850.00, disputed: false, date: "15/01/2026", pax: "1 Adult" },
-  { bookingId: "BID-1003", spNet: 1_100.00, hoNet: 1_050.00, selected: "sp" as const, amountPayable: 1_100.00, disputed: true, disputeAmt: 50.00, date: "20/01/2026", pax: "1 Adult, 1 Child" },
-  { bookingId: "BID-1004", spNet: 780.00, hoNet: 780.00, selected: "ho" as const, amountPayable: 780.00, disputed: false, date: "25/01/2026", pax: "1 Adult" },
-  { bookingId: "BID-1005", spNet: 850.00, hoNet: 670.00, selected: "ho" as const, amountPayable: 670.00, disputed: false, date: "01/02/2026", pax: "2 Adults" },
-  { bookingId: "BID-1006", spNet: 700.00, hoNet: 700.00, selected: "ho" as const, amountPayable: 700.00, disputed: false, date: "10/02/2026", pax: "1 Adult" },
+  { bookingId: "BID-1001", spNet: 850.00, hoNet: 800.00, date: "12/01/2026", pax: "1 Adult" },
+  { bookingId: "BID-1002", spNet: 920.00, hoNet: 850.00, date: "15/01/2026", pax: "1 Adult" },
+  { bookingId: "BID-1003", spNet: 1_100.00, hoNet: 1_050.00, date: "20/01/2026", pax: "1 Adult, 1 Child" },
+  { bookingId: "BID-1004", spNet: 780.00, hoNet: 780.00, date: "25/01/2026", pax: "1 Adult" },
+  { bookingId: "BID-1005", spNet: 850.00, hoNet: 670.00, date: "01/02/2026", pax: "2 Adults" },
+  { bookingId: "BID-1006", spNet: 700.00, hoNet: 700.00, date: "10/02/2026", pax: "1 Adult" },
 ];
 
 function fmt(n: number) {
@@ -61,10 +67,8 @@ type ModalView =
   | { level: "closed" }
   | { level: "reason"; reason: string }
   | { level: "reason-spnet"; reason: string }
-  | { level: "tid"; reason: string; tid: string; experience: string }
-  | { level: "tid-spnet"; reason: string; tid: string; experience: string }
   | { level: "tid-pax"; reason: string; tid: string; experience: string }
-  | { level: "bookings"; reason: string; tid: string; experience: string };
+  | { level: "tid-spnet"; reason: string; tid: string; experience: string };
 
 export function ActionModalWorkspace() {
   const [modalView, setModalView] = useState<ModalView>({ level: "closed" });
@@ -72,6 +76,8 @@ export function ActionModalWorkspace() {
   const [tidSearch, setTidSearch] = useState("");
   const [disputeChecked, setDisputeChecked] = useState(false);
   const [issueChecked, setIssueChecked] = useState(false);
+  const [expandedTid, setExpandedTid] = useState<string | null>(null);
+  const [resolvedTids, setResolvedTids] = useState<Set<string>>(new Set());
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({
     "Adult__12/01 - 28/01": "650.00",
     "Adult__01/02 - 15/02": "680.00",
@@ -81,6 +87,10 @@ export function ActionModalWorkspace() {
   const showFeedback = (msg: string) => {
     setActionFeedback(msg);
     setTimeout(() => setActionFeedback(null), 2500);
+  };
+
+  const markResolved = (tid: string) => {
+    setResolvedTids(prev => new Set(prev).add(tid));
   };
 
   const totalDiscUsd = MOCK_SUMMARY.reduce((s, r) => s + r.discUsd, 0);
@@ -98,25 +108,24 @@ export function ActionModalWorkspace() {
     !tidSearch || t.tid.toLowerCase().includes(tidSearch.toLowerCase()) || t.experience.toLowerCase().includes(tidSearch.toLowerCase())
   );
 
+  const resolvedCount = MOCK_TIDS.filter(t => resolvedTids.has(t.tid)).length;
+
   const openReason = (reason: string) => {
     setDisputeChecked(false);
     setIssueChecked(false);
+    setExpandedTid(null);
     setModalView({ level: "reason", reason });
   };
 
-  const openTid = (tid: typeof MOCK_TIDS[0]) => {
-    setDisputeChecked(false);
-    setIssueChecked(false);
-    setModalView({ level: "tid", reason: currentReason, tid: tid.tid, experience: tid.experience });
+  const toggleExpand = (tid: string) => {
+    setExpandedTid(prev => prev === tid ? null : tid);
   };
 
   const goBack = () => {
     setDisputeChecked(false);
     setIssueChecked(false);
     if (modalView.level === "reason-spnet") setModalView({ level: "reason", reason: currentReason });
-    else if (modalView.level === "tid-spnet" || modalView.level === "tid-pax" || modalView.level === "bookings")
-      setModalView({ level: "tid", reason: currentReason, tid: currentTid, experience: currentExperience });
-    else if (modalView.level === "tid")
+    else if (modalView.level === "tid-spnet" || modalView.level === "tid-pax")
       setModalView({ level: "reason", reason: currentReason });
     else setModalView({ level: "closed" });
   };
@@ -223,16 +232,15 @@ export function ActionModalWorkspace() {
           </div>
         </div>
 
-        {/* ══════ INLINE OVERLAY PANEL (replaces Dialog) ══════ */}
         {isOpen && (
           <div className="absolute inset-0 z-50 flex flex-col bg-background">
             {actionFeedback && (
-              <div className="mx-4 mt-3 px-3 py-2 bg-green-50 border border-green-200 rounded-md flex items-center gap-2 text-sm text-green-700">
-                <CheckCircle2 className="h-4 w-4" />{actionFeedback}
+              <div className="mx-4 mt-3 px-3 py-2 bg-green-50 border border-green-200 rounded-md flex items-center gap-2 text-sm text-green-700 animate-in fade-in slide-in-from-top-2 duration-200">
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />{actionFeedback}
               </div>
             )}
 
-            <div className="px-6 pt-5 pb-4 border-b flex-shrink-0">
+            <div className="px-6 pt-5 pb-3 border-b flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {modalView.level !== "reason" && (
@@ -248,13 +256,9 @@ export function ActionModalWorkspace() {
                     {currentTid && (
                       <>
                         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                        <button className={`font-mono font-medium ${modalView.level === "bookings" || modalView.level === "tid-spnet" || modalView.level === "tid-pax" ? "text-primary hover:underline cursor-pointer" : "text-foreground"}`}
-                          onClick={() => setModalView({ level: "tid", reason: currentReason, tid: currentTid, experience: currentExperience })}>
-                          {currentTid}
-                        </button>
+                        <span className="font-mono font-medium text-foreground">{currentTid}</span>
                         {modalView.level === "tid-spnet" && <><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-foreground font-medium">Confirm SP Net</span></>}
                         {modalView.level === "tid-pax" && <><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-foreground font-medium">Pax Pricing</span></>}
-                        {modalView.level === "bookings" && <><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-foreground font-medium">Bookings</span></>}
                       </>
                     )}
                     {modalView.level === "reason-spnet" && <><ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /><span className="text-foreground font-medium">Confirm SP Net</span></>}
@@ -265,14 +269,22 @@ export function ActionModalWorkspace() {
                 </Button>
               </div>
 
-              {currentExperience && (modalView.level === "tid" || modalView.level === "tid-spnet" || modalView.level === "tid-pax" || modalView.level === "bookings") && (
+              {currentExperience && (modalView.level === "tid-spnet" || modalView.level === "tid-pax") && (
                 <p className="text-xs text-muted-foreground mt-1 ml-7">{currentExperience}</p>
               )}
 
-              <div className="flex items-center justify-between mt-3">
+              <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-2">
                   {reasonData && (modalView.level === "reason" || modalView.level === "reason-spnet") && (
-                    <><Badge variant="secondary" className="text-xs">{reasonData.count} bookings</Badge><Badge variant="outline" className="text-xs font-mono">{reasonData.currency}</Badge></>
+                    <>
+                      <Badge variant="secondary" className="text-xs">{reasonData.count} bookings</Badge>
+                      <Badge variant="outline" className="text-xs font-mono">{reasonData.currency}</Badge>
+                      {resolvedCount > 0 && (
+                        <Badge className="text-xs bg-green-100 text-green-700 hover:bg-green-100">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />{resolvedCount}/{MOCK_TIDS.length} TIDs resolved
+                        </Badge>
+                      )}
+                    </>
                   )}
                   {tidData && currentTid && (
                     <><Badge variant="outline" className="text-xs font-mono">{tidData.fm}</Badge><Badge variant="secondary" className="text-xs">{tidData.bidCount} bookings</Badge></>
@@ -281,7 +293,7 @@ export function ActionModalWorkspace() {
                 {modalView.level === "reason" && (
                   <div className="relative">
                     <Search className="h-3.5 w-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                    <Input placeholder="Search TIDs or experiences..." className="h-8 pl-8 w-56 text-xs" value={tidSearch} onChange={(e) => setTidSearch(e.target.value)} />
+                    <Input placeholder="Search TIDs..." className="h-8 pl-8 w-48 text-xs" value={tidSearch} onChange={(e) => setTidSearch(e.target.value)} />
                   </div>
                 )}
               </div>
@@ -289,82 +301,210 @@ export function ActionModalWorkspace() {
 
             <div className="flex-1 overflow-auto">
 
-              {/* ──── REASON LEVEL ──── */}
+              {/* ═══════ REASON LEVEL: Inline-expandable TIDs ═══════ */}
               {modalView.level === "reason" && (
                 <div className="p-4 space-y-3">
                   <div className="flex items-center gap-2 px-1">
-                    <Sparkles className="h-4 w-4 text-violet-500" />
+                    <Sparkles className="h-4 w-4 text-violet-500 flex-shrink-0" />
                     <span className="text-xs text-muted-foreground">
                       Consistent margin gap: HO expected 18.2% take rate but actual is 12.8% — a 5.4pp shortfall across 4 TIDs.
                     </span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-md border p-3 cursor-pointer hover:bg-blue-50/80 transition-colors" onClick={() => setModalView({ level: "reason-spnet", reason: currentReason })}>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <div className="h-7 w-7 rounded-md bg-blue-100 flex items-center justify-center"><TrendingUp className="h-3.5 w-3.5 text-blue-600" /></div>
-                        <span className="text-sm font-medium">Set all to SP Net</span>
+                    <div className="rounded-md border p-2.5 cursor-pointer hover:bg-blue-50/80 transition-colors" onClick={() => setModalView({ level: "reason-spnet", reason: currentReason })}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="h-6 w-6 rounded bg-blue-100 flex items-center justify-center"><TrendingUp className="h-3 w-3 text-blue-600" /></div>
+                        <span className="text-xs font-medium">Set all SP Net</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">Pay {fmt(MOCK_TIDS.reduce((s, t) => s + t.spNet, 0))} EUR</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{fmt(MOCK_TIDS.reduce((s, t) => s + t.spNet, 0))} EUR</p>
                     </div>
-                    <div className="rounded-md border p-3 cursor-pointer hover:bg-green-50/80 transition-colors" onClick={() => showFeedback(`All ${reasonData?.count} bookings set to HO Net`)}>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <div className="h-7 w-7 rounded-md bg-green-100 flex items-center justify-center"><TrendingDown className="h-3.5 w-3.5 text-green-600" /></div>
-                        <span className="text-sm font-medium">Set all to HO Net</span>
+                    <div className="rounded-md border p-2.5 cursor-pointer hover:bg-green-50/80 transition-colors" onClick={() => { showFeedback(`All ${reasonData?.count} bookings → HO Net`); MOCK_TIDS.forEach(t => markResolved(t.tid)); }}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="h-6 w-6 rounded bg-green-100 flex items-center justify-center"><TrendingDown className="h-3 w-3 text-green-600" /></div>
+                        <span className="text-xs font-medium">Set all HO Net</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">Pay {fmt(MOCK_TIDS.reduce((s, t) => s + t.hoNet, 0))} EUR</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{fmt(MOCK_TIDS.reduce((s, t) => s + t.hoNet, 0))} EUR</p>
                     </div>
-                    <div className="rounded-md border p-3 cursor-pointer hover:bg-amber-50/80 transition-colors" onClick={() => showFeedback("Dispute raised for all TIDs")}>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <div className="h-7 w-7 rounded-md bg-amber-100 flex items-center justify-center"><Gavel className="h-3.5 w-3.5 text-amber-600" /></div>
-                        <span className="text-sm font-medium">Dispute All</span>
+                    <div className="rounded-md border p-2.5 cursor-pointer hover:bg-amber-50/80 transition-colors" onClick={() => showFeedback("Dispute raised for all TIDs")}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="h-6 w-6 rounded bg-amber-100 flex items-center justify-center"><Gavel className="h-3 w-3 text-amber-600" /></div>
+                        <span className="text-xs font-medium">Dispute All</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">Disc: {fmt(Math.abs(reasonData?.discLc || 0))} EUR</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{fmt(Math.abs(reasonData?.discLc || 0))} EUR</p>
                     </div>
                   </div>
 
-                  <div className="rounded-md border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="h-8 bg-muted/30">
-                          <TableHead className="py-1.5 text-xs pl-4">TID</TableHead>
-                          <TableHead className="py-1.5 text-xs">Experience</TableHead>
-                          <TableHead className="py-1.5 text-xs text-right">SP Net</TableHead>
-                          <TableHead className="py-1.5 text-xs text-right">HO Net</TableHead>
-                          <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
-                          <TableHead className="py-1.5 text-xs text-right">BIDs</TableHead>
-                          <TableHead className="py-1.5 text-xs w-20 text-right pr-4"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredTids.map((tid) => {
-                          const pct = ((tid.discUsd / (reasonData?.discUsd || 1)) * 100).toFixed(0);
-                          return (
-                            <TableRow key={tid.tid} className="h-10 cursor-pointer hover:bg-muted/40" onClick={() => openTid(tid)}>
-                              <TableCell className="py-2 pl-4">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
-                                  <Badge variant="outline" className="text-[10px] px-1 py-0">{tid.fm}</Badge>
+                  <div className="space-y-0 rounded-md border overflow-hidden">
+                    <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
+                      <div className="w-5" />
+                      <div className="pl-2">TID / Experience</div>
+                      <div className="text-right px-3 w-24">SP Net</div>
+                      <div className="text-right px-3 w-24">HO Net</div>
+                      <div className="text-right px-3 w-24">Disc.</div>
+                      <div className="text-center px-2 w-14">BIDs</div>
+                      <div className="text-right pr-1 w-[170px]">Quick Actions</div>
+                    </div>
+
+                    {filteredTids.map((tid) => {
+                      const isExpanded = expandedTid === tid.tid;
+                      const isResolved = resolvedTids.has(tid.tid);
+                      const pct = ((tid.discUsd / (reasonData?.discUsd || 1)) * 100).toFixed(0);
+
+                      return (
+                        <div key={tid.tid} className={isResolved ? "bg-green-50/40" : ""}>
+                          <div
+                            className={`grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
+                            onClick={() => toggleExpand(tid.tid)}
+                          >
+                            <div className="w-5 flex items-center">
+                              {isResolved ? (
+                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              ) : isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="pl-2 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 flex-shrink-0">{tid.fm}</Badge>
+                              </div>
+                              <div className="text-[11px] text-muted-foreground truncate">{tid.experience}</div>
+                            </div>
+                            <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.spNet)}</div>
+                            <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.hoNet)}</div>
+                            <div className="text-right px-3 w-24">
+                              <span className="font-mono text-sm text-red-600">{fmt(tid.discLc)}</span>
+                              <span className="text-[10px] text-muted-foreground ml-0.5">({pct}%)</span>
+                            </div>
+                            <div className="text-center px-2 w-14 text-sm">{tid.bidCount}</div>
+                            <div className="w-[170px] flex items-center justify-end gap-1 pr-1" onClick={(e) => e.stopPropagation()}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="sm" className="h-6 w-6 p-0 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                                    onClick={() => { showFeedback(`${tid.tid} → SP Net`); markResolved(tid.tid); }}>
+                                    <TrendingUp className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Set SP Net</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="sm" className="h-6 w-6 p-0 text-green-600 hover:bg-green-50 hover:text-green-700"
+                                    onClick={() => { showFeedback(`${tid.tid} → HO Net`); markResolved(tid.tid); }}>
+                                    <TrendingDown className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Set HO Net</TooltipContent>
+                              </Tooltip>
+                              {tid.hasPax && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-6 w-6 p-0 text-violet-600 hover:bg-violet-50 hover:text-violet-700"
+                                      onClick={() => setModalView({ level: "tid-pax", reason: currentReason, tid: tid.tid, experience: tid.experience })}>
+                                      <Calculator className="h-3 w-3" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="text-xs">Pax Pricing</TooltipContent>
+                                </Tooltip>
+                              )}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="sm" className="h-6 w-6 p-0 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                                    onClick={() => showFeedback(`Dispute raised for ${tid.tid}`)}>
+                                    <Gavel className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Raise Dispute</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="outline" size="sm" className="h-6 w-6 p-0 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                                    onClick={() => showFeedback(`Issue logged for ${tid.tid}`)}>
+                                    <Flag className="h-3 w-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">Log Issue</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="border-b bg-muted/10">
+                              <div className="px-6 py-2 flex items-center justify-between border-b bg-primary/5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium">{tid.bidCount} Bookings in {tid.tid}</span>
+                                  <span className="text-[11px] text-muted-foreground">· {tid.experience}</span>
                                 </div>
-                              </TableCell>
-                              <TableCell className="py-2 text-xs text-muted-foreground truncate max-w-[200px]">{tid.experience}</TableCell>
-                              <TableCell className="py-2 text-right font-mono text-sm">{fmt(tid.spNet)}</TableCell>
-                              <TableCell className="py-2 text-right font-mono text-sm">{fmt(tid.hoNet)}</TableCell>
-                              <TableCell className="py-2 text-right font-mono text-sm text-red-600">{fmt(tid.discLc)} <span className="text-[10px] text-muted-foreground font-sans">({pct}%)</span></TableCell>
-                              <TableCell className="py-2 text-right text-sm">{tid.bidCount}</TableCell>
-                              <TableCell className="py-2 pr-4 text-right">
-                                <Button variant="outline" size="sm" className="h-6 px-2 text-[11px]">Manage <ChevronRight className="h-3 w-3 ml-0.5" /></Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                                <div className="flex items-center gap-1">
+                                  <Button variant="default" size="sm" className="h-6 text-[11px] px-2 bg-blue-600 hover:bg-blue-700"
+                                    onClick={() => { showFeedback(`${tid.tid} → SP Net`); markResolved(tid.tid); setExpandedTid(null); }}>
+                                    <TrendingUp className="h-3 w-3 mr-1" />All SP
+                                  </Button>
+                                  <Button variant="default" size="sm" className="h-6 text-[11px] px-2 bg-green-600 hover:bg-green-700"
+                                    onClick={() => { showFeedback(`${tid.tid} → HO Net`); markResolved(tid.tid); setExpandedTid(null); }}>
+                                    <TrendingDown className="h-3 w-3 mr-1" />All HO
+                                  </Button>
+                                  {tid.hasPax && (
+                                    <Button variant="outline" size="sm" className="h-6 text-[11px] px-2"
+                                      onClick={() => setModalView({ level: "tid-pax", reason: currentReason, tid: tid.tid, experience: tid.experience })}>
+                                      <Calculator className="h-3 w-3 mr-1" />Pax
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="h-7 bg-muted/20">
+                                    <TableHead className="py-1 text-[11px] pl-8">BID</TableHead>
+                                    <TableHead className="py-1 text-[11px]">Date</TableHead>
+                                    <TableHead className="py-1 text-[11px]">Pax</TableHead>
+                                    <TableHead className="py-1 text-[11px] text-right">SP Net</TableHead>
+                                    <TableHead className="py-1 text-[11px] text-right">HO Net</TableHead>
+                                    <TableHead className="py-1 text-[11px] text-right">Diff</TableHead>
+                                    <TableHead className="py-1 text-[11px] text-center w-16">Net</TableHead>
+                                    <TableHead className="py-1 text-[11px] text-center w-12">Disp.</TableHead>
+                                    <TableHead className="py-1 text-[11px] text-center w-12 pr-4">Issue</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {MOCK_BOOKINGS.map((b) => {
+                                    const diff = b.spNet - b.hoNet;
+                                    return (
+                                      <TableRow key={b.bookingId} className="h-9 hover:bg-muted/20">
+                                        <TableCell className="py-1 pl-8 font-mono text-xs text-primary font-medium">{b.bookingId}</TableCell>
+                                        <TableCell className="py-1 text-[11px] text-muted-foreground">{b.date}</TableCell>
+                                        <TableCell className="py-1 text-[11px] text-muted-foreground">{b.pax}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono text-xs">{fmt(b.spNet)}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono text-xs">{fmt(b.hoNet)}</TableCell>
+                                        <TableCell className={`py-1 text-right font-mono text-xs ${diff > 0 ? "text-red-600" : diff < 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                                          {diff > 0 ? "+" : ""}{fmt(diff)}
+                                        </TableCell>
+                                        <TableCell className="py-1 text-center">
+                                          <div className="inline-flex rounded border overflow-hidden">
+                                            <button className="px-1.5 py-0 text-[10px] font-medium bg-blue-600 text-white">SP</button>
+                                            <button className="px-1.5 py-0 text-[10px] font-medium bg-background text-muted-foreground border-l hover:bg-muted">HO</button>
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="py-1 text-center"><Checkbox className="h-3.5 w-3.5" /></TableCell>
+                                        <TableCell className="py-1 text-center pr-4"><Checkbox className="h-3.5 w-3.5" /></TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* ──── REASON SP NET CONFIRM ──── */}
+              {/* ═══════ REASON-LEVEL SP NET CONFIRM ═══════ */}
               {modalView.level === "reason-spnet" && (
                 <div className="p-4 space-y-3">
                   <div className="rounded-md border overflow-hidden">
@@ -399,73 +539,21 @@ export function ActionModalWorkspace() {
                   <div className="rounded-md border flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-md bg-orange-100 flex items-center justify-center"><FileWarning className="h-4 w-4 text-orange-600" /></div>
-                      <div><div className="text-sm font-medium">Raise Issue</div><div className="text-xs text-muted-foreground">This is HO error — to be checked with internal teams</div></div>
+                      <div><div className="text-sm font-medium">Raise Issue</div><div className="text-xs text-muted-foreground">HO error — to be checked with internal teams</div></div>
                     </div>
                     <Checkbox checked={issueChecked} onCheckedChange={(c) => setIssueChecked(!!c)} className="h-5 w-5" />
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
                     <Button variant="ghost" size="sm" onClick={goBack}><ArrowLeft className="h-3.5 w-3.5 mr-1.5" /> Back</Button>
-                    <Button size="sm" onClick={() => { showFeedback(`All ${reasonData?.count} bookings updated to SP Net`); setModalView({ level: "reason", reason: currentReason }); }}>
+                    <Button size="sm" onClick={() => { showFeedback(`All ${reasonData?.count} bookings → SP Net`); MOCK_TIDS.forEach(t => markResolved(t.tid)); setModalView({ level: "reason", reason: currentReason }); }}>
                       <Check className="h-3.5 w-3.5 mr-1.5" /> Confirm & Apply SP Net
                     </Button>
                   </div>
                 </div>
               )}
 
-              {/* ──── TID LEVEL: Action cards ──── */}
-              {modalView.level === "tid" && tidData && (
-                <div className="p-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="rounded-md border p-2.5 bg-blue-50/50"><span className="text-muted-foreground">SP Net Total:</span> <span className="font-mono font-semibold text-blue-700">{fmt(tidData.spNet)} EUR</span></div>
-                    <div className="rounded-md border p-2.5 bg-green-50/50"><span className="text-muted-foreground">HO Net Total:</span> <span className="font-mono font-semibold text-green-700">{fmt(tidData.hoNet)} EUR</span></div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="rounded-md border overflow-hidden cursor-pointer hover:bg-blue-50/60 transition-colors" onClick={() => setModalView({ level: "tid-spnet", reason: currentReason, tid: currentTid, experience: currentExperience })}>
-                      <div className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-md bg-blue-100 flex items-center justify-center"><TrendingUp className="h-4 w-4 text-blue-600" /></div>
-                          <div><div className="text-sm font-medium">Update to SP Net</div><div className="text-xs text-muted-foreground">Set Amount Payable = SP Net for all {tidData.bidCount} bookings ({fmt(tidData.spNet)} EUR)</div></div>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border overflow-hidden cursor-pointer hover:bg-green-50/60 transition-colors" onClick={() => showFeedback(`${currentTid}: All set to HO Net`)}>
-                      <div className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-md bg-green-100 flex items-center justify-center"><TrendingDown className="h-4 w-4 text-green-600" /></div>
-                          <div><div className="text-sm font-medium">Update to HO Net</div><div className="text-xs text-muted-foreground">Set Amount Payable = HO Net for all {tidData.bidCount} bookings ({fmt(tidData.hoNet)} EUR)</div></div>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border overflow-hidden cursor-pointer hover:bg-violet-50/60 transition-colors" onClick={() => setModalView({ level: "tid-pax", reason: currentReason, tid: currentTid, experience: currentExperience })}>
-                      <div className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-md bg-violet-100 flex items-center justify-center"><Calculator className="h-4 w-4 text-violet-600" /></div>
-                          <div><div className="text-sm font-medium">Update based on Pax Type</div><div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate</div></div>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border overflow-hidden cursor-pointer hover:bg-muted/40 transition-colors" onClick={() => setModalView({ level: "bookings", reason: currentReason, tid: currentTid, experience: currentExperience })}>
-                      <div className="flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center"><Eye className="h-4 w-4 text-muted-foreground" /></div>
-                          <div><div className="text-sm font-medium">View & Edit Individual Bookings</div><div className="text-xs text-muted-foreground">Set net, dispute, or flag issues per booking</div></div>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ──── TID SP NET CONFIRM ──── */}
+              {/* ═══════ TID SP NET CONFIRM ═══════ */}
               {modalView.level === "tid-spnet" && tidData && (
                 <div className="p-4 space-y-3">
                   <div className="rounded-md border overflow-hidden">
@@ -506,14 +594,14 @@ export function ActionModalWorkspace() {
 
                   <div className="flex justify-between pt-1">
                     <Button variant="ghost" size="sm" onClick={goBack}><ArrowLeft className="h-3.5 w-3.5 mr-1.5" /> Back</Button>
-                    <Button size="sm" onClick={() => { showFeedback(`${currentTid}: Updated to SP Net`); setModalView({ level: "tid", reason: currentReason, tid: currentTid, experience: currentExperience }); }}>
+                    <Button size="sm" onClick={() => { showFeedback(`${currentTid} → SP Net`); markResolved(currentTid); setModalView({ level: "reason", reason: currentReason }); }}>
                       <Check className="h-3.5 w-3.5 mr-1.5" /> Confirm & Apply
                     </Button>
                   </div>
                 </div>
               )}
 
-              {/* ──── TID PAX PRICING ──── */}
+              {/* ═══════ TID PAX PRICING ═══════ */}
               {modalView.level === "tid-pax" && tidData && (
                 <div className="p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3 text-xs">
@@ -524,7 +612,7 @@ export function ActionModalWorkspace() {
                   <div className="text-xs text-muted-foreground">Grouped by: <span className="font-medium text-foreground">Experience Date</span></div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Quick fill all:</span>
+                    <span className="text-xs text-muted-foreground">Quick fill:</span>
                     <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => {
                       const p: Record<string, string> = {};
                       MOCK_PAX_ROWS.forEach(r => { p[`${r.paxType}__${r.dateRange}`] = String(r.spUnit); });
@@ -571,75 +659,34 @@ export function ActionModalWorkspace() {
 
                   <div className="flex justify-between pt-1">
                     <Button variant="ghost" size="sm" onClick={goBack}><ArrowLeft className="h-3.5 w-3.5 mr-1.5" /> Back</Button>
-                    <Button size="sm" onClick={() => { showFeedback("Pax-based prices applied"); setModalView({ level: "tid", reason: currentReason, tid: currentTid, experience: currentExperience }); }}>
+                    <Button size="sm" onClick={() => { showFeedback("Pax prices applied"); markResolved(currentTid); setModalView({ level: "reason", reason: currentReason }); }}>
                       <Check className="h-3.5 w-3.5 mr-1.5" /> Apply Pax Prices
                     </Button>
                   </div>
                 </div>
               )}
-
-              {/* ──── BOOKING LEVEL ──── */}
-              {modalView.level === "bookings" && (
-                <div className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="h-9 bg-muted/30 sticky top-0">
-                        <TableHead className="py-2 text-xs pl-6">Booking ID</TableHead>
-                        <TableHead className="py-2 text-xs">Pax</TableHead>
-                        <TableHead className="py-2 text-xs">Date</TableHead>
-                        <TableHead className="py-2 text-xs text-right">SP Net</TableHead>
-                        <TableHead className="py-2 text-xs text-right">HO Net</TableHead>
-                        <TableHead className="py-2 text-xs text-center w-20">Net</TableHead>
-                        <TableHead className="py-2 text-xs text-center">Dispute</TableHead>
-                        <TableHead className="py-2 text-xs text-right">Amt Payable</TableHead>
-                        <TableHead className="py-2 text-xs text-right pr-6">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {MOCK_BOOKINGS.map((b) => (
-                        <TableRow key={b.bookingId} className="h-11 hover:bg-muted/30">
-                          <TableCell className="py-2 pl-6 font-mono text-sm text-primary font-medium">{b.bookingId}</TableCell>
-                          <TableCell className="py-2 text-xs text-muted-foreground">{b.pax}</TableCell>
-                          <TableCell className="py-2 text-xs text-muted-foreground">{b.date}</TableCell>
-                          <TableCell className="py-2 text-right font-mono text-sm">{fmt(b.spNet)}</TableCell>
-                          <TableCell className="py-2 text-right font-mono text-sm">{fmt(b.hoNet)}</TableCell>
-                          <TableCell className="py-2 text-center">
-                            <div className="inline-flex rounded-md border overflow-hidden">
-                              <button className={`px-2.5 py-0.5 text-xs font-medium transition-colors ${b.selected === "sp" ? "bg-blue-600 text-white" : "bg-background text-muted-foreground hover:bg-muted"}`}>SP</button>
-                              <button className={`px-2.5 py-0.5 text-xs font-medium transition-colors border-l ${b.selected === "ho" ? "bg-emerald-600 text-white" : "bg-background text-muted-foreground hover:bg-muted"}`}>HO</button>
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-2 text-center">
-                            {b.disputed ? (
-                              <Badge variant="destructive" className="text-[11px] px-2 py-0.5"><Gavel className="h-3 w-3 mr-1" />{fmt(b.disputeAmt || 0)}</Badge>
-                            ) : (
-                              <Checkbox className="h-4 w-4" />
-                            )}
-                          </TableCell>
-                          <TableCell className="py-2 text-right">
-                            <Input className="h-7 w-24 text-xs text-right font-mono ml-auto border-dashed" defaultValue={b.amountPayable} />
-                          </TableCell>
-                          <TableCell className="py-2 pr-6 text-right">
-                            <Button variant="outline" size="sm" className="h-7 px-2 text-xs text-muted-foreground hover:text-violet-600"><Flag className="h-3 w-3 mr-1" />Issue</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
             </div>
 
-            <div className="border-t bg-muted/30 px-6 py-3 flex items-center justify-between flex-shrink-0">
+            <div className="border-t bg-muted/30 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
               <div className="text-xs text-muted-foreground">
-                {modalView.level === "reason" && `${filteredTids.length} TIDs · ${reasonData?.count} bookings`}
-                {(modalView.level === "tid" || modalView.level === "tid-spnet" || modalView.level === "tid-pax") && `${tidData?.bidCount} bookings in ${currentTid}`}
-                {modalView.level === "bookings" && `${MOCK_BOOKINGS.length} bookings`}
+                {(modalView.level === "reason" || modalView.level === "reason-spnet") && `${filteredTids.length} TIDs · ${reasonData?.count} bookings`}
+                {(modalView.level === "tid-spnet" || modalView.level === "tid-pax") && `${tidData?.bidCount} bookings in ${currentTid}`}
               </div>
               <div className="flex items-center gap-4 text-sm">
-                <div><span className="text-xs text-muted-foreground mr-2">SP Total</span><span className="font-mono font-medium text-blue-700">{fmt(tidData?.spNet || MOCK_TIDS.reduce((s, t) => s + t.spNet, 0))}</span></div>
-                <div><span className="text-xs text-muted-foreground mr-2">HO Total</span><span className="font-mono font-medium text-green-700">{fmt(tidData?.hoNet || MOCK_TIDS.reduce((s, t) => s + t.hoNet, 0))}</span></div>
-                <div><span className="text-xs text-muted-foreground mr-2">Disc.</span><span className="font-mono font-semibold text-red-600">{fmt(tidData?.discLc || (reasonData?.discLc || 0))}</span></div>
+                {(modalView.level === "reason" || modalView.level === "reason-spnet") && (
+                  <>
+                    <div><span className="text-xs text-muted-foreground mr-1.5">SP</span><span className="font-mono font-medium text-blue-700">{fmt(MOCK_TIDS.reduce((s, t) => s + t.spNet, 0))}</span></div>
+                    <div><span className="text-xs text-muted-foreground mr-1.5">HO</span><span className="font-mono font-medium text-green-700">{fmt(MOCK_TIDS.reduce((s, t) => s + t.hoNet, 0))}</span></div>
+                    <div><span className="text-xs text-muted-foreground mr-1.5">Disc.</span><span className="font-mono font-semibold text-red-600">{fmt(reasonData?.discLc || 0)}</span></div>
+                  </>
+                )}
+                {(modalView.level === "tid-spnet" || modalView.level === "tid-pax") && tidData && (
+                  <>
+                    <div><span className="text-xs text-muted-foreground mr-1.5">SP</span><span className="font-mono font-medium text-blue-700">{fmt(tidData.spNet)}</span></div>
+                    <div><span className="text-xs text-muted-foreground mr-1.5">HO</span><span className="font-mono font-medium text-green-700">{fmt(tidData.hoNet)}</span></div>
+                    <div><span className="text-xs text-muted-foreground mr-1.5">Disc.</span><span className="font-mono font-semibold text-red-600">{fmt(tidData.discLc)}</span></div>
+                  </>
+                )}
               </div>
             </div>
           </div>
