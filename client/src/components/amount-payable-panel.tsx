@@ -725,12 +725,12 @@ const CANCELLATION_CONDITIONS: Record<string, {
   cancellationInsurance: string;
   chargeLoss: string;
 }> = {
-  "Cancelled-OK":                    { cancellable: "Yes / N/A", spNet: "= 0", hoNet: "= 0", cancellationInsurance: "N/A",   chargeLoss: "N/A" },
-  "Cancelled-Refund OK":             { cancellable: "Yes",       spNet: "< 0", hoNet: "= 0", cancellationInsurance: "N/A",   chargeLoss: "N/A" },
-  "Cancelled-SP error":              { cancellable: "Yes",       spNet: "> 0", hoNet: "= 0", cancellationInsurance: "N/A",   chargeLoss: "N/A" },
-  "Cancelled-Insured Booking":       { cancellable: "No",        spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "Yes",   chargeLoss: "N/A" },
-  "Cancelled-DSS policy":            { cancellable: "No",        spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",    chargeLoss: "Yes" },
-  "Cancelled-Check for Charge loss": { cancellable: "No",        spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",    chargeLoss: "No"  },
+  "Cancelled-OK":                    { cancellable: "Any",  spNet: "= 0", hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "N/A" },
+  "Cancelled-Refund OK":             { cancellable: "Any",  spNet: "< 0", hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "N/A" },
+  "Cancelled-SP error":              { cancellable: "Yes",  spNet: "> 0", hoNet: "= 0", cancellationInsurance: "N/A", chargeLoss: "N/A" },
+  "Cancelled-Insured Booking":       { cancellable: "No",   spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "Yes", chargeLoss: "N/A" },
+  "Cancelled-DSS policy":            { cancellable: "No",   spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",  chargeLoss: "Yes" },
+  "Cancelled-Check for Charge loss": { cancellable: "No",   spNet: "≠ 0", hoNet: "= 0", cancellationInsurance: "No",  chargeLoss: "No"  },
 };
 
 const CANCELLATION_ACTION_POINTS: Record<string, string> = {
@@ -1303,6 +1303,8 @@ export function AmountPayablePanel({
 
   // Cancellation reasons to group together
   const cancellationReasons = [
+    "Cancelled-OK",
+    "Cancelled-Refund OK",
     "Cancelled-SP error",
     "Cancelled-Insured Booking",
     "Cancelled-Check for Charge loss",
@@ -1393,7 +1395,34 @@ export function AmountPayablePanel({
   const cancellationSummaryRows = useMemo((): CancellationSummaryRow[] => {
     const rows: CancellationSummaryRow[] = [];
 
+    function chronoSort(dateStrs: string[]): string[] {
+      return dateStrs.slice().sort((a, b) => {
+        const ta = new Date(a).getTime();
+        const tb = new Date(b).getTime();
+        if (isNaN(ta) && isNaN(tb)) return a.localeCompare(b);
+        if (isNaN(ta)) return 1;
+        if (isNaN(tb)) return -1;
+        return ta - tb;
+      });
+    }
+
+    function getBookingDates(bkgs: BookingForPayable[]): string[] {
+      return bkgs.map(b => {
+        const r = allRows.find(r => r.bookingId === b.bookingId);
+        return b.experienceDate || r?.experienceDate || b.bookingCreationDate || r?.bookingCreationDate || "";
+      }).filter((d): d is string => Boolean(d));
+    }
+
+    function calcDiscUSD(bkgs: BookingForPayable[]): number {
+      return bkgs.reduce((s, b) => {
+        const r = allRows.find(row => row.bookingId === b.bookingId);
+        return s + (r?.differenceUsd ?? 0);
+      }, 0);
+    }
+
     Object.entries(cancellationsByReason).forEach(([reason, bkgs]) => {
+      const reasonTotalBIDs = bkgs.length;
+
       if (CANCELLATION_FULFILLMENT_SPLIT.has(reason)) {
         const byFm = new Map<string, BookingForPayable[]>();
         for (const b of bkgs) {
@@ -1403,24 +1432,17 @@ export function AmountPayablePanel({
           byFm.get(fm)!.push(b);
         }
         byFm.forEach((fmBookings, fm) => {
-          const dates = fmBookings.map(b => {
-            const r = allRows.find(r => r.bookingId === b.bookingId);
-            return b.experienceDate || r?.experienceDate || b.bookingCreationDate || r?.bookingCreationDate || "";
-          }).filter(Boolean).sort();
+          const sorted = chronoSort(getBookingDates(fmBookings));
           const discLC = fmBookings.reduce((s, b) => s + (b.hoNet - b.spNet), 0);
-          const discUSD = fmBookings.reduce((s, b) => {
-            const r = allRows.find(row => row.bookingId === b.bookingId);
-            return s + (r?.differenceUsd ?? (r?.fxRateUsed ? (b.hoNet - b.spNet) / r.fxRateUsed : (b.hoNet - b.spNet)));
-          }, 0);
           rows.push({
             reason,
             fulfillmentMethod: fm,
             bidCount: fmBookings.length,
-            startDate: dates[0] || "",
-            endDate: dates[dates.length - 1] || "",
-            totalBIDs: fmBookings.length,
+            startDate: sorted[0] || "",
+            endDate: sorted[sorted.length - 1] || "",
+            totalBIDs: reasonTotalBIDs,
             discrepancyLC: discLC,
-            discrepancyUSD: discUSD,
+            discrepancyUSD: calcDiscUSD(fmBookings),
             bookings: fmBookings,
           });
         });
@@ -1430,24 +1452,17 @@ export function AmountPayablePanel({
           const row = allRows.find(r => r.bookingId === b.bookingId);
           if (row?.fulfillmentMethod) fmSet.add(row.fulfillmentMethod);
         }
-        const dates = bkgs.map(b => {
-          const r = allRows.find(r => r.bookingId === b.bookingId);
-          return b.experienceDate || r?.experienceDate || b.bookingCreationDate || r?.bookingCreationDate || "";
-        }).filter(Boolean).sort();
+        const sorted = chronoSort(getBookingDates(bkgs));
         const discLC = bkgs.reduce((s, b) => s + (b.hoNet - b.spNet), 0);
-        const discUSD = bkgs.reduce((s, b) => {
-          const r = allRows.find(row => row.bookingId === b.bookingId);
-          return s + (r?.differenceUsd ?? (r?.fxRateUsed ? (b.hoNet - b.spNet) / r.fxRateUsed : (b.hoNet - b.spNet)));
-        }, 0);
         rows.push({
           reason,
           fulfillmentMethod: fmSet.size > 0 ? Array.from(fmSet).join(", ") : "—",
           bidCount: bkgs.length,
-          startDate: dates[0] || "",
-          endDate: dates[dates.length - 1] || "",
-          totalBIDs: bkgs.length,
+          startDate: sorted[0] || "",
+          endDate: sorted[sorted.length - 1] || "",
+          totalBIDs: reasonTotalBIDs,
           discrepancyLC: discLC,
-          discrepancyUSD: discUSD,
+          discrepancyUSD: calcDiscUSD(bkgs),
           bookings: bkgs,
         });
       }
@@ -3280,93 +3295,104 @@ export function AmountPayablePanel({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <div className="p-3 border-t overflow-x-auto">
+                  <div className="border-t overflow-x-auto max-h-[480px]">
                     <Table className="text-xs w-full min-w-[1100px]">
-                      <TableHeader>
-                        <TableRow className="h-8 bg-muted/30">
-                          <TableHead className="py-1 text-xs font-semibold">Sub Category</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-center">Cancellable</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-center">SP Net</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-center">HO Net</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-center">Canc. Insurance</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-center">Charge Loss</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold">Result</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold">Action Point</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold">DRI Team</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold">Fulfillment</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-right">BID Count</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-center">Start Date</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-center">End Date</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-right">Total BIDs</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-right">Disc. ({currency})</TableHead>
-                          <TableHead className="py-1 text-xs font-semibold text-right">Disc. (USD)</TableHead>
+                      <TableHeader className="sticky top-0 z-10">
+                        <TableRow className="h-8 bg-muted/80 backdrop-blur-sm">
+                          <TableHead className="py-1 text-xs font-semibold bg-muted/80">Sub Category</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center bg-muted/80">Cancellable</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center bg-muted/80">SP Net</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center bg-muted/80">HO Net</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center bg-muted/80">Canc. Insurance</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center bg-muted/80">Charge Loss</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold bg-muted/80">Result (Sub-category)</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold bg-muted/80">Action Point</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold bg-muted/80">DRI Team</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold bg-muted/80">Fulfillment</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right bg-muted/80">BID Count</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center bg-muted/80">Start Date</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-center bg-muted/80">End Date</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right bg-muted/80">Total BIDs</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right bg-muted/80">Disc. ({currency})</TableHead>
+                          <TableHead className="py-1 text-xs font-semibold text-right bg-muted/80">Disc. (USD)</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {cancellationSummaryRows.map((row, idx) => {
-                          const cond = CANCELLATION_CONDITIONS[row.reason];
-                          const actionPoint = CANCELLATION_ACTION_POINTS[row.reason] || "—";
-                          const driTeam = getCancellationDriTeam(row.reason, row.fulfillmentMethod);
-                          const displayName = row.reason.replace("Cancelled-", "");
-                          const isNoAction = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-Insured Booking", "Cancelled-DSS policy"].includes(row.reason);
-                          const isDebitNote = row.reason === "Cancelled-SP error";
+                        {(() => {
+                          const ORDER = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-SP error", "Cancelled-Insured Booking", "Cancelled-DSS policy", "Cancelled-Check for Charge loss"];
+                          const uniqueReasons = Array.from(new Set(cancellationSummaryRows.map(r => r.reason)));
+                          uniqueReasons.sort((a, b) => (ORDER.indexOf(a) === -1 ? 99 : ORDER.indexOf(a)) - (ORDER.indexOf(b) === -1 ? 99 : ORDER.indexOf(b)));
+                          const reasonGroupIndex = new Map(uniqueReasons.map((r, i) => [r, i]));
 
-                          return (
-                            <TableRow key={`${row.reason}-${row.fulfillmentMethod}-${idx}`} className="h-8 hover:bg-muted/20">
-                              <TableCell className="py-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-medium text-xs">{displayName}</span>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary"
-                                    onClick={() => reasonModalRef.current?.open(row.reason, "cancellation")}
-                                    data-testid={`button-manage-cancellation-${row.reason}-${row.fulfillmentMethod}`}
+                          return cancellationSummaryRows.map((row, idx) => {
+                            const cond = CANCELLATION_CONDITIONS[row.reason];
+                            const actionPoint = CANCELLATION_ACTION_POINTS[row.reason] || "—";
+                            const driTeam = getCancellationDriTeam(row.reason, row.fulfillmentMethod);
+                            const isNoAction = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-Insured Booking", "Cancelled-DSS policy"].includes(row.reason);
+                            const isDebitNote = row.reason === "Cancelled-SP error";
+                            const groupIdx = reasonGroupIndex.get(row.reason) ?? 0;
+                            const isOddGroup = groupIdx % 2 === 1;
+
+                            return (
+                              <TableRow
+                                key={`${row.reason}-${row.fulfillmentMethod}-${idx}`}
+                                className={`h-8 hover:bg-primary/5 ${isOddGroup ? "bg-muted/20" : ""}`}
+                              >
+                                <TableCell className="py-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-medium text-xs">{row.reason.replace("Cancelled-", "")}</span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary"
+                                      onClick={() => reasonModalRef.current?.open(row.reason, "cancellation")}
+                                      data-testid={`button-manage-cancellation-${row.reason}-${row.fulfillmentMethod}`}
+                                    >
+                                      <Settings className="h-2.5 w-2.5 mr-0.5" />
+                                      Manage
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellable ?? "—"}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.spNet ?? "—"}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.hoNet ?? "—"}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellationInsurance ?? "—"}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.chargeLoss ?? "—"}</TableCell>
+                                <TableCell className="py-1">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] px-1.5 whitespace-nowrap ${isNoAction ? "border-green-500 text-green-700 dark:text-green-400" : isDebitNote ? "border-orange-500 text-orange-700 dark:text-orange-400" : "border-blue-500 text-blue-700 dark:text-blue-400"}`}
                                   >
-                                    <Settings className="h-2.5 w-2.5 mr-0.5" />
-                                    Manage
-                                  </Button>
-                                </div>
-                              </TableCell>
-                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellable ?? "—"}</TableCell>
-                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.spNet ?? "—"}</TableCell>
-                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.hoNet ?? "—"}</TableCell>
-                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.cancellationInsurance ?? "—"}</TableCell>
-                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{cond?.chargeLoss ?? "—"}</TableCell>
-                              <TableCell className="py-1">
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] px-1.5 ${isNoAction ? "border-green-500 text-green-700 dark:text-green-400" : isDebitNote ? "border-orange-500 text-orange-700 dark:text-orange-400" : "border-blue-500 text-blue-700 dark:text-blue-400"}`}
-                                >
-                                  {displayName}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="py-1 text-xs text-muted-foreground max-w-[160px]">
-                                <span title={actionPoint} className="truncate block">{actionPoint}</span>
-                              </TableCell>
-                              <TableCell className="py-1">
-                                {driTeam === "N/A" ? (
-                                  <span className="text-xs text-muted-foreground">N/A</span>
-                                ) : (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5">{driTeam}</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell className="py-1 text-xs text-muted-foreground max-w-[120px]">
-                                <span title={row.fulfillmentMethod} className="truncate block">{row.fulfillmentMethod}</span>
-                              </TableCell>
-                              <TableCell className="py-1 text-right font-mono">{row.bidCount}</TableCell>
-                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.startDate)}</TableCell>
-                              <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.endDate)}</TableCell>
-                              <TableCell className="py-1 text-right font-mono">{row.totalBIDs}</TableCell>
-                              <TableCell className={`py-1 text-right font-mono font-semibold ${row.discrepancyLC > 0 ? "text-green-700 dark:text-green-400" : row.discrepancyLC < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
-                                {row.discrepancyLC > 0 ? "+" : ""}{formatCurrency(row.discrepancyLC)}
-                              </TableCell>
-                              <TableCell className={`py-1 text-right font-mono ${row.discrepancyUSD > 0 ? "text-green-700 dark:text-green-400" : row.discrepancyUSD < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
-                                {row.discrepancyUSD > 0 ? "+" : ""}{formatCurrency(row.discrepancyUSD)}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
+                                    {row.reason}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="py-1 text-xs text-muted-foreground max-w-[180px]">
+                                  <span title={actionPoint} className="truncate block">{actionPoint}</span>
+                                </TableCell>
+                                <TableCell className="py-1">
+                                  {driTeam === "N/A" ? (
+                                    <span className="text-xs text-muted-foreground">N/A</span>
+                                  ) : (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5">{driTeam}</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="py-1 text-xs text-muted-foreground max-w-[120px]">
+                                  <span title={row.fulfillmentMethod} className="truncate block">{row.fulfillmentMethod}</span>
+                                </TableCell>
+                                <TableCell className="py-1 text-right font-mono">{row.bidCount}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.startDate)}</TableCell>
+                                <TableCell className="py-1 text-center font-mono text-muted-foreground">{formatCancDate(row.endDate)}</TableCell>
+                                <TableCell className="py-1 text-right font-mono">{row.totalBIDs}</TableCell>
+                                <TableCell className={`py-1 text-right font-mono font-semibold ${row.discrepancyLC > 0 ? "text-green-700 dark:text-green-400" : row.discrepancyLC < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                                  {row.discrepancyLC > 0 ? "+" : ""}{formatCurrency(row.discrepancyLC)}
+                                </TableCell>
+                                <TableCell className={`py-1 text-right font-mono ${row.discrepancyUSD > 0 ? "text-green-700 dark:text-green-400" : row.discrepancyUSD < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                                  {row.discrepancyUSD > 0 ? "+" : ""}{formatCurrency(row.discrepancyUSD)}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          });
+                        })()}
                       </TableBody>
                     </Table>
                   </div>
