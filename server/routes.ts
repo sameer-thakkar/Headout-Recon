@@ -26,9 +26,18 @@ function registerDownloadRoute(app: Express) {
   });
 }
 
+// In-memory token store (persists for the lifetime of the server process)
+const authTokens = new Set<string>();
+
 // Auth middleware — protects all /api/* routes except /api/auth/*
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.path.startsWith("/auth/")) return next();
+  const authHeader = req.headers["authorization"];
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    if (authTokens.has(token)) return next();
+  }
+  // Fallback: legacy cookie-based session
   if (req.session?.authenticated) return next();
   res.status(401).json({ error: "Unauthorized" });
 }
@@ -114,6 +123,14 @@ export async function registerRoutes(
   // ==========================================
 
   app.get("/api/auth/status", (req, res) => {
+    const authHeader = req.headers["authorization"];
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+      if (authTokens.has(token)) {
+        return res.set("Cache-Control", "no-store").json({ authenticated: true });
+      }
+    }
+    // Fallback: legacy cookie-based session
     res.set("Cache-Control", "no-store").json({ authenticated: !!req.session?.authenticated });
   });
 
@@ -124,10 +141,12 @@ export async function registerRoutes(
       return res.status(500).json({ error: "APP_PASSWORD is not configured" });
     }
     if (password === appPassword) {
+      const token = randomUUID();
+      authTokens.add(token);
+      // Also set session for any non-header clients
       req.session.authenticated = true;
-      req.session.save((err) => {
-        if (err) return res.status(500).json({ error: "Session error" });
-        res.json({ success: true });
+      req.session.save(() => {
+        res.json({ success: true, token });
       });
     } else {
       res.status(401).json({ error: "Incorrect password" });
@@ -135,6 +154,10 @@ export async function registerRoutes(
   });
 
   app.post("/api/auth/logout", (req, res) => {
+    const authHeader = req.headers["authorization"];
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      authTokens.delete(authHeader.slice(7));
+    }
     req.session.destroy(() => {
       res.json({ success: true });
     });

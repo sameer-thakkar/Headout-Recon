@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, setAuthToken, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,9 @@ export function LoginPage() {
     setError("");
     setIsLoading(true);
     try {
-      await apiRequest("POST", "/api/auth/login", { password });
+      const res = await apiRequest("POST", "/api/auth/login", { password });
+      const data = await res.json();
+      if (data.token) setAuthToken(data.token);
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/status"] });
       setLocation("/");
     } catch {

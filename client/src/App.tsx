@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
-import { queryClient, apiRequest } from "./lib/queryClient";
+import { queryClient, apiRequest, clearAuthToken } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -618,6 +618,7 @@ function AuthGate() {
   });
 
   const handleLogout = useCallback(async () => {
+    clearAuthToken();
     await apiRequest("POST", "/api/auth/logout", {});
     await queryClient.invalidateQueries({ queryKey: ["/api/auth/status"] });
     setLocation("/");
