@@ -523,16 +523,14 @@ export function OptionA_ExpandActions() {
 
                       {!showPax && !showSpConfirm && (
                         <div className="rounded-md border overflow-hidden bg-background">
-                          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
-                            <div>Booking ID</div><div className="text-right w-20 px-2">SP Net</div><div className="text-right w-20 px-2">HO Net</div><div className="w-20 px-2 text-right">Date</div><div className="w-16 px-2">Pax</div>
+                          <div className="grid grid-cols-[1fr_auto_auto] items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
+                            <div>Booking ID</div><div className="text-right w-24 px-2">SP Net</div><div className="text-right w-24 px-2">HO Net</div>
                           </div>
                           {BOOKINGS.map(b => (
-                            <div key={b.bookingId} className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center px-3 h-7 border-b last:border-0 text-xs hover:bg-muted/20">
+                            <div key={b.bookingId} className="grid grid-cols-[1fr_auto_auto] items-center px-3 h-7 border-b last:border-0 text-xs hover:bg-muted/20">
                               <div className="font-mono text-primary">{b.bookingId}</div>
-                              <div className="text-right w-20 px-2 font-mono text-blue-600">{fmt(b.spNet)}</div>
-                              <div className="text-right w-20 px-2 font-mono text-green-600">{fmt(b.hoNet)}</div>
-                              <div className="w-20 px-2 text-right text-muted-foreground">{b.date}</div>
-                              <div className="w-16 px-2 text-muted-foreground">{b.pax}</div>
+                              <div className="text-right w-24 px-2 font-mono text-blue-600">{fmt(b.spNet)}</div>
+                              <div className="text-right w-24 px-2 font-mono text-green-600">{fmt(b.hoNet)}</div>
                             </div>
                           ))}
                         </div>
