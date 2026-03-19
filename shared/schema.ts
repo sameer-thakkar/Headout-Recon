@@ -698,6 +698,7 @@ export const portalReloads = pgTable("portal_reloads", {
   zendeskId: varchar("zendesk_id"),
   dateOfPayment: varchar("date_of_payment"),
   amountLoadedAtDate: varchar("amount_loaded_at_date"),
+  currency: varchar("currency"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -710,6 +711,7 @@ export const portalReloadSchema = z.object({
   zendeskId: z.string().nullable().optional(),
   dateOfPayment: z.string().nullable().optional(),
   amountLoadedAtDate: z.string().nullable().optional(),
+  currency: z.string().nullable().optional(),
   createdAt: z.string(),
 });
 export type PortalReload = z.infer<typeof portalReloadSchema>;
@@ -720,6 +722,7 @@ export const insertPortalReloadSchema = z.object({
   zendeskId: z.string().nullable().optional(),
   dateOfPayment: z.string().nullable().optional(),
   amountLoadedAtDate: z.string().nullable().optional(),
+  currency: z.string().nullable().optional(),
 });
 export type InsertPortalReload = z.infer<typeof insertPortalReloadSchema>;
 

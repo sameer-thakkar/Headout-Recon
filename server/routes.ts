@@ -1834,9 +1834,13 @@ export async function registerRoutes(
         const lc = h.toLowerCase();
         return lc.includes("amount loaded") || lc.includes("loaded at date") || lc.includes("reload amount");
       });
-      console.log("Portal reloads column detection:", { partnerIdCol, paidAmountCol, zendeskIdCol: zendeskIdCol || "(not found)", dateCol: dateCol || "(not found)", amountLoadedCol: amountLoadedCol || "(not found)", allHeaders: headers });
+      const currencyCol = remainingHeaders.find(h => {
+        const lc = h.toLowerCase();
+        return (lc.includes("currency") && (lc.includes("zendesk") || lc.includes("ticket") || lc.includes("finance")));
+      }) || remainingHeaders.find(h => h.toLowerCase() === "currency");
+      console.log("Portal reloads column detection:", { partnerIdCol, paidAmountCol, zendeskIdCol: zendeskIdCol || "(not found)", dateCol: dateCol || "(not found)", amountLoadedCol: amountLoadedCol || "(not found)", currencyCol: currencyCol || "(not found)", allHeaders: headers });
 
-      const parsed: { beId: string; paidAmount: number; zendeskId?: string; dateOfPayment?: string; amountLoadedAtDate?: string; rawRow: Record<string, unknown> }[] = [];
+      const parsed: { beId: string; paidAmount: number; zendeskId?: string; dateOfPayment?: string; amountLoadedAtDate?: string; currency?: string; rawRow: Record<string, unknown> }[] = [];
       for (const row of rawRows) {
         const beId = String(row[partnerIdCol] || "").trim();
         const rawAmount = row[paidAmountCol];
@@ -1844,6 +1848,7 @@ export async function registerRoutes(
 
         if (beId && paidAmount !== 0) {
           const zendeskId = zendeskIdCol ? String(row[zendeskIdCol] || "").trim() || undefined : undefined;
+          const currency = currencyCol ? String(row[currencyCol] || "").trim().toUpperCase() || undefined : undefined;
           let dateOfPayment: string | undefined;
           if (dateCol) {
             const rawDate = row[dateCol];
@@ -1886,7 +1891,7 @@ export async function registerRoutes(
               amountLoadedAtDate = String(rawLoaded || "").trim() || undefined;
             }
           }
-          parsed.push({ beId, paidAmount, zendeskId, dateOfPayment, amountLoadedAtDate, rawRow: row as Record<string, unknown> });
+          parsed.push({ beId, paidAmount, zendeskId, dateOfPayment, amountLoadedAtDate, currency, rawRow: row as Record<string, unknown> });
         }
       }
 
@@ -1921,6 +1926,7 @@ export async function registerRoutes(
           zendeskId: r.zendeskId || null,
           dateOfPayment: r.dateOfPayment || null,
           amountLoadedAtDate: r.amountLoadedAtDate || null,
+          currency: r.currency || null,
         }));
 
       if (validReloads.length === 0) {

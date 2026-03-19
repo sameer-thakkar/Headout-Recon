@@ -2318,7 +2318,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
               Current Reloads
               <Badge variant="secondary" className="text-xs">{reloads.length} entries</Badge>
-              <span className="ml-auto font-mono text-sm">{formatNumber(originalTotal)} {currency}</span>
+              <span className="ml-auto font-mono text-sm">{formatNumber(originalTotal)} {reloads.find(r => r.currency)?.currency || currency}</span>
             </h4>
             {reloads.length > 0 ? (
               <div className="rounded-md border overflow-hidden max-h-48 overflow-y-auto">
@@ -2328,7 +2328,8 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                       <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
                       <TableHead className="py-1 text-xs whitespace-nowrap">Date of Payment</TableHead>
                       <TableHead className="py-1 text-xs text-right whitespace-nowrap">Amt Loaded at Date</TableHead>
-                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Paid Amount ({currency})</TableHead>
+                      <TableHead className="py-1 text-xs">Currency</TableHead>
+                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Paid Amount</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2337,6 +2338,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                         <TableCell className="py-1 font-mono">{r.zendeskId ? String(r.zendeskId).replace(/\.0+$/, "") : "-"}</TableCell>
                         <TableCell className="py-1">{formatDateDisplay(r.dateOfPayment)}</TableCell>
                         <TableCell className="py-1 text-right">{formatDateDisplay(r.amountLoadedAtDate)}</TableCell>
+                        <TableCell className="py-1 font-mono text-xs">{r.currency || "-"}</TableCell>
                         <TableCell className="py-1 text-right font-mono">{formatNumber(Math.round(r.paidAmount * 100) / 100)}</TableCell>
                       </TableRow>
                     ))}
@@ -2368,7 +2370,7 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
                       <TableHead className="py-1 text-xs">Zendesk ID</TableHead>
                       <TableHead className="py-1 text-xs whitespace-nowrap">Date of Payment</TableHead>
                       <TableHead className="py-1 text-xs text-right whitespace-nowrap">Amt Loaded at Date</TableHead>
-                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Paid Amount ({currency})</TableHead>
+                      <TableHead className="py-1 text-xs text-right whitespace-nowrap">Paid Amount</TableHead>
                       <TableHead className="py-1 text-xs w-10"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -2516,27 +2518,29 @@ const ManageReloadsModal = memo(forwardRef<ManageReloadsModalHandle, ManageReloa
           <Separator />
 
           <div className="rounded-md border p-3 bg-muted/20 space-y-1">
+            {(() => { const reloadCcy = reloads.find(r => r.currency)?.currency || currency; return (<>
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Original Reloads</span>
-              <span className="font-mono">{formatNumber(originalTotal)} {currency}</span>
+              <span className="font-mono">{formatNumber(originalTotal)} {reloadCcy}</span>
             </div>
             {addTotal > 0 && (
               <div className="flex items-center justify-between text-xs text-green-600">
                 <span>Additions</span>
-                <span className="font-mono">+{formatNumber(addTotal)} {currency}</span>
+                <span className="font-mono">+{formatNumber(addTotal)} {reloadCcy}</span>
               </div>
             )}
             {lessTotal > 0 && (
               <div className="flex items-center justify-between text-xs text-red-600">
                 <span>Deductions</span>
-                <span className="font-mono">-{formatNumber(lessTotal)} {currency}</span>
+                <span className="font-mono">-{formatNumber(lessTotal)} {reloadCcy}</span>
               </div>
             )}
             <Separator className="my-1" />
             <div className="flex items-center justify-between text-sm font-semibold">
               <span>Final Reloads</span>
-              <span className="font-mono">{formatNumber(adjustedTotal)} {currency}</span>
+              <span className="font-mono">{formatNumber(adjustedTotal)} {reloadCcy}</span>
             </div>
+            </>); })()}
           </div>
         </div>
 
