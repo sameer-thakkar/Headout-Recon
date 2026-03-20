@@ -89,6 +89,7 @@ export function OptionA_ExpandActions() {
   const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
   const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
 
+  const [isPortalDeposit, setIsPortalDeposit] = useState(true);
   const [showTakeAction, setShowTakeAction] = useState(false);
   const [takeActionPrice, setTakeActionPrice] = useState<"sp" | "ho">("sp");
   const [takeActionDisputes, setTakeActionDisputes] = useState<Set<string>>(new Set());
@@ -513,6 +514,14 @@ export function OptionA_ExpandActions() {
                     <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">Difference</span><div className="font-mono font-semibold text-amber-600">{fmt(totalDiff)}</div></div>
                     <div className={`rounded border-2 p-2 ${isSp ? "border-blue-300 bg-blue-50/50" : "border-green-300 bg-green-50/50"}`}><span className="text-muted-foreground">Payable</span><div className={`font-mono font-bold ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(totalPayable)}</div></div>
                   </div>
+                  {isPortalDeposit && !isSp && (
+                    <div className="flex items-start gap-2.5 rounded-md border-2 border-amber-400 bg-amber-50/60 px-3 py-2.5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-800 leading-relaxed">
+                        You have selected HO Net for portal deposit reconciliation. We have already been charged SP Net for this booking. Consider selecting <button className="font-semibold underline underline-offset-2 hover:text-amber-950" onClick={() => { setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); }}>SP Net</button> and raising a dispute for the same.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {isSp && (
