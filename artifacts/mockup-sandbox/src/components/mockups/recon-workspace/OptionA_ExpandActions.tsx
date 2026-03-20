@@ -597,7 +597,7 @@ export function OptionA_ExpandActions() {
                         <div>TID / Experience</div>
                         <div className="text-right text-blue-600">SP Net</div>
                         <div className="text-right text-green-600">HO Net</div>
-                        <div className="text-right text-red-500">Disc. LC</div>
+                        <div className="text-right text-amber-600">Difference</div>
                       </div>
                       {allTids.map(t => {
                         const isChecked = takeActionIssues.has(t.tid);
@@ -607,14 +607,14 @@ export function OptionA_ExpandActions() {
                             <div className="truncate"><span className="font-mono font-medium text-primary">{t.tid}</span> <span className="text-muted-foreground text-[11px]">{t.experience}</span></div>
                             <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
                             <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
-                            <div className="font-mono text-right text-red-500 font-medium">{fmt(t.discLc)}</div>
+                            <div className="font-mono text-right text-amber-600 font-medium">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
                           </div>
                         );
                       })}
                       {issueCount > 0 && (
                         <div className="flex items-center justify-between px-3 py-1.5 border-t bg-orange-50/50 text-xs font-semibold">
                           <span className="text-orange-800">{issueCount} TID{issueCount > 1 ? "s" : ""} selected for issue</span>
-                          <span className="font-mono text-orange-700">Disc: {fmt(allTids.filter(t => takeActionIssues.has(t.tid)).reduce((s, t) => s + t.discLc, 0))}</span>
+                          <span className="font-mono text-orange-700">Difference: {fmt(allTids.filter(t => takeActionIssues.has(t.tid)).reduce((s, t) => s + Math.abs(t.spNet - t.hoNet), 0))}</span>
                         </div>
                       )}
                     </div>
@@ -635,7 +635,7 @@ export function OptionA_ExpandActions() {
                       setShowTakeAction(false);
                       setSelectedTids(new Set());
                     }}>
-                      <Check className="h-3.5 w-3.5" /> Apply {summaryParts.join(" · ")}
+                      <Check className="h-3.5 w-3.5" /> Confirm & Apply <Badge variant="secondary" className="text-[10px] ml-1 px-1.5 py-0">{summaryParts.join(" · ")}</Badge>
                     </Button>
                   </div>
                 </div>
