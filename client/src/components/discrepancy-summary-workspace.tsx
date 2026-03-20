@@ -737,7 +737,7 @@ export function DiscrepancySummaryWorkspace({
 
             {filteredTids.length > 0 && (
               <div className="rounded-md border overflow-hidden">
-                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
+                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
                   <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
@@ -745,6 +745,8 @@ export function DiscrepancySummaryWorkspace({
                   <div className="pl-2">TID</div>
                   <div className="text-right px-3 w-24">SP Net</div>
                   <div className="text-right px-3 w-24">HO Net</div>
+                  <div className="text-right px-3 w-24 text-violet-600">TAP</div>
+                  <div className="text-right px-3 w-24 text-violet-600">Dispute</div>
                   <div className="text-right px-3 w-24">Disc.</div>
                   <div className="text-center px-2 w-14 pr-3">BIDs</div>
                 </div>
@@ -759,7 +761,7 @@ export function DiscrepancySummaryWorkspace({
                   return (
                     <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
-                        className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
+                        className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
                         onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                       >
                         <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
@@ -779,6 +781,8 @@ export function DiscrepancySummaryWorkspace({
                         </div>
                         <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.spNet)}</div>
                         <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.hoNet)}</div>
+                        <div className="text-right px-3 w-24 font-mono text-sm text-violet-600 font-medium">{fmt(tid.spNet)}</div>
+                        <div className="text-right px-3 w-24 font-mono text-sm text-violet-600 font-medium">{fmt(Math.abs(tid.spNet - tid.hoNet))}</div>
                         <div className="text-right px-3 w-24">
                           <span className="font-mono text-sm text-red-600 dark:text-red-400">{fmt(Math.abs(tid.discLc))}</span>
                           <span className="text-[10px] text-muted-foreground ml-0.5">({pct}%)</span>
