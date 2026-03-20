@@ -665,7 +665,7 @@ export function OptionA_ExpandActions() {
 
                       {!showPax && !showSpConfirm && !showHoConfirm && (
                         <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10">
-                          <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setShowSpConfirm(tid.tid); setShowHoConfirm(null); setDisputeChecked(false); }}>
+                          <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setShowSpConfirm(tid.tid); setShowHoConfirm(null); setDisputeChecked(false); setIssueChecked(false); }}>
                             <TrendingUp className="h-3.5 w-3.5" /> Set SP Net
                           </Button>
                           <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => { setShowHoConfirm(tid.tid); setShowSpConfirm(null); setIssueChecked(false); }}>
@@ -712,9 +712,31 @@ export function OptionA_ExpandActions() {
                             </div>
                           </div>
 
+                          <div className={`rounded-md border-2 overflow-hidden transition-colors ${issueChecked ? "border-orange-500 bg-orange-50/50" : "border-border bg-white"}`}>
+                            <div className="px-3 py-3">
+                              <div className="flex items-start gap-3">
+                                <div className={`flex items-center justify-center h-8 w-8 rounded-md flex-shrink-0 ${issueChecked ? "bg-orange-100" : "bg-muted"}`}>
+                                  <FileWarning className={`h-4 w-4 ${issueChecked ? "text-orange-600" : "text-muted-foreground"}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-3 mb-0.5">
+                                    <div className="text-xs font-semibold">Raise Issue</div>
+                                    <Checkbox checked={issueChecked} onCheckedChange={(checked) => setIssueChecked(!!checked)} className="h-4 w-4" />
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground font-medium mb-0.5">This is HO error</div>
+                                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                    To be checked with internal teams at Headout. The discrepancy of{" "}
+                                    <span className="font-mono font-semibold text-orange-600">{fmt(Math.abs(tid.spNet - tid.hoNet))}</span>
+                                    {" "}will be logged to the Issue Tracker for investigation and resolution.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
                           <div className="flex items-center justify-between">
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowSpConfirm(null)}>Cancel</Button>
-                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "sp" })); flash(`${tid.tid} → SP Net applied${disputeChecked ? " + dispute raised" : ""}`); resolve(tid.tid); setExpandedTid(null); setShowSpConfirm(null); }}>
+                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "sp" })); const extras = [disputeChecked && "dispute raised", issueChecked && "issue logged"].filter(Boolean).join(" + "); flash(`${tid.tid} → SP Net applied${extras ? " + " + extras : ""}`); resolve(tid.tid); setExpandedTid(null); setShowSpConfirm(null); }}>
                               <Check className="h-3 w-3" /> Confirm & Apply
                             </Button>
                           </div>
