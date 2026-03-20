@@ -477,15 +477,25 @@ export function OptionA_ExpandActions() {
             const totalHo = allTids.reduce((s, t) => s + t.hoNet, 0);
             const totalPayable = isSp ? totalSp : totalHo;
             const totalDiff = Math.abs(totalSp - totalHo);
-            const getPaxDisputeAmt = (tid: string, r: typeof PAX_ROWS[0]) => {
+            const getPaxUnitDispute = (tid: string, r: typeof PAX_ROWS[0]) => {
               const k = `${r.paxType}__${r.dateRange}`;
               const entry = disputePaxPrices[tid]?.[k];
               if (entry?.dispute !== undefined && entry.dispute !== "") return parseFloat(entry.dispute);
-              return (r.spUnit - r.hoUnit) * r.count;
+              return r.spUnit - r.hoUnit;
+            };
+            const getPaxUnitTap = (tid: string, r: typeof PAX_ROWS[0]) => {
+              const k = `${r.paxType}__${r.dateRange}`;
+              const entry = disputePaxPrices[tid]?.[k];
+              if (entry?.tap !== undefined && entry.tap !== "") return parseFloat(entry.tap);
+              return r.spUnit;
             };
             const computePaxDiff = (tid: string, t: TidData) => {
               if (!t.hasPax) return null;
-              return PAX_ROWS.reduce((s, r) => s + getPaxDisputeAmt(tid, r), 0);
+              return PAX_ROWS.reduce((s, r) => s + getPaxUnitDispute(tid, r) * r.count, 0);
+            };
+            const computePaxTapTotal = (tid: string, t: TidData) => {
+              if (!t.hasPax) return null;
+              return PAX_ROWS.reduce((s, r) => s + getPaxUnitTap(tid, r) * r.count, 0);
             };
             const getDisputeDiff = (t: TidData) => {
               const paxDiff = computePaxDiff(t.tid, t);
@@ -610,9 +620,8 @@ export function OptionA_ExpandActions() {
                                     {PAX_ROWS.map(r => {
                                       const k = `${r.paxType}__${r.dateRange}`;
                                       const entry = (disputePaxPrices[t.tid] || {})[k] || {};
-                                      const defaultTap = r.spUnit * r.count;
-                                      const defaultDispute = (r.spUnit - r.hoUnit) * r.count;
-                                      const hoTotal = r.hoUnit * r.count;
+                                      const defaultTap = r.spUnit;
+                                      const defaultDispute = r.spUnit - r.hoUnit;
                                       const tapVal = entry.tap !== undefined && entry.tap !== "" ? entry.tap : String(defaultTap);
                                       const dispVal = entry.dispute !== undefined && entry.dispute !== "" ? entry.dispute : String(defaultDispute);
                                       const hasTapOvr = entry.tap !== undefined && entry.tap !== "";
@@ -625,18 +634,25 @@ export function OptionA_ExpandActions() {
                                           <div className="text-right font-mono text-blue-600">{fmt(r.spUnit)}</div>
                                           <div className="text-right font-mono text-green-600">{fmt(r.hoUnit)}</div>
                                           <div className="text-right">
-                                            <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasTapOvr ? "border-violet-400 bg-violet-50" : ""}`} value={tapVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newDisp = val !== "" ? String(parseFloat(val) - hoTotal) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: val, dispute: newDisp } } })); } }} />
+                                            <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasTapOvr ? "border-violet-400 bg-violet-50" : ""}`} value={tapVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newDisp = val !== "" ? String(parseFloat(val) - r.hoUnit) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: val, dispute: newDisp } } })); } }} />
                                           </div>
                                           <div className="text-right">
-                                            <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasDispOvr ? "border-violet-400 bg-violet-50" : ""}`} value={dispVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newTap = val !== "" ? String(hoTotal + parseFloat(val)) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: newTap, dispute: val } } })); } }} />
+                                            <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasDispOvr ? "border-violet-400 bg-violet-50" : ""}`} value={dispVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newTap = val !== "" ? String(r.hoUnit + parseFloat(val)) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: newTap, dispute: val } } })); } }} />
                                           </div>
                                         </div>
                                       );
                                     })}
                                   </div>
-                                  <div className="flex items-center justify-end mt-1.5 text-[11px] font-semibold text-violet-700">
-                                    Pax-computed dispute: <span className="font-mono ml-1">{fmt(paxDiffVal ?? 0)}</span>
-                                  </div>
+                                  {(() => {
+                                    const tidTapTotal = computePaxTapTotal(t.tid, t) ?? 0;
+                                    const tidDispTotal = paxDiffVal ?? 0;
+                                    return (
+                                      <div className="flex items-center justify-end mt-1.5 gap-4 text-[11px] font-semibold text-violet-700">
+                                        <span>TID Total Amt Payable: <span className="font-mono">{fmt(tidTapTotal)}</span></span>
+                                        <span>TID Total Dispute: <span className="font-mono">{fmt(tidDispTotal)}</span></span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -1061,15 +1077,15 @@ export function OptionA_ExpandActions() {
                           <Table>
                             <TableHeader><TableRow className="h-7"><TableHead className="text-xs py-1">Pax</TableHead><TableHead className="text-xs py-1">Dates</TableHead><TableHead className="text-xs py-1 text-right">Qty</TableHead><TableHead className="text-xs py-1 text-right">SP Unit</TableHead><TableHead className="text-xs py-1 text-right">HO Unit</TableHead><TableHead className="text-xs py-1 text-right">Total Amt Payable</TableHead><TableHead className="text-xs py-1 text-right">Dispute Amt</TableHead></TableRow></TableHeader>
                             <TableBody>
-                              {PAX_ROWS.map(r => { const k = `${r.paxType}__${r.dateRange}`; const entry = paxPrices[k] || {}; const defaultTap = r.spUnit * r.count; const defaultDisp = (r.spUnit - r.hoUnit) * r.count; const hoTotal = r.hoUnit * r.count; const tapVal = entry.tap !== undefined && entry.tap !== "" ? entry.tap : String(defaultTap); const dispVal = entry.dispute !== undefined && entry.dispute !== "" ? entry.dispute : String(defaultDisp); const hasTapOvr = entry.tap !== undefined && entry.tap !== ""; const hasDispOvr = entry.dispute !== undefined && entry.dispute !== ""; return (
+                              {PAX_ROWS.map(r => { const k = `${r.paxType}__${r.dateRange}`; const entry = paxPrices[k] || {}; const defaultTap = r.spUnit; const defaultDisp = r.spUnit - r.hoUnit; const tapVal = entry.tap !== undefined && entry.tap !== "" ? entry.tap : String(defaultTap); const dispVal = entry.dispute !== undefined && entry.dispute !== "" ? entry.dispute : String(defaultDisp); const hasTapOvr = entry.tap !== undefined && entry.tap !== ""; const hasDispOvr = entry.dispute !== undefined && entry.dispute !== ""; return (
                                 <TableRow key={k} className="h-8">
                                   <TableCell className="py-1 text-xs">{r.paxType}</TableCell>
                                   <TableCell className="py-1 text-xs text-muted-foreground">{r.dateRange}</TableCell>
                                   <TableCell className="py-1 text-xs text-right">{r.count}</TableCell>
                                   <TableCell className="py-1 text-xs text-right font-mono text-blue-600">{fmt(r.spUnit)}</TableCell>
                                   <TableCell className="py-1 text-xs text-right font-mono text-green-600">{fmt(r.hoUnit)}</TableCell>
-                                  <TableCell className="py-1 text-right"><Input className={`h-6 w-20 text-xs text-right font-mono ml-auto ${hasTapOvr ? "border-violet-400 bg-violet-50" : ""}`} type="number" step="any" value={tapVal} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newDisp = val !== "" ? String(parseFloat(val) - hoTotal) : ""; setPaxPrices(p => ({ ...p, [k]: { tap: val, dispute: newDisp } })); } }} /></TableCell>
-                                  <TableCell className="py-1 text-right"><Input className={`h-6 w-20 text-xs text-right font-mono ml-auto ${hasDispOvr ? "border-violet-400 bg-violet-50" : ""}`} type="number" step="any" value={dispVal} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newTap = val !== "" ? String(hoTotal + parseFloat(val)) : ""; setPaxPrices(p => ({ ...p, [k]: { tap: newTap, dispute: val } })); } }} /></TableCell>
+                                  <TableCell className="py-1 text-right"><Input className={`h-6 w-20 text-xs text-right font-mono ml-auto ${hasTapOvr ? "border-violet-400 bg-violet-50" : ""}`} type="number" step="any" value={tapVal} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newDisp = val !== "" ? String(parseFloat(val) - r.hoUnit) : ""; setPaxPrices(p => ({ ...p, [k]: { tap: val, dispute: newDisp } })); } }} /></TableCell>
+                                  <TableCell className="py-1 text-right"><Input className={`h-6 w-20 text-xs text-right font-mono ml-auto ${hasDispOvr ? "border-violet-400 bg-violet-50" : ""}`} type="number" step="any" value={dispVal} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newTap = val !== "" ? String(r.hoUnit + parseFloat(val)) : ""; setPaxPrices(p => ({ ...p, [k]: { tap: newTap, dispute: val } })); } }} /></TableCell>
                                 </TableRow>
                               ); })}
                             </TableBody>
@@ -1077,7 +1093,10 @@ export function OptionA_ExpandActions() {
                           <div className="flex items-center justify-between">
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowPax(null)}>Cancel</Button>
                             <div className="flex items-center gap-3">
-                              <span className="text-[11px] font-semibold text-violet-700">Total dispute: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = paxPrices[k]; const disp = entry?.dispute; return s + (disp !== undefined && disp !== "" ? parseFloat(disp) : (r.spUnit - r.hoUnit) * r.count); }, 0))}</span></span>
+                              <div className="text-[11px] font-semibold text-violet-700 flex gap-3">
+                                <span>TID Total TAP: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = paxPrices[k]; const tap = entry?.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : r.spUnit; return s + tap * r.count; }, 0))}</span></span>
+                                <span>TID Total Dispute: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = paxPrices[k]; const disp = entry?.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : r.spUnit - r.hoUnit; return s + disp * r.count; }, 0))}</span></span>
+                              </div>
                               <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { flash("Pax dispute amounts applied"); resolve(tid.tid); setExpandedTid(null); setShowPax(null); }}>
                                 <Check className="h-3 w-3" /> Apply Dispute
                               </Button>
