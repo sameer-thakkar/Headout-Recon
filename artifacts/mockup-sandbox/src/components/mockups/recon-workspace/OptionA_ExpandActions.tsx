@@ -5,10 +5,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Calculator, Check, Gavel, FileWarning, AlertTriangle, X as XIcon,
-  BarChart3, PanelTopClose, PanelTop, CheckCheck
+  BarChart3, PanelTopClose, PanelTop, CheckCheck, Trash2
 } from "lucide-react";
 
 interface TidData {
@@ -16,23 +17,49 @@ interface TidData {
   bidCount: number; fm: string; experience: string; hasPax: boolean;
   hoTakeRate: number; actualTakeRate: number; discPercent: string; soldAtLoss: boolean; lossUsd: number;
   startDate: string; endDate: string; bidCountWithDisc: number; bidCountInDuration: number;
+  isSecondaryVendor?: boolean;
+}
+
+interface BookingData {
+  bookingId: string; spNet: number; hoNet: number;
+  amountPaid: number; disputeSettled: number;
+  isNegativeSp?: boolean; isAlreadyReconciled?: boolean; isUnmapped?: boolean;
+  arSubReason?: string; vendorId?: string;
 }
 
 const TIDS: TidData[] = [
   { tid: "TID-90234", spNet: 5_200, hoNet: 4_850, discLc: 350, discUsd: 379.40, bidCount: 6, fm: "Freesale", experience: "Sagrada Familia Guided Tour", hasPax: true, hoTakeRate: 18.5, actualTakeRate: 12.3, discPercent: "-6.2%", soldAtLoss: false, lossUsd: 0, startDate: "01/01/2026", endDate: "31/01/2026", bidCountWithDisc: 5, bidCountInDuration: 6 },
   { tid: "TID-90456", spNet: 18_400, hoNet: 12_300, discLc: 6_100, discUsd: 6_612.40, bidCount: 12, fm: "Freesale", experience: "Park Güell Skip-the-Line", hasPax: true, hoTakeRate: 20.0, actualTakeRate: -3.2, discPercent: "-23.2%", soldAtLoss: true, lossUsd: 2_450, startDate: "05/01/2026", endDate: "28/01/2026", bidCountWithDisc: 12, bidCountInDuration: 12 },
   { tid: "TID-90789", spNet: 8_900, hoNet: 3_900, discLc: 5_000.75, discUsd: 5_420.81, bidCount: 7, fm: "Manual", experience: "Casa Batlló Night Experience", hasPax: false, hoTakeRate: 15.0, actualTakeRate: 10.8, discPercent: "-4.2%", soldAtLoss: false, lossUsd: 0, startDate: "10/01/2026", endDate: "25/01/2026", bidCountWithDisc: 6, bidCountInDuration: 7 },
-  { tid: "TID-91012", spNet: 3_100, hoNet: 2_100, discLc: 1_000, discUsd: 1_084, bidCount: 3, fm: "Freesale", experience: "Montserrat Day Trip", hasPax: false, hoTakeRate: 22.0, actualTakeRate: 18.5, discPercent: "-3.5%", soldAtLoss: false, lossUsd: 0, startDate: "15/01/2026", endDate: "20/01/2026", bidCountWithDisc: 3, bidCountInDuration: 3 },
+  { tid: "TID-91012", spNet: 3_100, hoNet: 2_100, discLc: 1_000, discUsd: 1_084, bidCount: 3, fm: "Freesale", experience: "Montserrat Day Trip", hasPax: false, hoTakeRate: 22.0, actualTakeRate: 18.5, discPercent: "-3.5%", soldAtLoss: false, lossUsd: 0, startDate: "15/01/2026", endDate: "20/01/2026", bidCountWithDisc: 3, bidCountInDuration: 3, isSecondaryVendor: true },
 ];
 
-const BOOKINGS = [
-  { bookingId: "BID-1001", spNet: 850, hoNet: 800, date: "12/01/2026", pax: "1 Adult" },
-  { bookingId: "BID-1002", spNet: 920, hoNet: 850, date: "15/01/2026", pax: "1 Adult" },
-  { bookingId: "BID-1003", spNet: 1_100, hoNet: 1_050, date: "20/01/2026", pax: "1 Adult, 1 Child" },
-  { bookingId: "BID-1004", spNet: 780, hoNet: 780, date: "25/01/2026", pax: "1 Adult" },
-  { bookingId: "BID-1005", spNet: 850, hoNet: 670, date: "01/02/2026", pax: "2 Adults" },
-  { bookingId: "BID-1006", spNet: 700, hoNet: 700, date: "10/02/2026", pax: "1 Adult" },
-];
+const MOCK_BOOKINGS: Record<string, BookingData[]> = {
+  "TID-90234": [
+    { bookingId: "BID-1001", spNet: 850, hoNet: 800, amountPaid: 200, disputeSettled: 0 },
+    { bookingId: "BID-1002", spNet: 920, hoNet: 850, amountPaid: 0, disputeSettled: 50 },
+    { bookingId: "BID-1003", spNet: 1_100, hoNet: 1_050, amountPaid: 300, disputeSettled: 0 },
+    { bookingId: "BID-1004", spNet: 780, hoNet: 780, amountPaid: 0, disputeSettled: 0 },
+    { bookingId: "BID-1005", spNet: 850, hoNet: 670, amountPaid: 0, disputeSettled: 0, isAlreadyReconciled: true, arSubReason: "" },
+    { bookingId: "BID-1006", spNet: 700, hoNet: 700, amountPaid: 0, disputeSettled: 0 },
+  ],
+  "TID-90456": [
+    { bookingId: "BID-2001", spNet: 4_600, hoNet: 3_100, amountPaid: 1_000, disputeSettled: 0 },
+    { bookingId: "BID-2002", spNet: 5_200, hoNet: 3_400, amountPaid: 0, disputeSettled: 200 },
+    { bookingId: "BID-2003", spNet: -1_200, hoNet: 0, amountPaid: 0, disputeSettled: 0, isNegativeSp: true },
+    { bookingId: "BID-2004", spNet: 3_800, hoNet: 2_500, amountPaid: 500, disputeSettled: 0, isUnmapped: true },
+  ],
+  "TID-90789": [
+    { bookingId: "BID-3001", spNet: 3_200, hoNet: 1_400, amountPaid: 0, disputeSettled: 0 },
+    { bookingId: "BID-3002", spNet: 2_800, hoNet: 1_200, amountPaid: 500, disputeSettled: 0 },
+    { bookingId: "BID-3003", spNet: 2_900, hoNet: 1_300, amountPaid: 0, disputeSettled: 0 },
+  ],
+  "TID-91012": [
+    { bookingId: "BID-4001", spNet: 1_200, hoNet: 800, amountPaid: 0, disputeSettled: 0, vendorId: "VND-ORIG-001" },
+    { bookingId: "BID-4002", spNet: 1_000, hoNet: 700, amountPaid: 0, disputeSettled: 100, vendorId: "VND-ORIG-002" },
+    { bookingId: "BID-4003", spNet: 900, hoNet: 600, amountPaid: 0, disputeSettled: 0, vendorId: "VND-ORIG-001" },
+  ],
+};
 
 const PAX_ROWS = [
   { paxType: "Adult", dateRange: "12/01 - 28/01", count: 8, spUnit: 650, hoUnit: 600 },
@@ -58,6 +85,15 @@ export function OptionA_ExpandActions() {
   const [selectedTids, setSelectedTids] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
   const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
+
+  const [tapOverrides, setTapOverrides] = useState<Record<string, string>>({});
+  const [activeDisputes, setActiveDisputes] = useState<Record<string, string>>({});
+  const [disputeEditing, setDisputeEditing] = useState<string | null>(null);
+  const [disputeInput, setDisputeInput] = useState("");
+  const [arDecisions, setArDecisions] = useState<Record<string, "pay" | "dont_pay">>({});
+  const [arReasons, setArReasons] = useState<Record<string, string>>({});
+  const [unmappedResolved, setUnmappedResolved] = useState<Set<string>>(new Set());
+  const [vendorOverrides, setVendorOverrides] = useState<Record<string, string>>({});
 
   const flash = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(null), 2500); };
   const resolve = (tid: string) => setResolvedTids(prev => new Set(prev).add(tid));
@@ -115,9 +151,210 @@ export function OptionA_ExpandActions() {
   const openDiscrepancyAction = (action: string) => { setBulkScope("all"); setBulkConfirm(action); };
   const openSelectionAction = (action: string) => { setBulkScope("selected"); setBulkConfirm(action); };
 
+  const getTap = (b: BookingData): number => {
+    if (tapOverrides[b.bookingId] !== undefined && tapOverrides[b.bookingId] !== "") return parseFloat(tapOverrides[b.bookingId]) || 0;
+    if (b.isNegativeSp) { if (b.hoNet === 0) return 0; if (Math.abs(b.spNet) === Math.abs(b.hoNet)) return 0; return Math.abs(Math.abs(b.hoNet) - Math.abs(b.spNet)); }
+    return b.spNet;
+  };
+
+  const getPricePayable = (b: BookingData): number => getTap(b) - b.amountPaid;
+
   const filteredTids = TIDS.filter(t => !tidSearch || t.tid.toLowerCase().includes(tidSearch.toLowerCase()) || t.experience.toLowerCase().includes(tidSearch.toLowerCase()));
   const resolvedCount = TIDS.filter(t => resolvedTids.has(t.tid)).length;
   const totalDisc = TIDS.reduce((s, t) => s + t.discUsd, 0);
+
+  const renderBookingTable = (tid: TidData) => {
+    const bookings = MOCK_BOOKINGS[tid.tid] || [];
+    const isSecVendor = tid.isSecondaryVendor;
+
+    const totals = bookings.reduce((acc, b) => {
+      acc.spNet += b.spNet;
+      acc.hoNet += b.hoNet;
+      acc.tap += getTap(b);
+      acc.amtPaid += b.amountPaid;
+      acc.dispAmt += parseFloat(activeDisputes[b.bookingId] || "0");
+      acc.dispSettled += b.disputeSettled;
+      acc.pricePayable += getPricePayable(b);
+      return acc;
+    }, { spNet: 0, hoNet: 0, tap: 0, amtPaid: 0, dispAmt: 0, dispSettled: 0, pricePayable: 0 });
+
+    return (
+      <div className="rounded-md border overflow-hidden bg-background">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="h-7 bg-muted/30 border-b">
+                <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap min-w-[100px]">Booking ID</th>
+                <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">SP Net</th>
+                <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">HO Net</th>
+                <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">TAP</th>
+                <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">Amt Paid</th>
+                <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">Dispute</th>
+                <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">Disp. Settled</th>
+                <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24 font-semibold text-foreground">Price Payable</th>
+                {isSecVendor && <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-28">Vendor ID</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map(b => {
+                const hasDispute = !!activeDisputes[b.bookingId];
+                const isEditingDispute = disputeEditing === b.bookingId;
+                const maxDisp = Math.abs(b.spNet - b.hoNet);
+                const tap = getTap(b);
+                const pricePayable = getPricePayable(b);
+
+                return (
+                  <tr key={b.bookingId} className={`h-8 border-b last:border-0 transition-colors ${hasDispute ? "bg-amber-50/50" : ""} ${b.isNegativeSp ? "bg-red-50/30" : ""} ${b.isAlreadyReconciled ? "bg-violet-50/30" : ""} hover:bg-muted/20`}>
+                    <td className="px-2 py-1">
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-primary font-medium">{b.bookingId}</span>
+                        {hasDispute && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">{fmt(parseFloat(activeDisputes[b.bookingId]))}</Badge>}
+                        {b.isNegativeSp && <Badge className="text-[9px] px-1 py-0 bg-red-100 text-red-700 border-red-200">Refund</Badge>}
+                        {b.isAlreadyReconciled && <Badge className="text-[9px] px-1 py-0 bg-violet-100 text-violet-700 border-violet-200">AR</Badge>}
+                        {b.isUnmapped && <Badge className="text-[9px] px-1 py-0 bg-slate-100 text-slate-700 border-slate-200">Unmapped</Badge>}
+                      </div>
+                    </td>
+                    <td className={`text-right px-2 py-1 font-mono ${b.isNegativeSp ? "text-red-600 font-semibold" : "text-blue-600"}`}>{fmt(b.spNet)}</td>
+                    <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(b.hoNet)}</td>
+                    <td className="text-right px-2 py-1">
+                      {b.isAlreadyReconciled ? (
+                        <span className="font-mono text-muted-foreground">—</span>
+                      ) : b.isNegativeSp ? (
+                        <span className="font-mono text-red-600 font-semibold">{fmt(tap)}</span>
+                      ) : (
+                        <Input
+                          className="h-6 w-20 text-[11px] text-right font-mono ml-auto border-dashed"
+                          value={tapOverrides[b.bookingId] ?? String(tap)}
+                          onChange={e => setTapOverrides(p => ({ ...p, [b.bookingId]: e.target.value }))}
+                        />
+                      )}
+                    </td>
+                    <td className={`text-right px-2 py-1 font-mono ${b.amountPaid > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>{b.amountPaid > 0 ? fmt(b.amountPaid) : "—"}</td>
+                    <td className="text-right px-2 py-1">
+                      {isEditingDispute ? (
+                        <div className="flex items-center gap-1 justify-end">
+                          <Input
+                            className="h-6 w-16 text-[11px] text-right font-mono border-amber-300"
+                            value={disputeInput}
+                            onChange={e => { const v = parseFloat(e.target.value) || 0; setDisputeInput(String(Math.max(0, Math.min(v, maxDisp)))); }}
+                            autoFocus
+                          />
+                          <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-green-600" onClick={() => { setActiveDisputes(p => ({ ...p, [b.bookingId]: disputeInput || String(maxDisp) })); setDisputeEditing(null); flash(`Dispute ${fmt(parseFloat(disputeInput || String(maxDisp)))} raised`); }}>
+                            <Check className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-muted-foreground" onClick={() => setDisputeEditing(null)}>
+                            <XIcon className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : hasDispute ? (
+                        <div className="flex items-center gap-1 justify-end">
+                          <span className="font-mono text-amber-700 font-medium">{fmt(parseFloat(activeDisputes[b.bookingId]))}</span>
+                          <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-red-400 hover:text-red-600" onClick={() => { setActiveDisputes(p => { const n = { ...p }; delete n[b.bookingId]; return n; }); flash("Dispute removed"); }}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-amber-600 hover:text-amber-700 hover:bg-amber-50" onClick={() => { setDisputeEditing(b.bookingId); setDisputeInput(String(maxDisp)); }}>
+                          <Gavel className="h-3 w-3 mr-0.5" /> Raise
+                        </Button>
+                      )}
+                    </td>
+                    <td className={`text-right px-2 py-1 font-mono ${b.disputeSettled > 0 ? "text-teal-600" : "text-muted-foreground"}`}>{b.disputeSettled > 0 ? fmt(b.disputeSettled) : "—"}</td>
+                    <td className="text-right px-2 py-1 font-mono font-semibold text-foreground">{fmt(pricePayable)}</td>
+                    {isSecVendor && (
+                      <td className="px-2 py-1">
+                        <Input
+                          className="h-6 w-24 text-[11px] font-mono border-dashed"
+                          value={vendorOverrides[b.bookingId] ?? b.vendorId ?? ""}
+                          onChange={e => setVendorOverrides(p => ({ ...p, [b.bookingId]: e.target.value }))}
+                        />
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="h-8 bg-muted/40 border-t font-semibold text-[11px]">
+                <td className="px-2 py-1 text-muted-foreground">Total ({bookings.length})</td>
+                <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(totals.spNet)}</td>
+                <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(totals.hoNet)}</td>
+                <td className="text-right px-2 py-1 font-mono">{fmt(totals.tap)}</td>
+                <td className="text-right px-2 py-1 font-mono text-emerald-600">{totals.amtPaid > 0 ? fmt(totals.amtPaid) : "—"}</td>
+                <td className="text-right px-2 py-1 font-mono text-amber-700">{totals.dispAmt > 0 ? fmt(totals.dispAmt) : "—"}</td>
+                <td className="text-right px-2 py-1 font-mono text-teal-600">{totals.dispSettled > 0 ? fmt(totals.dispSettled) : "—"}</td>
+                <td className="text-right px-2 py-1 font-mono font-bold text-foreground">{fmt(totals.pricePayable)}</td>
+                {isSecVendor && <td />}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* AR / Unmapped special rows */}
+        {bookings.some(b => b.isAlreadyReconciled || b.isUnmapped) && (
+          <div className="border-t bg-muted/10 px-3 py-2 space-y-2">
+            {bookings.filter(b => b.isAlreadyReconciled).map(b => (
+              <div key={`ar-${b.bookingId}`} className="flex items-center gap-3 rounded-md border border-violet-200 bg-violet-50/50 px-3 py-2 text-xs">
+                <Badge className="text-[9px] px-1.5 py-0 bg-violet-100 text-violet-700 border-violet-200 flex-shrink-0">AR</Badge>
+                <span className="font-mono font-medium text-primary">{b.bookingId}</span>
+                <div className="h-4 w-px bg-violet-200" />
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant={arDecisions[b.bookingId] === "pay" ? "default" : "outline"} className={`h-6 text-[10px] px-2 ${arDecisions[b.bookingId] === "pay" ? "bg-green-600 hover:bg-green-700 text-white" : "text-green-700 border-green-300"}`}
+                    onClick={() => setArDecisions(p => ({ ...p, [b.bookingId]: "pay" }))}>
+                    Pay
+                  </Button>
+                  <Button size="sm" variant={arDecisions[b.bookingId] === "dont_pay" ? "default" : "outline"} className={`h-6 text-[10px] px-2 ${arDecisions[b.bookingId] === "dont_pay" ? "bg-red-600 hover:bg-red-700 text-white" : "text-red-700 border-red-300"}`}
+                    onClick={() => setArDecisions(p => ({ ...p, [b.bookingId]: "dont_pay" }))}>
+                    Don't Pay
+                  </Button>
+                </div>
+                {arDecisions[b.bookingId] && (
+                  <Select value={arReasons[b.bookingId] || ""} onValueChange={v => setArReasons(p => ({ ...p, [b.bookingId]: v }))}>
+                    <SelectTrigger className="h-6 w-36 text-[10px]">
+                      <SelectValue placeholder="Sub-reason..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {arDecisions[b.bookingId] === "pay" ? (
+                        <>
+                          <SelectItem value="manual_error">Manual Error</SelectItem>
+                          <SelectItem value="partial_fulfillment">Partial Fulfillment</SelectItem>
+                          <SelectItem value="rate_change">Rate Change</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="already_paid">Already Paid</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                          <SelectItem value="duplicate">Duplicate</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
+                {arDecisions[b.bookingId] && arReasons[b.bookingId] && (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                )}
+              </div>
+            ))}
+            {bookings.filter(b => b.isUnmapped && !unmappedResolved.has(b.bookingId)).map(b => (
+              <div key={`um-${b.bookingId}`} className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs">
+                <Badge className="text-[9px] px-1.5 py-0 bg-slate-100 text-slate-700 border-slate-200 flex-shrink-0">Unmapped</Badge>
+                <span className="font-mono font-medium text-primary">{b.bookingId}</span>
+                <div className="h-4 w-px bg-slate-200" />
+                <span className="text-muted-foreground">Assign to:</span>
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => { setUnmappedResolved(p => new Set(p).add(b.bookingId)); flash(`${b.bookingId} → Finance-Prepurchase`); }}>
+                  Finance-Prepurchase
+                </Button>
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => { setUnmappedResolved(p => new Set(p).add(b.bookingId)); flash(`${b.bookingId} → Reservation Ops`); }}>
+                  Reservation Ops
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background font-sans flex flex-col">
       <div className="border-b bg-card px-5 py-3 flex items-center justify-between flex-shrink-0">
@@ -139,7 +376,6 @@ export function OptionA_ExpandActions() {
       )}
 
       <div className="flex-1 overflow-auto flex flex-col">
-        {/* Analysis Panel */}
         <div className="flex-shrink-0 border-b">
           <div className="flex items-center justify-between px-4 py-2 bg-violet-50/70 border-b cursor-pointer hover:bg-violet-50" onClick={() => setAnalysisOpen(!analysisOpen)}>
             <div className="flex items-center gap-2">
@@ -197,8 +433,6 @@ export function OptionA_ExpandActions() {
           )}
         </div>
 
-
-        {/* Action Panel */}
         <div className="flex-1 overflow-auto px-4 pb-4 pt-2 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -211,7 +445,6 @@ export function OptionA_ExpandActions() {
             </div>
           </div>
 
-          {/* ★ DISCREPANCY-LEVEL ACTION STRIP — always visible, applies to ALL TIDs */}
           {!bulkConfirm && (
             <div className="rounded-lg border bg-muted/30 px-3 py-2.5 flex items-center gap-2.5">
               <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {TIDS.length} TIDs:</span>
@@ -231,7 +464,6 @@ export function OptionA_ExpandActions() {
             </div>
           )}
 
-          {/* ★ CHECKBOX BULK ACTION BAR — appears when 2+ TIDs selected */}
           {selectedTids.size >= 2 && !bulkConfirm && (
             <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-center gap-2">
@@ -258,7 +490,6 @@ export function OptionA_ExpandActions() {
             </div>
           )}
 
-          {/* ★ BULK CONFIRM — detailed table for SP/HO Net, simple for others */}
           {bulkConfirm && (bulkConfirm === "sp" || bulkConfirm === "ho") && (() => {
             const selectedTidData = getBulkTidData();
             const isSp = bulkConfirm === "sp";
@@ -272,16 +503,12 @@ export function OptionA_ExpandActions() {
                   <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
                     {isSp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
                     Bulk {isSp ? "SP Net" : "HO Net"} —
-                    {bulkScope === "all"
-                      ? <span>All {selectedTidData.length} TIDs</span>
-                      : <span>{selectedTidData.length} selected TIDs</span>}
+                    {bulkScope === "all" ? <span>All {selectedTidData.length} TIDs</span> : <span>{selectedTidData.length} selected TIDs</span>}
                   </div>
                   <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}>
                     <XIcon className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-
-                {/* Per-TID value table */}
                 <div className="rounded-md border overflow-hidden bg-white">
                   <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
                     <div>TID</div>
@@ -302,7 +529,6 @@ export function OptionA_ExpandActions() {
                       <div className={`text-right w-28 px-2 font-mono font-semibold ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(isSp ? t.spNet : t.hoNet)}</div>
                     </div>
                   ))}
-                  {/* Totals row */}
                   <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center px-3 h-8 bg-muted/30 border-t text-xs font-semibold">
                     <div className="text-muted-foreground">Total ({selectedTidData.length} TIDs)</div>
                     <div className="text-right w-24 px-2 font-mono text-blue-600">{fmt(totalSp)}</div>
@@ -311,14 +537,12 @@ export function OptionA_ExpandActions() {
                     <div className={`text-right w-28 px-2 font-mono text-sm ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(totalPayable)}</div>
                   </div>
                 </div>
-
                 {isSp && totalDiscount > 0 && (
                   <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-600 flex-shrink-0" />
                     <span className="text-amber-800">Paying <span className="font-mono font-semibold">{fmt(totalDiscount)}</span> above HO Net across {selectedTidData.length} TIDs — consider raising disputes.</span>
                   </div>
                 )}
-
                 <div className="flex items-center justify-between pt-1">
                   <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
                   <Button size="sm" className={`h-7 text-xs gap-1 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} variant={isSp ? "default" : "outline"} onClick={() => handleBulkAction(bulkConfirm)}>
@@ -360,10 +584,7 @@ export function OptionA_ExpandActions() {
           <div className="rounded-md border overflow-hidden">
             <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
               <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
-                <Checkbox
-                  checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length}
-                  className="h-3.5 w-3.5"
-                />
+                <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
               </div>
               <div className="w-5" />
               <div className="pl-2">TID / Experience</div>
@@ -383,11 +604,9 @@ export function OptionA_ExpandActions() {
               return (
                 <div key={tid.tid} id={`a-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`}>
                   <div className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
-                    onClick={() => { setExpandedTid(isExpanded ? null : tid.tid); setShowPax(null); setShowSpConfirm(null); setDisputeChecked(false); }}>
+                    onClick={() => { setExpandedTid(isExpanded ? null : tid.tid); setShowPax(null); setShowSpConfirm(null); setDisputeChecked(false); setDisputeEditing(null); }}>
                     <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
-                      {!isResolved && (
-                        <Checkbox checked={isSelected} className="h-3.5 w-3.5" />
-                      )}
+                      {!isResolved && <Checkbox checked={isSelected} className="h-3.5 w-3.5" />}
                     </div>
                     <div className="w-5 flex items-center">
                       {isResolved ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
@@ -397,6 +616,7 @@ export function OptionA_ExpandActions() {
                         <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
                         <Badge variant="outline" className="text-[10px] px-1 py-0">{tid.fm}</Badge>
                         {tid.soldAtLoss && <Badge variant="destructive" className="text-[10px] px-1 py-0">Loss</Badge>}
+                        {tid.isSecondaryVendor && <Badge className="text-[10px] px-1 py-0 bg-orange-100 text-orange-700 border-orange-200">2nd Vendor</Badge>}
                       </div>
                       <div className="text-[11px] text-muted-foreground truncate">{tid.experience}</div>
                     </div>
@@ -411,7 +631,6 @@ export function OptionA_ExpandActions() {
 
                   {isExpanded && (
                     <div className="border-b bg-muted/10 px-4 py-3 space-y-3">
-                      {/* ★ INLINE ANALYSIS SUMMARY — key metrics at a glance */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <div className="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs">
                           <span className="text-muted-foreground">Take Rate:</span>
@@ -437,7 +656,6 @@ export function OptionA_ExpandActions() {
                         )}
                       </div>
 
-                      {/* ACTION STRIP */}
                       {!showPax && !showSpConfirm && (
                         <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10">
                           <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setShowSpConfirm(tid.tid); setDisputeChecked(false); }}>
@@ -521,20 +739,7 @@ export function OptionA_ExpandActions() {
                         </div>
                       )}
 
-                      {!showPax && !showSpConfirm && (
-                        <div className="rounded-md border overflow-hidden bg-background">
-                          <div className="grid grid-cols-[1fr_auto_auto] items-center h-7 bg-muted/30 px-3 text-[11px] font-medium text-muted-foreground border-b">
-                            <div>Booking ID</div><div className="text-right w-24 px-2">SP Net</div><div className="text-right w-24 px-2">HO Net</div>
-                          </div>
-                          {BOOKINGS.map(b => (
-                            <div key={b.bookingId} className="grid grid-cols-[1fr_auto_auto] items-center px-3 h-7 border-b last:border-0 text-xs hover:bg-muted/20">
-                              <div className="font-mono text-primary">{b.bookingId}</div>
-                              <div className="text-right w-24 px-2 font-mono text-blue-600">{fmt(b.spNet)}</div>
-                              <div className="text-right w-24 px-2 font-mono text-green-600">{fmt(b.hoNet)}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {!showPax && !showSpConfirm && renderBookingTable(tid)}
                     </div>
                   )}
                 </div>
