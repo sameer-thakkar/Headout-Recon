@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DiscrepancySummaryWorkspace } from "@/components/discrepancy-summary-workspace";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -171,15 +172,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const unmappedRows = runResult?.unmappedRows || [];
   const fxData = runResult?.fx || null;
 
-  const filteredDiscrepancyRows = useMemo(() => {
-    if (!discrepancyData?.analysisRows || !selectedReason) return [];
-    const filtered = discrepancyData.analysisRows.filter(row => row.reason === selectedReason);
-    // For NPD, sort by discrepancy USD from low (most negative) to high
-    if (selectedReason === "Net Price Discrepancy") {
-      return [...filtered].sort((a, b) => (a.discrepancyUsd ?? 0) - (b.discrepancyUsd ?? 0));
-    }
-    return filtered;
-  }, [discrepancyData?.analysisRows, selectedReason]);
 
   const bookingsForPayableModal = useMemo((): BookingForPayable[] => {
     if (!selectedPayableCurrency) return [];
@@ -629,8 +621,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
 
   const hasResults = currentRunId && overallSummary.length > 0;
-  const isMTBReason = selectedReason === "Multiple Tickets Booked";
-  const isNPDReason = selectedReason === "Net Price Discrepancy";
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -1072,123 +1062,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         </div>
       </ScrollArea>
 
-      <Dialog open={isModalOpen} onOpenChange={handleModalClose}>
-        <DialogContent className="max-w-[95vw] max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Discrepancy Analysis: {selectedReason}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-auto">
-            <Table className="min-w-max">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>TID</TableHead>
-                  {isMTBReason && (
-                    <>
-                      <TableHead className="text-right">Discrepancy USD</TableHead>
-                      <TableHead>Fulfilment Method</TableHead>
-                      <TableHead>Times Charged</TableHead>
-                      <TableHead>Start Date</TableHead>
-                      <TableHead>End Date</TableHead>
-                      <TableHead className="text-right">BID Count</TableHead>
-                      <TableHead className="text-right">BID Count Duration</TableHead>
-                      <TableHead className="text-right">Total BIDs</TableHead>
-                      <TableHead>DRI Team</TableHead>
-                    </>
-                  )}
-                  {isNPDReason && (
-                    <>
-                      <TableHead className="text-right">Discrepancy USD</TableHead>
-                      <TableHead>Fulfilment Method</TableHead>
-                      <TableHead className="text-right">HO Take Rate</TableHead>
-                      <TableHead className="text-right">Actual Rate</TableHead>
-                      <TableHead>Start Date</TableHead>
-                      <TableHead>End Date</TableHead>
-                      <TableHead className="text-right">Discrepancy %</TableHead>
-                      <TableHead className="text-right">BID Count with Discrepancy</TableHead>
-                      <TableHead className="text-right">BID Count in Duration</TableHead>
-                      <TableHead>Sold at Loss</TableHead>
-                      <TableHead className="text-right">Loss USD</TableHead>
-                    </>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredDiscrepancyRows.map((row, index) => (
-                  <TableRow key={`${row.tid}-${index}`} data-testid={`modal-row-${row.tid}`}>
-                    <TableCell className="font-mono">{row.tid}</TableCell>
-                    {isMTBReason && (
-                      <>
-                        <TableCell className="text-right font-mono">
-                          {formatNumber(row.discrepancyUsd)}
-                        </TableCell>
-                        <TableCell>{row.fulfillmentMethod}</TableCell>
-                        <TableCell>{row.timesCharged}</TableCell>
-                        <TableCell>{formatDateDDMMYYYY(row.startDate) || "-"}</TableCell>
-                        <TableCell>{formatDateDDMMYYYY(row.endDate) || "-"}</TableCell>
-                        <TableCell className="text-right">{row.countBidWithDiscrepancy}</TableCell>
-                        <TableCell className="text-right">{row.countBidsInDuration}</TableCell>
-                        <TableCell className="text-right">{row.totalBidsInReport}</TableCell>
-                        <TableCell>{row.driTeam}</TableCell>
-                      </>
-                    )}
-                    {isNPDReason && (
-                      <>
-                        <TableCell className={`text-right font-mono ${(row.discrepancyUsd ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
-                          {formatNumber(row.discrepancyUsd)}
-                        </TableCell>
-                        <TableCell>{row.fulfillmentMethod}</TableCell>
-                        <TableCell className="text-right font-mono">
-                          {row.hoTakeRatePercent?.toFixed(2) ?? "-"}%
-                        </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {row.actualTakeRatePercent?.toFixed(2) ?? "-"}%
-                        </TableCell>
-                        <TableCell>{formatDateDDMMYYYY(row.startDate) || "-"}</TableCell>
-                        <TableCell>{formatDateDDMMYYYY(row.endDate) || "-"}</TableCell>
-                        <TableCell className={`text-right font-mono ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
-                          {row.discrepancyPercentRange || "-"}
-                        </TableCell>
-                        <TableCell className="text-right">{row.countBidWithDiscrepancy}</TableCell>
-                        <TableCell className="text-right">{row.countBidsInDuration}</TableCell>
-                        <TableCell>
-                          <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"}>
-                            {row.soldAtLoss || "-"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className={`text-right font-mono ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400" : ""}`}>
-                          {row.lossUsd != null ? formatNumber(row.lossUsd) : "-"}
-                        </TableCell>
-                      </>
-                    )}
-                  </TableRow>
-                ))}
-                {isDiscrepancyLoading && (
-                  <TableRow>
-                    <TableCell 
-                      colSpan={isMTBReason ? 10 : isNPDReason ? 12 : 6} 
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      Loading discrepancy data...
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!isDiscrepancyLoading && filteredDiscrepancyRows.length === 0 && (
-                  <TableRow>
-                    <TableCell 
-                      colSpan={isMTBReason ? 10 : isNPDReason ? 12 : 6} 
-                      className="text-center py-8 text-muted-foreground"
-                    >
-                      No discrepancy data available for this reason
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DiscrepancySummaryWorkspace
+        open={isModalOpen}
+        onOpenChange={handleModalClose}
+        reason={selectedReason}
+        runId={currentRunId}
+        primaryRows={primaryRows}
+        secondaryVendorRows={secondaryVendorRows}
+        unmappedRows={unmappedRows}
+        analysisRows={discrepancyData?.analysisRows || []}
+        isLoadingAnalysis={isDiscrepancyLoading}
+      />
 
       {/* Already Reconciled - First Level Modal (Classification Breakdown) */}
       <Dialog open={isAlreadyReconciledModalOpen} onOpenChange={setIsAlreadyReconciledModalOpen}>
