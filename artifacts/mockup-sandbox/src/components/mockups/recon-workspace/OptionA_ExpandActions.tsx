@@ -1046,34 +1046,36 @@ export function OptionA_ExpandActions() {
 
                       {showPax === tid.tid && (
                         <div className="rounded-md border bg-violet-50/30 p-3 space-y-2">
-                          <div className="flex items-center gap-2 text-sm font-medium text-violet-800">
-                            <Calculator className="h-4 w-4" /> Pax Pricing
-                          </div>
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="text-muted-foreground">Quick fill:</span>
-                            <Button size="sm" variant="outline" className="h-5 text-[10px] px-2" onClick={() => { const p: Record<string, string> = {}; PAX_ROWS.forEach(r => p[`${r.paxType}__${r.dateRange}`] = String(r.spUnit)); setPaxPrices(p); }}>All SP</Button>
-                            <Button size="sm" variant="outline" className="h-5 text-[10px] px-2" onClick={() => { const p: Record<string, string> = {}; PAX_ROWS.forEach(r => p[`${r.paxType}__${r.dateRange}`] = String(r.hoUnit)); setPaxPrices(p); }}>All HO</Button>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm font-medium text-violet-800">
+                              <Calculator className="h-4 w-4" /> Pax Dispute
+                            </div>
+                            <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => setPaxPrices({})}>Reset Defaults</Button>
                           </div>
                           <Table>
-                            <TableHeader><TableRow className="h-7"><TableHead className="text-xs py-1">Pax</TableHead><TableHead className="text-xs py-1">Dates</TableHead><TableHead className="text-xs py-1 text-right">Cnt</TableHead><TableHead className="text-xs py-1 text-right">SP</TableHead><TableHead className="text-xs py-1 text-right">HO</TableHead><TableHead className="text-xs py-1 text-right">Final</TableHead></TableRow></TableHeader>
+                            <TableHeader><TableRow className="h-7"><TableHead className="text-xs py-1">Pax</TableHead><TableHead className="text-xs py-1">Dates</TableHead><TableHead className="text-xs py-1 text-right">Qty</TableHead><TableHead className="text-xs py-1 text-right">SP Unit</TableHead><TableHead className="text-xs py-1 text-right">HO Unit</TableHead><TableHead className="text-xs py-1 text-right">Total Amt Payable</TableHead><TableHead className="text-xs py-1 text-right">Dispute Amt</TableHead></TableRow></TableHeader>
                             <TableBody>
-                              {PAX_ROWS.map(r => { const k = `${r.paxType}__${r.dateRange}`; return (
+                              {PAX_ROWS.map(r => { const k = `${r.paxType}__${r.dateRange}`; const tap = r.spUnit * r.count; const defaultDisp = (r.spUnit - r.hoUnit) * r.count; const hasOvr = paxPrices[k] !== undefined && paxPrices[k] !== ""; return (
                                 <TableRow key={k} className="h-8">
                                   <TableCell className="py-1 text-xs">{r.paxType}</TableCell>
                                   <TableCell className="py-1 text-xs text-muted-foreground">{r.dateRange}</TableCell>
                                   <TableCell className="py-1 text-xs text-right">{r.count}</TableCell>
                                   <TableCell className="py-1 text-xs text-right font-mono text-blue-600">{fmt(r.spUnit)}</TableCell>
                                   <TableCell className="py-1 text-xs text-right font-mono text-green-600">{fmt(r.hoUnit)}</TableCell>
-                                  <TableCell className="py-1 text-right"><Input className="h-6 w-20 text-xs text-right font-mono ml-auto" value={paxPrices[k] || ""} onChange={e => setPaxPrices(p => ({ ...p, [k]: e.target.value }))} /></TableCell>
+                                  <TableCell className="py-1 text-xs text-right font-mono text-muted-foreground">{fmt(tap)}</TableCell>
+                                  <TableCell className="py-1 text-right"><Input className={`h-6 w-20 text-xs text-right font-mono ml-auto ${hasOvr ? "border-violet-400 bg-violet-50" : ""}`} type="number" step="any" value={hasOvr ? paxPrices[k] : String(defaultDisp)} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) setPaxPrices(p => ({ ...p, [k]: val })); }} /></TableCell>
                                 </TableRow>
                               ); })}
                             </TableBody>
                           </Table>
                           <div className="flex items-center justify-between">
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowPax(null)}>Cancel</Button>
-                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { flash("Pax prices applied"); resolve(tid.tid); setExpandedTid(null); setShowPax(null); }}>
-                              <Check className="h-3 w-3" /> Apply Pax Prices
-                            </Button>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[11px] font-semibold text-violet-700">Total dispute: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const ovr = paxPrices[k]; return s + (ovr !== undefined && ovr !== "" ? parseFloat(ovr) : (r.spUnit - r.hoUnit) * r.count); }, 0))}</span></span>
+                              <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { flash("Pax dispute amounts applied"); resolve(tid.tid); setExpandedTid(null); setShowPax(null); }}>
+                                <Check className="h-3 w-3" /> Apply Dispute
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       )}
