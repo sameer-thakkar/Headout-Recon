@@ -610,24 +610,13 @@ export function DiscrepancySummaryWorkspace({
             </div>
 
             {!bulkConfirm && !showTakeAction && (
-              <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-3 py-2.5 flex items-center gap-2.5 flex-wrap">
+              <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-4 py-3 flex items-center gap-4">
                 <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tidGroups.length} TIDs:</span>
                 <div className="h-4 w-px bg-border" />
-                <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); setDisputePaxExpanded(null); setDisputePaxPrices({}); }} data-testid="take-action-btn">
+                <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); setDisputePaxExpanded(null); setDisputePaxPrices({}); }} data-testid="take-action-btn">
                   <Zap className="h-3.5 w-3.5" /> Take Action
                 </Button>
-                <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openDiscrepancyAction("sp")} disabled={priceOverrideMutation.isPending} data-testid="bulk-sp-net">
-                  <TrendingUp className="h-3 w-3" /> SP Net
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-950/30" onClick={() => openDiscrepancyAction("ho")} disabled={priceOverrideMutation.isPending} data-testid="bulk-ho-net">
-                  <TrendingDown className="h-3 w-3" /> HO Net
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30" onClick={() => openDiscrepancyAction("dispute")} disabled={disputeMutation.isPending} data-testid="bulk-dispute">
-                  <Gavel className="h-3 w-3" /> Raise Dispute
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/30" onClick={() => { setIssueScopeTids(null); setIssueOpen(true); }} data-testid="bulk-issue">
-                  <FileWarning className="h-3 w-3" /> Log Issue
-                </Button>
+                <span className="text-xs text-muted-foreground">Set price, raise disputes &amp; log issues in one guided flow</span>
               </div>
             )}
 
