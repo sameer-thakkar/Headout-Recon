@@ -23,6 +23,7 @@ interface TidData {
 interface BookingData {
   bookingId: string; spNet: number; hoNet: number;
   amountPaid: number; disputeSettled: number;
+  disputeAmount: number; totalAmountPayable: number;
   isNegativeSp?: boolean; isAlreadyReconciled?: boolean; isUnmapped?: boolean;
   arSubReason?: string; vendorId?: string;
 }
@@ -36,28 +37,28 @@ const TIDS: TidData[] = [
 
 const MOCK_BOOKINGS: Record<string, BookingData[]> = {
   "TID-90234": [
-    { bookingId: "BID-1001", spNet: 850, hoNet: 800, amountPaid: 200, disputeSettled: 0 },
-    { bookingId: "BID-1002", spNet: 920, hoNet: 850, amountPaid: 0, disputeSettled: 50 },
-    { bookingId: "BID-1003", spNet: 1_100, hoNet: 1_050, amountPaid: 300, disputeSettled: 0 },
-    { bookingId: "BID-1004", spNet: 780, hoNet: 780, amountPaid: 0, disputeSettled: 0 },
-    { bookingId: "BID-1005", spNet: 850, hoNet: 670, amountPaid: 0, disputeSettled: 0, isAlreadyReconciled: true, arSubReason: "" },
-    { bookingId: "BID-1006", spNet: 700, hoNet: 700, amountPaid: 0, disputeSettled: 0 },
+    { bookingId: "BID-1001", spNet: 850, hoNet: 800, amountPaid: 200, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 850 },
+    { bookingId: "BID-1002", spNet: 920, hoNet: 850, amountPaid: 0, disputeSettled: 50, disputeAmount: 0, totalAmountPayable: 920 },
+    { bookingId: "BID-1003", spNet: 1_100, hoNet: 1_050, amountPaid: 300, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 1_100 },
+    { bookingId: "BID-1004", spNet: 780, hoNet: 780, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 780 },
+    { bookingId: "BID-1005", spNet: 850, hoNet: 670, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 850, isAlreadyReconciled: true, arSubReason: "" },
+    { bookingId: "BID-1006", spNet: 700, hoNet: 700, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 700 },
   ],
   "TID-90456": [
-    { bookingId: "BID-2001", spNet: 4_600, hoNet: 3_100, amountPaid: 1_000, disputeSettled: 0 },
-    { bookingId: "BID-2002", spNet: 5_200, hoNet: 3_400, amountPaid: 0, disputeSettled: 200 },
-    { bookingId: "BID-2003", spNet: -1_200, hoNet: 0, amountPaid: 0, disputeSettled: 0, isNegativeSp: true },
-    { bookingId: "BID-2004", spNet: 3_800, hoNet: 2_500, amountPaid: 500, disputeSettled: 0, isUnmapped: true },
+    { bookingId: "BID-2001", spNet: 4_600, hoNet: 3_100, amountPaid: 1_000, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 4_600 },
+    { bookingId: "BID-2002", spNet: 5_200, hoNet: 3_400, amountPaid: 0, disputeSettled: 200, disputeAmount: 0, totalAmountPayable: 5_200 },
+    { bookingId: "BID-2003", spNet: -1_200, hoNet: 0, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 0, isNegativeSp: true },
+    { bookingId: "BID-2004", spNet: 3_800, hoNet: 2_500, amountPaid: 500, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 3_800, isUnmapped: true },
   ],
   "TID-90789": [
-    { bookingId: "BID-3001", spNet: 3_200, hoNet: 1_400, amountPaid: 0, disputeSettled: 0 },
-    { bookingId: "BID-3002", spNet: 2_800, hoNet: 1_200, amountPaid: 500, disputeSettled: 0 },
-    { bookingId: "BID-3003", spNet: 2_900, hoNet: 1_300, amountPaid: 0, disputeSettled: 0 },
+    { bookingId: "BID-3001", spNet: 3_200, hoNet: 1_400, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 3_200 },
+    { bookingId: "BID-3002", spNet: 2_800, hoNet: 1_200, amountPaid: 500, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 2_800 },
+    { bookingId: "BID-3003", spNet: 2_900, hoNet: 1_300, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 2_900 },
   ],
   "TID-91012": [
-    { bookingId: "BID-4001", spNet: 1_200, hoNet: 800, amountPaid: 0, disputeSettled: 0, vendorId: "VND-ORIG-001" },
-    { bookingId: "BID-4002", spNet: 1_000, hoNet: 700, amountPaid: 0, disputeSettled: 100, vendorId: "VND-ORIG-002" },
-    { bookingId: "BID-4003", spNet: 900, hoNet: 600, amountPaid: 0, disputeSettled: 0, vendorId: "VND-ORIG-001" },
+    { bookingId: "BID-4001", spNet: 1_200, hoNet: 800, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 1_200, vendorId: "VND-ORIG-001" },
+    { bookingId: "BID-4002", spNet: 1_000, hoNet: 700, amountPaid: 0, disputeSettled: 100, disputeAmount: 0, totalAmountPayable: 1_000, vendorId: "VND-ORIG-002" },
+    { bookingId: "BID-4003", spNet: 900, hoNet: 600, amountPaid: 0, disputeSettled: 0, disputeAmount: 0, totalAmountPayable: 900, vendorId: "VND-ORIG-001" },
   ],
 };
 
@@ -86,6 +87,7 @@ export function OptionA_ExpandActions() {
   const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
   const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
 
+  const [tidActions, setTidActions] = useState<Record<string, "sp" | "ho">>({});
   const [tapOverrides, setTapOverrides] = useState<Record<string, string>>({});
   const [activeDisputes, setActiveDisputes] = useState<Record<string, string>>({});
   const [disputeEditing, setDisputeEditing] = useState<string | null>(null);
@@ -133,6 +135,7 @@ export function OptionA_ExpandActions() {
   const handleBulkAction = (action: string) => {
     const tids = getBulkTids();
     if (action === "ho" || action === "sp") {
+      setTidActions(prev => { const next = { ...prev }; tids.forEach(t => { next[t] = action as "sp" | "ho"; }); return next; });
       resolveMultiple(tids);
       flash(`${tids.length} TIDs → ${action === "sp" ? "SP" : "HO"} Net applied`);
       setSelectedTids(new Set());
@@ -151,13 +154,15 @@ export function OptionA_ExpandActions() {
   const openDiscrepancyAction = (action: string) => { setBulkScope("all"); setBulkConfirm(action); };
   const openSelectionAction = (action: string) => { setBulkScope("selected"); setBulkConfirm(action); };
 
-  const getTap = (b: BookingData): number => {
+  const getTap = (b: BookingData, tid?: string): number => {
     if (tapOverrides[b.bookingId] !== undefined && tapOverrides[b.bookingId] !== "") return parseFloat(tapOverrides[b.bookingId]) || 0;
     if (b.isNegativeSp) { if (b.hoNet === 0) return 0; if (Math.abs(b.spNet) === Math.abs(b.hoNet)) return 0; return Math.abs(Math.abs(b.hoNet) - Math.abs(b.spNet)); }
+    const tidAction = tid ? tidActions[tid] : undefined;
+    if (tidAction === "ho") return b.hoNet;
     return b.spNet;
   };
 
-  const getPricePayable = (b: BookingData): number => getTap(b) - b.amountPaid;
+  const getPricePayable = (b: BookingData, tid?: string): number => getTap(b, tid) - b.amountPaid;
 
   const filteredTids = TIDS.filter(t => !tidSearch || t.tid.toLowerCase().includes(tidSearch.toLowerCase()) || t.experience.toLowerCase().includes(tidSearch.toLowerCase()));
   const resolvedCount = TIDS.filter(t => resolvedTids.has(t.tid)).length;
@@ -170,11 +175,11 @@ export function OptionA_ExpandActions() {
     const totals = bookings.reduce((acc, b) => {
       acc.spNet += b.spNet;
       acc.hoNet += b.hoNet;
-      acc.tap += getTap(b);
+      acc.tap += getTap(b, tid.tid);
       acc.amtPaid += b.amountPaid;
       acc.dispAmt += parseFloat(activeDisputes[b.bookingId] || "0");
       acc.dispSettled += b.disputeSettled;
-      acc.pricePayable += getPricePayable(b);
+      acc.pricePayable += getPricePayable(b, tid.tid);
       return acc;
     }, { spNet: 0, hoNet: 0, tap: 0, amtPaid: 0, dispAmt: 0, dispSettled: 0, pricePayable: 0 });
 
@@ -200,8 +205,8 @@ export function OptionA_ExpandActions() {
                 const hasDispute = !!activeDisputes[b.bookingId];
                 const isEditingDispute = disputeEditing === b.bookingId;
                 const maxDisp = Math.abs(b.spNet - b.hoNet);
-                const tap = getTap(b);
-                const pricePayable = getPricePayable(b);
+                const tap = getTap(b, tid.tid);
+                const pricePayable = getPricePayable(b, tid.tid);
 
                 return (
                   <tr key={b.bookingId} className={`h-8 border-b last:border-0 transition-colors ${hasDispute ? "bg-amber-50/50" : ""} ${b.isNegativeSp ? "bg-red-50/30" : ""} ${b.isAlreadyReconciled ? "bg-violet-50/30" : ""} hover:bg-muted/20`}>
@@ -661,7 +666,7 @@ export function OptionA_ExpandActions() {
                           <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setShowSpConfirm(tid.tid); setDisputeChecked(false); }}>
                             <TrendingUp className="h-3.5 w-3.5" /> Set SP Net
                           </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => { flash(`${tid.tid} → HO Net applied`); resolve(tid.tid); setExpandedTid(null); }}>
+                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "ho" })); flash(`${tid.tid} → HO Net applied`); resolve(tid.tid); setExpandedTid(null); }}>
                             <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
                           </Button>
                           {tid.hasPax && (
@@ -698,7 +703,7 @@ export function OptionA_ExpandActions() {
                           </div>
                           <div className="flex items-center justify-between">
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowSpConfirm(null)}>Cancel</Button>
-                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { flash(`${tid.tid} → SP Net applied`); resolve(tid.tid); setExpandedTid(null); setShowSpConfirm(null); }}>
+                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "sp" })); flash(`${tid.tid} → SP Net applied`); resolve(tid.tid); setExpandedTid(null); setShowSpConfirm(null); }}>
                               <Check className="h-3 w-3" /> Confirm & Apply
                             </Button>
                           </div>
