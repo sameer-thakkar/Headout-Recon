@@ -15,7 +15,7 @@ import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Check, Gavel, FileWarning, AlertTriangle, X as XIcon,
   BarChart3, PanelTopClose, PanelTop, CheckCheck, Calculator, Loader2,
-  Sparkles
+  Sparkles, Zap
 } from "lucide-react";
 import type { DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 import { driTeams } from "@shared/schema";
@@ -123,6 +123,13 @@ export function DiscrepancySummaryWorkspace({
   const [paxOpen, setPaxOpen] = useState(false);
   const [paxTid, setPaxTid] = useState<TidGroup | null>(null);
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
+
+  const [showTakeAction, setShowTakeAction] = useState(false);
+  const [takeActionPrice, setTakeActionPrice] = useState<"sp" | "ho">("sp");
+  const [takeActionDisputes, setTakeActionDisputes] = useState<Set<string>>(new Set());
+  const [takeActionIssues, setTakeActionIssues] = useState<Set<string>>(new Set());
+  const [disputePaxExpanded, setDisputePaxExpanded] = useState<string | null>(null);
+  const [disputePaxPrices, setDisputePaxPrices] = useState<Record<string, Record<string, { tap?: string; dispute?: string }>>>({});
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -441,6 +448,12 @@ export function DiscrepancySummaryWorkspace({
         setPaxOpen(false);
         setPaxTid(null);
         setPaxPrices({});
+        setShowTakeAction(false);
+        setTakeActionPrice("sp");
+        setTakeActionDisputes(new Set());
+        setTakeActionIssues(new Set());
+        setDisputePaxExpanded(null);
+        setDisputePaxPrices({});
       }
       onOpenChange(v);
     }}>
@@ -596,10 +609,13 @@ export function DiscrepancySummaryWorkspace({
               </div>
             </div>
 
-            {!bulkConfirm && (
+            {!bulkConfirm && !showTakeAction && (
               <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-3 py-2.5 flex items-center gap-2.5 flex-wrap">
                 <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tidGroups.length} TIDs:</span>
                 <div className="h-4 w-px bg-border" />
+                <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); setDisputePaxExpanded(null); setDisputePaxPrices({}); }} data-testid="take-action-btn">
+                  <Zap className="h-3.5 w-3.5" /> Take Action
+                </Button>
                 <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openDiscrepancyAction("sp")} disabled={priceOverrideMutation.isPending} data-testid="bulk-sp-net">
                   <TrendingUp className="h-3 w-3" /> SP Net
                 </Button>
@@ -615,7 +631,345 @@ export function DiscrepancySummaryWorkspace({
               </div>
             )}
 
-            {selectedTids.size >= 2 && !bulkConfirm && (
+            {showTakeAction && !bulkConfirm && (() => {
+              const allTids = tidGroups;
+              const isSp = takeActionPrice === "sp";
+              const totalSp = allTids.reduce((s, t) => s + t.spNet, 0);
+              const totalHo = allTids.reduce((s, t) => s + t.hoNet, 0);
+              const totalPayable = isSp ? totalSp : totalHo;
+              const totalDiff = Math.abs(totalSp - totalHo);
+
+              const getDisputeDiff = (t: TidGroup) => {
+                if (t.hasPax) {
+                  const allPax = t.bookings.flatMap(b => b.paxBreakdown || []);
+                  if (allPax.length === 0) return Math.abs(t.spNet - t.hoNet);
+                  return allPax.reduce((s, p) => {
+                    const k = `${p.paxType}__${p.unitPrice}`;
+                    const entry = (disputePaxPrices[t.tid] || {})[k];
+                    const disp = entry?.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : (p.unitPrice - (p.priceNet / p.count || 0));
+                    return s + Math.abs(disp) * p.count;
+                  }, 0);
+                }
+                return Math.abs(t.spNet - t.hoNet);
+              };
+
+              const getTidTap = (t: TidGroup) => {
+                if (t.hasPax) {
+                  const allPax = t.bookings.flatMap(b => b.paxBreakdown || []);
+                  if (allPax.length === 0) return t.spNet;
+                  return allPax.reduce((s, p) => {
+                    const k = `${p.paxType}__${p.unitPrice}`;
+                    const entry = (disputePaxPrices[t.tid] || {})[k];
+                    const tap = entry?.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : p.unitPrice;
+                    return s + tap * p.count;
+                  }, 0);
+                }
+                return t.spNet;
+              };
+
+              const disputeTotal = allTids.filter(t => takeActionDisputes.has(t.tid)).reduce((s, t) => s + getDisputeDiff(t), 0);
+              const disputeCount = takeActionDisputes.size;
+              const issueCount = takeActionIssues.size;
+
+              const toggleDisputeTid = (tid: string) => setTakeActionDisputes(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else next.add(tid); return next; });
+              const toggleIssueTid = (tid: string) => setTakeActionIssues(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else next.add(tid); return next; });
+
+              const summaryParts = [isSp ? "SP Net" : "HO Net"];
+              if (disputeCount > 0) summaryParts.push(`${disputeCount} dispute${disputeCount > 1 ? "s" : ""}`);
+              if (issueCount > 0) summaryParts.push(`${issueCount} issue${issueCount > 1 ? "s" : ""}`);
+
+              return (
+                <div className="rounded-lg border-2 border-primary/30 bg-background p-4 space-y-4 animate-in fade-in duration-200" data-testid="take-action-panel">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Zap className="h-4 w-4 text-primary" />
+                      Take Action — All {allTids.length} TIDs
+                    </div>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowTakeAction(false)} data-testid="close-take-action">
+                      <XIcon className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">Step 1: Select Price</div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className={`h-8 text-xs gap-1.5 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-transparent border border-blue-300 text-blue-700 hover:bg-blue-50"}`} onClick={() => { setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); }} data-testid="take-action-sp">
+                        <TrendingUp className="h-3.5 w-3.5" /> SP Net {isSp && <Check className="h-3 w-3" />}
+                      </Button>
+                      <Button size="sm" className={`h-8 text-xs gap-1.5 ${!isSp ? "bg-green-700 hover:bg-green-800 text-white" : "bg-transparent border border-green-300 text-green-700 hover:bg-green-50"}`} onClick={() => { setTakeActionPrice("ho"); setTakeActionDisputes(new Set()); }} data-testid="take-action-ho">
+                        <TrendingDown className="h-3.5 w-3.5" /> HO Net {!isSp && <Check className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-xs">
+                      <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">SP Net</span><div className={`font-mono font-semibold ${isSp ? "text-blue-700" : "text-muted-foreground"}`}>{fmt(totalSp)}</div></div>
+                      <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">HO Net</span><div className={`font-mono font-semibold ${!isSp ? "text-green-700" : "text-muted-foreground"}`}>{fmt(totalHo)}</div></div>
+                      <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">Difference</span><div className="font-mono font-semibold text-amber-600">{fmt(totalDiff)}</div></div>
+                      <div className={`rounded border-2 p-2 ${isSp ? "border-blue-300 bg-blue-50/50" : "border-green-300 bg-green-50/50"}`}><span className="text-muted-foreground">Payable</span><div className={`font-mono font-bold ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(totalPayable)}</div></div>
+                    </div>
+                    {!isSp && (
+                      <div className="flex items-start gap-2.5 rounded-md border-2 border-amber-400 bg-amber-50/60 px-3 py-2.5">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-800 leading-relaxed">
+                          You have selected HO Net. We have already been charged SP Net for this booking. Consider selecting <button className="font-semibold underline underline-offset-2 hover:text-amber-950" onClick={() => { setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); }}>SP Net</button> and raising a dispute for the difference.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {isSp && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Step 2: Raise Dispute <span className="text-[10px] font-normal">(optional)</span></div>
+                      <div className={`rounded-md border-2 overflow-hidden transition-colors ${disputeCount > 0 ? "border-amber-500 bg-amber-50/50" : "border-border bg-muted/10"}`}>
+                        <div className="px-3 py-2.5">
+                          <div className="flex items-start gap-2.5">
+                            <div className={`flex items-center justify-center h-7 w-7 rounded-md flex-shrink-0 ${disputeCount > 0 ? "bg-amber-100" : "bg-muted"}`}>
+                              <AlertTriangle className={`h-3.5 w-3.5 ${disputeCount > 0 ? "text-amber-600" : "text-muted-foreground"}`} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold mb-0.5">This is SP error and refund to be claimed</div>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                The difference will be tracked as a dispute for future settlement — either adjusted against a future invoice or absorbed.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="border-t">
+                          <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20">
+                            <span className="text-[11px] font-medium text-muted-foreground">Select TIDs to dispute</span>
+                            <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => { setTakeActionDisputes(prev => prev.size === allTids.length ? new Set() : new Set(allTids.map(t => t.tid))); }} data-testid="toggle-all-disputes">
+                              {takeActionDisputes.size === allTids.length ? "None" : "All"}
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-[auto_5fr_2.5fr_2.5fr_2.5fr_2.5fr_2.5fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
+                            <div className="w-5" />
+                            <div>TID / Experience</div>
+                            <div className="text-right text-blue-600">SP Net</div>
+                            <div className="text-right text-green-600">HO Net</div>
+                            <div className="text-right text-violet-600">TAP</div>
+                            <div className="text-right text-violet-600">Dispute</div>
+                            <div className="text-right text-amber-600">Difference</div>
+                          </div>
+                          {allTids.map(t => {
+                            const isChecked = takeActionDisputes.has(t.tid);
+                            const isPaxOpen = disputePaxExpanded === t.tid;
+                            const tidTapTotal = getTidTap(t);
+                            const tidDispTotal = getDisputeDiff(t);
+                            const experience = t.bookings[0]?.experienceName || t.bookings[0]?.productName || "";
+                            return (
+                              <div key={t.tid}>
+                                <div className={`grid grid-cols-[auto_5fr_2.5fr_2.5fr_2.5fr_2.5fr_2.5fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)} data-testid={`dispute-tid-${t.tid}`}>
+                                  <div className="flex items-center">
+                                    <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-1" />
+                                    {t.hasPax && (
+                                      <button className="p-0 h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 mr-0.5" onClick={e => { e.stopPropagation(); setDisputePaxExpanded(prev => prev === t.tid ? null : t.tid); }}>
+                                        <ChevronRight className={`h-3 w-3 text-violet-500 transition-transform ${isPaxOpen ? "rotate-90" : ""}`} />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="truncate">
+                                    <span className="font-mono font-medium text-primary">{t.tid}</span>
+                                    {experience && <span className="text-muted-foreground text-[11px] ml-1">{experience}</span>}
+                                    {t.hasPax && <span className="ml-1.5 text-[9px] font-medium text-violet-600 bg-violet-100 px-1 py-0 rounded">PAX</span>}
+                                  </div>
+                                  <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
+                                  <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
+                                  <div className="font-mono text-right text-violet-600 font-medium">{fmt(tidTapTotal)}</div>
+                                  <div className="font-mono text-right text-violet-600 font-medium">{fmt(tidDispTotal)}</div>
+                                  <div className="font-mono text-right font-medium text-amber-600">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
+                                </div>
+                                {isPaxOpen && t.hasPax && (() => {
+                                  const allPax = t.bookings.flatMap(b => b.paxBreakdown || []);
+                                  const paxGroups = new Map<string, { paxType: string; count: number; spUnit: number; hoUnit: number }>();
+                                  allPax.forEach(p => {
+                                    const k = `${p.paxType}__${p.unitPrice}`;
+                                    if (!paxGroups.has(k)) paxGroups.set(k, { paxType: p.paxType, count: 0, spUnit: p.unitPrice, hoUnit: p.priceNet / p.count || 0 });
+                                    const g = paxGroups.get(k)!;
+                                    g.count += p.count;
+                                  });
+                                  const paxRows = Array.from(paxGroups.entries());
+                                  if (paxRows.length === 0) return null;
+                                  return (
+                                    <div className="border-t bg-violet-50/30 dark:bg-violet-950/10 px-4 py-2 ml-6">
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">Pax Dispute — compute dispute amount per pax type</span>
+                                        <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { setDisputePaxPrices(prev => { const next = { ...prev }; delete next[t.tid]; return next; }); }} data-testid={`reset-pax-${t.tid}`}>Reset Defaults</Button>
+                                      </div>
+                                      <div className="border rounded overflow-hidden text-[11px]">
+                                        <div className="grid grid-cols-[2fr_1fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 px-2 py-1 bg-violet-100/50 dark:bg-violet-900/30 font-medium text-violet-700 dark:text-violet-300">
+                                          <div>Pax Type</div><div className="text-right">Qty</div><div className="text-right">SP Unit</div><div className="text-right">HO Unit</div><div className="text-right">Total Amt Payable</div><div className="text-right">Dispute Amt</div>
+                                        </div>
+                                        {paxRows.map(([k, r]) => {
+                                          const entry = (disputePaxPrices[t.tid] || {})[k] || {};
+                                          const defaultTap = r.spUnit;
+                                          const defaultDispute = r.spUnit - r.hoUnit;
+                                          const tapVal = entry.tap !== undefined && entry.tap !== "" ? entry.tap : String(defaultTap);
+                                          const dispVal = entry.dispute !== undefined && entry.dispute !== "" ? entry.dispute : String(defaultDispute);
+                                          const hasTapOvr = entry.tap !== undefined && entry.tap !== "";
+                                          const hasDispOvr = entry.dispute !== undefined && entry.dispute !== "";
+                                          return (
+                                            <div key={k} className="grid grid-cols-[2fr_1fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 items-center px-2 py-1 border-t bg-white dark:bg-card">
+                                              <div className="font-medium">{r.paxType}</div>
+                                              <div className="text-right font-mono">{r.count}</div>
+                                              <div className="text-right font-mono text-blue-600">{fmt(r.spUnit)}</div>
+                                              <div className="text-right font-mono text-green-600">{fmt(r.hoUnit)}</div>
+                                              <div className="text-right">
+                                                <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasTapOvr ? "border-violet-400 bg-violet-50" : ""}`} value={tapVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newDisp = val !== "" ? String(parseFloat(val) - r.hoUnit) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: val, dispute: newDisp } } })); } }} data-testid={`pax-tap-${t.tid}-${k}`} />
+                                              </div>
+                                              <div className="text-right">
+                                                <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasDispOvr ? "border-violet-400 bg-violet-50" : ""}`} value={dispVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newTap = val !== "" ? String(r.hoUnit + parseFloat(val)) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: newTap, dispute: val } } })); } }} data-testid={`pax-disp-${t.tid}-${k}`} />
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            );
+                          })}
+                          {disputeCount > 0 && (
+                            <div className="flex items-center justify-between px-3 py-1.5 border-t bg-amber-50/50 text-xs font-semibold">
+                              <span className="text-amber-800">{disputeCount} TID{disputeCount > 1 ? "s" : ""} selected</span>
+                              <span className="font-mono text-amber-700">Total: {fmt(disputeTotal)}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">{isSp ? "Step 3" : "Step 2"}: Raise Issue <span className="text-[10px] font-normal">(optional)</span></div>
+                    <div className={`rounded-md border-2 overflow-hidden transition-colors ${issueCount > 0 ? "border-orange-500 bg-orange-50/50" : "border-border bg-muted/10"}`}>
+                      <div className="px-3 py-2.5">
+                        <div className="flex items-start gap-2.5">
+                          <div className={`flex items-center justify-center h-7 w-7 rounded-md flex-shrink-0 ${issueCount > 0 ? "bg-orange-100" : "bg-muted"}`}>
+                            <FileWarning className={`h-3.5 w-3.5 ${issueCount > 0 ? "text-orange-600" : "text-muted-foreground"}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold mb-0.5">This is HO error</div>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                              To be checked with internal teams at Headout. Selected TIDs will be logged to the Issue Tracker for investigation and resolution.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-t">
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20">
+                          <span className="text-[11px] font-medium text-muted-foreground">Select TIDs to raise issues for</span>
+                          <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => { setTakeActionIssues(prev => prev.size === allTids.length ? new Set() : new Set(allTids.map(t => t.tid))); }} data-testid="toggle-all-issues">
+                            {takeActionIssues.size === allTids.length ? "None" : "All"}
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
+                          <div className="w-5" />
+                          <div>TID / Experience</div>
+                          <div className="text-right text-blue-600">SP Net</div>
+                          <div className="text-right text-green-600">HO Net</div>
+                          <div className="text-right text-amber-600">Difference</div>
+                          <div className="text-right text-violet-600">DRI Team</div>
+                        </div>
+                        {allTids.map(t => {
+                          const isChecked = takeActionIssues.has(t.tid);
+                          const experience = t.bookings[0]?.experienceName || t.bookings[0]?.productName || "";
+                          const tidDriTeam = t.bookings[0]?.driTeam || detectedDriTeam;
+                          return (
+                            <div key={t.tid} className={`grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)} data-testid={`issue-tid-${t.tid}`}>
+                              <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-2" />
+                              <div className="truncate">
+                                <span className="font-mono font-medium text-primary">{t.tid}</span>
+                                {experience && <span className="text-muted-foreground text-[11px] ml-1">{experience}</span>}
+                              </div>
+                              <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
+                              <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
+                              <div className="font-mono text-right text-amber-600 font-medium">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
+                              <div className="text-right text-violet-600 text-[11px] truncate pl-1">{tidDriTeam}</div>
+                            </div>
+                          );
+                        })}
+                        {issueCount > 0 && (() => {
+                          const selectedIssue = allTids.filter(t => takeActionIssues.has(t.tid));
+                          const teamCounts: Record<string, number> = {};
+                          selectedIssue.forEach(t => {
+                            const team = t.bookings[0]?.driTeam || detectedDriTeam;
+                            team.split(", ").forEach(tm => { teamCounts[tm] = (teamCounts[tm] || 0) + 1; });
+                          });
+                          const teamSummary = Object.entries(teamCounts).map(([team, count]) => `${team} (${count})`).join(", ");
+                          return (
+                            <div className="flex items-center justify-between px-3 py-1.5 border-t bg-orange-50/50 text-xs font-semibold flex-wrap gap-1">
+                              <span className="text-orange-800">{issueCount} TID{issueCount > 1 ? "s" : ""} selected</span>
+                              <span className="text-violet-600 text-[11px] font-medium">{teamSummary}</span>
+                              <span className="font-mono text-orange-700">Difference: {fmt(selectedIssue.reduce((s, t) => s + Math.abs(t.spNet - t.hoNet), 0))}</span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t">
+                    <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowTakeAction(false)} data-testid="cancel-take-action">Cancel</Button>
+                    <Button size="sm" className="h-8 text-xs gap-1.5" data-testid="confirm-take-action" disabled={priceOverrideMutation.isPending || disputeMutation.isPending || issueMutation.isPending} onClick={() => {
+                      const allBookingIds = allTids.flatMap(t => t.bookings.map(b => b.bookingId));
+                      const flashParts: string[] = [];
+                      const completeParts: string[] = [];
+                      const failParts: string[] = [];
+
+                      const finalize = () => {
+                        if (completeParts.length > 0) flash(completeParts.join(" · "));
+                        if (failParts.length > 0) toast({ title: "Some actions failed", description: failParts.join("; "), variant: "destructive" });
+                        setShowTakeAction(false);
+                        setSelectedTids(new Set());
+                      };
+
+                      let pendingOps = 1;
+                      if (disputeCount > 0) pendingOps++;
+                      if (issueCount > 0) pendingOps++;
+                      let completedOps = 0;
+                      const checkDone = () => { completedOps++; if (completedOps >= pendingOps) finalize(); };
+
+                      priceOverrideMutation.mutate({ bookingIds: allBookingIds, selection: takeActionPrice }, {
+                        onSuccess: () => {
+                          resolveMultiple(allTids.map(t => t.tid));
+                          completeParts.push(`${allTids.length} TIDs → ${isSp ? "SP" : "HO"} Net`);
+                          checkDone();
+                        },
+                        onError: (err) => { failParts.push(`Price: ${String(err)}`); checkDone(); },
+                      });
+
+                      if (disputeCount > 0) {
+                        const disputeBookingIds = allTids.filter(t => takeActionDisputes.has(t.tid)).flatMap(t => t.bookings.map(b => b.bookingId));
+                        disputeMutation.mutate({ bookingIds: disputeBookingIds }, {
+                          onSuccess: () => {
+                            setDisputedBookings(prev => { const next = new Set(prev); disputeBookingIds.forEach(id => next.add(id)); return next; });
+                            completeParts.push(`${disputeCount} dispute${disputeCount > 1 ? "s" : ""}`);
+                            checkDone();
+                          },
+                          onError: (err) => { failParts.push(`Dispute: ${String(err)}`); checkDone(); },
+                        });
+                      }
+                      if (issueCount > 0) {
+                        const issueTids = allTids.filter(t => takeActionIssues.has(t.tid));
+                        const issueBookingIds = issueTids.flatMap(t => t.bookings.map(b => b.bookingId));
+                        const teamCounts: Record<string, number> = {};
+                        issueTids.forEach(t => { const team = t.bookings[0]?.driTeam || detectedDriTeam; teamCounts[team] = (teamCounts[team] || 0) + 1; });
+                        const primaryDriTeam = Object.entries(teamCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || detectedDriTeam;
+                        issueMutation.mutate({ bookingIds: issueBookingIds, description: `Take Action: ${reason}`, priority: "medium", driTeam: primaryDriTeam }, {
+                          onSuccess: () => { completeParts.push(`${issueCount} issue${issueCount > 1 ? "s" : ""}`); checkDone(); },
+                          onError: (err) => { failParts.push(`Issue: ${String(err)}`); checkDone(); },
+                        });
+                      }
+                    }}>
+                      {(priceOverrideMutation.isPending || disputeMutation.isPending) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      Confirm & Apply <Badge variant="secondary" className="text-[10px] ml-1 px-1.5 py-0">{summaryParts.join(" · ")}</Badge>
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {selectedTids.size >= 2 && !bulkConfirm && !showTakeAction && (
               <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200 flex-wrap">
                 <div className="flex items-center gap-2">
                   <CheckCheck className="h-4 w-4 text-primary" />
