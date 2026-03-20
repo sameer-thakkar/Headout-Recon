@@ -539,14 +539,22 @@ export function OptionA_ExpandActions() {
                             {takeActionDisputes.size === allTids.length ? "None" : "All"}
                           </Button>
                         </div>
+                        <div className="grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
+                          <div className="w-5" />
+                          <div>TID / Experience</div>
+                          <div className="text-right text-blue-600">SP Net</div>
+                          <div className="text-right text-green-600">HO Net</div>
+                          <div className="text-right text-amber-600">Difference</div>
+                        </div>
                         {allTids.map(t => {
                           const isChecked = takeActionDisputes.has(t.tid);
                           return (
-                            <div key={t.tid} className={`flex items-center gap-2 px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
-                              <Checkbox checked={isChecked} className="h-3.5 w-3.5" />
-                              <span className="font-mono font-medium text-primary w-20">{t.tid}</span>
-                              <span className="text-muted-foreground flex-1 truncate text-[11px]">{t.experience}</span>
-                              <span className="font-mono text-amber-600 font-medium w-20 text-right">{fmt(Math.abs(t.spNet - t.hoNet))}</span>
+                            <div key={t.tid} className={`grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
+                              <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-2" />
+                              <div className="truncate"><span className="font-mono font-medium text-primary">{t.tid}</span> <span className="text-muted-foreground text-[11px]">{t.experience}</span></div>
+                              <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
+                              <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
+                              <div className="font-mono text-right text-amber-600 font-medium">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
                             </div>
                           );
                         })}
@@ -584,14 +592,22 @@ export function OptionA_ExpandActions() {
                           {takeActionIssues.size === allTids.length ? "None" : "All"}
                         </Button>
                       </div>
+                      <div className="grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
+                        <div className="w-5" />
+                        <div>TID / Experience</div>
+                        <div className="text-right text-blue-600">SP Net</div>
+                        <div className="text-right text-green-600">HO Net</div>
+                        <div className="text-right text-red-500">Disc. LC</div>
+                      </div>
                       {allTids.map(t => {
                         const isChecked = takeActionIssues.has(t.tid);
                         return (
-                          <div key={t.tid} className={`flex items-center gap-2 px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)}>
-                            <Checkbox checked={isChecked} className="h-3.5 w-3.5" />
-                            <span className="font-mono font-medium text-primary w-20">{t.tid}</span>
-                            <span className="text-muted-foreground flex-1 truncate text-[11px]">{t.experience}</span>
-                            <span className="font-mono text-red-500 font-medium w-20 text-right">{fmt(t.discLc)}</span>
+                          <div key={t.tid} className={`grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)}>
+                            <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-2" />
+                            <div className="truncate"><span className="font-mono font-medium text-primary">{t.tid}</span> <span className="text-muted-foreground text-[11px]">{t.experience}</span></div>
+                            <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
+                            <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
+                            <div className="font-mono text-right text-red-500 font-medium">{fmt(t.discLc)}</div>
                           </div>
                         );
                       })}
@@ -608,7 +624,6 @@ export function OptionA_ExpandActions() {
                 <div className="flex items-center justify-between pt-1 border-t">
                   <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowTakeAction(false)}>Cancel</Button>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-muted-foreground">{summaryParts.join(" · ")}</span>
                     <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => {
                       const allTidIds = allTids.map(t => t.tid);
                       setTidActions(prev => { const next = { ...prev }; allTidIds.forEach(t => { next[t] = takeActionPrice; }); return next; });
@@ -620,7 +635,7 @@ export function OptionA_ExpandActions() {
                       setShowTakeAction(false);
                       setSelectedTids(new Set());
                     }}>
-                      <Check className="h-3.5 w-3.5" /> Confirm & Apply
+                      <Check className="h-3.5 w-3.5" /> Apply {summaryParts.join(" · ")}
                     </Button>
                   </div>
                 </div>
