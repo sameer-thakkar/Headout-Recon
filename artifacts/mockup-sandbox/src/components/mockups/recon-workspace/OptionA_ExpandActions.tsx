@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Calculator, Check, Gavel, FileWarning, AlertTriangle, X as XIcon,
-  BarChart3, PanelTopClose, PanelTop, CheckCheck, Trash2
+  BarChart3, PanelTopClose, PanelTop, CheckCheck, Trash2, Zap
 } from "lucide-react";
 
 interface TidData {
@@ -88,6 +88,11 @@ export function OptionA_ExpandActions() {
   const [selectedTids, setSelectedTids] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
   const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
+
+  const [showTakeAction, setShowTakeAction] = useState(false);
+  const [takeActionPrice, setTakeActionPrice] = useState<"sp" | "ho">("sp");
+  const [takeActionDisputes, setTakeActionDisputes] = useState<Set<string>>(new Set());
+  const [takeActionIssues, setTakeActionIssues] = useState<Set<string>>(new Set());
 
   const [tidActions, setTidActions] = useState<Record<string, "sp" | "ho">>({});
   const [tapOverrides, setTapOverrides] = useState<Record<string, string>>({});
@@ -452,24 +457,176 @@ export function OptionA_ExpandActions() {
             </div>
           </div>
 
-          {!bulkConfirm && (
+          {!bulkConfirm && !showTakeAction && (
             <div className="rounded-lg border bg-muted/30 px-3 py-2.5 flex items-center gap-2.5">
               <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {TIDS.length} TIDs:</span>
               <div className="h-4 w-px bg-border" />
-              <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openDiscrepancyAction("sp")}>
-                <TrendingUp className="h-3 w-3" /> SP Net
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openDiscrepancyAction("ho")}>
-                <TrendingDown className="h-3 w-3" /> HO Net
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openDiscrepancyAction("dispute")}>
-                <Gavel className="h-3 w-3" /> Raise Dispute
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => openDiscrepancyAction("issue")}>
-                <FileWarning className="h-3 w-3" /> Log Issue
+              <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); }}>
+                <Zap className="h-3.5 w-3.5" /> Take Action
               </Button>
             </div>
           )}
+
+          {showTakeAction && !bulkConfirm && (() => {
+            const allTids = TIDS;
+            const isSp = takeActionPrice === "sp";
+            const totalSp = allTids.reduce((s, t) => s + t.spNet, 0);
+            const totalHo = allTids.reduce((s, t) => s + t.hoNet, 0);
+            const totalPayable = isSp ? totalSp : totalHo;
+            const totalDiff = Math.abs(totalSp - totalHo);
+            const disputeTotal = allTids.filter(t => takeActionDisputes.has(t.tid)).reduce((s, t) => s + Math.abs(t.spNet - t.hoNet), 0);
+            const disputeCount = takeActionDisputes.size;
+            const issueCount = takeActionIssues.size;
+
+            const toggleDisputeTid = (tid: string) => setTakeActionDisputes(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else next.add(tid); return next; });
+            const toggleIssueTid = (tid: string) => setTakeActionIssues(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else next.add(tid); return next; });
+
+            const summaryParts = [isSp ? "SP Net" : "HO Net"];
+            if (disputeCount > 0) summaryParts.push(`${disputeCount} dispute${disputeCount > 1 ? "s" : ""}`);
+            if (issueCount > 0) summaryParts.push(`${issueCount} issue${issueCount > 1 ? "s" : ""}`);
+
+            return (
+              <div className="rounded-lg border-2 border-primary/30 bg-background p-4 space-y-4 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Zap className="h-4 w-4 text-primary" />
+                    Take Action — All {allTids.length} TIDs
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowTakeAction(false)}>
+                    <XIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Step 1: Select Price</div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" className={`h-8 text-xs gap-1.5 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-transparent border border-blue-300 text-blue-700 hover:bg-blue-50"}`} onClick={() => { setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); }}>
+                      <TrendingUp className="h-3.5 w-3.5" /> SP Net {isSp && <Check className="h-3 w-3" />}
+                    </Button>
+                    <Button size="sm" className={`h-8 text-xs gap-1.5 ${!isSp ? "bg-green-700 hover:bg-green-800 text-white" : "bg-transparent border border-green-300 text-green-700 hover:bg-green-50"}`} onClick={() => { setTakeActionPrice("ho"); setTakeActionDisputes(new Set()); }}>
+                      <TrendingDown className="h-3.5 w-3.5" /> HO Net {!isSp && <Check className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">SP Net</span><div className={`font-mono font-semibold ${isSp ? "text-blue-700" : "text-muted-foreground"}`}>{fmt(totalSp)}</div></div>
+                    <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">HO Net</span><div className={`font-mono font-semibold ${!isSp ? "text-green-700" : "text-muted-foreground"}`}>{fmt(totalHo)}</div></div>
+                    <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">Difference</span><div className="font-mono font-semibold text-amber-600">{fmt(totalDiff)}</div></div>
+                    <div className={`rounded border-2 p-2 ${isSp ? "border-blue-300 bg-blue-50/50" : "border-green-300 bg-green-50/50"}`}><span className="text-muted-foreground">Payable</span><div className={`font-mono font-bold ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(totalPayable)}</div></div>
+                  </div>
+                </div>
+
+                {isSp && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">Step 2: Raise Dispute <span className="text-[10px] font-normal">(optional)</span></div>
+                    <div className={`rounded-md border-2 overflow-hidden transition-colors ${disputeCount > 0 ? "border-amber-500 bg-amber-50/50" : "border-border bg-muted/10"}`}>
+                      <div className="px-3 py-2.5">
+                        <div className="flex items-start gap-2.5">
+                          <div className={`flex items-center justify-center h-7 w-7 rounded-md flex-shrink-0 ${disputeCount > 0 ? "bg-amber-100" : "bg-muted"}`}>
+                            <AlertTriangle className={`h-3.5 w-3.5 ${disputeCount > 0 ? "text-amber-600" : "text-muted-foreground"}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold mb-0.5">This is SP error and refund to be claimed</div>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                              The difference will be tracked as a dispute for future settlement — either adjusted against a future invoice or absorbed.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-t">
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20">
+                          <span className="text-[11px] font-medium text-muted-foreground">Select TIDs to dispute</span>
+                          <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => { setTakeActionDisputes(prev => prev.size === allTids.length ? new Set() : new Set(allTids.map(t => t.tid))); }}>
+                            {takeActionDisputes.size === allTids.length ? "None" : "All"}
+                          </Button>
+                        </div>
+                        {allTids.map(t => {
+                          const isChecked = takeActionDisputes.has(t.tid);
+                          return (
+                            <div key={t.tid} className={`flex items-center gap-2 px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
+                              <Checkbox checked={isChecked} className="h-3.5 w-3.5" />
+                              <span className="font-mono font-medium text-primary w-20">{t.tid}</span>
+                              <span className="text-muted-foreground flex-1 truncate text-[11px]">{t.experience}</span>
+                              <span className="font-mono text-amber-600 font-medium w-20 text-right">{fmt(Math.abs(t.spNet - t.hoNet))}</span>
+                            </div>
+                          );
+                        })}
+                        {disputeCount > 0 && (
+                          <div className="flex items-center justify-between px-3 py-1.5 border-t bg-amber-50/50 text-xs font-semibold">
+                            <span className="text-amber-800">{disputeCount} TID{disputeCount > 1 ? "s" : ""} selected</span>
+                            <span className="font-mono text-amber-700">Total: {fmt(disputeTotal)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">{isSp ? "Step 3" : "Step 2"}: Raise Issue <span className="text-[10px] font-normal">(optional)</span></div>
+                  <div className={`rounded-md border-2 overflow-hidden transition-colors ${issueCount > 0 ? "border-orange-500 bg-orange-50/50" : "border-border bg-muted/10"}`}>
+                    <div className="px-3 py-2.5">
+                      <div className="flex items-start gap-2.5">
+                        <div className={`flex items-center justify-center h-7 w-7 rounded-md flex-shrink-0 ${issueCount > 0 ? "bg-orange-100" : "bg-muted"}`}>
+                          <FileWarning className={`h-3.5 w-3.5 ${issueCount > 0 ? "text-orange-600" : "text-muted-foreground"}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold mb-0.5">This is HO error</div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            To be checked with internal teams at Headout. Selected TIDs will be logged to the Issue Tracker for investigation and resolution.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="border-t">
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20">
+                        <span className="text-[11px] font-medium text-muted-foreground">Select TIDs to raise issues for</span>
+                        <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => { setTakeActionIssues(prev => prev.size === allTids.length ? new Set() : new Set(allTids.map(t => t.tid))); }}>
+                          {takeActionIssues.size === allTids.length ? "None" : "All"}
+                        </Button>
+                      </div>
+                      {allTids.map(t => {
+                        const isChecked = takeActionIssues.has(t.tid);
+                        return (
+                          <div key={t.tid} className={`flex items-center gap-2 px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)}>
+                            <Checkbox checked={isChecked} className="h-3.5 w-3.5" />
+                            <span className="font-mono font-medium text-primary w-20">{t.tid}</span>
+                            <span className="text-muted-foreground flex-1 truncate text-[11px]">{t.experience}</span>
+                            <span className="font-mono text-red-500 font-medium w-20 text-right">{fmt(t.discLc)}</span>
+                          </div>
+                        );
+                      })}
+                      {issueCount > 0 && (
+                        <div className="flex items-center justify-between px-3 py-1.5 border-t bg-orange-50/50 text-xs font-semibold">
+                          <span className="text-orange-800">{issueCount} TID{issueCount > 1 ? "s" : ""} selected for issue</span>
+                          <span className="font-mono text-orange-700">Disc: {fmt(allTids.filter(t => takeActionIssues.has(t.tid)).reduce((s, t) => s + t.discLc, 0))}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t">
+                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowTakeAction(false)}>Cancel</Button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">{summaryParts.join(" · ")}</span>
+                    <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => {
+                      const allTidIds = allTids.map(t => t.tid);
+                      setTidActions(prev => { const next = { ...prev }; allTidIds.forEach(t => { next[t] = takeActionPrice; }); return next; });
+                      resolveMultiple(allTidIds);
+                      const flashParts = [`All ${allTids.length} TIDs → ${isSp ? "SP" : "HO"} Net applied`];
+                      if (disputeCount > 0) flashParts.push(`${disputeCount} dispute${disputeCount > 1 ? "s" : ""} raised`);
+                      if (issueCount > 0) flashParts.push(`${issueCount} issue${issueCount > 1 ? "s" : ""} logged`);
+                      flash(flashParts.join(" · "));
+                      setShowTakeAction(false);
+                      setSelectedTids(new Set());
+                    }}>
+                      <Check className="h-3.5 w-3.5" /> Confirm & Apply
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {selectedTids.size >= 2 && !bulkConfirm && (
             <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
