@@ -477,27 +477,19 @@ export function OptionA_ExpandActions() {
             const totalHo = allTids.reduce((s, t) => s + t.hoNet, 0);
             const totalPayable = isSp ? totalSp : totalHo;
             const totalDiff = Math.abs(totalSp - totalHo);
-            const computePaxDiff = (tid: string) => {
-              const prices = disputePaxPrices[tid];
-              if (!prices || Object.keys(prices).length === 0) return null;
-              let total = 0;
-              let allFilled = true;
-              PAX_ROWS.forEach(r => {
-                const k = `${r.paxType}__${r.dateRange}`;
-                const val = prices[k];
-                if (val && val !== "") {
-                  total += (parseFloat(val) - r.hoUnit) * r.count;
-                } else {
-                  allFilled = false;
-                }
-              });
-              return allFilled ? total : null;
+            const getPaxDisputeAmt = (tid: string, r: typeof PAX_ROWS[0]) => {
+              const k = `${r.paxType}__${r.dateRange}`;
+              const override = disputePaxPrices[tid]?.[k];
+              if (override !== undefined && override !== "") return parseFloat(override);
+              return (r.spUnit - r.hoUnit) * r.count;
+            };
+            const computePaxDiff = (tid: string, t: TidData) => {
+              if (!t.hasPax) return null;
+              return PAX_ROWS.reduce((s, r) => s + getPaxDisputeAmt(tid, r), 0);
             };
             const getDisputeDiff = (t: TidData) => {
-              if (t.hasPax) {
-                const paxDiff = computePaxDiff(t.tid);
-                if (paxDiff !== null) return paxDiff;
-              }
+              const paxDiff = computePaxDiff(t.tid, t);
+              if (paxDiff !== null) return paxDiff;
               return Math.abs(t.spNet - t.hoNet);
             };
             const disputeTotal = allTids.filter(t => takeActionDisputes.has(t.tid)).reduce((s, t) => s + getDisputeDiff(t), 0);
@@ -583,7 +575,7 @@ export function OptionA_ExpandActions() {
                         {allTids.map(t => {
                           const isChecked = takeActionDisputes.has(t.tid);
                           const isPaxOpen = disputePaxExpanded === t.tid;
-                          const paxDiffVal = t.hasPax ? computePaxDiff(t.tid) : null;
+                          const paxDiffVal = computePaxDiff(t.tid, t);
                           const displayDiff = paxDiffVal !== null ? paxDiffVal : Math.abs(t.spNet - t.hoNet);
                           return (
                             <div key={t.tid}>
@@ -608,38 +600,37 @@ export function OptionA_ExpandActions() {
                               {isPaxOpen && (
                                 <div className="border-t bg-violet-50/30 px-4 py-2 ml-6">
                                   <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-[11px] font-semibold text-violet-700">Pax Pricing — set final price per pax type</span>
-                                    <div className="flex gap-1">
-                                      <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { const p: Record<string, string> = {}; PAX_ROWS.forEach(r => p[`${r.paxType}__${r.dateRange}`] = String(r.spUnit)); setDisputePaxPrices(prev => ({ ...prev, [t.tid]: p })); }}>All SP</Button>
-                                      <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { const p: Record<string, string> = {}; PAX_ROWS.forEach(r => p[`${r.paxType}__${r.dateRange}`] = String(r.hoUnit)); setDisputePaxPrices(prev => ({ ...prev, [t.tid]: p })); }}>All HO</Button>
-                                    </div>
+                                    <span className="text-[11px] font-semibold text-violet-700">Pax Dispute — compute dispute amount per pax type</span>
+                                    <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { setDisputePaxPrices(prev => { const next = { ...prev }; delete next[t.tid]; return next; }); }}>Reset Defaults</Button>
                                   </div>
                                   <div className="border rounded overflow-hidden text-[11px]">
-                                    <div className="grid grid-cols-[2fr_2fr_1fr_1.5fr_1.5fr_1.5fr] gap-0 px-2 py-1 bg-violet-100/50 font-medium text-violet-700">
-                                      <div>Pax Type</div><div>Date Range</div><div className="text-right">Qty</div><div className="text-right">SP Unit</div><div className="text-right">HO Unit</div><div className="text-right">Final Price</div>
+                                    <div className="grid grid-cols-[1.8fr_1.8fr_0.8fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 px-2 py-1 bg-violet-100/50 font-medium text-violet-700">
+                                      <div>Pax Type</div><div>Date Range</div><div className="text-right">Qty</div><div className="text-right">SP Unit</div><div className="text-right">HO Unit</div><div className="text-right">Total Amt Payable</div><div className="text-right">Dispute Amt</div>
                                     </div>
                                     {PAX_ROWS.map(r => {
                                       const k = `${r.paxType}__${r.dateRange}`;
                                       const tidPrices = disputePaxPrices[t.tid] || {};
+                                      const tap = r.spUnit * r.count;
+                                      const defaultDispute = (r.spUnit - r.hoUnit) * r.count;
+                                      const hasOverride = tidPrices[k] !== undefined && tidPrices[k] !== "";
                                       return (
-                                        <div key={k} className="grid grid-cols-[2fr_2fr_1fr_1.5fr_1.5fr_1.5fr] gap-0 items-center px-2 py-1 border-t bg-white">
+                                        <div key={k} className="grid grid-cols-[1.8fr_1.8fr_0.8fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 items-center px-2 py-1 border-t bg-white">
                                           <div className="font-medium">{r.paxType}</div>
                                           <div className="text-muted-foreground">{r.dateRange}</div>
                                           <div className="text-right font-mono">{r.count}</div>
                                           <div className="text-right font-mono text-blue-600">{fmt(r.spUnit)}</div>
                                           <div className="text-right font-mono text-green-600">{fmt(r.hoUnit)}</div>
+                                          <div className="text-right font-mono text-muted-foreground">{fmt(tap)}</div>
                                           <div className="text-right">
-                                            <input type="number" step="any" className="h-5 w-16 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400" value={tidPrices[k] || ""} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: val } })); } }} placeholder="—" />
+                                            <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasOverride ? "border-violet-400 bg-violet-50" : ""}`} value={hasOverride ? tidPrices[k] : String(defaultDispute)} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: val } })); } }} />
                                           </div>
                                         </div>
                                       );
                                     })}
                                   </div>
-                                  {paxDiffVal !== null && (
-                                    <div className="flex items-center justify-end mt-1.5 text-[11px] font-semibold text-violet-700">
-                                      Pax-computed dispute: <span className="font-mono ml-1">{fmt(paxDiffVal)}</span>
-                                    </div>
-                                  )}
+                                  <div className="flex items-center justify-end mt-1.5 text-[11px] font-semibold text-violet-700">
+                                    Pax-computed dispute: <span className="font-mono ml-1">{fmt(paxDiffVal ?? 0)}</span>
+                                  </div>
                                 </div>
                               )}
                             </div>
