@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -134,6 +134,10 @@ export function DiscrepancySummaryWorkspace({
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
+
+  useEffect(() => {
+    setShowTidBreakdown(false);
+  }, [reason]);
 
   const filteredAnalysis = useMemo(() => {
     if (!analysisRows || !reason) return [];
