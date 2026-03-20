@@ -94,6 +94,8 @@ export function OptionA_ExpandActions() {
   const [takeActionPrice, setTakeActionPrice] = useState<"sp" | "ho">("sp");
   const [takeActionDisputes, setTakeActionDisputes] = useState<Set<string>>(new Set());
   const [takeActionIssues, setTakeActionIssues] = useState<Set<string>>(new Set());
+  const [disputePaxExpanded, setDisputePaxExpanded] = useState<string | null>(null);
+  const [disputePaxPrices, setDisputePaxPrices] = useState<Record<string, Record<string, string>>>({});
 
   const [tidActions, setTidActions] = useState<Record<string, "sp" | "ho">>({});
   const [tapOverrides, setTapOverrides] = useState<Record<string, string>>({});
@@ -475,7 +477,30 @@ export function OptionA_ExpandActions() {
             const totalHo = allTids.reduce((s, t) => s + t.hoNet, 0);
             const totalPayable = isSp ? totalSp : totalHo;
             const totalDiff = Math.abs(totalSp - totalHo);
-            const disputeTotal = allTids.filter(t => takeActionDisputes.has(t.tid)).reduce((s, t) => s + Math.abs(t.spNet - t.hoNet), 0);
+            const computePaxDiff = (tid: string) => {
+              const prices = disputePaxPrices[tid];
+              if (!prices || Object.keys(prices).length === 0) return null;
+              let total = 0;
+              let allFilled = true;
+              PAX_ROWS.forEach(r => {
+                const k = `${r.paxType}__${r.dateRange}`;
+                const val = prices[k];
+                if (val && val !== "") {
+                  total += Math.abs(parseFloat(val) - r.hoUnit) * r.count;
+                } else {
+                  allFilled = false;
+                }
+              });
+              return allFilled ? total : null;
+            };
+            const getDisputeDiff = (t: TidData) => {
+              if (t.hasPax) {
+                const paxDiff = computePaxDiff(t.tid);
+                if (paxDiff !== null) return paxDiff;
+              }
+              return Math.abs(t.spNet - t.hoNet);
+            };
+            const disputeTotal = allTids.filter(t => takeActionDisputes.has(t.tid)).reduce((s, t) => s + getDisputeDiff(t), 0);
             const disputeCount = takeActionDisputes.size;
             const issueCount = takeActionIssues.size;
 
@@ -557,13 +582,66 @@ export function OptionA_ExpandActions() {
                         </div>
                         {allTids.map(t => {
                           const isChecked = takeActionDisputes.has(t.tid);
+                          const isPaxOpen = disputePaxExpanded === t.tid;
+                          const paxDiffVal = t.hasPax ? computePaxDiff(t.tid) : null;
+                          const displayDiff = paxDiffVal !== null ? paxDiffVal : Math.abs(t.spNet - t.hoNet);
                           return (
-                            <div key={t.tid} className={`grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
-                              <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-2" />
-                              <div className="truncate"><span className="font-mono font-medium text-primary">{t.tid}</span> <span className="text-muted-foreground text-[11px]">{t.experience}</span></div>
-                              <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
-                              <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
-                              <div className="font-mono text-right text-amber-600 font-medium">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
+                            <div key={t.tid}>
+                              <div className={`grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
+                                <div className="flex items-center">
+                                  <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-1" />
+                                  {t.hasPax && (
+                                    <button className="p-0 h-4 w-4 flex items-center justify-center rounded hover:bg-muted/40 mr-0.5" onClick={e => { e.stopPropagation(); setDisputePaxExpanded(prev => prev === t.tid ? null : t.tid); }}>
+                                      <ChevronRight className={`h-3 w-3 text-violet-500 transition-transform ${isPaxOpen ? "rotate-90" : ""}`} />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="truncate">
+                                  <span className="font-mono font-medium text-primary">{t.tid}</span>
+                                  <span className="text-muted-foreground text-[11px]"> {t.experience}</span>
+                                  {t.hasPax && <span className="ml-1.5 text-[9px] font-medium text-violet-600 bg-violet-100 px-1 py-0 rounded">PAX</span>}
+                                </div>
+                                <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
+                                <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
+                                <div className={`font-mono text-right font-medium ${paxDiffVal !== null ? "text-violet-600" : "text-amber-600"}`}>{fmt(displayDiff)}{paxDiffVal !== null && <span className="text-[9px] ml-0.5">⚡</span>}</div>
+                              </div>
+                              {isPaxOpen && (
+                                <div className="border-t bg-violet-50/30 px-4 py-2 ml-6">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[11px] font-semibold text-violet-700">Pax Pricing — set final price per pax type</span>
+                                    <div className="flex gap-1">
+                                      <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { const p: Record<string, string> = {}; PAX_ROWS.forEach(r => p[`${r.paxType}__${r.dateRange}`] = String(r.spUnit)); setDisputePaxPrices(prev => ({ ...prev, [t.tid]: p })); }}>All SP</Button>
+                                      <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { const p: Record<string, string> = {}; PAX_ROWS.forEach(r => p[`${r.paxType}__${r.dateRange}`] = String(r.hoUnit)); setDisputePaxPrices(prev => ({ ...prev, [t.tid]: p })); }}>All HO</Button>
+                                    </div>
+                                  </div>
+                                  <div className="border rounded overflow-hidden text-[11px]">
+                                    <div className="grid grid-cols-[2fr_2fr_1fr_1.5fr_1.5fr_1.5fr] gap-0 px-2 py-1 bg-violet-100/50 font-medium text-violet-700">
+                                      <div>Pax Type</div><div>Date Range</div><div className="text-right">Qty</div><div className="text-right">SP Unit</div><div className="text-right">HO Unit</div><div className="text-right">Final Price</div>
+                                    </div>
+                                    {PAX_ROWS.map(r => {
+                                      const k = `${r.paxType}__${r.dateRange}`;
+                                      const tidPrices = disputePaxPrices[t.tid] || {};
+                                      return (
+                                        <div key={k} className="grid grid-cols-[2fr_2fr_1fr_1.5fr_1.5fr_1.5fr] gap-0 items-center px-2 py-1 border-t bg-white">
+                                          <div className="font-medium">{r.paxType}</div>
+                                          <div className="text-muted-foreground">{r.dateRange}</div>
+                                          <div className="text-right font-mono">{r.count}</div>
+                                          <div className="text-right font-mono text-blue-600">{fmt(r.spUnit)}</div>
+                                          <div className="text-right font-mono text-green-600">{fmt(r.hoUnit)}</div>
+                                          <div className="text-right">
+                                            <input className="h-5 w-16 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400" value={tidPrices[k] || ""} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: val } })); }} placeholder="—" />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  {paxDiffVal !== null && (
+                                    <div className="flex items-center justify-end mt-1.5 text-[11px] font-semibold text-violet-700">
+                                      Pax-computed dispute: <span className="font-mono ml-1">{fmt(paxDiffVal)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
