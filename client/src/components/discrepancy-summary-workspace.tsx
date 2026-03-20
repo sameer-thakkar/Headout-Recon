@@ -124,6 +124,7 @@ export function DiscrepancySummaryWorkspace({
   const [paxTid, setPaxTid] = useState<TidGroup | null>(null);
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
 
+  const [showTidBreakdown, setShowTidBreakdown] = useState(false);
   const [showTakeAction, setShowTakeAction] = useState(false);
   const [takeActionPrice, setTakeActionPrice] = useState<"sp" | "ho">("sp");
   const [takeActionDisputes, setTakeActionDisputes] = useState<Set<string>>(new Set());
@@ -448,6 +449,7 @@ export function DiscrepancySummaryWorkspace({
         setPaxOpen(false);
         setPaxTid(null);
         setPaxPrices({});
+        setShowTidBreakdown(false);
         setShowTakeAction(false);
         setTakeActionPrice("sp");
         setTakeActionDisputes(new Set());
@@ -1122,8 +1124,22 @@ export function DiscrepancySummaryWorkspace({
             )}
 
             {filteredTids.length > 0 && (
+              <Collapsible open={showTidBreakdown} onOpenChange={setShowTidBreakdown}>
               <div className="rounded-md border overflow-hidden">
-                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b">
+                <CollapsibleTrigger asChild>
+                  <div className="grid grid-cols-[auto_1fr_auto] gap-0 items-center h-9 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b cursor-pointer hover:bg-muted/60 transition-colors select-none" data-testid="tid-breakdown-toggle">
+                    <div className="flex items-center gap-2 mr-3">
+                      {showTidBreakdown ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      <span className="font-medium text-foreground">TID / BID Breakdown</span>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredTids.length} TIDs</Badge>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredTids.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
+                    </div>
+                    <div />
+                    <div className="text-right font-mono text-red-600 dark:text-red-400 text-xs">{fmt(filteredTids.reduce((s, t) => s + Math.abs(t.discLc), 0))}</div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
                   <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
@@ -1248,7 +1264,9 @@ export function DiscrepancySummaryWorkspace({
                     </div>
                   );
                 })}
+                </CollapsibleContent>
               </div>
+              </Collapsible>
             )}
 
             {paxOpen && paxTid && (
