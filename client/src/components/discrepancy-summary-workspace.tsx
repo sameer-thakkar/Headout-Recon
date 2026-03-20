@@ -794,6 +794,27 @@ export function DiscrepancySummaryWorkspace({
                                         <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">Pax Dispute — compute dispute amount per pax type</span>
                                         <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { setDisputePaxPrices(prev => { const next = { ...prev }; delete next[t.tid]; return next; }); }} data-testid={`reset-pax-${t.tid}`}>Reset Defaults</Button>
                                       </div>
+                                      {(() => {
+                                        const summaryTap = paxRows.reduce((s, [k, r]) => {
+                                          const entry = (disputePaxPrices[t.tid] || {})[k] || {};
+                                          const tap = entry.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : r.spUnit;
+                                          return s + tap * r.count;
+                                        }, 0);
+                                        const summaryDisp = paxRows.reduce((s, [k, r]) => {
+                                          const entry = (disputePaxPrices[t.tid] || {})[k] || {};
+                                          const disp = entry.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : (r.spUnit - r.hoUnit);
+                                          return s + Math.abs(disp) * r.count;
+                                        }, 0);
+                                        return (
+                                          <div className="flex items-center gap-4 bg-violet-100/40 dark:bg-violet-900/30 rounded px-2 py-1 mb-1.5">
+                                            <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">TID Total TAP</span>
+                                            <span className="font-mono text-[11px] font-bold text-violet-700 dark:text-violet-300" data-testid={`pax-summary-tap-${t.tid}`}>{fmt(summaryTap)}</span>
+                                            <div className="h-3 w-px bg-violet-300 dark:bg-violet-600" />
+                                            <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">TID Total Dispute</span>
+                                            <span className="font-mono text-[11px] font-bold text-violet-700 dark:text-violet-300" data-testid={`pax-summary-disp-${t.tid}`}>{fmt(summaryDisp)}</span>
+                                          </div>
+                                        );
+                                      })()}
                                       <div className="border rounded overflow-hidden text-[11px]">
                                         <div className="grid grid-cols-[2fr_1fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 px-2 py-1 bg-violet-100/50 dark:bg-violet-900/30 font-medium text-violet-700 dark:text-violet-300">
                                           <div>Pax Type</div><div className="text-right">Qty</div><div className="text-right">SP Unit</div><div className="text-right">HO Unit</div><div className="text-right">Total Amt Payable</div><div className="text-right">Dispute Amt</div>
