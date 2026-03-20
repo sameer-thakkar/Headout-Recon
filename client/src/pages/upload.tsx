@@ -841,72 +841,97 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     <Table className="text-sm">
                       <TableHeader>
                         <TableRow className="h-8">
-                          <TableHead className="py-1.5 text-xs">Reason</TableHead>
+                          <TableHead className="py-1.5 text-xs pl-4">Reason</TableHead>
                           <TableHead className="py-1.5 text-xs">Currency</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Count</TableHead>
+                          <TableHead className="py-1.5 text-xs text-right pr-4 w-24">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {/* Already Reconciled combined row (if exists) */}
-                        {processedSummary.alreadyReconciledRow && (
-                          <TableRow
-                            className="h-8 cursor-pointer hover-elevate bg-amber-50 dark:bg-amber-950/30"
-                            onClick={() => setIsAlreadyReconciledModalOpen(true)}
-                            data-testid="summary-row-already-reconciled"
-                          >
-                            <TableCell className="py-1.5">
-                              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                                <AlertTriangle className="h-3 w-3" />
-                                {processedSummary.alreadyReconciledRow.reason}
-                              </span>
-                            </TableCell>
-                            <TableCell className="py-1.5">{processedSummary.alreadyReconciledRow.currency}</TableCell>
-                            <TableCell className="py-1.5 text-right font-mono">
-                              {formatNumber(processedSummary.alreadyReconciledRow.discrepancyLc)}
-                            </TableCell>
-                            <TableCell className="py-1.5 text-right font-mono">
-                              {formatNumber(processedSummary.alreadyReconciledRow.discrepancyUsd)}
-                            </TableCell>
-                            <TableCell className="py-1.5 text-right">{processedSummary.alreadyReconciledRow.countBid}</TableCell>
-                          </TableRow>
-                        )}
+                        {processedSummary.alreadyReconciledRow && (() => {
+                          const usd = Math.abs(processedSummary.alreadyReconciledRow.discrepancyUsd);
+                          const severityClass = usd > 5000 ? "bg-red-500" : usd > 1000 ? "bg-amber-500" : usd > 0 ? "bg-blue-400" : "bg-green-500";
+                          return (
+                            <TableRow
+                              className="h-9 cursor-pointer hover-elevate bg-amber-50 dark:bg-amber-950/30 relative"
+                              onClick={() => setIsAlreadyReconciledModalOpen(true)}
+                              data-testid="summary-row-already-reconciled"
+                            >
+                              <TableCell className="py-1.5 pl-4 relative">
+                                <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l ${severityClass}`} />
+                                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  {processedSummary.alreadyReconciledRow.reason}
+                                </span>
+                              </TableCell>
+                              <TableCell className="py-1.5">{processedSummary.alreadyReconciledRow.currency}</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono">
+                                {formatNumber(processedSummary.alreadyReconciledRow.discrepancyLc)}
+                              </TableCell>
+                              <TableCell className="py-1.5 text-right font-mono">
+                                {formatNumber(processedSummary.alreadyReconciledRow.discrepancyUsd)}
+                              </TableCell>
+                              <TableCell className="py-1.5 text-right">{processedSummary.alreadyReconciledRow.countBid}</TableCell>
+                              <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
+                                <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setIsAlreadyReconciledModalOpen(true)} data-testid="manage-btn-already-reconciled">
+                                  Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })()}
                         {/* Cancellations combined row (if exists) */}
-                        {processedSummary.cancellationsRow && (
-                          <TableRow
-                            className="h-8 cursor-pointer hover-elevate bg-red-50 dark:bg-red-950/30"
-                            onClick={() => setIsCancellationsModalOpen(true)}
-                            data-testid="summary-row-cancellations"
-                          >
-                            <TableCell className="py-1.5">
-                              <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-                                <XCircle className="h-3 w-3" />
-                                {processedSummary.cancellationsRow.reason}
-                              </span>
-                            </TableCell>
-                            <TableCell className="py-1.5">{processedSummary.cancellationsRow.currency}</TableCell>
-                            <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">
-                              {formatNumber(processedSummary.cancellationsRow.discrepancyLc)}
-                            </TableCell>
-                            <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">
-                              {formatNumber(processedSummary.cancellationsRow.discrepancyUsd)}
-                            </TableCell>
-                            <TableCell className="py-1.5 text-right">{processedSummary.cancellationsRow.countBid}</TableCell>
-                          </TableRow>
-                        )}
+                        {processedSummary.cancellationsRow && (() => {
+                          const usd = Math.abs(processedSummary.cancellationsRow.discrepancyUsd);
+                          const severityClass = usd > 5000 ? "bg-red-500" : usd > 1000 ? "bg-amber-500" : usd > 0 ? "bg-blue-400" : "bg-green-500";
+                          return (
+                            <TableRow
+                              className="h-9 cursor-pointer hover-elevate bg-red-50 dark:bg-red-950/30 relative"
+                              onClick={() => setIsCancellationsModalOpen(true)}
+                              data-testid="summary-row-cancellations"
+                            >
+                              <TableCell className="py-1.5 pl-4 relative">
+                                <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l ${severityClass}`} />
+                                <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                                  <XCircle className="h-3 w-3" />
+                                  {processedSummary.cancellationsRow.reason}
+                                </span>
+                              </TableCell>
+                              <TableCell className="py-1.5">{processedSummary.cancellationsRow.currency}</TableCell>
+                              <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">
+                                {formatNumber(processedSummary.cancellationsRow.discrepancyLc)}
+                              </TableCell>
+                              <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">
+                                {formatNumber(processedSummary.cancellationsRow.discrepancyUsd)}
+                              </TableCell>
+                              <TableCell className="py-1.5 text-right">{processedSummary.cancellationsRow.countBid}</TableCell>
+                              <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
+                                <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setIsCancellationsModalOpen(true)} data-testid="manage-btn-cancellations">
+                                  Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })()}
                         {/* Regular summary rows */}
                         {processedSummary.rows.map((row, index) => {
                           const isClickable = row.reason !== "Reconciled";
+                          const isReconciled = row.reason === "Reconciled";
+                          const usd = Math.abs(row.discrepancyUsd);
+                          const severityClass = isReconciled ? "bg-green-500" : usd > 5000 ? "bg-red-500" : usd > 1000 ? "bg-amber-500" : usd > 0 ? "bg-blue-400" : "bg-green-500";
                           return (
                             <TableRow
                               key={`${row.reason}-${row.currency}-${index}`}
-                              className={`h-8 ${isClickable ? "cursor-pointer hover-elevate" : ""}`}
+                              className={`h-9 relative ${isClickable ? "cursor-pointer hover-elevate" : ""} ${isReconciled ? "bg-green-50/40 dark:bg-green-950/10" : ""}`}
                               onClick={() => isClickable && handleReasonClick(row.reason)}
                               data-testid={`summary-row-${row.reason}-${row.currency}`}
                             >
-                              <TableCell className="py-1.5">
-                                <span className={`text-xs ${row.reason === "Reconciled" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                              <TableCell className="py-1.5 pl-4 relative">
+                                <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l ${severityClass}`} />
+                                <span className={`text-xs ${isReconciled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
                                   {row.reason}
                                 </span>
                               </TableCell>
@@ -918,11 +943,48 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                 {formatNumber(row.discrepancyUsd)}
                               </TableCell>
                               <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                              <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
+                                {isClickable && (
+                                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => handleReasonClick(row.reason)} data-testid={`manage-btn-${row.reason}`}>
+                                    Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                                  </Button>
+                                )}
+                              </TableCell>
                             </TableRow>
                           );
                         })}
                       </TableBody>
                     </Table>
+                    {/* Grand Total footer */}
+                    {(() => {
+                      const allRows = [
+                        processedSummary.alreadyReconciledRow,
+                        processedSummary.cancellationsRow,
+                        ...processedSummary.rows,
+                      ].filter(Boolean) as typeof processedSummary.rows;
+                      const totalCount = allRows.reduce((s, r) => s + r.countBid, 0);
+                      const totalLc = allRows.reduce((s, r) => s + r.discrepancyLc, 0);
+                      const totalUsd = allRows.reduce((s, r) => s + r.discrepancyUsd, 0);
+                      return (
+                        <div className="border-t bg-muted/30 px-4 py-2.5 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium text-muted-foreground">Grand Total</span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{totalCount} bookings</Badge>
+                          </div>
+                          <div className="flex items-center gap-5">
+                            <div><span className="text-muted-foreground mr-1.5">LC</span><span className="font-mono font-semibold text-red-600">{formatNumber(totalLc)}</span></div>
+                            <div><span className="text-muted-foreground mr-1.5">USD</span><span className="font-mono font-semibold text-red-600">{formatNumber(totalUsd)}</span></div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* Severity legend */}
+                    <div className="flex items-center gap-3 px-4 py-2 text-[10px] text-muted-foreground border-t">
+                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-red-500 rounded-sm" />&gt; 5,000</div>
+                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-amber-500 rounded-sm" />&gt; 1,000</div>
+                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-blue-400 rounded-sm" />&lt; 1,000</div>
+                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-green-500 rounded-sm" />Reconciled</div>
+                    </div>
                     
                     {/* Secondary Vendor Section */}
                     {secondaryVendorSummary.length > 0 && (
@@ -939,24 +1001,28 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         <Table className="text-sm">
                           <TableHeader>
                             <TableRow className="h-8">
-                              <TableHead className="py-1.5 text-xs">Reason</TableHead>
+                              <TableHead className="py-1.5 text-xs pl-4">Reason</TableHead>
                               <TableHead className="py-1.5 text-xs">Currency</TableHead>
                               <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
                               <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
                               <TableHead className="py-1.5 text-xs text-right">Count</TableHead>
+                              <TableHead className="py-1.5 text-xs text-right pr-4 w-24">Action</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {secondaryVendorSummary.map((row, index) => {
                               const isClickable = row.reason !== "Reconciled";
+                              const usd = Math.abs(row.discrepancyUsd);
+                              const severityClass = usd > 5000 ? "bg-red-500" : usd > 1000 ? "bg-amber-500" : usd > 0 ? "bg-blue-400" : "bg-green-500";
                               return (
                                 <TableRow
                                   key={`sv-${row.reason}-${row.currency}-${index}`}
-                                  className={`h-8 bg-amber-50/50 dark:bg-amber-950/20 ${isClickable ? "cursor-pointer hover-elevate" : ""}`}
+                                  className={`h-9 bg-amber-50/50 dark:bg-amber-950/20 relative ${isClickable ? "cursor-pointer hover-elevate" : ""}`}
                                   onClick={() => isClickable && handleReasonClick(row.reason)}
                                   data-testid={`summary-row-sv-${row.reason}-${row.currency}`}
                                 >
-                                  <TableCell className="py-1.5">
+                                  <TableCell className="py-1.5 pl-4 relative">
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l ${severityClass}`} />
                                     <span className="text-xs text-amber-700 dark:text-amber-400">
                                       {row.reason}
                                     </span>
@@ -969,6 +1035,13 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     {formatNumber(row.discrepancyUsd)}
                                   </TableCell>
                                   <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                                  <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
+                                    {isClickable && (
+                                      <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => handleReasonClick(row.reason)} data-testid={`manage-btn-sv-${row.reason}`}>
+                                        Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                                      </Button>
+                                    )}
+                                  </TableCell>
                                 </TableRow>
                               );
                             })}
