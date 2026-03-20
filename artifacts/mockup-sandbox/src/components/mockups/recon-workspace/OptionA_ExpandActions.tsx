@@ -585,8 +585,6 @@ export function OptionA_ExpandActions() {
                         {allTids.map(t => {
                           const isChecked = takeActionDisputes.has(t.tid);
                           const isPaxOpen = disputePaxExpanded === t.tid;
-                          const paxDiffVal = computePaxDiff(t.tid, t);
-                          const displayDiff = paxDiffVal !== null ? paxDiffVal : Math.abs(t.spNet - t.hoNet);
                           return (
                             <div key={t.tid}>
                               <div className={`grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
@@ -603,24 +601,19 @@ export function OptionA_ExpandActions() {
                                   <span className="text-muted-foreground text-[11px]"> {t.experience}</span>
                                   {t.hasPax && <span className="ml-1.5 text-[9px] font-medium text-violet-600 bg-violet-100 px-1 py-0 rounded">PAX</span>}
                                 </div>
-                                {(() => {
-                                  const tidTapTotal = computePaxTapTotal(t.tid, t);
-                                  return isPaxOpen && tidTapTotal !== null
-                                    ? <div className="font-mono text-right text-violet-600 font-medium" title="TID Total TAP (pax-computed)">{fmt(tidTapTotal)}<span className="text-[9px] ml-0.5">⚡</span></div>
-                                    : <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>;
-                                })()}
+                                <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
                                 <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
-                                {(() => {
-                                  return isPaxOpen && paxDiffVal !== null
-                                    ? <div className="font-mono text-right text-violet-600 font-medium" title="TID Total Dispute (pax-computed)">{fmt(paxDiffVal)}<span className="text-[9px] ml-0.5">⚡</span></div>
-                                    : <div className={`font-mono text-right font-medium ${paxDiffVal !== null ? "text-violet-600" : "text-amber-600"}`}>{fmt(displayDiff)}{paxDiffVal !== null && <span className="text-[9px] ml-0.5">⚡</span>}</div>;
-                                })()}
+                                <div className={`font-mono text-right font-medium text-amber-600`}>{fmt(Math.abs(t.spNet - t.hoNet))}</div>
                               </div>
                               {isPaxOpen && (
                                 <div className="border-t bg-violet-50/30 px-4 py-2 ml-6">
                                   <div className="flex items-center justify-between mb-1.5">
                                     <span className="text-[11px] font-semibold text-violet-700">Pax Dispute — compute dispute amount per pax type</span>
                                     <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { setDisputePaxPrices(prev => { const next = { ...prev }; delete next[t.tid]; return next; }); }}>Reset Defaults</Button>
+                                  </div>
+                                  <div className="flex items-center justify-end gap-4 text-[11px] font-semibold text-violet-700 bg-violet-100/40 rounded px-2 py-1 mb-1.5">
+                                    <span>TID Total TAP: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = (disputePaxPrices[t.tid] || {})[k]; const tap = entry?.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : r.spUnit; return s + tap * r.count; }, 0))}</span></span>
+                                    <span>TID Total Dispute: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = (disputePaxPrices[t.tid] || {})[k]; const disp = entry?.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : r.spUnit - r.hoUnit; return s + disp * r.count; }, 0))}</span></span>
                                   </div>
                                   <div className="border rounded overflow-hidden text-[11px]">
                                     <div className="grid grid-cols-[1.8fr_1.8fr_0.8fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 px-2 py-1 bg-violet-100/50 font-medium text-violet-700">
