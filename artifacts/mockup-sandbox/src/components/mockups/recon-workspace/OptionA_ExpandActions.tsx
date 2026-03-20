@@ -81,7 +81,9 @@ export function OptionA_ExpandActions() {
   const [tidSearch, setTidSearch] = useState("");
   const [showPax, setShowPax] = useState<string | null>(null);
   const [showSpConfirm, setShowSpConfirm] = useState<string | null>(null);
+  const [showHoConfirm, setShowHoConfirm] = useState<string | null>(null);
   const [disputeChecked, setDisputeChecked] = useState(false);
+  const [issueChecked, setIssueChecked] = useState(false);
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
   const [selectedTids, setSelectedTids] = useState<Set<string>>(new Set());
   const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
@@ -609,7 +611,7 @@ export function OptionA_ExpandActions() {
               return (
                 <div key={tid.tid} id={`a-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`}>
                   <div className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
-                    onClick={() => { setExpandedTid(isExpanded ? null : tid.tid); setShowPax(null); setShowSpConfirm(null); setDisputeChecked(false); setDisputeEditing(null); }}>
+                    onClick={() => { setExpandedTid(isExpanded ? null : tid.tid); setShowPax(null); setShowSpConfirm(null); setShowHoConfirm(null); setDisputeChecked(false); setIssueChecked(false); setDisputeEditing(null); }}>
                     <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
                       {!isResolved && <Checkbox checked={isSelected} className="h-3.5 w-3.5" />}
                     </div>
@@ -661,12 +663,12 @@ export function OptionA_ExpandActions() {
                         )}
                       </div>
 
-                      {!showPax && !showSpConfirm && (
+                      {!showPax && !showSpConfirm && !showHoConfirm && (
                         <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10">
-                          <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setShowSpConfirm(tid.tid); setDisputeChecked(false); }}>
+                          <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { setShowSpConfirm(tid.tid); setShowHoConfirm(null); setDisputeChecked(false); }}>
                             <TrendingUp className="h-3.5 w-3.5" /> Set SP Net
                           </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "ho" })); flash(`${tid.tid} → HO Net applied`); resolve(tid.tid); setExpandedTid(null); }}>
+                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => { setShowHoConfirm(tid.tid); setShowSpConfirm(null); setIssueChecked(false); }}>
                             <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
                           </Button>
                           {tid.hasPax && (
@@ -674,13 +676,6 @@ export function OptionA_ExpandActions() {
                               <Calculator className="h-3.5 w-3.5" /> Pax Pricing
                             </Button>
                           )}
-                          <div className="flex-1" />
-                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => flash(`Dispute raised for ${tid.tid}`)}>
-                            <Gavel className="h-3.5 w-3.5" /> Dispute
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => flash(`Issue logged for ${tid.tid}`)}>
-                            <FileWarning className="h-3.5 w-3.5" /> Issue
-                          </Button>
                         </div>
                       )}
 
@@ -694,16 +689,74 @@ export function OptionA_ExpandActions() {
                             <div className="rounded border p-2 bg-white"><span className="text-muted-foreground">HO Net</span><div className="font-mono font-semibold text-green-700">{fmt(tid.hoNet)}</div></div>
                             <div className="rounded border p-2 bg-white"><span className="text-muted-foreground">Difference</span><div className="font-mono font-semibold text-amber-600">+{fmt(tid.spNet - tid.hoNet)}</div></div>
                           </div>
-                          <div className={`rounded border p-3 flex items-start gap-3 ${disputeChecked ? "border-amber-400 bg-amber-50" : "bg-white"}`}>
-                            <AlertTriangle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${disputeChecked ? "text-amber-600" : "text-muted-foreground"}`} />
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between"><span className="text-xs font-medium">Raise Dispute</span><Switch checked={disputeChecked} onCheckedChange={setDisputeChecked} /></div>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">Track <span className="font-mono font-medium text-amber-600">{fmt(tid.spNet - tid.hoNet)}</span> as dispute</p>
+
+                          <div className={`rounded-md border-2 overflow-hidden transition-colors ${disputeChecked ? "border-amber-500 bg-amber-50/50" : "border-border bg-white"}`}>
+                            <div className="px-3 py-3">
+                              <div className="flex items-start gap-3">
+                                <div className={`flex items-center justify-center h-8 w-8 rounded-md flex-shrink-0 ${disputeChecked ? "bg-amber-100" : "bg-muted"}`}>
+                                  <AlertTriangle className={`h-4 w-4 ${disputeChecked ? "text-amber-600" : "text-muted-foreground"}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-3 mb-0.5">
+                                    <div className="text-xs font-semibold">Raise Dispute</div>
+                                    <Switch checked={disputeChecked} onCheckedChange={setDisputeChecked} />
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground font-medium mb-0.5">This is SP error and refund to be claimed</div>
+                                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                    Paying SP Net now. The difference of{" "}
+                                    <span className="font-mono font-semibold text-amber-600">{fmt(Math.abs(tid.spNet - tid.hoNet))}</span>
+                                    {" "}will be tracked as a dispute for future settlement — either adjusted against a future invoice or absorbed.
+                                  </p>
+                                </div>
+                              </div>
                             </div>
                           </div>
+
                           <div className="flex items-center justify-between">
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowSpConfirm(null)}>Cancel</Button>
-                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "sp" })); flash(`${tid.tid} → SP Net applied`); resolve(tid.tid); setExpandedTid(null); setShowSpConfirm(null); }}>
+                            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "sp" })); flash(`${tid.tid} → SP Net applied${disputeChecked ? " + dispute raised" : ""}`); resolve(tid.tid); setExpandedTid(null); setShowSpConfirm(null); }}>
+                              <Check className="h-3 w-3" /> Confirm & Apply
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {showHoConfirm === tid.tid && (
+                        <div className="rounded-md border bg-green-50/50 p-3 space-y-3">
+                          <div className="flex items-center gap-2 text-sm font-medium text-green-800">
+                            <TrendingDown className="h-4 w-4" /> Confirm: Set to HO Net
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="rounded border p-2 bg-white"><span className="text-muted-foreground">HO Net</span><div className="font-mono font-semibold text-green-700">{fmt(tid.hoNet)}</div></div>
+                            <div className="rounded border p-2 bg-white"><span className="text-muted-foreground">SP Net</span><div className="font-mono font-semibold text-blue-700">{fmt(tid.spNet)}</div></div>
+                            <div className="rounded border p-2 bg-white"><span className="text-muted-foreground">Difference</span><div className="font-mono font-semibold text-amber-600">{fmt(Math.abs(tid.spNet - tid.hoNet))}</div></div>
+                          </div>
+
+                          <div className={`rounded-md border-2 overflow-hidden transition-colors ${issueChecked ? "border-orange-500 bg-orange-50/50" : "border-border bg-white"}`}>
+                            <div className="px-3 py-3">
+                              <div className="flex items-start gap-3">
+                                <div className={`flex items-center justify-center h-8 w-8 rounded-md flex-shrink-0 ${issueChecked ? "bg-orange-100" : "bg-muted"}`}>
+                                  <FileWarning className={`h-4 w-4 ${issueChecked ? "text-orange-600" : "text-muted-foreground"}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-3 mb-0.5">
+                                    <div className="text-xs font-semibold">Raise Issue</div>
+                                    <Checkbox checked={issueChecked} onCheckedChange={(checked) => setIssueChecked(!!checked)} className="h-4 w-4" />
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground font-medium mb-0.5">This is HO error</div>
+                                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                    To be checked with internal teams at Headout. The discrepancy of{" "}
+                                    <span className="font-mono font-semibold text-orange-600">{fmt(Math.abs(tid.spNet - tid.hoNet))}</span>
+                                    {" "}will be logged to the Issue Tracker for investigation and resolution.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowHoConfirm(null)}>Cancel</Button>
+                            <Button size="sm" className="h-7 text-xs gap-1 bg-green-700 hover:bg-green-800 text-white" onClick={() => { setTidActions(p => ({ ...p, [tid.tid]: "ho" })); flash(`${tid.tid} → HO Net applied${issueChecked ? " + issue logged" : ""}`); resolve(tid.tid); setExpandedTid(null); setShowHoConfirm(null); }}>
                               <Check className="h-3 w-3" /> Confirm & Apply
                             </Button>
                           </div>
@@ -744,7 +797,7 @@ export function OptionA_ExpandActions() {
                         </div>
                       )}
 
-                      {!showPax && !showSpConfirm && renderBookingTable(tid)}
+                      {!showPax && !showSpConfirm && !showHoConfirm && renderBookingTable(tid)}
                     </div>
                   )}
                 </div>
