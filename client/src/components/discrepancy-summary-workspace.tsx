@@ -152,7 +152,7 @@ export function DiscrepancySummaryWorkspace({
       let hasPax = false;
       bookings.forEach(b => {
         if (b.fulfillmentMethod) fmSet.add(b.fulfillmentMethod);
-        if (b.paxType || b.paxCount) hasPax = true;
+        if (b.paxBreakdown && b.paxBreakdown.length > 0) hasPax = true;
       });
       return {
         tid,
@@ -180,10 +180,18 @@ export function DiscrepancySummaryWorkspace({
   }, [tidGroups, reason]);
 
   const priceOverrideMutation = useMutation({
-    mutationFn: async ({ bookingIds, selection }: { bookingIds: string[]; selection: "ho" | "sp" }) => {
+    mutationFn: async ({ bookingIds, selection, customPrices }: { bookingIds: string[]; selection: "ho" | "sp"; customPrices?: Record<string, number> }) => {
       if (!runId) throw new Error("No active run");
-      const overrides: Record<string, string> = {};
-      bookingIds.forEach(id => { overrides[id] = selection; });
+      const overrides: Record<string, { totalAmountPayable: number; selection: "ho" | "sp" }> = {};
+      bookingIds.forEach(id => {
+        if (customPrices && customPrices[id] !== undefined) {
+          overrides[id] = { totalAmountPayable: customPrices[id], selection };
+        } else {
+          const row = allRows.find(r => r.bookingId === id);
+          const amt = selection === "ho" ? (row?.hoNet || 0) : (row?.spNetInHo || 0);
+          overrides[id] = { totalAmountPayable: amt, selection };
+        }
+      });
       await apiRequest("POST", "/api/price-overrides", { runId, overrides });
     },
     onSuccess: () => {
@@ -371,11 +379,30 @@ export function DiscrepancySummaryWorkspace({
     });
   }, [tidGroups, disputeMutation, toast]);
 
+  const clearDisputesMutation = useMutation({
+    mutationFn: async ({ bookingIds }: { bookingIds: string[] }) => {
+      if (!runId) throw new Error("No active run");
+      await apiRequest("DELETE", `/api/disputes/${runId}/bulk`, { bookingIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/disputes", runId] });
+    },
+  });
+
   const handleClearAllDisputes = useCallback(() => {
-    setDisputedBookings(new Set());
-    flash("All disputes cleared");
-    setDisputeOpen(false);
-  }, []);
+    const bookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
+    clearDisputesMutation.mutate({ bookingIds }, {
+      onSuccess: () => {
+        setDisputedBookings(new Set());
+        flash("All disputes cleared");
+        setDisputeOpen(false);
+        toast({ title: "Disputes cleared", description: `${bookingIds.length} disputes removed` });
+      },
+      onError: (err) => {
+        toast({ title: "Failed to clear disputes", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [tidGroups, runId, clearDisputesMutation, toast]);
 
   const openDiscrepancyAction = (action: string) => { setBulkScope("all"); setBulkConfirm(action); };
   const openSelectionAction = (action: string) => { setBulkScope("selected"); setBulkConfirm(action); };
@@ -843,31 +870,34 @@ export function DiscrepancySummaryWorkspace({
                     <thead>
                       <tr className="h-7 bg-muted/30 border-b">
                         <th className="text-left font-medium text-muted-foreground px-2 py-1">Booking ID</th>
-                        <th className="text-left font-medium text-muted-foreground px-2 py-1">Pax Type</th>
-                        <th className="text-right font-medium text-muted-foreground px-2 py-1">Count</th>
+                        <th className="text-left font-medium text-muted-foreground px-2 py-1">Pax Types</th>
                         <th className="text-right font-medium text-muted-foreground px-2 py-1 w-24">SP Net</th>
                         <th className="text-right font-medium text-muted-foreground px-2 py-1 w-28">Final Price</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {paxTid.bookings.map(b => (
-                        <tr key={b.bookingId} className="h-8 border-b last:border-0">
-                          <td className="px-2 py-1 font-mono text-primary font-medium">{b.bookingId}</td>
-                          <td className="px-2 py-1">{b.paxType || "—"}</td>
-                          <td className="text-right px-2 py-1">{b.paxCount || "—"}</td>
-                          <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(b.spNetInHo || 0)}</td>
-                          <td className="text-right px-2 py-1">
-                            <Input
-                              className="h-6 w-24 text-xs text-right font-mono ml-auto"
-                              type="number"
-                              placeholder={String(b.spNetInHo || 0)}
-                              value={paxPrices[b.bookingId] || ""}
-                              onChange={e => setPaxPrices(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                              data-testid={`pax-price-${b.bookingId}`}
-                            />
-                          </td>
-                        </tr>
-                      ))}
+                      {paxTid.bookings.map(b => {
+                        const paxSummary = b.paxBreakdown && b.paxBreakdown.length > 0
+                          ? b.paxBreakdown.map(p => `${p.paxType}×${p.count}`).join(", ")
+                          : "—";
+                        return (
+                          <tr key={b.bookingId} className="h-8 border-b last:border-0">
+                            <td className="px-2 py-1 font-mono text-primary font-medium">{b.bookingId}</td>
+                            <td className="px-2 py-1 text-muted-foreground">{paxSummary}</td>
+                            <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(b.spNetInHo || 0)}</td>
+                            <td className="text-right px-2 py-1">
+                              <Input
+                                className="h-6 w-24 text-xs text-right font-mono ml-auto"
+                                type="number"
+                                placeholder={String(b.spNetInHo || 0)}
+                                value={paxPrices[b.bookingId] || ""}
+                                onChange={e => setPaxPrices(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
+                                data-testid={`pax-price-${b.bookingId}`}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -878,7 +908,9 @@ export function DiscrepancySummaryWorkspace({
                     <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
                       const bookingIds = Object.keys(paxPrices).filter(k => paxPrices[k]);
                       if (bookingIds.length === 0) { flash("No prices set"); return; }
-                      priceOverrideMutation.mutate({ bookingIds, selection: "sp" }, {
+                      const customPricesNum: Record<string, number> = {};
+                      bookingIds.forEach(id => { customPricesNum[id] = parseFloat(paxPrices[id]) || 0; });
+                      priceOverrideMutation.mutate({ bookingIds, selection: "sp", customPrices: customPricesNum }, {
                         onSuccess: () => {
                           resolve(paxTid.tid);
                           flash(`Pax pricing applied for ${paxTid.tid}`);
@@ -995,8 +1027,8 @@ export function DiscrepancySummaryWorkspace({
                       Dispute All
                     </Button>
                     {disputedBookings.size > 0 && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 border-red-200" onClick={handleClearAllDisputes} data-testid="clear-disputes-btn">
-                        <XIcon className="h-3 w-3" /> Clear All
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 border-red-200" onClick={handleClearAllDisputes} disabled={clearDisputesMutation.isPending} data-testid="clear-disputes-btn">
+                        {clearDisputesMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <XIcon className="h-3 w-3" />} Clear All
                       </Button>
                     )}
                   </div>
