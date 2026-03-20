@@ -1139,7 +1139,7 @@ export function DiscrepancySummaryWorkspace({
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredTids.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
                     </div>
                     <div />
-                    <div className="text-right font-mono text-red-600 dark:text-red-400 text-xs">{fmt(filteredTids.reduce((s, t) => s + Math.abs(t.discLc), 0))}</div>
+                    <div className="text-right font-mono text-muted-foreground text-xs">{fmt(filteredTids.reduce((s, t) => s + Math.abs(t.discLc), 0))}</div>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
