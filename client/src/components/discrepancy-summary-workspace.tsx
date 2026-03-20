@@ -610,7 +610,7 @@ export function DiscrepancySummaryWorkspace({
             </div>
 
             {!bulkConfirm && !showTakeAction && (
-              <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-4 py-3 flex items-center gap-4">
+              <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-4 py-3 flex items-center gap-4 flex-wrap">
                 <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tidGroups.length} TIDs:</span>
                 <div className="h-4 w-px bg-border" />
                 <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); setDisputePaxExpanded(null); setDisputePaxPrices({}); }} data-testid="take-action-btn">
