@@ -486,7 +486,7 @@ export function OptionA_ExpandActions() {
                 const k = `${r.paxType}__${r.dateRange}`;
                 const val = prices[k];
                 if (val && val !== "") {
-                  total += Math.abs(parseFloat(val) - r.hoUnit) * r.count;
+                  total += (parseFloat(val) - r.hoUnit) * r.count;
                 } else {
                   allFilled = false;
                 }
@@ -629,7 +629,7 @@ export function OptionA_ExpandActions() {
                                           <div className="text-right font-mono text-blue-600">{fmt(r.spUnit)}</div>
                                           <div className="text-right font-mono text-green-600">{fmt(r.hoUnit)}</div>
                                           <div className="text-right">
-                                            <input className="h-5 w-16 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400" value={tidPrices[k] || ""} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: val } })); }} placeholder="—" />
+                                            <input type="number" step="any" className="h-5 w-16 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400" value={tidPrices[k] || ""} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: val } })); } }} placeholder="—" />
                                           </div>
                                         </div>
                                       );
