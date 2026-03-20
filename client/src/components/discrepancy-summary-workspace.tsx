@@ -821,6 +821,28 @@ export function DiscrepancySummaryWorkspace({
                                             </div>
                                           );
                                         })}
+                                        {(() => {
+                                          const tidTotalTap = paxRows.reduce((s, [k, r]) => {
+                                            const entry = (disputePaxPrices[t.tid] || {})[k] || {};
+                                            const tap = entry.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : r.spUnit;
+                                            return s + tap * r.count;
+                                          }, 0);
+                                          const tidTotalDisp = paxRows.reduce((s, [k, r]) => {
+                                            const entry = (disputePaxPrices[t.tid] || {})[k] || {};
+                                            const disp = entry.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : (r.spUnit - r.hoUnit);
+                                            return s + Math.abs(disp) * r.count;
+                                          }, 0);
+                                          return (
+                                            <div className="grid grid-cols-[2fr_1fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 px-2 py-1.5 border-t bg-violet-100/60 dark:bg-violet-900/40 font-semibold text-[11px]">
+                                              <div className="text-violet-700 dark:text-violet-300">TID Total</div>
+                                              <div />
+                                              <div />
+                                              <div />
+                                              <div className="text-right font-mono text-violet-700 dark:text-violet-300" data-testid={`pax-total-tap-${t.tid}`}>{fmt(tidTotalTap)}</div>
+                                              <div className="text-right font-mono text-violet-700 dark:text-violet-300" data-testid={`pax-total-disp-${t.tid}`}>{fmt(tidTotalDisp)}</div>
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     </div>
                                   );
