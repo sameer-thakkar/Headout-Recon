@@ -17,7 +17,7 @@ interface TidData {
   bidCount: number; fm: string; experience: string; hasPax: boolean;
   hoTakeRate: number; actualTakeRate: number; discPercent: string; soldAtLoss: boolean; lossUsd: number;
   startDate: string; endDate: string; bidCountWithDisc: number; bidCountInDuration: number;
-  isSecondaryVendor?: boolean;
+  isSecondaryVendor?: boolean; driTeam: string;
 }
 
 interface BookingData {
@@ -29,10 +29,10 @@ interface BookingData {
 }
 
 const TIDS: TidData[] = [
-  { tid: "TID-90234", spNet: 5_200, hoNet: 4_850, discLc: 350, discUsd: 379.40, bidCount: 6, fm: "Freesale", experience: "Sagrada Familia Guided Tour", hasPax: true, hoTakeRate: 18.5, actualTakeRate: 12.3, discPercent: "-6.2%", soldAtLoss: false, lossUsd: 0, startDate: "01/01/2026", endDate: "31/01/2026", bidCountWithDisc: 5, bidCountInDuration: 6 },
-  { tid: "TID-90456", spNet: 18_400, hoNet: 12_300, discLc: 6_100, discUsd: 6_612.40, bidCount: 12, fm: "Freesale", experience: "Park Güell Skip-the-Line", hasPax: true, hoTakeRate: 20.0, actualTakeRate: -3.2, discPercent: "-23.2%", soldAtLoss: true, lossUsd: 2_450, startDate: "05/01/2026", endDate: "28/01/2026", bidCountWithDisc: 12, bidCountInDuration: 12 },
-  { tid: "TID-90789", spNet: 8_900, hoNet: 3_900, discLc: 5_000.75, discUsd: 5_420.81, bidCount: 7, fm: "Manual", experience: "Casa Batlló Night Experience", hasPax: false, hoTakeRate: 15.0, actualTakeRate: 10.8, discPercent: "-4.2%", soldAtLoss: false, lossUsd: 0, startDate: "10/01/2026", endDate: "25/01/2026", bidCountWithDisc: 6, bidCountInDuration: 7 },
-  { tid: "TID-91012", spNet: 3_100, hoNet: 2_100, discLc: 1_000, discUsd: 1_084, bidCount: 3, fm: "Freesale", experience: "Montserrat Day Trip", hasPax: false, hoTakeRate: 22.0, actualTakeRate: 18.5, discPercent: "-3.5%", soldAtLoss: false, lossUsd: 0, startDate: "15/01/2026", endDate: "20/01/2026", bidCountWithDisc: 3, bidCountInDuration: 3, isSecondaryVendor: true },
+  { tid: "TID-90234", spNet: 5_200, hoNet: 4_850, discLc: 350, discUsd: 379.40, bidCount: 6, fm: "Freesale", experience: "Sagrada Familia Guided Tour", hasPax: true, hoTakeRate: 18.5, actualTakeRate: 12.3, discPercent: "-6.2%", soldAtLoss: false, lossUsd: 0, startDate: "01/01/2026", endDate: "31/01/2026", bidCountWithDisc: 5, bidCountInDuration: 6, driTeam: "Finance" },
+  { tid: "TID-90456", spNet: 18_400, hoNet: 12_300, discLc: 6_100, discUsd: 6_612.40, bidCount: 12, fm: "Freesale", experience: "Park Güell Skip-the-Line", hasPax: true, hoTakeRate: 20.0, actualTakeRate: -3.2, discPercent: "-23.2%", soldAtLoss: true, lossUsd: 2_450, startDate: "05/01/2026", endDate: "28/01/2026", bidCountWithDisc: 12, bidCountInDuration: 12, driTeam: "Finance, Reservation Ops" },
+  { tid: "TID-90789", spNet: 8_900, hoNet: 3_900, discLc: 5_000.75, discUsd: 5_420.81, bidCount: 7, fm: "Manual", experience: "Casa Batlló Night Experience", hasPax: false, hoTakeRate: 15.0, actualTakeRate: 10.8, discPercent: "-4.2%", soldAtLoss: false, lossUsd: 0, startDate: "10/01/2026", endDate: "25/01/2026", bidCountWithDisc: 6, bidCountInDuration: 7, driTeam: "Supply Ops" },
+  { tid: "TID-91012", spNet: 3_100, hoNet: 2_100, discLc: 1_000, discUsd: 1_084, bidCount: 3, fm: "Freesale", experience: "Montserrat Day Trip", hasPax: false, hoTakeRate: 22.0, actualTakeRate: 18.5, discPercent: "-3.5%", soldAtLoss: false, lossUsd: 0, startDate: "15/01/2026", endDate: "20/01/2026", bidCountWithDisc: 3, bidCountInDuration: 3, isSecondaryVendor: true, driTeam: "Finance" },
 ];
 
 const MOCK_BOOKINGS: Record<string, BookingData[]> = {
@@ -601,31 +601,40 @@ export function OptionA_ExpandActions() {
                           {takeActionIssues.size === allTids.length ? "None" : "All"}
                         </Button>
                       </div>
-                      <div className="grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
+                      <div className="grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
                         <div className="w-5" />
                         <div>TID / Experience</div>
                         <div className="text-right text-blue-600">SP Net</div>
                         <div className="text-right text-green-600">HO Net</div>
                         <div className="text-right text-amber-600">Difference</div>
+                        <div className="text-right text-violet-600">DRI Team</div>
                       </div>
                       {allTids.map(t => {
                         const isChecked = takeActionIssues.has(t.tid);
                         return (
-                          <div key={t.tid} className={`grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)}>
+                          <div key={t.tid} className={`grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)}>
                             <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-2" />
                             <div className="truncate"><span className="font-mono font-medium text-primary">{t.tid}</span> <span className="text-muted-foreground text-[11px]">{t.experience}</span></div>
                             <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
                             <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
                             <div className="font-mono text-right text-amber-600 font-medium">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
+                            <div className="text-right text-violet-600 text-[11px] truncate pl-1">{t.driTeam}</div>
                           </div>
                         );
                       })}
-                      {issueCount > 0 && (
-                        <div className="flex items-center justify-between px-3 py-1.5 border-t bg-orange-50/50 text-xs font-semibold">
-                          <span className="text-orange-800">{issueCount} TID{issueCount > 1 ? "s" : ""} selected for issue</span>
-                          <span className="font-mono text-orange-700">Difference: {fmt(allTids.filter(t => takeActionIssues.has(t.tid)).reduce((s, t) => s + Math.abs(t.spNet - t.hoNet), 0))}</span>
-                        </div>
-                      )}
+                      {issueCount > 0 && (() => {
+                        const selectedIssue = allTids.filter(t => takeActionIssues.has(t.tid));
+                        const teamCounts: Record<string, number> = {};
+                        selectedIssue.forEach(t => t.driTeam.split(", ").forEach(team => { teamCounts[team] = (teamCounts[team] || 0) + 1; }));
+                        const teamSummary = Object.entries(teamCounts).map(([team, count]) => `${team} (${count})`).join(", ");
+                        return (
+                          <div className="flex items-center justify-between px-3 py-1.5 border-t bg-orange-50/50 text-xs font-semibold flex-wrap gap-1">
+                            <span className="text-orange-800">{issueCount} TID{issueCount > 1 ? "s" : ""} selected</span>
+                            <span className="text-violet-600 text-[11px] font-medium">{teamSummary}</span>
+                            <span className="font-mono text-orange-700">Difference: {fmt(selectedIssue.reduce((s, t) => s + Math.abs(t.spNet - t.hoNet), 0))}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
