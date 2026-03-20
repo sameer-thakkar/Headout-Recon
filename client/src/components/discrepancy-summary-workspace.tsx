@@ -1187,8 +1187,8 @@ export function DiscrepancySummaryWorkspace({
                         </div>
                         <div className="text-right px-3 w-28 font-mono text-sm">{fmt(tid.spNet)}</div>
                         <div className="text-right px-3 w-28 font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right px-3 w-28 font-mono text-sm text-violet-600 font-medium">{fmt(tid.spNet)}</div>
-                        <div className="text-right px-3 w-28 font-mono text-sm text-violet-600 font-medium">{fmt(Math.abs(tid.spNet - tid.hoNet))}</div>
+                        <div className="text-right px-3 w-28 font-mono text-sm text-violet-600 font-medium">{fmt(showTakeAction && takeActionPrice === "ho" ? tid.hoNet : tid.spNet)}</div>
+                        <div className="text-right px-3 w-28 font-mono text-sm text-violet-600 font-medium">{fmt(showTakeAction && takeActionPrice === "ho" ? 0 : Math.abs(tid.spNet - tid.hoNet))}</div>
                         <div className="text-right px-3 w-28 leading-tight">
                           <div className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</div>
                           <div className="text-[10px] text-muted-foreground">{pct}%</div>
