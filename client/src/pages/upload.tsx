@@ -1072,6 +1072,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         unmappedRows={unmappedRows}
         analysisRows={discrepancyData?.analysisRows || []}
         isLoadingAnalysis={isDiscrepancyLoading}
+        billingEntityId={spDetails?.beId || ""}
+        billingEntityName={spDetails?.billingEntityName || ""}
+        currency={spDetails?.currency || "USD"}
       />
 
       {/* Already Reconciled - First Level Modal (Classification Breakdown) */}

@@ -1,17 +1,24 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useCallback } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Check, Gavel, FileWarning, AlertTriangle, X as XIcon,
-  BarChart3, PanelTopClose, PanelTop, CheckCheck, Calculator, Loader2
+  BarChart3, PanelTopClose, PanelTop, CheckCheck, Calculator, Loader2,
+  Sparkles
 } from "lucide-react";
 import type { DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
+import { driTeams } from "@shared/schema";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -40,6 +47,8 @@ interface TidGroup {
   discLc: number;
   discUsd: number;
   bidCount: number;
+  fulfillmentMethods: string[];
+  hasPax: boolean;
 }
 
 interface DiscrepancySummaryWorkspaceProps {
@@ -52,6 +61,32 @@ interface DiscrepancySummaryWorkspaceProps {
   unmappedRows: PrimaryRow[];
   analysisRows: DiscrepancyAnalysisRow[];
   isLoadingAnalysis: boolean;
+  billingEntityId?: string;
+  billingEntityName?: string;
+  currency?: string;
+}
+
+function analyzeTakeRateInsight(bookings: PrimaryRow[]): string | null {
+  const withHsp = bookings.filter(b => b.headoutSellingPrice && b.headoutSellingPrice > 0);
+  if (withHsp.length < 2) return null;
+  const rates = withHsp.map(b => {
+    const hsp = b.headoutSellingPrice!;
+    const hoTake = ((hsp - (b.hoNet || 0)) / hsp) * 100;
+    const actualTake = ((hsp - (b.spNetInHo || 0)) / hsp) * 100;
+    return { hoTake, actualTake, gap: hoTake - actualTake };
+  });
+  const avgGap = rates.reduce((s, r) => s + r.gap, 0) / rates.length;
+  if (Math.abs(avgGap) < 0.5) return null;
+  const avgHo = rates.reduce((s, r) => s + r.hoTake, 0) / rates.length;
+  const avgActual = rates.reduce((s, r) => s + r.actualTake, 0) / rates.length;
+  const lossCount = rates.filter(r => r.actualTake < 0).length;
+  if (lossCount > 0) {
+    return `Margin erosion: HO expected ${avgHo.toFixed(1)}% but actual is ${avgActual.toFixed(1)}%. ${lossCount}/${rates.length} bookings sold at loss.`;
+  }
+  if (avgGap > 0) {
+    return `Take rate gap: HO expected ${avgHo.toFixed(1)}% vs actual ${avgActual.toFixed(1)}% (${Math.abs(avgGap).toFixed(1)}pp shortfall).`;
+  }
+  return `SP charging below agreed rate: actual ${avgActual.toFixed(1)}% vs expected ${avgHo.toFixed(1)}%.`;
 }
 
 export function DiscrepancySummaryWorkspace({
@@ -64,7 +99,11 @@ export function DiscrepancySummaryWorkspace({
   unmappedRows,
   analysisRows,
   isLoadingAnalysis,
+  billingEntityId,
+  billingEntityName,
+  currency,
 }: DiscrepancySummaryWorkspaceProps) {
+  const { toast } = useToast();
   const [analysisOpen, setAnalysisOpen] = useState(true);
   const [expandedTid, setExpandedTid] = useState<string | null>(null);
   const [resolvedTids, setResolvedTids] = useState<Set<string>>(new Set());
@@ -74,6 +113,16 @@ export function DiscrepancySummaryWorkspace({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState<string | null>(null);
   const [bulkScope, setBulkScope] = useState<"all" | "selected">("all");
+
+  const [issueOpen, setIssueOpen] = useState(false);
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [issueDescription, setIssueDescription] = useState("");
+  const [issuePriority, setIssuePriority] = useState<string>("medium");
+  const [issueDriTeam, setIssueDriTeam] = useState<string>("");
+  const [disputedBookings, setDisputedBookings] = useState<Set<string>>(new Set());
+  const [paxOpen, setPaxOpen] = useState(false);
+  const [paxTid, setPaxTid] = useState<TidGroup | null>(null);
+  const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -99,6 +148,12 @@ export function DiscrepancySummaryWorkspace({
     return Array.from(tidMap.entries()).map(([tid, bookings]) => {
       const spNet = bookings.reduce((s, b) => s + (b.spNetInHo || 0), 0);
       const hoNet = bookings.reduce((s, b) => s + (b.hoNet || 0), 0);
+      const fmSet = new Set<string>();
+      let hasPax = false;
+      bookings.forEach(b => {
+        if (b.fulfillmentMethod) fmSet.add(b.fulfillmentMethod);
+        if (b.paxType || b.paxCount) hasPax = true;
+      });
       return {
         tid,
         bookings,
@@ -107,9 +162,78 @@ export function DiscrepancySummaryWorkspace({
         discLc: Math.round((hoNet - spNet) * 100) / 100,
         discUsd: 0,
         bidCount: bookings.length,
+        fulfillmentMethods: Array.from(fmSet),
+        hasPax,
       };
     }).sort((a, b) => Math.abs(b.discLc) - Math.abs(a.discLc));
   }, [allRows, reason]);
+
+  const detectedDriTeam = useMemo(() => {
+    const match = allRows.find(r => r.reason === reason && r.driTeam);
+    return match?.driTeam || "Tech";
+  }, [allRows, reason]);
+
+  const predictiveInsight = useMemo(() => {
+    if (!reason || tidGroups.length === 0) return null;
+    const topTid = tidGroups[0];
+    return analyzeTakeRateInsight(topTid.bookings);
+  }, [tidGroups, reason]);
+
+  const priceOverrideMutation = useMutation({
+    mutationFn: async ({ bookingIds, selection }: { bookingIds: string[]; selection: "ho" | "sp" }) => {
+      if (!runId) throw new Error("No active run");
+      const overrides: Record<string, string> = {};
+      bookingIds.forEach(id => { overrides[id] = selection; });
+      await apiRequest("POST", "/api/price-overrides", { runId, overrides });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", runId] });
+    },
+  });
+
+  const disputeMutation = useMutation({
+    mutationFn: async ({ bookingIds }: { bookingIds: string[] }) => {
+      if (!runId) throw new Error("No active run");
+      const disputes = bookingIds.map(bookingId => {
+        const row = allRows.find(r => r.bookingId === bookingId);
+        return {
+          bookingId,
+          ticketId: row?.ticketId || "",
+          tid: row?.tid || bookingId,
+          disputeAmount: Math.abs((row?.spNetInHo || 0) - (row?.hoNet || 0)),
+          reconciledNet: row?.spNetInHo || 0,
+        };
+      });
+      await apiRequest("POST", `/api/disputes/${runId}`, { disputes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/disputes", runId] });
+    },
+  });
+
+  const issueMutation = useMutation({
+    mutationFn: async ({ bookingIds, description, priority, driTeam }: { bookingIds: string[]; description: string; priority: string; driTeam: string }) => {
+      if (!runId) throw new Error("No active run");
+      const totalDiscLc = tidGroups.reduce((s, t) => s + Math.abs(t.discLc), 0);
+      await apiRequest("POST", "/api/issues", {
+        runId,
+        billingEntityId: billingEntityId || "",
+        billingEntityName: billingEntityName || "",
+        currency: currency || "USD",
+        discrepancyLocal: totalDiscLc,
+        discrepancyUsd: totalDiscLc,
+        reason: reason || "",
+        driTeam,
+        bookingIds,
+        errorBucket: reason || "",
+        rca: description || "",
+        issueStatus: priority === "high" ? "urgent" : priority === "low" ? "low-priority" : "open",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/issues", runId] });
+    },
+  });
 
   const flash = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(null), 2500); };
   const resolve = (tid: string) => setResolvedTids(prev => new Set(prev).add(tid));
@@ -141,26 +265,128 @@ export function DiscrepancySummaryWorkspace({
 
   const getBulkTids = () => bulkScope === "all" ? tidGroups.map(t => t.tid) : Array.from(selectedTids);
   const getBulkTidData = () => bulkScope === "all" ? tidGroups : tidGroups.filter(t => selectedTids.has(t.tid));
-
-  const handleBulkAction = (action: string) => {
+  const getBulkBookingIds = () => {
     const tids = getBulkTids();
+    const tidSet = new Set(tids);
+    return tidGroups.filter(t => tidSet.has(t.tid)).flatMap(t => t.bookings.map(b => b.bookingId));
+  };
+
+  const handleBulkAction = useCallback((action: string) => {
+    const tids = getBulkTids();
+    const bookingIds = getBulkBookingIds();
     if (action === "ho" || action === "sp") {
-      resolveMultiple(tids);
-      flash(`${tids.length} TIDs → ${action === "sp" ? "SP" : "HO"} Net applied`);
+      priceOverrideMutation.mutate({ bookingIds, selection: action }, {
+        onSuccess: () => {
+          resolveMultiple(tids);
+          flash(`${tids.length} TIDs → ${action === "sp" ? "SP" : "HO"} Net applied`);
+          toast({ title: "Price overrides saved", description: `Applied ${action.toUpperCase()} Net to ${bookingIds.length} bookings` });
+        },
+        onError: (err) => {
+          toast({ title: "Failed to apply", description: String(err), variant: "destructive" });
+        },
+      });
     } else if (action === "dispute") {
-      flash(`Dispute raised for ${tids.length} TIDs`);
+      disputeMutation.mutate({ bookingIds }, {
+        onSuccess: () => {
+          setDisputedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+          flash(`Dispute raised for ${tids.length} TIDs (${bookingIds.length} bookings)`);
+          toast({ title: "Disputes created", description: `${bookingIds.length} dispute records created` });
+        },
+        onError: (err) => {
+          toast({ title: "Dispute creation failed", description: String(err), variant: "destructive" });
+        },
+      });
     } else if (action === "issue") {
-      flash(`Issue logged for ${tids.length} TIDs`);
+      setIssueOpen(true);
     }
     setSelectedTids(new Set());
     setBulkConfirm(null);
-  };
+  }, [tidGroups, selectedTids, bulkScope, priceOverrideMutation, disputeMutation, toast]);
+
+  const handleTidAction = useCallback((tid: TidGroup, action: "sp" | "ho") => {
+    const bookingIds = tid.bookings.map(b => b.bookingId);
+    priceOverrideMutation.mutate({ bookingIds, selection: action }, {
+      onSuccess: () => {
+        resolve(tid.tid);
+        setExpandedTid(null);
+        flash(`${tid.tid} → ${action === "sp" ? "SP" : "HO"} Net applied`);
+      },
+      onError: (err) => {
+        toast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [priceOverrideMutation, toast]);
+
+  const handleTidDispute = useCallback((tid: TidGroup) => {
+    const bookingIds = tid.bookings.map(b => b.bookingId);
+    disputeMutation.mutate({ bookingIds }, {
+      onSuccess: () => {
+        setDisputedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+        flash(`Dispute raised for ${tid.tid} (${bookingIds.length} bookings)`);
+      },
+      onError: (err) => {
+        toast({ title: "Dispute failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [disputeMutation, toast]);
+
+  const handleTidIssue = useCallback((tid: TidGroup) => {
+    setIssueOpen(true);
+    const insight = analyzeTakeRateInsight(tid.bookings);
+    if (insight) setIssueDescription(insight);
+  }, []);
+
+  const handleSubmitIssue = useCallback(() => {
+    const bookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
+    issueMutation.mutate({
+      bookingIds,
+      description: issueDescription,
+      priority: issuePriority,
+      driTeam: issueDriTeam || detectedDriTeam,
+    }, {
+      onSuccess: () => {
+        flash("Issue logged successfully");
+        toast({ title: "Issue created", description: `Issue logged for ${reason}` });
+        setIssueOpen(false);
+        setIssueDescription("");
+      },
+      onError: (err) => {
+        toast({ title: "Issue creation failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [tidGroups, issueDescription, issuePriority, issueDriTeam, detectedDriTeam, reason, issueMutation, toast]);
+
+  const handleBulkDispute = useCallback(() => {
+    const bookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
+    disputeMutation.mutate({ bookingIds }, {
+      onSuccess: () => {
+        setDisputedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+        flash(`Disputes raised for all ${tidGroups.length} TIDs`);
+        toast({ title: "Disputes created", description: `${bookingIds.length} dispute records` });
+        setDisputeOpen(false);
+      },
+      onError: (err) => {
+        toast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [tidGroups, disputeMutation, toast]);
+
+  const handleClearAllDisputes = useCallback(() => {
+    setDisputedBookings(new Set());
+    flash("All disputes cleared");
+    setDisputeOpen(false);
+  }, []);
 
   const openDiscrepancyAction = (action: string) => { setBulkScope("all"); setBulkConfirm(action); };
   const openSelectionAction = (action: string) => { setBulkScope("selected"); setBulkConfirm(action); };
 
   const totalDisc = tidGroups.reduce((s, t) => s + Math.abs(t.discLc), 0);
   const resolvedCount = tidGroups.filter(t => resolvedTids.has(t.tid)).length;
+  const totalDisputeAmount = useMemo(() => {
+    return tidGroups.flatMap(t => t.bookings)
+      .filter(b => !disputedBookings.has(b.bookingId))
+      .reduce((s, b) => s + Math.abs((b.spNetInHo || 0) - (b.hoNet || 0)), 0);
+  }, [tidGroups, disputedBookings]);
 
   if (!reason) return null;
 
@@ -174,6 +400,13 @@ export function DiscrepancySummaryWorkspace({
         setBulkConfirm(null);
         setTidSearch("");
         setFeedback(null);
+        setIssueOpen(false);
+        setDisputeOpen(false);
+        setIssueDescription("");
+        setDisputedBookings(new Set());
+        setPaxOpen(false);
+        setPaxTid(null);
+        setPaxPrices({});
       }
       onOpenChange(v);
     }}>
@@ -196,6 +429,13 @@ export function DiscrepancySummaryWorkspace({
         {feedback && (
           <div className="mx-4 mt-2 px-3 py-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md flex items-center gap-2 text-sm text-green-700 dark:text-green-300 animate-in fade-in duration-200">
             <CheckCircle2 className="h-4 w-4" />{feedback}
+          </div>
+        )}
+
+        {predictiveInsight && (
+          <div className="mx-4 mt-2 px-3 py-2 rounded-md border border-violet-200 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-950/20 flex items-start gap-2 text-xs">
+            <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 flex-shrink-0 mt-0.5" />
+            <span className="text-violet-800 dark:text-violet-300">{predictiveInsight}</span>
           </div>
         )}
 
@@ -223,9 +463,7 @@ export function DiscrepancySummaryWorkspace({
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />Loading analysis...
                   </div>
                 ) : filteredAnalysis.length === 0 ? (
-                  <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
-                    No analysis data available
-                  </div>
+                  <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">No analysis data available</div>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -325,26 +563,26 @@ export function DiscrepancySummaryWorkspace({
             </div>
 
             {!bulkConfirm && (
-              <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-3 py-2.5 flex items-center gap-2.5">
+              <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-3 py-2.5 flex items-center gap-2.5 flex-wrap">
                 <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tidGroups.length} TIDs:</span>
                 <div className="h-4 w-px bg-border" />
-                <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openDiscrepancyAction("sp")} data-testid="bulk-sp-net">
+                <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openDiscrepancyAction("sp")} disabled={priceOverrideMutation.isPending} data-testid="bulk-sp-net">
                   <TrendingUp className="h-3 w-3" /> SP Net
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-950/30" onClick={() => openDiscrepancyAction("ho")} data-testid="bulk-ho-net">
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-950/30" onClick={() => openDiscrepancyAction("ho")} disabled={priceOverrideMutation.isPending} data-testid="bulk-ho-net">
                   <TrendingDown className="h-3 w-3" /> HO Net
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30" onClick={() => openDiscrepancyAction("dispute")} data-testid="bulk-dispute">
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30" onClick={() => openDiscrepancyAction("dispute")} disabled={disputeMutation.isPending} data-testid="bulk-dispute">
                   <Gavel className="h-3 w-3" /> Raise Dispute
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/30" onClick={() => openDiscrepancyAction("issue")} data-testid="bulk-issue">
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/30" onClick={() => { setIssueOpen(true); }} data-testid="bulk-issue">
                   <FileWarning className="h-3 w-3" /> Log Issue
                 </Button>
               </div>
             )}
 
             {selectedTids.size >= 2 && !bulkConfirm && (
-              <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-200 flex-wrap">
                 <div className="flex items-center gap-2">
                   <CheckCheck className="h-4 w-4 text-primary" />
                   <span className="text-sm font-semibold">{selectedTids.size} TIDs selected</span>
@@ -423,22 +661,23 @@ export function DiscrepancySummaryWorkspace({
                   )}
                   <div className="flex items-center justify-between pt-1">
                     <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
-                    <Button size="sm" className={`h-7 text-xs gap-1 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} variant={isSp ? "default" : "outline"} onClick={() => handleBulkAction(bulkConfirm)} data-testid="bulk-confirm-apply">
-                      <Check className="h-3 w-3" /> Apply {isSp ? "SP Net" : "HO Net"} to {selData.length} TIDs
+                    <Button size="sm" className={`h-7 text-xs gap-1 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} variant={isSp ? "default" : "outline"} onClick={() => handleBulkAction(bulkConfirm)} disabled={priceOverrideMutation.isPending} data-testid="bulk-confirm-apply">
+                      {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Apply {isSp ? "SP Net" : "HO Net"} to {selData.length} TIDs
                     </Button>
                   </div>
                 </div>
               );
             })()}
 
-            {bulkConfirm && bulkConfirm !== "sp" && bulkConfirm !== "ho" && (() => {
+            {bulkConfirm && bulkConfirm === "dispute" && (() => {
               const confirmData = getBulkTidData();
               return (
                 <div className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-950/30 p-3 space-y-2 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
                       <AlertTriangle className="h-4 w-4" />
-                      {bulkConfirm === "dispute" ? "Raise Dispute" : "Log Issue"} for {bulkScope === "all" ? `all ${confirmData.length}` : `${confirmData.length} selected`} TIDs
+                      Raise Dispute for {bulkScope === "all" ? `all ${confirmData.length}` : `${confirmData.length} selected`} TIDs
                     </div>
                     <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setBulkConfirm(null)}>
                       <XIcon className="h-3.5 w-3.5" />
@@ -449,8 +688,9 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                   <div className="flex items-center gap-2">
                     <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
-                    <Button size="sm" className="h-7 text-xs gap-1" onClick={() => handleBulkAction(bulkConfirm)} data-testid="bulk-confirm-apply-other">
-                      <Check className="h-3 w-3" /> Confirm & Apply
+                    <Button size="sm" className="h-7 text-xs gap-1" onClick={() => handleBulkAction("dispute")} disabled={disputeMutation.isPending} data-testid="bulk-confirm-dispute">
+                      {disputeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Confirm & Raise Disputes
                     </Button>
                   </div>
                 </div>
@@ -458,9 +698,7 @@ export function DiscrepancySummaryWorkspace({
             })()}
 
             {tidGroups.length === 0 && !isLoadingAnalysis && (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                No TID-level actions available for this reason
-              </div>
+              <div className="text-center py-8 text-muted-foreground text-sm">No TID-level actions available for this reason</div>
             )}
 
             {filteredTids.length > 0 && (
@@ -497,7 +735,13 @@ export function DiscrepancySummaryWorkspace({
                           {isResolved ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                         </div>
                         <div className="pl-2 min-w-0">
-                          <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
+                            {tid.fulfillmentMethods.length > 0 && (
+                              <Badge variant="outline" className="text-[10px] px-1 py-0">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</Badge>
+                            )}
+                            {tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
+                          </div>
                         </div>
                         <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.spNet)}</div>
                         <div className="text-right px-3 w-24 font-mono text-sm">{fmt(tid.hoNet)}</div>
@@ -510,18 +754,26 @@ export function DiscrepancySummaryWorkspace({
 
                       {isExpanded && (
                         <div className="border-b bg-muted/10 dark:bg-muted/5 px-4 py-3 space-y-3">
-                          <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10">
-                            <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { flash(`${tid.tid} → SP Net applied`); resolve(tid.tid); setExpandedTid(null); }} data-testid={`tid-sp-net-${tid.tid}`}>
-                              <TrendingUp className="h-3.5 w-3.5" /> Set SP Net
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 flex-wrap">
+                            <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTidAction(tid, "sp")} disabled={priceOverrideMutation.isPending} data-testid={`tid-sp-net-${tid.tid}`}>
+                              {priceOverrideMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5" />} Set SP Net
                             </Button>
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => { flash(`${tid.tid} → HO Net applied`); resolve(tid.tid); setExpandedTid(null); }} data-testid={`tid-ho-net-${tid.tid}`}>
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => handleTidAction(tid, "ho")} disabled={priceOverrideMutation.isPending} data-testid={`tid-ho-net-${tid.tid}`}>
                               <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
                             </Button>
+                            {tid.hasPax && (
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50" onClick={() => {
+                                setPaxTid(tid);
+                                setPaxOpen(true);
+                              }} data-testid={`tid-pax-${tid.tid}`}>
+                                <Calculator className="h-3.5 w-3.5" /> Pax Pricing
+                              </Button>
+                            )}
                             <div className="flex-1" />
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => flash(`Dispute raised for ${tid.tid}`)} data-testid={`tid-dispute-${tid.tid}`}>
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => handleTidDispute(tid)} disabled={disputeMutation.isPending} data-testid={`tid-dispute-${tid.tid}`}>
                               <Gavel className="h-3.5 w-3.5" /> Dispute
                             </Button>
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => flash(`Issue logged for ${tid.tid}`)} data-testid={`tid-issue-${tid.tid}`}>
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
                               <FileWarning className="h-3.5 w-3.5" /> Issue
                             </Button>
                           </div>
@@ -539,9 +791,15 @@ export function DiscrepancySummaryWorkspace({
                               <tbody>
                                 {tid.bookings.map(b => {
                                   const diff = (b.hoNet || 0) - (b.spNetInHo || 0);
+                                  const hasDisp = disputedBookings.has(b.bookingId);
                                   return (
-                                    <tr key={b.bookingId} className="h-8 border-b last:border-0 hover:bg-muted/20">
-                                      <td className="px-2 py-1 font-mono text-primary font-medium">{b.bookingId}</td>
+                                    <tr key={b.bookingId} className={`h-8 border-b last:border-0 hover:bg-muted/20 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
+                                      <td className="px-2 py-1">
+                                        <div className="flex items-center gap-1">
+                                          <span className="font-mono text-primary font-medium">{b.bookingId}</span>
+                                          {hasDisp && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
+                                        </div>
+                                      </td>
                                       <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(b.spNetInHo || 0)}</td>
                                       <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(b.hoNet || 0)}</td>
                                       <td className={`text-right px-2 py-1 font-mono ${diff < 0 ? "text-red-600" : diff > 0 ? "text-green-600" : "text-muted-foreground"}`}>
@@ -568,6 +826,183 @@ export function DiscrepancySummaryWorkspace({
                 })}
               </div>
             )}
+
+            {paxOpen && paxTid && (
+              <div className="rounded-lg border-2 border-violet-200 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-950/20 p-3 space-y-3 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-violet-800 dark:text-violet-300">
+                    <Calculator className="h-4 w-4" />
+                    Pax Pricing — {paxTid.tid}
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); }}>
+                    <XIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="rounded-md border overflow-hidden bg-white dark:bg-card">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="h-7 bg-muted/30 border-b">
+                        <th className="text-left font-medium text-muted-foreground px-2 py-1">Booking ID</th>
+                        <th className="text-left font-medium text-muted-foreground px-2 py-1">Pax Type</th>
+                        <th className="text-right font-medium text-muted-foreground px-2 py-1">Count</th>
+                        <th className="text-right font-medium text-muted-foreground px-2 py-1 w-24">SP Net</th>
+                        <th className="text-right font-medium text-muted-foreground px-2 py-1 w-28">Final Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paxTid.bookings.map(b => (
+                        <tr key={b.bookingId} className="h-8 border-b last:border-0">
+                          <td className="px-2 py-1 font-mono text-primary font-medium">{b.bookingId}</td>
+                          <td className="px-2 py-1">{b.paxType || "—"}</td>
+                          <td className="text-right px-2 py-1">{b.paxCount || "—"}</td>
+                          <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(b.spNetInHo || 0)}</td>
+                          <td className="text-right px-2 py-1">
+                            <Input
+                              className="h-6 w-24 text-xs text-right font-mono ml-auto"
+                              type="number"
+                              placeholder={String(b.spNetInHo || 0)}
+                              value={paxPrices[b.bookingId] || ""}
+                              onChange={e => setPaxPrices(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
+                              data-testid={`pax-price-${b.bookingId}`}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-muted-foreground">{Object.keys(paxPrices).filter(k => paxPrices[k]).length} prices set</span>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); }}>Cancel</Button>
+                    <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                      const bookingIds = Object.keys(paxPrices).filter(k => paxPrices[k]);
+                      if (bookingIds.length === 0) { flash("No prices set"); return; }
+                      priceOverrideMutation.mutate({ bookingIds, selection: "sp" }, {
+                        onSuccess: () => {
+                          resolve(paxTid.tid);
+                          flash(`Pax pricing applied for ${paxTid.tid}`);
+                          setPaxOpen(false);
+                          setPaxTid(null);
+                          setPaxPrices({});
+                        },
+                      });
+                    }} disabled={priceOverrideMutation.isPending} data-testid="apply-pax-pricing">
+                      {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Apply Pax Pricing
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <Collapsible open={issueOpen} onOpenChange={setIssueOpen}>
+              <CollapsibleTrigger asChild>
+                <div className="rounded-lg border px-3 py-2 cursor-pointer hover:bg-muted/20 flex items-center gap-2" data-testid="issue-section-toggle">
+                  <FileWarning className="h-4 w-4 text-orange-600" />
+                  <span className="text-xs font-semibold text-orange-800 dark:text-orange-300">Raise Issue</span>
+                  {issueOpen ? <ChevronDown className="h-3.5 w-3.5 ml-auto text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 ml-auto text-muted-foreground" />}
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20 p-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground">Priority</label>
+                      <Select value={issuePriority} onValueChange={setIssuePriority}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-muted-foreground">DRI Team</label>
+                      <Select value={issueDriTeam || detectedDriTeam} onValueChange={setIssueDriTeam}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {driTeams.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-medium text-muted-foreground">Description</label>
+                      {predictiveInsight && (
+                        <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 text-violet-600" onClick={() => {
+                          if (predictiveInsight) setIssueDescription(prev => prev ? prev + "\n\n" + predictiveInsight : predictiveInsight);
+                        }} data-testid="auto-analyze-btn">
+                          <Sparkles className="h-3 w-3" /> Auto-analyze
+                        </Button>
+                      )}
+                    </div>
+                    <Textarea
+                      className="text-xs min-h-[60px]"
+                      placeholder="Describe the issue..."
+                      value={issueDescription}
+                      onChange={e => setIssueDescription(e.target.value)}
+                      data-testid="issue-description"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground">{tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings across {tidGroups.length} TIDs</span>
+                    <Button size="sm" className="h-7 text-xs gap-1" onClick={handleSubmitIssue} disabled={issueMutation.isPending || !issueDescription.trim()} data-testid="submit-issue-btn">
+                      {issueMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      Log Issue
+                    </Button>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            <Collapsible open={disputeOpen} onOpenChange={setDisputeOpen}>
+              <CollapsibleTrigger asChild>
+                <div className="rounded-lg border px-3 py-2 cursor-pointer hover:bg-muted/20 flex items-center gap-2" data-testid="dispute-section-toggle">
+                  <Gavel className="h-4 w-4 text-amber-600" />
+                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">Raise Dispute</span>
+                  {disputedBookings.size > 0 && (
+                    <Badge className="text-[10px] bg-amber-100 text-amber-700 border-amber-200">{disputedBookings.size} active</Badge>
+                  )}
+                  {disputeOpen ? <ChevronDown className="h-3.5 w-3.5 ml-auto text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 ml-auto text-muted-foreground" />}
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-3">
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div className="rounded border p-2 bg-white dark:bg-card">
+                      <span className="text-muted-foreground">Disputable</span>
+                      <div className="font-mono font-semibold">{tidGroups.reduce((s, t) => s + t.bidCount, 0) - disputedBookings.size} bookings</div>
+                    </div>
+                    <div className="rounded border p-2 bg-white dark:bg-card">
+                      <span className="text-muted-foreground">Total Amount</span>
+                      <div className="font-mono font-semibold text-amber-700">{fmt(totalDisputeAmount)}</div>
+                    </div>
+                    <div className="rounded border p-2 bg-white dark:bg-card">
+                      <span className="text-muted-foreground">Active Disputes</span>
+                      <div className="font-mono font-semibold text-green-600">{disputedBookings.size}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white" onClick={handleBulkDispute} disabled={disputeMutation.isPending} data-testid="dispute-all-btn">
+                      {disputeMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gavel className="h-3 w-3" />}
+                      Dispute All
+                    </Button>
+                    {disputedBookings.size > 0 && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-red-600 border-red-200" onClick={handleClearAllDisputes} data-testid="clear-disputes-btn">
+                        <XIcon className="h-3 w-3" /> Clear All
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </div>
 
