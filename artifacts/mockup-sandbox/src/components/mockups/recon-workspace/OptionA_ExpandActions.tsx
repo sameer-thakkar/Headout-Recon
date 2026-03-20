@@ -575,19 +575,23 @@ export function OptionA_ExpandActions() {
                             {takeActionDisputes.size === allTids.length ? "None" : "All"}
                           </Button>
                         </div>
-                        <div className="grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
+                        <div className="grid grid-cols-[auto_5fr_2.5fr_2.5fr_2.5fr_2.5fr_2.5fr] gap-0 px-3 py-1 border-t text-[10px] font-medium text-muted-foreground bg-muted/10">
                           <div className="w-5" />
                           <div>TID / Experience</div>
                           <div className="text-right text-blue-600">SP Net</div>
                           <div className="text-right text-green-600">HO Net</div>
+                          <div className="text-right text-violet-600">TAP</div>
+                          <div className="text-right text-violet-600">Dispute</div>
                           <div className="text-right text-amber-600">Difference</div>
                         </div>
                         {allTids.map(t => {
                           const isChecked = takeActionDisputes.has(t.tid);
                           const isPaxOpen = disputePaxExpanded === t.tid;
+                          const tidTapTotal = t.hasPax ? PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = (disputePaxPrices[t.tid] || {})[k]; const tap = entry?.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : r.spUnit; return s + tap * r.count; }, 0) : t.spNet;
+                          const tidDispTotal = t.hasPax ? PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = (disputePaxPrices[t.tid] || {})[k]; const disp = entry?.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : r.spUnit - r.hoUnit; return s + disp * r.count; }, 0) : Math.abs(t.spNet - t.hoNet);
                           return (
                             <div key={t.tid}>
-                              <div className={`grid grid-cols-[auto_5fr_3fr_3fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
+                              <div className={`grid grid-cols-[auto_5fr_2.5fr_2.5fr_2.5fr_2.5fr_2.5fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)}>
                                 <div className="flex items-center">
                                   <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-1" />
                                   {t.hasPax && (
@@ -603,6 +607,8 @@ export function OptionA_ExpandActions() {
                                 </div>
                                 <div className="font-mono text-right text-blue-600">{fmt(t.spNet)}</div>
                                 <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
+                                <div className="font-mono text-right text-violet-600 font-medium">{fmt(tidTapTotal)}</div>
+                                <div className="font-mono text-right text-violet-600 font-medium">{fmt(tidDispTotal)}</div>
                                 <div className={`font-mono text-right font-medium text-amber-600`}>{fmt(Math.abs(t.spNet - t.hoNet))}</div>
                               </div>
                               {isPaxOpen && (
@@ -610,10 +616,6 @@ export function OptionA_ExpandActions() {
                                   <div className="flex items-center justify-between mb-1.5">
                                     <span className="text-[11px] font-semibold text-violet-700">Pax Dispute — compute dispute amount per pax type</span>
                                     <Button size="sm" variant="outline" className="h-5 text-[10px] px-2 border-violet-200 text-violet-600 hover:bg-violet-100" onClick={() => { setDisputePaxPrices(prev => { const next = { ...prev }; delete next[t.tid]; return next; }); }}>Reset Defaults</Button>
-                                  </div>
-                                  <div className="flex items-center justify-end gap-4 text-[11px] font-semibold text-violet-700 bg-violet-100/40 rounded px-2 py-1 mb-1.5">
-                                    <span>TID Total TAP: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = (disputePaxPrices[t.tid] || {})[k]; const tap = entry?.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : r.spUnit; return s + tap * r.count; }, 0))}</span></span>
-                                    <span>TID Total Dispute: <span className="font-mono">{fmt(PAX_ROWS.reduce((s, r) => { const k = `${r.paxType}__${r.dateRange}`; const entry = (disputePaxPrices[t.tid] || {})[k]; const disp = entry?.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : r.spUnit - r.hoUnit; return s + disp * r.count; }, 0))}</span></span>
                                   </div>
                                   <div className="border rounded overflow-hidden text-[11px]">
                                     <div className="grid grid-cols-[1.8fr_1.8fr_0.8fr_1.3fr_1.3fr_1.5fr_1.5fr] gap-0 px-2 py-1 bg-violet-100/50 font-medium text-violet-700">
