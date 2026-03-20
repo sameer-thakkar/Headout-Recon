@@ -338,14 +338,20 @@ export function DiscrepancySummaryWorkspace({
     });
   }, [disputeMutation, toast]);
 
+  const [issueScopeTids, setIssueScopeTids] = useState<string[] | null>(null);
+
   const handleTidIssue = useCallback((tid: TidGroup) => {
+    setIssueScopeTids([tid.tid]);
     setIssueOpen(true);
     const insight = analyzeTakeRateInsight(tid.bookings);
     if (insight) setIssueDescription(insight);
   }, []);
 
   const handleSubmitIssue = useCallback(() => {
-    const bookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
+    const scopedGroups = issueScopeTids
+      ? tidGroups.filter(t => issueScopeTids.includes(t.tid))
+      : tidGroups;
+    const bookingIds = scopedGroups.flatMap(t => t.bookings.map(b => b.bookingId));
     issueMutation.mutate({
       bookingIds,
       description: issueDescription,
@@ -362,7 +368,7 @@ export function DiscrepancySummaryWorkspace({
         toast({ title: "Issue creation failed", description: String(err), variant: "destructive" });
       },
     });
-  }, [tidGroups, issueDescription, issuePriority, issueDriTeam, detectedDriTeam, reason, issueMutation, toast]);
+  }, [tidGroups, issueScopeTids, issueDescription, issuePriority, issueDriTeam, detectedDriTeam, reason, issueMutation, toast]);
 
   const handleBulkDispute = useCallback(() => {
     const bookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
@@ -430,6 +436,7 @@ export function DiscrepancySummaryWorkspace({
         setIssueOpen(false);
         setDisputeOpen(false);
         setIssueDescription("");
+        setIssueScopeTids(null);
         setDisputedBookings(new Set());
         setPaxOpen(false);
         setPaxTid(null);
@@ -602,7 +609,7 @@ export function DiscrepancySummaryWorkspace({
                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30" onClick={() => openDiscrepancyAction("dispute")} disabled={disputeMutation.isPending} data-testid="bulk-dispute">
                   <Gavel className="h-3 w-3" /> Raise Dispute
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/30" onClick={() => { setIssueOpen(true); }} data-testid="bulk-issue">
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 dark:text-orange-400 border-orange-300 dark:border-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950/30" onClick={() => { setIssueScopeTids(null); setIssueOpen(true); }} data-testid="bulk-issue">
                   <FileWarning className="h-3 w-3" /> Log Issue
                 </Button>
               </div>
@@ -984,7 +991,11 @@ export function DiscrepancySummaryWorkspace({
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">{tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings across {tidGroups.length} TIDs</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {issueScopeTids
+                        ? `${tidGroups.filter(t => issueScopeTids.includes(t.tid)).reduce((s, t) => s + t.bidCount, 0)} bookings in ${issueScopeTids.length} TID${issueScopeTids.length > 1 ? "s" : ""} (${issueScopeTids.join(", ")})`
+                        : `${tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings across all ${tidGroups.length} TIDs`}
+                    </span>
                     <Button size="sm" className="h-7 text-xs gap-1" onClick={handleSubmitIssue} disabled={issueMutation.isPending || !issueDescription.trim()} data-testid="submit-issue-btn">
                       {issueMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                       Log Issue
