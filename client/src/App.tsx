@@ -23,6 +23,7 @@ import { ReconTrackerPage } from "@/pages/recon-tracker";
 import { IssueTrackerPage } from "@/pages/issue-tracker";
 import { LoginPage } from "@/pages/login";
 import { RetoolPage } from "@/pages/retool";
+import { MockupPreviewPage } from "@/pages/mockup-preview";
 import NotFound from "@/pages/not-found";
 
 import type {
@@ -597,6 +598,9 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
               </Route>
               <Route path="/issue-tracker">
                 <IssueTrackerPage runId={currentRunId} />
+              </Route>
+              <Route path="/mockup-preview">
+                <MockupPreviewPage />
               </Route>
               <Route path="/retool">
                 <RetoolPage />
