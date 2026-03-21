@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from "react";
 import { authFetch } from "@/lib/queryClient";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2, Check, Search, Calendar, TrendingDown, CreditCard } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2, Check } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -144,9 +144,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [arDecisions, setArDecisions] = useState<Map<string, { decision: "pay" | "dont_pay"; reason: string; customReason: string; finalAmount: number }>>(new Map());
   const [arActiveDisputes, setArActiveDisputes] = useState<Set<string>>(new Set());
   const [arDisputeAmounts, setArDisputeAmounts] = useState<Map<string, number>>(new Map());
-  const [arSearchQuery, setArSearchQuery] = useState("");
-  const [arSelectedBookings, setArSelectedBookings] = useState<Set<string>>(new Set());
-  const [arExpandedTids, setArExpandedTids] = useState<Set<string>>(new Set());
   // Cancellations modal state
   const [isCancellationsModalOpen, setIsCancellationsModalOpen] = useState(false);
   const { toast } = useToast();
@@ -1253,14 +1250,10 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         </DialogContent>
       </Dialog>
 
-      {/* Already Reconciled - Second Level Modal (Enhanced Workspace) */}
+      {/* Already Reconciled - Second Level Modal (Booking Details with Actions) */}
       <Dialog open={isAlreadyReconciledDetailModalOpen} onOpenChange={(open) => {
         setIsAlreadyReconciledDetailModalOpen(open);
-        if (!open) {
-          setSelectedAlreadyReconciledType(null);
-          setArSearchQuery("");
-          setArSelectedBookings(new Set());
-        }
+        if (!open) setSelectedAlreadyReconciledType(null);
       }}>
         <DialogContent className="max-w-[95vw] max-h-[85vh] flex flex-col">
           <DialogHeader>
@@ -1278,584 +1271,143 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               <Badge variant="outline" className="ml-2 text-xs">
                 {selectedAlreadyReconciledBookings.length} bookings
               </Badge>
-              {(() => {
-                const decidedCount = selectedAlreadyReconciledBookings.filter(b => arDecisions.has(b.bookingId)).length;
-                const total = selectedAlreadyReconciledBookings.length;
-                return decidedCount > 0 ? (
-                  <Badge variant="secondary" className="ml-1 text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                    Decided: {decidedCount}/{total}
-                  </Badge>
-                ) : null;
-              })()}
             </DialogTitle>
           </DialogHeader>
-
-          {(() => {
-            const allBookings = selectedAlreadyReconciledBookings;
-            const payMismatchCount = allBookings.filter(b => {
-              const ho = b.paymentMethod || "";
-              const sp = b.spPaymentMethod || "";
-              return ho && sp && ho !== sp;
-            }).length;
-            const priceDriftBookings = allBookings.filter(b => Math.abs(b.hoNet - b.spNetInHo) > 0.01);
-            const priceDriftDelta = priceDriftBookings.reduce((s, b) => s + (b.spNetInHo - b.hoNet), 0);
-            const dates = allBookings
-              .map(b => b.dateOfPayment || b.spDateOfPayment)
-              .filter(Boolean)
-              .map(d => String(d))
-              .sort();
-            const earliestDate = dates.length > 0 ? formatDateDDMMYYYY(dates[0]) : null;
-            const latestDate = dates.length > 1 ? formatDateDDMMYYYY(dates[dates.length - 1]) : earliestDate;
-
-            const query = arSearchQuery.toLowerCase();
-            const filteredBookings = query
-              ? allBookings.filter(b =>
-                  (b.tid || "").toLowerCase().includes(query) ||
-                  b.bookingId.toLowerCase().includes(query)
-                )
-              : allBookings;
-
-            const tidGroups = new Map<string, typeof filteredBookings>();
-            for (const b of filteredBookings) {
-              const tid = b.tid || "NO_TID";
-              if (!tidGroups.has(tid)) tidGroups.set(tid, []);
-              tidGroups.get(tid)!.push(b);
-            }
-            const sortedTids = Array.from(tidGroups.entries()).sort((a, b) => {
-              const aDelta = Math.abs(a[1].reduce((s, bk) => s + (bk.spNetInHo - bk.hoNet), 0));
-              const bDelta = Math.abs(b[1].reduce((s, bk) => s + (bk.spNetInHo - bk.hoNet), 0));
-              return bDelta - aDelta;
-            });
-
-            const allFilteredIds = filteredBookings.map(b => b.bookingId);
-            const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => arSelectedBookings.has(id));
-            const someSelected = arSelectedBookings.size > 0;
-
-            return (
-              <>
-                {/* Insight Cards */}
-                <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="flex-1 overflow-auto">
+            <Table className="min-w-max">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>TID</TableHead>
+                  <TableHead>Booking ID</TableHead>
+                  <TableHead className="text-right">Reconciled Net</TableHead>
+                  <TableHead className="text-right">SP Net</TableHead>
                   {selectedAlreadyReconciledType === "same_be" && (
-                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-3">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <CreditCard className="h-3.5 w-3.5 text-amber-600" />
-                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Payment Mismatch</span>
-                      </div>
-                      <p className="text-lg font-mono font-semibold">{payMismatchCount}</p>
-                      <p className="text-[10px] text-muted-foreground">of {allBookings.length} bookings have different payment methods</p>
-                    </div>
+                    <TableHead>Pay Method Mismatch</TableHead>
                   )}
                   {selectedAlreadyReconciledType === "different_be" && (
-                    <div className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20 p-3">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <CreditCard className="h-3.5 w-3.5 text-orange-600" />
-                        <span className="text-xs font-medium text-orange-700 dark:text-orange-400">Unique TIDs</span>
-                      </div>
-                      <p className="text-lg font-mono font-semibold">{tidGroups.size}</p>
-                      <p className="text-[10px] text-muted-foreground">across {allBookings.length} bookings</p>
-                    </div>
+                    <TableHead>Payment Method</TableHead>
                   )}
-                  <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/20 p-3">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <TrendingDown className="h-3.5 w-3.5 text-violet-600" />
-                      <span className="text-xs font-medium text-violet-700 dark:text-violet-400">Price Drift</span>
-                    </div>
-                    <p className="text-lg font-mono font-semibold">{priceDriftBookings.length > 0 ? formatNumber(Math.abs(priceDriftDelta)) : "0.00"}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {priceDriftBookings.length > 0
-                        ? `net delta across ${priceDriftBookings.length} bookings`
-                        : "all prices match"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-3">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Calendar className="h-3.5 w-3.5 text-blue-600" />
-                      <span className="text-xs font-medium text-blue-700 dark:text-blue-400">Date Spread</span>
-                    </div>
-                    <p className="text-sm font-mono font-semibold">
-                      {earliestDate && latestDate && earliestDate !== latestDate
-                        ? `${earliestDate} – ${latestDate}`
-                        : earliestDate || "No dates"}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">payment date range</p>
-                  </div>
-                </div>
-
-                {/* Search Bar */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <Input
-                      className="h-8 text-xs pl-8 pr-8"
-                      placeholder="Search by TID or Booking ID..."
-                      value={arSearchQuery}
-                      onChange={(e) => setArSearchQuery(e.target.value)}
-                      data-testid="ar-search-input"
-                    />
-                    {arSearchQuery && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5"
-                        onClick={() => setArSearchQuery("")}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                  {query && (
-                    <span className="text-xs text-muted-foreground">
-                      Showing {filteredBookings.length} of {allBookings.length} bookings
-                    </span>
+                  <TableHead>Date of Payment</TableHead>
+                  {selectedAlreadyReconciledType === "different_be" && (
+                    <>
+                      <TableHead>HO BE ID</TableHead>
+                      <TableHead>SP BE ID</TableHead>
+                    </>
                   )}
-                </div>
-
-                {/* TID-Grouped Collapsible View */}
-                <div className="flex-1 overflow-auto border rounded-lg">
-                  {sortedTids.map(([tid, tidBookings]) => {
-                    const isSingleBooking = tidBookings.length === 1;
-                    const isExpanded = isSingleBooking || arExpandedTids.has(tid);
-                    const tidReconNet = tidBookings.reduce((s, b) => s + b.hoNet, 0);
-                    const tidSpNet = tidBookings.reduce((s, b) => s + b.spNetInHo, 0);
-                    const tidDelta = tidSpNet - tidReconNet;
-                    const allTidSelected = tidBookings.every(b => arSelectedBookings.has(b.bookingId));
-
-                    return (
-                      <div key={tid} className="border-b last:border-b-0" data-testid={`ar-tid-group-${tid}`}>
-                        {/* TID Header Row */}
-                        <div
-                          className={`flex items-center gap-2 px-3 py-2 bg-muted/30 hover:bg-muted/50 ${!isSingleBooking ? "cursor-pointer" : ""}`}
-                          onClick={() => {
-                            if (isSingleBooking) return;
-                            setArExpandedTids(prev => {
-                              const n = new Set(prev);
-                              n.has(tid) ? n.delete(tid) : n.add(tid);
-                              return n;
-                            });
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5 rounded border-gray-300"
-                            checked={allTidSelected}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              setArSelectedBookings(prev => {
-                                const n = new Set(prev);
-                                tidBookings.forEach(b => allTidSelected ? n.delete(b.bookingId) : n.add(b.bookingId));
-                                return n;
-                              });
-                            }}
-                            data-testid={`ar-tid-checkbox-${tid}`}
-                          />
-                          {!isSingleBooking && (
-                            isExpanded
-                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  <TableHead className="w-[85px]">Decision</TableHead>
+                  <TableHead className="w-[150px]">Reason</TableHead>
+                  <TableHead className="w-[110px]">Dispute</TableHead>
+                  <TableHead className="w-[100px] text-right">Final Amt</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedAlreadyReconciledBookings.map((booking, index) => {
+                  const hoPaymentMethod = booking.paymentMethod || "";
+                  const spPaymentMethod = booking.spPaymentMethod || "";
+                  const paymentMethodMismatch = hoPaymentMethod && spPaymentMethod && hoPaymentMethod !== spPaymentMethod;
+                  const decision = arDecisions.get(booking.bookingId);
+                  const isPay = !decision || decision.decision === "pay";
+                  const isDontPay = decision?.decision === "dont_pay";
+                  const isDisputeActive = arActiveDisputes.has(booking.bookingId);
+                  const disputeAmount = arDisputeAmounts.get(booking.bookingId) || 0;
+                  const currentFinalAmount = decision?.finalAmount ?? booking.spNetInHo;
+                  const reasonOptions = ["", "Cancellations", "Multiple tickets booked", "Manual Error", "Partial Fulfillment"];
+                  const isCustomReason = decision?.reason && !reasonOptions.includes(decision.reason);
+                  return (
+                    <TableRow key={`${booking.bookingId}-${index}`} className={isDontPay ? "opacity-50" : ""} data-testid={`already-reconciled-row-${booking.bookingId}`}>
+                      <TableCell className="font-mono text-xs">{booking.tid || "-"}</TableCell>
+                      <TableCell className="font-mono text-xs">{booking.bookingId}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{formatNumber(booking.hoNet)}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{formatNumber(booking.spNetInHo)}</TableCell>
+                      {selectedAlreadyReconciledType === "same_be" && (
+                        <TableCell>
+                          {paymentMethodMismatch ? (
+                            <Badge variant="destructive" className="text-[10px]">{hoPaymentMethod} vs {spPaymentMethod}</Badge>
+                          ) : <span className="text-muted-foreground text-xs">-</span>}
+                        </TableCell>
+                      )}
+                      {selectedAlreadyReconciledType === "different_be" && (
+                        <TableCell className="text-xs">{hoPaymentMethod || spPaymentMethod || "-"}</TableCell>
+                      )}
+                      <TableCell className="text-xs">{formatDateDDMMYYYY(booking.dateOfPayment || booking.spDateOfPayment) || "-"}</TableCell>
+                      {selectedAlreadyReconciledType === "different_be" && (
+                        <>
+                          <TableCell className="font-mono text-xs">{booking.hoBeId || "-"}</TableCell>
+                          <TableCell className="font-mono text-xs">{booking.beId || "-"}</TableCell>
+                        </>
+                      )}
+                      <TableCell>
+                        <Select value={decision?.decision || "pay"} onValueChange={(v: "pay" | "dont_pay") => {
+                          const newDecisions = new Map(arDecisions);
+                          newDecisions.set(booking.bookingId, { decision: v, reason: decision?.reason || "", customReason: decision?.customReason || "", finalAmount: decision?.finalAmount ?? booking.spNetInHo });
+                          setArDecisions(newDecisions);
+                        }}>
+                          <SelectTrigger className="h-6 text-[11px] px-1.5" data-testid={`ar-select-decision-${booking.bookingId}`}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pay">Pay</SelectItem>
+                            <SelectItem value="dont_pay">Don't Pay</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-0.5">
+                          <Select value={isCustomReason ? "" : (decision?.reason || "")} onValueChange={(v) => {
+                            const newDecisions = new Map(arDecisions);
+                            newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: v === "none" ? "" : v, customReason: "", finalAmount: decision?.finalAmount ?? booking.spNetInHo });
+                            setArDecisions(newDecisions);
+                          }}>
+                            <SelectTrigger className="h-6 text-[11px] px-1 flex-1" data-testid={`ar-select-reason-${booking.bookingId}`}><SelectValue placeholder="-" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">-</SelectItem>
+                              <SelectItem value="Cancellations">Cancellations</SelectItem>
+                              <SelectItem value="Multiple tickets booked">Multiple tickets</SelectItem>
+                              <SelectItem value="Manual Error">Manual Error</SelectItem>
+                              <SelectItem value="Partial Fulfillment">Partial Fulfillment</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {(isCustomReason || decision?.reason === "") && decision && (
+                            <Input className="h-6 text-[11px] px-1 w-14" placeholder="Other..." value={isCustomReason ? decision?.reason : ""} onChange={(e) => {
+                              const newDecisions = new Map(arDecisions);
+                              newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: e.target.value, customReason: e.target.value, finalAmount: decision?.finalAmount ?? booking.spNetInHo });
+                              setArDecisions(newDecisions);
+                            }} data-testid={`ar-input-custom-reason-${booking.bookingId}`} />
                           )}
-                          <span className="font-mono text-xs font-medium">{tid === "NO_TID" ? "No TID" : tid}</span>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{tidBookings.length}</Badge>
-                          <div className="flex-1" />
-                          <div className="flex gap-4 text-xs font-mono">
-                            <span className="text-muted-foreground">Recon: <span className="text-foreground">{formatNumber(tidReconNet)}</span></span>
-                            <span className="text-muted-foreground">SP: <span className="text-foreground">{formatNumber(tidSpNet)}</span></span>
-                            {Math.abs(tidDelta) > 0.01 && (
-                              <span className={tidDelta > 0 ? "text-red-600" : "text-green-600"}>
-                                {tidDelta > 0 ? "+" : ""}{formatNumber(tidDelta)}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex gap-1 ml-2" onClick={e => e.stopPropagation()}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 text-[10px] px-1.5"
-                              onClick={() => {
-                                const newDecisions = new Map(arDecisions);
-                                tidBookings.forEach(b => {
-                                  newDecisions.set(b.bookingId, {
-                                    decision: "pay",
-                                    reason: arDecisions.get(b.bookingId)?.reason || "",
-                                    customReason: arDecisions.get(b.bookingId)?.customReason || "",
-                                    finalAmount: arDecisions.get(b.bookingId)?.finalAmount ?? b.spNetInHo,
-                                  });
-                                });
-                                setArDecisions(newDecisions);
-                              }}
-                              data-testid={`ar-tid-pay-all-${tid}`}
-                            >
-                              Pay All
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 text-[10px] px-1.5 text-red-600 border-red-200"
-                              onClick={() => {
-                                const newDecisions = new Map(arDecisions);
-                                tidBookings.forEach(b => {
-                                  newDecisions.set(b.bookingId, {
-                                    decision: "dont_pay",
-                                    reason: arDecisions.get(b.bookingId)?.reason || "",
-                                    customReason: arDecisions.get(b.bookingId)?.customReason || "",
-                                    finalAmount: arDecisions.get(b.bookingId)?.finalAmount ?? b.spNetInHo,
-                                  });
-                                });
-                                setArDecisions(newDecisions);
-                              }}
-                              data-testid={`ar-tid-dontpay-all-${tid}`}
-                            >
-                              Don't Pay All
-                            </Button>
-                          </div>
                         </div>
-
-                        {/* Expanded Booking Rows */}
-                        {isExpanded && (
-                          <div>
-                            {tidBookings.map((booking, index) => {
-                              const hoPaymentMethod = booking.paymentMethod || "";
-                              const spPaymentMethod = booking.spPaymentMethod || "";
-                              const paymentMethodMismatch = hoPaymentMethod && spPaymentMethod && hoPaymentMethod !== spPaymentMethod;
-                              const decision = arDecisions.get(booking.bookingId);
-                              const isPay = !decision || decision.decision === "pay";
-                              const isDontPay = decision?.decision === "dont_pay";
-                              const isDisputeActive = arActiveDisputes.has(booking.bookingId);
-                              const disputeAmount = arDisputeAmounts.get(booking.bookingId) || 0;
-                              const currentFinalAmount = decision?.finalAmount ?? booking.spNetInHo;
-                              const reasonOptions = ["", "Cancellations", "Multiple tickets booked", "Manual Error", "Partial Fulfillment"];
-                              const isCustomReason = decision?.reason && !reasonOptions.includes(decision.reason);
-
-                              return (
-                                <div
-                                  key={`${booking.bookingId}-${index}`}
-                                  className={`flex items-center gap-2 px-3 py-1.5 border-t text-xs ${isDontPay ? "opacity-50 bg-muted/20" : ""}`}
-                                  data-testid={`already-reconciled-row-${booking.bookingId}`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    className="h-3.5 w-3.5 rounded border-gray-300"
-                                    checked={arSelectedBookings.has(booking.bookingId)}
-                                    onChange={() => {
-                                      setArSelectedBookings(prev => {
-                                        const n = new Set(prev);
-                                        n.has(booking.bookingId) ? n.delete(booking.bookingId) : n.add(booking.bookingId);
-                                        return n;
-                                      });
-                                    }}
-                                    data-testid={`ar-checkbox-${booking.bookingId}`}
-                                  />
-                                  <div className="w-24 font-mono truncate" title={booking.bookingId}>{booking.bookingId}</div>
-                                  <div className="w-20 text-right font-mono">{formatNumber(booking.hoNet)}</div>
-                                  <div className="w-20 text-right font-mono">{formatNumber(booking.spNetInHo)}</div>
-                                  {selectedAlreadyReconciledType === "same_be" && (
-                                    <div className="w-28">
-                                      {paymentMethodMismatch ? (
-                                        <Badge variant="destructive" className="text-[10px]">
-                                          {hoPaymentMethod} vs {spPaymentMethod}
-                                        </Badge>
-                                      ) : (
-                                        <span className="text-muted-foreground">-</span>
-                                      )}
-                                    </div>
-                                  )}
-                                  {selectedAlreadyReconciledType === "different_be" && (
-                                    <>
-                                      <div className="w-16 truncate">{hoPaymentMethod || spPaymentMethod || "-"}</div>
-                                      <div className="w-14 font-mono truncate">{booking.hoBeId || "-"}</div>
-                                      <div className="w-14 font-mono truncate">{booking.beId || "-"}</div>
-                                    </>
-                                  )}
-                                  <div className="w-20">{formatDateDDMMYYYY(booking.dateOfPayment || booking.spDateOfPayment) || "-"}</div>
-                                  <div className="w-[85px]">
-                                    <Select
-                                      value={decision?.decision || "pay"}
-                                      onValueChange={(v: "pay" | "dont_pay") => {
-                                        const newDecisions = new Map(arDecisions);
-                                        newDecisions.set(booking.bookingId, {
-                                          decision: v,
-                                          reason: decision?.reason || "",
-                                          customReason: decision?.customReason || "",
-                                          finalAmount: decision?.finalAmount ?? booking.spNetInHo,
-                                        });
-                                        setArDecisions(newDecisions);
-                                      }}
-                                    >
-                                      <SelectTrigger className="h-6 text-[11px] px-1.5" data-testid={`ar-select-decision-${booking.bookingId}`}>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="pay">Pay</SelectItem>
-                                        <SelectItem value="dont_pay">Don't Pay</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="w-[140px]">
-                                    <div className="flex gap-0.5">
-                                      <Select
-                                        value={isCustomReason ? "" : (decision?.reason || "")}
-                                        onValueChange={(v) => {
-                                          const newDecisions = new Map(arDecisions);
-                                          newDecisions.set(booking.bookingId, {
-                                            decision: decision?.decision || "pay",
-                                            reason: v === "none" ? "" : v,
-                                            customReason: "",
-                                            finalAmount: decision?.finalAmount ?? booking.spNetInHo,
-                                          });
-                                          setArDecisions(newDecisions);
-                                        }}
-                                      >
-                                        <SelectTrigger className="h-6 text-[11px] px-1 flex-1" data-testid={`ar-select-reason-${booking.bookingId}`}>
-                                          <SelectValue placeholder="-" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="none">-</SelectItem>
-                                          <SelectItem value="Cancellations">Cancellations</SelectItem>
-                                          <SelectItem value="Multiple tickets booked">Multiple tickets</SelectItem>
-                                          <SelectItem value="Manual Error">Manual Error</SelectItem>
-                                          <SelectItem value="Partial Fulfillment">Partial Fulfillment</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      {(isCustomReason || decision?.reason === "") && decision && (
-                                        <Input
-                                          className="h-6 text-[11px] px-1 w-14"
-                                          placeholder="Other..."
-                                          value={isCustomReason ? decision?.reason : ""}
-                                          onChange={(e) => {
-                                            const newDecisions = new Map(arDecisions);
-                                            newDecisions.set(booking.bookingId, {
-                                              decision: decision?.decision || "pay",
-                                              reason: e.target.value,
-                                              customReason: e.target.value,
-                                              finalAmount: decision?.finalAmount ?? booking.spNetInHo,
-                                            });
-                                            setArDecisions(newDecisions);
-                                          }}
-                                          data-testid={`ar-input-custom-reason-${booking.bookingId}`}
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="w-[100px]">
-                                    {isDisputeActive ? (
-                                      <div className="flex items-center gap-0.5">
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          className="h-6 text-[11px] px-1 w-14 text-right font-mono"
-                                          value={disputeAmount || ""}
-                                          onChange={(e) => {
-                                            const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
-                                            setArDisputeAmounts(prev => {
-                                              const newMap = new Map(prev);
-                                              newMap.set(booking.bookingId, val);
-                                              return newMap;
-                                            });
-                                          }}
-                                          data-testid={`ar-input-dispute-amount-${booking.bookingId}`}
-                                        />
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-5 w-5"
-                                          onClick={() => {
-                                            setArActiveDisputes(prev => {
-                                              const newSet = new Set(prev);
-                                              newSet.delete(booking.bookingId);
-                                              return newSet;
-                                            });
-                                            setArDisputeAmounts(prev => {
-                                              const newMap = new Map(prev);
-                                              newMap.delete(booking.bookingId);
-                                              return newMap;
-                                            });
-                                          }}
-                                          data-testid={`ar-button-cancel-dispute-${booking.bookingId}`}
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-6 text-[10px] px-1.5"
-                                        onClick={() => {
-                                          setArActiveDisputes(prev => new Set(prev).add(booking.bookingId));
-                                          setArDisputeAmounts(prev => {
-                                            const newMap = new Map(prev);
-                                            newMap.set(booking.bookingId, Math.abs(booking.spNetInHo - booking.hoNet));
-                                            return newMap;
-                                          });
-                                        }}
-                                        data-testid={`ar-button-dispute-${booking.bookingId}`}
-                                      >
-                                        Dispute
-                                      </Button>
-                                    )}
-                                  </div>
-                                  <div className="w-[90px]">
-                                    {isPay ? (
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        className="h-6 text-[11px] px-1 text-right font-mono"
-                                        value={currentFinalAmount}
-                                        onChange={(e) => {
-                                          const newDecisions = new Map(arDecisions);
-                                          newDecisions.set(booking.bookingId, {
-                                            decision: decision?.decision || "pay",
-                                            reason: decision?.reason || "",
-                                            customReason: decision?.customReason || "",
-                                            finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100,
-                                          });
-                                          setArDecisions(newDecisions);
-                                        }}
-                                        data-testid={`ar-input-final-amount-${booking.bookingId}`}
-                                      />
-                                    ) : (
-                                      <span className="text-muted-foreground">-</span>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
+                      </TableCell>
+                      <TableCell>
+                        {isDisputeActive ? (
+                          <div className="flex items-center gap-0.5">
+                            <Input type="number" step="0.01" className="h-6 text-[11px] px-1 w-14 text-right font-mono" value={disputeAmount || ""} onChange={(e) => {
+                              const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
+                              setArDisputeAmounts(prev => { const m = new Map(prev); m.set(booking.bookingId, val); return m; });
+                            }} data-testid={`ar-input-dispute-amount-${booking.bookingId}`} />
+                            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
+                              setArActiveDisputes(prev => { const s = new Set(prev); s.delete(booking.bookingId); return s; });
+                              setArDisputeAmounts(prev => { const m = new Map(prev); m.delete(booking.bookingId); return m; });
+                            }} data-testid={`ar-button-cancel-dispute-${booking.bookingId}`}><X className="h-3 w-3" /></Button>
                           </div>
+                        ) : (
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-1.5" onClick={() => {
+                            setArActiveDisputes(prev => new Set(prev).add(booking.bookingId));
+                            setArDisputeAmounts(prev => { const m = new Map(prev); m.set(booking.bookingId, Math.abs(booking.spNetInHo - booking.hoNet)); return m; });
+                          }} data-testid={`ar-button-dispute-${booking.bookingId}`}>Dispute</Button>
                         )}
-                      </div>
-                    );
-                  })}
-                  {sortedTids.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground text-sm">
-                      {query ? "No bookings match your search" : "No bookings found"}
-                    </div>
-                  )}
-                </div>
-
-                {/* Bulk Action Bar */}
-                {someSelected && (
-                  <div className="flex items-center gap-3 px-3 py-2 bg-primary/5 border rounded-lg mt-2">
-                    <span className="text-xs font-medium">{arSelectedBookings.size} selected</span>
-                    <div className="flex gap-1.5 ml-auto">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs px-2 border-green-300 text-green-700 hover:bg-green-50"
-                        onClick={() => {
-                          const newDecisions = new Map(arDecisions);
-                          arSelectedBookings.forEach(id => {
-                            const b = allBookings.find(bk => bk.bookingId === id);
-                            if (b) {
-                              newDecisions.set(id, {
-                                decision: "pay",
-                                reason: arDecisions.get(id)?.reason || "",
-                                customReason: arDecisions.get(id)?.customReason || "",
-                                finalAmount: arDecisions.get(id)?.finalAmount ?? b.spNetInHo,
-                              });
-                            }
-                          });
-                          setArDecisions(newDecisions);
-                        }}
-                        data-testid="ar-bulk-pay"
-                      >
-                        <Check className="h-3 w-3 mr-1" /> Set Pay
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs px-2 border-red-300 text-red-700 hover:bg-red-50"
-                        onClick={() => {
-                          const newDecisions = new Map(arDecisions);
-                          arSelectedBookings.forEach(id => {
-                            const b = allBookings.find(bk => bk.bookingId === id);
-                            if (b) {
-                              newDecisions.set(id, {
-                                decision: "dont_pay",
-                                reason: arDecisions.get(id)?.reason || "",
-                                customReason: arDecisions.get(id)?.customReason || "",
-                                finalAmount: arDecisions.get(id)?.finalAmount ?? b.spNetInHo,
-                              });
-                            }
-                          });
-                          setArDecisions(newDecisions);
-                        }}
-                        data-testid="ar-bulk-dontpay"
-                      >
-                        <X className="h-3 w-3 mr-1" /> Set Don't Pay
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs px-2 border-amber-300 text-amber-700 hover:bg-amber-50"
-                        onClick={() => {
-                          arSelectedBookings.forEach(id => {
-                            const b = allBookings.find(bk => bk.bookingId === id);
-                            if (b) {
-                              setArActiveDisputes(prev => new Set(prev).add(id));
-                              setArDisputeAmounts(prev => {
-                                const newMap = new Map(prev);
-                                newMap.set(id, Math.abs(b.spNetInHo - b.hoNet));
-                                return newMap;
-                              });
-                            }
-                          });
-                        }}
-                        data-testid="ar-bulk-dispute"
-                      >
-                        <AlertTriangle className="h-3 w-3 mr-1" /> Dispute Selected
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Footer */}
-                {allBookings.length > 0 && (
-                  <div className="flex items-center justify-between pt-3 border-t mt-2">
-                    <div className="flex gap-4 text-xs text-muted-foreground">
-                      <span>
-                        <Check className="h-3 w-3 inline mr-1 text-green-500" />
-                        Pay: {allBookings.filter(b => {
-                          const d = arDecisions.get(b.bookingId);
-                          return !d || d.decision === "pay";
-                        }).length}
-                      </span>
-                      <span>
-                        <X className="h-3 w-3 inline mr-1 text-red-500" />
-                        Don't Pay: {allBookings.filter(b => {
-                          const d = arDecisions.get(b.bookingId);
-                          return d?.decision === "dont_pay";
-                        }).length}
-                      </span>
-                      <span>
-                        Disputes: {allBookings.filter(b => arActiveDisputes.has(b.bookingId)).length}
-                      </span>
-                    </div>
-                    <div className="flex gap-6 text-xs">
-                      <div>
-                        <span className="text-muted-foreground mr-1">Excluded:</span>
-                        <span className="font-mono font-medium text-red-600">
-                          {formatNumber(allBookings.reduce((sum, b) => {
-                            const d = arDecisions.get(b.bookingId);
-                            if (d?.decision !== "dont_pay") return sum;
-                            return sum + (d?.finalAmount ?? b.spNetInHo);
-                          }, 0))}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground mr-1">Total Payable:</span>
-                        <span className="font-mono font-semibold text-sm">
-                          {formatNumber(allBookings.reduce((sum, b) => {
-                            const d = arDecisions.get(b.bookingId);
-                            if (d?.decision === "dont_pay") return sum;
-                            return sum + (d?.finalAmount ?? b.spNetInHo);
-                          }, 0))}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isPay ? (
+                          <Input type="number" step="0.01" className="h-6 text-[11px] px-1 text-right font-mono" value={currentFinalAmount} onChange={(e) => {
+                            const newDecisions = new Map(arDecisions);
+                            newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: decision?.reason || "", customReason: decision?.customReason || "", finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 });
+                            setArDecisions(newDecisions);
+                          }} data-testid={`ar-input-final-amount-${booking.bookingId}`} />
+                        ) : <span className="text-muted-foreground text-xs">-</span>}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
 
