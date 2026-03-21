@@ -17,6 +17,7 @@ interface AnalysisRow {
   previousBe: string | null;
   bidCount: number;
   tids: string[];
+  paymentMethods: string[];
 }
 
 interface BookingRow {
@@ -51,6 +52,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
 
   if (sameBe.length > 0) {
     const tids = [...new Set(sameBe.map(b => b.tid))];
+    const paymentMethods = [...new Set(sameBe.map(b => b.paymentMethod).filter(Boolean))];
     rows.push({
       type: "Same BE",
       discrepancyLc: sameBe.reduce((s, b) => s + (b.spNet - b.hoNet), 0),
@@ -58,6 +60,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
       previousBe: null,
       bidCount: sameBe.length,
       tids,
+      paymentMethods,
     });
   }
 
@@ -70,6 +73,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
     }
     for (const [prevBe, group] of byPrevBe) {
       const tids = [...new Set(group.map(b => b.tid))];
+      const paymentMethods = [...new Set(group.map(b => b.paymentMethod).filter(Boolean))];
       rows.push({
         type: "Diff BE",
         discrepancyLc: group.reduce((s, b) => s + (b.spNet - b.hoNet), 0),
@@ -77,6 +81,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
         previousBe: prevBe,
         bidCount: group.length,
         tids,
+        paymentMethods,
       });
     }
   }
@@ -128,6 +133,7 @@ export default function AnalysisWorkspace() {
                 <TableHead className="text-right">Discrepancy USD</TableHead>
                 <TableHead>Previous BE</TableHead>
                 <TableHead className="text-right">BID Count</TableHead>
+                <TableHead>Payment Method</TableHead>
                 <TableHead>Ticket IDs</TableHead>
               </TableRow>
             </TableHeader>
@@ -173,6 +179,13 @@ export default function AnalysisWorkspace() {
                     <TableCell className="text-right font-mono text-sm">{row.bidCount}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
+                        {row.paymentMethods.map(pm => (
+                          <Badge key={pm} variant="secondary" className="text-[10px]">{pm}</Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
                         {row.tids.map(tid => (
                           <Badge key={tid} variant="outline" className="text-[10px] font-mono">{tid}</Badge>
                         ))}
@@ -194,6 +207,7 @@ export default function AnalysisWorkspace() {
                 </TableCell>
                 <TableCell></TableCell>
                 <TableCell className="text-right font-mono text-sm">{totalBids}</TableCell>
+                <TableCell></TableCell>
                 <TableCell></TableCell>
               </TableRow>
             </TableBody>
