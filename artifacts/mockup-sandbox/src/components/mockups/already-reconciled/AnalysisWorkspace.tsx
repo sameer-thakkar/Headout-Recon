@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronRight, ChevronDown, X as XIcon } from "lucide-react";
+
+import { ChevronRight, ChevronDown, X as XIcon, Info as InfoIcon } from "lucide-react";
 
 const formatNumber = (n: number) =>
   n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -91,9 +91,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
 
 export default function AnalysisWorkspace() {
   const [selectedRow, setSelectedRow] = useState<AnalysisRow | null>(null);
-  const [decisions, setDecisions] = useState<Map<string, { decision: "pay" | "dont_pay"; reason: string; finalAmount: number }>>(new Map());
-  const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
-  const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
+  const [finalAmounts, setFinalAmounts] = useState<Map<string, number>>(new Map());
 
   const analysisRows = buildAnalysisRows(MOCK_BOOKINGS);
 
@@ -107,6 +105,21 @@ export default function AnalysisWorkspace() {
         return b.type === "Diff BE" && b.hoBeId === selectedRow.previousBe;
       })
     : [];
+
+  const getFinalAmount = (bookingId: string, spNet: number) => {
+    if (finalAmounts.has(bookingId)) return finalAmounts.get(bookingId)!;
+    return 0;
+  };
+
+  const setFinalAmount = (bookingId: string, val: number) => {
+    setFinalAmounts(prev => { const m = new Map(prev); m.set(bookingId, val); return m; });
+  };
+
+  const zeroedOut = detailBookings.filter(b => getFinalAmount(b.bookingId, b.spNet) === 0);
+  const keptPayable = detailBookings.filter(b => getFinalAmount(b.bookingId, b.spNet) !== 0);
+  const zeroedLc = zeroedOut.reduce((s, b) => s + b.spNet, 0);
+  const keptLc = keptPayable.reduce((s, b) => s + getFinalAmount(b.bookingId, b.spNet), 0);
+  const netTapImpact = keptLc - detailBookings.reduce((s, b) => s + b.spNet, 0);
 
   return (
     <div style={{ fontFamily: "Inter, sans-serif", background: "#fff", minHeight: "100vh", padding: "24px" }}>
@@ -216,6 +229,7 @@ export default function AnalysisWorkspace() {
 
         {selectedRow && (
           <Card className="border-primary/20">
+            {/* Card header */}
             <div className="px-4 py-3 border-b bg-muted/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -245,6 +259,19 @@ export default function AnalysisWorkspace() {
                 </Button>
               </div>
             </div>
+
+            {/* Info banner */}
+            <div className="mx-4 mt-3 mb-1 flex items-start gap-2.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-800">
+              <InfoIcon className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+              <span>
+                {selectedRow.type === "Same BE"
+                  ? <>These bookings have already been paid under billing entity <span className="font-mono font-semibold">{detailBookings[0]?.hoBeId || "—"}</span>. Total Amount Payable has been set to <span className="font-semibold">0</span> for all. You can override individual amounts below if needed.</>
+                  : <>These bookings were previously reconciled under billing entity <span className="font-mono font-semibold">{selectedRow.previousBe}</span>. Total Amount Payable has been set to <span className="font-semibold">0</span> for all. You can override individual amounts below if needed.</>
+                }
+              </span>
+            </div>
+
+            {/* Booking table */}
             <div className="overflow-auto">
               <Table>
                 <TableHeader>
@@ -262,28 +289,18 @@ export default function AnalysisWorkspace() {
                         <TableHead>SP BE</TableHead>
                       </>
                     )}
-                    <TableHead className="w-[90px]">Decision</TableHead>
-                    <TableHead className="w-[150px]">Reason</TableHead>
-                    <TableHead className="w-[110px]">Dispute</TableHead>
-                    <TableHead className="w-[100px] text-right">Final Amt</TableHead>
+                    <TableHead className="w-[110px] text-right">Final Amt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {detailBookings.map((booking, index) => {
+                  {detailBookings.map((booking) => {
                     const diff = booking.spNet - booking.hoNet;
-                    const decision = decisions.get(booking.bookingId);
-                    const isPay = !decision || decision.decision === "pay";
-                    const isDontPay = decision?.decision === "dont_pay";
-                    const isDisputeActive = activeDisputes.has(booking.bookingId);
-                    const disputeAmount = disputeAmounts.get(booking.bookingId) || 0;
-                    const currentFinalAmount = decision?.finalAmount ?? booking.spNet;
-                    const reasonOptions = ["", "Cancellations", "Multiple tickets booked", "Manual Error", "Partial Fulfillment"];
-                    const isCustomReason = decision?.reason && !reasonOptions.includes(decision.reason);
+                    const currentFinalAmount = getFinalAmount(booking.bookingId, booking.spNet);
+                    const isOverridden = currentFinalAmount !== 0;
 
                     return (
                       <TableRow
                         key={booking.bookingId}
-                        className={isDontPay ? "opacity-50" : ""}
                         data-testid={`booking-row-${booking.bookingId}`}
                       >
                         <TableCell className="font-mono text-xs">{booking.tid}</TableCell>
@@ -307,121 +324,62 @@ export default function AnalysisWorkspace() {
                             <TableCell className="font-mono text-xs">{booking.spBeId}</TableCell>
                           </>
                         )}
-                        <TableCell>
-                          <Select
-                            value={decision?.decision || "pay"}
-                            onValueChange={(v: string) => {
-                              const newDec = new Map(decisions);
-                              newDec.set(booking.bookingId, {
-                                decision: v as "pay" | "dont_pay",
-                                reason: decision?.reason || "",
-                                finalAmount: decision?.finalAmount ?? booking.spNet,
-                              });
-                              setDecisions(newDec);
-                            }}
-                          >
-                            <SelectTrigger className="h-6 text-[11px] px-1.5" data-testid={`decision-${booking.bookingId}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pay">Pay</SelectItem>
-                              <SelectItem value="dont_pay">Don't Pay</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={isCustomReason ? "" : (decision?.reason || "")}
-                            onValueChange={(v: string) => {
-                              const newDec = new Map(decisions);
-                              newDec.set(booking.bookingId, {
-                                decision: decision?.decision || "pay",
-                                reason: v === "none" ? "" : v,
-                                finalAmount: decision?.finalAmount ?? booking.spNet,
-                              });
-                              setDecisions(newDec);
-                            }}
-                          >
-                            <SelectTrigger className="h-6 text-[11px] px-1" data-testid={`reason-${booking.bookingId}`}>
-                              <SelectValue placeholder="-" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">-</SelectItem>
-                              <SelectItem value="Cancellations">Cancellations</SelectItem>
-                              <SelectItem value="Multiple tickets booked">Multiple tickets</SelectItem>
-                              <SelectItem value="Manual Error">Manual Error</SelectItem>
-                              <SelectItem value="Partial Fulfillment">Partial Fulfillment</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          {isDisputeActive ? (
-                            <div className="flex items-center gap-0.5">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                className="h-6 text-[11px] px-1 w-14 text-right font-mono"
-                                value={disputeAmount || ""}
-                                onChange={(e) => {
-                                  const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
-                                  setDisputeAmounts(prev => { const m = new Map(prev); m.set(booking.bookingId, val); return m; });
-                                }}
-                                data-testid={`dispute-amount-${booking.bookingId}`}
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-5 w-5"
-                                onClick={() => {
-                                  setActiveDisputes(prev => { const s = new Set(prev); s.delete(booking.bookingId); return s; });
-                                  setDisputeAmounts(prev => { const m = new Map(prev); m.delete(booking.bookingId); return m; });
-                                }}
-                              >
-                                <XIcon className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 text-[10px] px-1.5"
-                              onClick={() => {
-                                setActiveDisputes(prev => new Set(prev).add(booking.bookingId));
-                                setDisputeAmounts(prev => { const m = new Map(prev); m.set(booking.bookingId, Math.abs(diff)); return m; });
-                              }}
-                              data-testid={`dispute-btn-${booking.bookingId}`}
-                            >
-                              Dispute
-                            </Button>
-                          )}
-                        </TableCell>
                         <TableCell className="text-right">
-                          {isPay ? (
+                          <div className="flex items-center justify-end gap-1">
+                            {isOverridden && (
+                              <Badge className="h-4 text-[9px] px-1 bg-amber-100 text-amber-700 border-amber-200">
+                                Override
+                              </Badge>
+                            )}
                             <Input
                               type="number"
                               step="0.01"
-                              className="h-6 text-[11px] px-1 text-right font-mono"
+                              className={`h-6 text-[11px] px-1 w-20 text-right font-mono ${isOverridden ? "border-amber-400 bg-amber-50" : ""}`}
                               value={currentFinalAmount}
                               onChange={(e) => {
-                                const newDec = new Map(decisions);
-                                newDec.set(booking.bookingId, {
-                                  decision: decision?.decision || "pay",
-                                  reason: decision?.reason || "",
-                                  finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100,
-                                });
-                                setDecisions(newDec);
+                                const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
+                                setFinalAmount(booking.bookingId, val);
                               }}
                               data-testid={`final-amount-${booking.bookingId}`}
                             />
-                          ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
-                          )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
                   })}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Summary strip */}
+            <div className="mx-4 my-3 flex items-center gap-6 rounded-md border bg-muted/30 px-4 py-2.5 text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-green-500 shrink-0"></span>
+                <span className="text-muted-foreground">Zeroed out:</span>
+                <span className="font-semibold">{zeroedOut.length} bookings</span>
+                <span className="font-mono text-muted-foreground text-xs">({formatNumber(zeroedLc)} LC)</span>
+              </div>
+              <div className="h-4 w-px bg-border"></div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0"></span>
+                <span className="text-muted-foreground">Kept payable:</span>
+                <span className="font-semibold">{keptPayable.length} bookings</span>
+                <span className="font-mono text-muted-foreground text-xs">({formatNumber(keptLc)} LC)</span>
+              </div>
+              <div className="h-4 w-px bg-border"></div>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <span className="text-muted-foreground">Net TAP impact:</span>
+                <span className={`font-mono font-semibold ${netTapImpact <= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {netTapImpact > 0 ? "+" : ""}{formatNumber(netTapImpact)} LC
+                </span>
+              </div>
+            </div>
+
+            {/* Apply action */}
+            <div className="px-4 pb-4 flex justify-end">
+              <Button size="sm" className="text-xs">
+                Apply &amp; Confirm
+              </Button>
             </div>
           </Card>
         )}

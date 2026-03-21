@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from "react";
 import { authFetch } from "@/lib/queryClient";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2, Check } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2, Check, Info } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -1273,6 +1273,18 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               </Badge>
             </DialogTitle>
           </DialogHeader>
+
+          {/* TAP=0 info banner */}
+          <div className="flex items-start gap-2.5 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/40 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-300 mx-0 mb-2">
+            <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+            <span>
+              {selectedAlreadyReconciledType === "same_be"
+                ? <>These bookings have already been paid under billing entity <span className="font-mono font-semibold">{selectedAlreadyReconciledBookings[0]?.hoBeId || selectedAlreadyReconciledBookings[0]?.beId || "—"}</span>. Total Amount Payable has been set to <span className="font-semibold">0</span> for all. You can override individual amounts in the <span className="font-semibold">Final Amt</span> column below if needed.</>
+                : <>These bookings were previously reconciled under a different billing entity. Total Amount Payable has been set to <span className="font-semibold">0</span> for all. You can override individual amounts in the <span className="font-semibold">Final Amt</span> column below if needed.</>
+              }
+            </span>
+          </div>
+
           <div className="flex-1 overflow-auto">
             <Table className="min-w-max">
               <TableHeader>
@@ -1310,7 +1322,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                   const isDontPay = decision?.decision === "dont_pay";
                   const isDisputeActive = arActiveDisputes.has(booking.bookingId);
                   const disputeAmount = arDisputeAmounts.get(booking.bookingId) || 0;
-                  const currentFinalAmount = decision?.finalAmount ?? booking.spNetInHo;
+                  const currentFinalAmount = decision?.finalAmount ?? 0;
                   const reasonOptions = ["", "Cancellations", "Multiple tickets booked", "Manual Error", "Partial Fulfillment"];
                   const isCustomReason = decision?.reason && !reasonOptions.includes(decision.reason);
                   return (
@@ -1339,7 +1351,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       <TableCell>
                         <Select value={decision?.decision || "pay"} onValueChange={(v: "pay" | "dont_pay") => {
                           const newDecisions = new Map(arDecisions);
-                          newDecisions.set(booking.bookingId, { decision: v, reason: decision?.reason || "", customReason: decision?.customReason || "", finalAmount: decision?.finalAmount ?? booking.spNetInHo });
+                          newDecisions.set(booking.bookingId, { decision: v, reason: decision?.reason || "", customReason: decision?.customReason || "", finalAmount: decision?.finalAmount ?? 0 });
                           setArDecisions(newDecisions);
                         }}>
                           <SelectTrigger className="h-6 text-[11px] px-1.5" data-testid={`ar-select-decision-${booking.bookingId}`}><SelectValue /></SelectTrigger>
@@ -1353,7 +1365,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         <div className="flex gap-0.5">
                           <Select value={isCustomReason ? "" : (decision?.reason || "")} onValueChange={(v) => {
                             const newDecisions = new Map(arDecisions);
-                            newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: v === "none" ? "" : v, customReason: "", finalAmount: decision?.finalAmount ?? booking.spNetInHo });
+                            newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: v === "none" ? "" : v, customReason: "", finalAmount: decision?.finalAmount ?? 0 });
                             setArDecisions(newDecisions);
                           }}>
                             <SelectTrigger className="h-6 text-[11px] px-1 flex-1" data-testid={`ar-select-reason-${booking.bookingId}`}><SelectValue placeholder="-" /></SelectTrigger>
@@ -1368,7 +1380,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                           {(isCustomReason || decision?.reason === "") && decision && (
                             <Input className="h-6 text-[11px] px-1 w-14" placeholder="Other..." value={isCustomReason ? decision?.reason : ""} onChange={(e) => {
                               const newDecisions = new Map(arDecisions);
-                              newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: e.target.value, customReason: e.target.value, finalAmount: decision?.finalAmount ?? booking.spNetInHo });
+                              newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: e.target.value, customReason: e.target.value, finalAmount: decision?.finalAmount ?? 0 });
                               setArDecisions(newDecisions);
                             }} data-testid={`ar-input-custom-reason-${booking.bookingId}`} />
                           )}
