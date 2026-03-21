@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { ChevronRight, ChevronDown, X as XIcon, Info as InfoIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const formatNumber = (n: number) =>
   n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -105,7 +106,7 @@ export function MockupPreviewPage() {
       })
     : [];
 
-  const getFinalAmount = (bookingId: string) => {
+  const getFinalAmount = (bookingId: string): number => {
     if (finalAmounts.has(bookingId)) return finalAmounts.get(bookingId)!;
     return 0;
   };
@@ -290,6 +291,7 @@ export function MockupPreviewPage() {
                         <TableHead>SP BE</TableHead>
                       </>
                     )}
+                    <TableHead className="w-8"></TableHead>
                     <TableHead className="w-[110px] text-right">Final Amt</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -298,6 +300,9 @@ export function MockupPreviewPage() {
                     const diff = booking.spNet - booking.hoNet;
                     const currentFinalAmount = getFinalAmount(booking.bookingId);
                     const isOverridden = currentFinalAmount !== 0;
+                    const infoMsg = selectedRow.type === "Same BE"
+                      ? `Already paid for ${booking.bookingId} under Billing Entity ${booking.hoBeId}. Total Amount Payable has been set to 0.`
+                      : `${booking.bookingId} was previously reconciled under ${booking.hoBeId}. Total Amount Payable has been set to 0.`;
 
                     return (
                       <TableRow
@@ -325,6 +330,18 @@ export function MockupPreviewPage() {
                             <TableCell className="font-mono text-xs">{booking.spBeId}</TableCell>
                           </>
                         )}
+                        <TableCell className="w-8 px-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <InfoIcon className="h-3.5 w-3.5 text-blue-400 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="max-w-[260px] text-xs">
+                                {infoMsg}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             {isOverridden && (

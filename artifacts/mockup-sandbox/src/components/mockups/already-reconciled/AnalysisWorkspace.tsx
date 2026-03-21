@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChevronRight, ChevronDown, X as XIcon, Info as InfoIcon } from "lucide-react";
 
 const formatNumber = (n: number) =>
@@ -106,7 +106,7 @@ export default function AnalysisWorkspace() {
       })
     : [];
 
-  const getFinalAmount = (bookingId: string, spNet: number) => {
+  const getFinalAmount = (bookingId: string) => {
     if (finalAmounts.has(bookingId)) return finalAmounts.get(bookingId)!;
     return 0;
   };
@@ -115,10 +115,10 @@ export default function AnalysisWorkspace() {
     setFinalAmounts(prev => { const m = new Map(prev); m.set(bookingId, val); return m; });
   };
 
-  const zeroedOut = detailBookings.filter(b => getFinalAmount(b.bookingId, b.spNet) === 0);
-  const keptPayable = detailBookings.filter(b => getFinalAmount(b.bookingId, b.spNet) !== 0);
+  const zeroedOut = detailBookings.filter(b => getFinalAmount(b.bookingId) === 0);
+  const keptPayable = detailBookings.filter(b => getFinalAmount(b.bookingId) !== 0);
   const zeroedLc = zeroedOut.reduce((s, b) => s + b.spNet, 0);
-  const keptLc = keptPayable.reduce((s, b) => s + getFinalAmount(b.bookingId, b.spNet), 0);
+  const keptLc = keptPayable.reduce((s, b) => s + getFinalAmount(b.bookingId), 0);
   const netTapImpact = keptLc - detailBookings.reduce((s, b) => s + b.spNet, 0);
 
   return (
@@ -289,14 +289,18 @@ export default function AnalysisWorkspace() {
                         <TableHead>SP BE</TableHead>
                       </>
                     )}
+                    <TableHead className="w-8"></TableHead>
                     <TableHead className="w-[110px] text-right">Final Amt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {detailBookings.map((booking) => {
                     const diff = booking.spNet - booking.hoNet;
-                    const currentFinalAmount = getFinalAmount(booking.bookingId, booking.spNet);
+                    const currentFinalAmount = getFinalAmount(booking.bookingId);
                     const isOverridden = currentFinalAmount !== 0;
+                    const infoMsg = selectedRow.type === "Same BE"
+                      ? `Already paid for ${booking.bookingId} under Billing Entity ${booking.hoBeId}. Total Amount Payable has been set to 0.`
+                      : `${booking.bookingId} was previously reconciled under ${booking.hoBeId}. Total Amount Payable has been set to 0.`;
 
                     return (
                       <TableRow
@@ -324,6 +328,18 @@ export default function AnalysisWorkspace() {
                             <TableCell className="font-mono text-xs">{booking.spBeId}</TableCell>
                           </>
                         )}
+                        <TableCell className="w-8 px-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <InfoIcon className="h-3.5 w-3.5 text-blue-400 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="max-w-[260px] text-xs">
+                                {infoMsg}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             {isOverridden && (

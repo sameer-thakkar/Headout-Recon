@@ -442,6 +442,21 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     return alreadyReconciledData.differentBE.bookings;
   }, [selectedAlreadyReconciledType, alreadyReconciledData]);
 
+  // Pre-populate arDecisions with finalAmount=0 when the AR detail modal opens
+  useEffect(() => {
+    if (isAlreadyReconciledDetailModalOpen && selectedAlreadyReconciledBookings.length > 0) {
+      setArDecisions(prev => {
+        const next = new Map(prev);
+        for (const booking of selectedAlreadyReconciledBookings) {
+          if (!next.has(booking.bookingId)) {
+            next.set(booking.bookingId, { decision: "pay", reason: "", customReason: "", finalAmount: 0 });
+          }
+        }
+        return next;
+      });
+    }
+  }, [isAlreadyReconciledDetailModalOpen, selectedAlreadyReconciledBookings]);
+
   // Split summary into Primary Vendor and Secondary Vendor sections
   // Uses separate arrays from API (no prefix needed)
   // Consolidate both by reason to handle multiple currencies
@@ -1280,7 +1295,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             <span>
               {selectedAlreadyReconciledType === "same_be"
                 ? <>These bookings have already been paid under billing entity <span className="font-mono font-semibold">{selectedAlreadyReconciledBookings[0]?.hoBeId || selectedAlreadyReconciledBookings[0]?.beId || "—"}</span>. Total Amount Payable has been set to <span className="font-semibold">0</span> for all. You can override individual amounts in the <span className="font-semibold">Final Amt</span> column below if needed.</>
-                : <>These bookings were previously reconciled under a different billing entity. Total Amount Payable has been set to <span className="font-semibold">0</span> for all. You can override individual amounts in the <span className="font-semibold">Final Amt</span> column below if needed.</>
+                : <>These bookings were previously reconciled under billing entity <span className="font-mono font-semibold">{selectedAlreadyReconciledBookings[0]?.hoBeId || "—"}</span>. Total Amount Payable has been set to <span className="font-semibold">0</span> for all. You can override individual amounts in the <span className="font-semibold">Final Amt</span> column below if needed.</>
               }
             </span>
           </div>
