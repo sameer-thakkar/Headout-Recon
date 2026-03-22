@@ -1009,22 +1009,18 @@ export function CancellationsWorkspace() {
                       </TableCell>
                       {/* ── Action cell ─────────────────────────────────── */}
                       <TableCell className="py-1 pr-3 text-center">
-                        {row.hasActions ? (
-                          isDone ? (
-                            <Badge className="gap-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-50 text-[11px] font-medium px-2 py-0.5">
-                              <CheckCircle2 className="h-3 w-3" /> Done
-                            </Badge>
-                          ) : (
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground"
-                              onClick={() => openTakeAction(row.rowKey)}
-                            >
-                              <Zap className="h-3 w-3" /> Take Action
-                            </Button>
-                          )
+                        {isDone ? (
+                          <Badge className="gap-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-50 text-[11px] font-medium px-2 py-0.5">
+                            <CheckCircle2 className="h-3 w-3" /> Done
+                          </Badge>
                         ) : (
-                          <span className="text-muted-foreground">—</span>
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                            onClick={() => openTakeAction(row.rowKey)}
+                          >
+                            <Zap className="h-3 w-3" /> Take Action
+                          </Button>
                         )}
                       </TableCell>
                     </TableRow>
