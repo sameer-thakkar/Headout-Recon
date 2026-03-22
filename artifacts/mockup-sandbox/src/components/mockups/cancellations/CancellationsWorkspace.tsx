@@ -342,9 +342,12 @@ export function CancellationsWorkspace() {
     if (!takeAction) return;
     // When advancing to step 2, sync dispute amounts from price choice
     if (step === 2 && takeAction.priceChoice) {
-      const amounts: Record<string, string> = {};
+      // Only seed amounts for TIDs that have never been touched; preserve manual edits
+      const amounts: Record<string, string> = { ...takeAction.disputeAmounts };
       selectedTids.forEach(t => {
-        amounts[t.tid] = getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices).toFixed(2);
+        if (!(t.tid in amounts)) {
+          amounts[t.tid] = getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices).toFixed(2);
+        }
       });
       setTakeAction(prev => prev ? { ...prev, step, disputeAmounts: amounts } : prev);
     } else {
