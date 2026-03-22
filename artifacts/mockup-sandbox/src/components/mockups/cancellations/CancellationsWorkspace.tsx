@@ -22,6 +22,8 @@ const CANCELLATION_SORT_ORDER: Record<string, number> = {
   "Cancelled-Check for Charge loss": 1,
   "Cancelled-DSS policy":            2,
   "Cancelled-OK":                    3,
+  "Cancelled-Insured Booking":       4,
+  "Cancelled-Refund OK":             5,
 };
 const sortKey = (sub: string) => CANCELLATION_SORT_ORDER[sub] ?? 99;
 
