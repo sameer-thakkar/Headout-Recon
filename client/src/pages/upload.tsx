@@ -385,6 +385,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     "Cancelled-Insured Booking",
     "Cancelled-Check for Charge loss",
     "Cancelled-DSS policy",
+    "Cancelled-OK",
+    "Cancelled-Refund OK",
   ];
 
   // Calculate cancellation breakdown data
