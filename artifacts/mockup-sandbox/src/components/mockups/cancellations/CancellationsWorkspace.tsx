@@ -515,47 +515,8 @@ export function CancellationsWorkspace() {
             </div>
           </div>
 
-          {/* ══ SECTION 2: Actions (pills when idle, 3-step panel when active) ═ */}
+          {/* ══ SECTION 2: Amount Payable (idle) / 3-step panel (active) ══════ */}
           <div className="flex-1 flex flex-col overflow-hidden">
-
-            {/* ── No active action: show NPD-style pills per actionable row ── */}
-            {!takeAction && (
-              <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-semibold">Actions</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {MOCK_BREAKUP.filter(r => r.hasActions).length} rows
-                  </Badge>
-                </div>
-                {MOCK_BREAKUP.filter(r => r.hasActions).map(row => {
-                  const tids = MOCK_TIDS[row.rowKey] ?? [];
-                  const isDone = doneRows.has(row.rowKey);
-                  return (
-                    <div key={row.rowKey} className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center gap-4">
-                      {subCategoryBadge(row.subCategory)}
-                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tids.length} TIDs:</span>
-                      <div className="h-4 w-px bg-border" />
-                      {isDone ? (
-                        <Badge className="gap-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-50 text-xs font-medium px-2 py-0.5">
-                          <CheckCircle2 className="h-3 w-3" /> Done
-                        </Badge>
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
-                            onClick={() => openTakeAction(row.rowKey)}
-                          >
-                            <Zap className="h-3.5 w-3.5" /> Take Action
-                          </Button>
-                          <span className="text-xs text-muted-foreground">Set price, raise disputes &amp; log issues in one guided flow</span>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
             {/* ── Active action: 3-step panel ──────────────────────────────── */}
             {takeAction && selectedRow && (
@@ -959,12 +920,13 @@ export function CancellationsWorkspace() {
           )}
 
           {/* ══ Amount Payable Summary Table ════════════════════════════════ */}
-          <div className="shrink-0 border-t bg-background" style={{ maxHeight: 280, overflowY: "auto" }}>
+            {!takeAction && (
+            <div className="flex-1 overflow-auto">
             {/* Sticky sub-header */}
             <div className="px-5 pt-2.5 pb-1.5 flex items-center gap-2 sticky top-0 bg-background z-10 border-b">
               <span className="text-xs font-semibold uppercase tracking-wide">Amount Payable</span>
               <Badge variant="secondary" className="text-xs">{MOCK_BREAKUP.length} rows</Badge>
-              <span className="ml-auto text-xs text-muted-foreground">Confirm payable amount per sub-category</span>
+              <span className="ml-auto text-xs text-muted-foreground">Confirm payable amount · click ⚡ to raise disputes &amp; log issues</span>
             </div>
 
             <Table>
@@ -978,7 +940,8 @@ export function CancellationsWorkspace() {
                     { label: "Disc. LC",             cls: "",                    align: "text-right" },
                     { label: "Disc. USD",            cls: "",                    align: "text-right" },
                     { label: "Dispute Raised",       cls: "",                    align: "text-right" },
-                    { label: "Total Amount Payable", cls: "pr-3 min-w-[200px]", align: "text-right" },
+                    { label: "Total Amount Payable", cls: "min-w-[200px]",       align: "text-right" },
+                    { label: "Action",               cls: "pr-3 text-center",    align: "" },
                   ].map(col => (
                     <TableHead key={col.label} className={`py-1 text-xs font-medium bg-muted/50 whitespace-nowrap ${col.align} ${col.cls}`}>
                       {col.label}
@@ -995,6 +958,7 @@ export function CancellationsWorkspace() {
                     ? tapOverrides[row.rowKey]
                     : defaultTap.toFixed(2);
                   const isConfirmed = tapConfirmedRows.has(row.rowKey);
+                  const isDone = doneRows.has(row.rowKey);
                   return (
                     <TableRow
                       key={row.rowKey}
@@ -1043,6 +1007,26 @@ export function CancellationsWorkspace() {
                           </Button>
                         </div>
                       </TableCell>
+                      {/* ── Action cell ─────────────────────────────────── */}
+                      <TableCell className="py-1 pr-3 text-center">
+                        {row.hasActions ? (
+                          isDone ? (
+                            <Badge className="gap-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-50 text-[11px] font-medium px-2 py-0.5">
+                              <CheckCircle2 className="h-3 w-3" /> Done
+                            </Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs gap-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              onClick={() => openTakeAction(row.rowKey)}
+                            >
+                              <Zap className="h-3 w-3" /> Take Action
+                            </Button>
+                          )
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -1071,19 +1055,21 @@ export function CancellationsWorkspace() {
                       return tot > 0 ? fmt(tot) : "—";
                     })()}
                   </td>
-                  <td className="py-2 text-right font-mono pr-3">
+                  <td className="py-2 text-right font-mono pr-2">
                     {fmt(MOCK_BREAKUP.reduce((s, r) => {
                       const d = liveDispute(r.rowKey);
                       const def = Math.max(0, r.spNetLc - d);
                       return s + (parseFloat(tapOverrides[r.rowKey] ?? def.toFixed(2)) || 0);
                     }, 0))}
                   </td>
+                  <td className="py-2 pr-3" />
                 </tr>
               </tfoot>
             </Table>
-          </div>
+            </div>
+            )}
 
-        </div>
+          </div>
         </div>
 
         {/* ── Toast ──────────────────────────────────────────────────────── */}
