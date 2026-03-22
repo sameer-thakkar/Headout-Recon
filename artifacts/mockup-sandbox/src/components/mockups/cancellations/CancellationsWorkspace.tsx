@@ -231,11 +231,26 @@ function subCategoryBadge(sub: string) {
   );
 }
 
-function getAppliedPrice(tid: TidRow, priceChoice: "sp" | "ho", overrides: Record<string, "sp" | "ho" | "pax">): number {
+function computePaxTotal(tid: TidRow, paxPrices: Record<string, string>): number {
+  if (tid.paxRows.length === 0) return Math.abs(tid.spNetLc);
+  return tid.paxRows.reduce((sum, pr) => {
+    const key = `${tid.tid}__${pr.paxType}__${pr.dateRange}`;
+    const entered = parseFloat(paxPrices[key] ?? "");
+    const unitPrice = isNaN(entered) ? pr.spUnit : entered;
+    return sum + unitPrice * pr.count;
+  }, 0);
+}
+
+function getAppliedPrice(
+  tid: TidRow,
+  priceChoice: "sp" | "ho",
+  overrides: Record<string, "sp" | "ho" | "pax">,
+  paxPrices: Record<string, string>,
+): number {
   const ov = overrides[tid.tid];
   if (ov === "sp") return Math.abs(tid.spNetLc);
   if (ov === "ho") return 0;
-  if (ov === "pax") return Math.abs(tid.spNetLc); // treat pax as sp net for totalling
+  if (ov === "pax") return computePaxTotal(tid, paxPrices);
   return priceChoice === "sp" ? Math.abs(tid.spNetLc) : 0;
 }
 
@@ -292,7 +307,7 @@ export function CancellationsWorkspace() {
 
   // Computed totals for the bottom bar
   const totalPayable = takeAction && takeAction.priceChoice
-    ? selectedTids.reduce((s, t) => s + getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides), 0)
+    ? selectedTids.reduce((s, t) => s + getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices), 0)
     : 0;
   const totalDisputeAmt = takeAction
     ? [...takeAction.disputeTids].reduce((s, tid) => {
@@ -329,7 +344,7 @@ export function CancellationsWorkspace() {
     if (step === 2 && takeAction.priceChoice) {
       const amounts: Record<string, string> = {};
       selectedTids.forEach(t => {
-        amounts[t.tid] = String(getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides).toFixed(2));
+        amounts[t.tid] = getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices).toFixed(2);
       });
       setTakeAction(prev => prev ? { ...prev, step, disputeAmounts: amounts } : prev);
     } else {
@@ -608,7 +623,7 @@ export function CancellationsWorkspace() {
 
                           {selectedTids.map(tid => {
                             const ov = takeAction.tidOverrides[tid.tid];
-                            const applied = getAppliedPrice(tid, takeAction.priceChoice!, takeAction.tidOverrides);
+                            const applied = getAppliedPrice(tid, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices);
                             const isPaxExpanded = takeAction.paxExpandedTid === tid.tid;
 
                             return (
@@ -620,8 +635,9 @@ export function CancellationsWorkspace() {
                                   </div>
                                   <div className="text-right w-24 font-mono text-sm text-blue-700">{fmt(Math.abs(tid.spNetLc))}</div>
                                   <div className="text-right w-10 text-sm">{tid.bidCount}</div>
-                                  <div className={`text-right w-24 font-mono text-sm font-semibold ${ov === "pax" ? "text-violet-600" : applied === 0 ? "text-green-600" : "text-blue-600"}`}>
-                                    {ov === "pax" ? "Pax pricing" : fmt(applied)}
+                                  <div className={`text-right w-24 font-mono text-sm font-semibold flex items-center justify-end gap-1 ${ov === "pax" ? "text-violet-600" : applied === 0 ? "text-green-600" : "text-blue-600"}`}>
+                                    {fmt(applied)}
+                                    {ov === "pax" && <span className="text-[10px] font-normal bg-violet-100 text-violet-700 px-1 rounded leading-4">pax</span>}
                                   </div>
                                   <div className="w-36">
                                     <Select
@@ -750,7 +766,7 @@ export function CancellationsWorkspace() {
                       {selectedTids.map(tid => {
                         const checked = takeAction.disputeTids.has(tid.tid);
                         const appliedPrice = takeAction.priceChoice
-                          ? getAppliedPrice(tid, takeAction.priceChoice, takeAction.tidOverrides)
+                          ? getAppliedPrice(tid, takeAction.priceChoice, takeAction.tidOverrides, takeAction.paxPrices)
                           : Math.abs(tid.spNetLc);
                         return (
                           <div key={tid.tid} className={`grid grid-cols-[auto_1fr_auto_auto_auto_1fr] items-center px-3 h-11 border-b last:border-0 gap-2 transition-colors ${checked ? "bg-amber-50/40" : "bg-background opacity-60"}`}>
