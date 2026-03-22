@@ -511,9 +511,9 @@ export function CancellationsWorkspace() {
                       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tids.length} TIDs:</span>
                       <div className="h-4 w-px bg-border" />
                       {isDone ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-green-600 font-medium">
-                          <CheckCircle2 className="h-4 w-4" /> Done
-                        </span>
+                        <Badge className="gap-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-50 text-xs font-medium px-2 py-0.5">
+                          <CheckCircle2 className="h-3 w-3" /> Done
+                        </Badge>
                       ) : (
                         <>
                           <Button
