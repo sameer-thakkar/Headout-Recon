@@ -414,7 +414,7 @@ export function CancellationsWorkspace() {
                             ${[2,3,9,12,13,14].includes(i) ? "text-right" : [1,4,5].includes(i) ? "text-center" : ""}
                           `}>{h}</TableHead>
                         ))}
-                        <TableHead className="py-1.5 text-xs font-medium bg-muted/90 whitespace-nowrap text-right pr-3">Action</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium bg-muted/90 whitespace-nowrap text-right pr-3 sticky right-0 z-20 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -476,8 +476,13 @@ export function CancellationsWorkspace() {
                             </TableCell>
                             <TableCell className="py-1.5 font-mono text-xs text-muted-foreground whitespace-nowrap">{row.tidConcentration || "—"}</TableCell>
 
-                            {/* Action column */}
-                            <TableCell className="py-1.5 text-right pr-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                            {/* Action column — sticky right */}
+                            <TableCell
+                              className={`py-1.5 text-right pr-3 whitespace-nowrap sticky right-0 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]
+                                ${isActive ? "bg-blue-50/70" : isDone ? "bg-green-50/40" : "bg-background"}
+                              `}
+                              onClick={e => e.stopPropagation()}
+                            >
                               {isDone ? (
                                 <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
                                   <CheckCircle2 className="h-3.5 w-3.5" /> Done
