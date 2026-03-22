@@ -43,6 +43,9 @@ const AmountPayablePanel = lazy(() =>
 const PurchaseReconciliationPanel = lazy(() =>
   import("@/components/purchase-reconciliation-panel").then(m => ({ default: m.PurchaseReconciliationPanel }))
 );
+const CancellationsWorkspace = lazy(() =>
+  import("@/components/cancellations-workspace").then(m => ({ default: m.CancellationsWorkspace }))
+);
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow, FxData } from "@shared/schema";
 
 interface UploadPageProps {
@@ -1484,68 +1487,20 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         </DialogContent>
       </Dialog>
 
-      {/* Cancellations Modal - Breakdown by Type */}
+      {/* Cancellations Workspace - Full-screen analysis + TID action */}
       <Dialog open={isCancellationsModalOpen} onOpenChange={setIsCancellationsModalOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <XCircle className="h-5 w-5 text-red-600" />
-              Cancellations Breakdown
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Click on a cancellation type to view detailed bookings.
-            </p>
-            <div className="space-y-2">
-              {cancellationData.breakdown.map((item) => (
-                <Card 
-                  key={item.reason}
-                  className="cursor-pointer hover-elevate border-red-200 dark:border-red-900/50"
-                  onClick={() => {
-                    setIsCancellationsModalOpen(false);
-                    setSelectedReason(item.reason);
-                    setIsModalOpen(true);
-                  }}
-                  data-testid={`cancellation-type-${item.displayName}`}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="destructive" className="text-xs">
-                          {item.displayName}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {item.count} booking{item.count !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-mono text-red-600 dark:text-red-400">
-                          {formatNumber(item.discrepancyLc)} LC
-                        </p>
-                        <p className="text-xs font-mono text-muted-foreground">
-                          {formatNumber(item.discrepancyUsd)} USD
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <div className="pt-3 border-t">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Total Cancellations</span>
-                <div className="text-right">
-                  <p className="font-mono font-medium text-red-600 dark:text-red-400">
-                    {formatNumber(cancellationData.totalDiscrepancyLc)} LC
-                  </p>
-                  <p className="text-xs font-mono text-muted-foreground">
-                    {formatNumber(cancellationData.totalDiscrepancyUsd)} USD
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 gap-0 flex flex-col overflow-hidden" data-testid="cancellations-workspace-dialog">
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading workspace…</div>}>
+            <CancellationsWorkspace
+              cancellationBookings={primaryRows.filter(r => cancellationReasons.includes(r.reason))}
+              allRows={primaryRows}
+              currency={cancellationData.currency}
+              beId={spDetails?.beId || ""}
+              supplierName={spDetails?.billingEntityName || ""}
+              onClose={() => setIsCancellationsModalOpen(false)}
+              fxData={fxData}
+            />
+          </Suspense>
         </DialogContent>
       </Dialog>
 
