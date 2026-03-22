@@ -3,12 +3,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   XCircle, AlertTriangle, ChevronRight,
-  CheckCircle2, X as XIcon, TrendingUp, TrendingDown, Check, Zap,
+  CheckCircle2, X as XIcon, Check, Zap,
 } from "lucide-react";
 
 const fmt = (n: number) =>
@@ -64,10 +63,9 @@ interface TidRow {
 
 type TakeActionState = {
   rowKey: string;
-  priceChoice: "sp" | "ho" | null;
-  tidOverrides: Record<string, "sp" | "ho" | "pax">;
-  paxExpandedTid: string | null;
+  tidFinalPrices: Record<string, string>;
   paxPrices: Record<string, string>;
+  expandedPaxTids: Set<string>;
   disputeTids: Set<string>;
   disputeAmounts: Record<string, string>;
   issueTids: Set<string>;
@@ -230,19 +228,6 @@ function computePaxTotal(tid: TidRow, paxPrices: Record<string, string>): number
   }, 0);
 }
 
-function getAppliedPrice(
-  tid: TidRow,
-  priceChoice: "sp" | "ho",
-  overrides: Record<string, "sp" | "ho" | "pax">,
-  paxPrices: Record<string, string>,
-): number {
-  const ov = overrides[tid.tid];
-  if (ov === "sp") return Math.abs(tid.spNetLc);
-  if (ov === "ho") return 0;
-  if (ov === "pax") return computePaxTotal(tid, paxPrices);
-  return priceChoice === "sp" ? Math.abs(tid.spNetLc) : 0;
-}
-
 // ─── Main Component ─────────────────────────────────────────────────────────
 export function CancellationsWorkspace() {
   const [takeAction, setTakeAction] = useState<TakeActionState>(null);
@@ -266,8 +251,14 @@ export function CancellationsWorkspace() {
   const selectedTids = takeAction ? (MOCK_TIDS[takeAction.rowKey] ?? []) : [];
 
   // Computed totals for the bottom bar
-  const totalPayable = takeAction && takeAction.priceChoice
-    ? selectedTids.reduce((s, t) => s + getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices), 0)
+  const getTidFinalPrice = (tid: TidRow): number => {
+    if (!takeAction) return 0;
+    if (tid.hasPax) return computePaxTotal(tid, takeAction.paxPrices);
+    const raw = parseFloat(takeAction.tidFinalPrices[tid.tid] ?? "") || 0;
+    return raw;
+  };
+  const totalPayable = takeAction
+    ? selectedTids.reduce((s, t) => s + getTidFinalPrice(t), 0)
     : 0;
   const totalDisputeAmt = takeAction
     ? [...takeAction.disputeTids].reduce((s, tid) => {
@@ -280,16 +271,20 @@ export function CancellationsWorkspace() {
 
   const openTakeAction = (rowKey: string) => {
     const tids = MOCK_TIDS[rowKey] ?? [];
+    // pre-fill final prices: SP Net for non-pax TIDs; pax TIDs computed from pax rows
+    const tidFinalPrices: Record<string, string> = {};
+    tids.forEach(t => {
+      if (!t.hasPax) tidFinalPrices[t.tid] = String(Math.abs(t.spNetLc));
+    });
     // pre-init disputes: all tids selected, amounts default to SP Net
     const disputeTids = new Set(tids.map(t => t.tid));
     const disputeAmounts: Record<string, string> = {};
     tids.forEach(t => { disputeAmounts[t.tid] = String(Math.abs(t.spNetLc)); });
     setTakeAction({
       rowKey,
-      priceChoice: null,
-      tidOverrides: {},
-      paxExpandedTid: null,
+      tidFinalPrices,
       paxPrices: {},
+      expandedPaxTids: new Set(),
       disputeTids,
       disputeAmounts,
       issueTids: new Set(),
@@ -494,45 +489,10 @@ export function CancellationsWorkspace() {
               <div className="flex-1 overflow-auto">
                 <div className="px-5 py-4 space-y-5">
 
-                  {/* Net Price ─────────────────────────────────────────── */}
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Net Price</div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => updateTA({ priceChoice: "sp" })}
-                        className={`flex-1 rounded-lg border-2 p-3 text-left transition-all cursor-pointer ${takeAction.priceChoice === "sp" ? "border-blue-500 bg-blue-50" : "border-border hover:border-blue-300 hover:bg-blue-50/40"}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className={`h-6 w-6 rounded flex items-center justify-center shrink-0 ${takeAction.priceChoice === "sp" ? "bg-blue-200" : "bg-blue-100"}`}>
-                            <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
-                          </div>
-                          <span className="text-xs font-semibold text-blue-900">Pay SP Net</span>
-                          {takeAction.priceChoice === "sp" && <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
-                          <span className="font-mono text-xs font-semibold text-blue-700 ml-auto">{fmt(Math.abs(selectedRow.spNetLc))} EUR</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1 pl-8">Accept the cancellation charge as billed by SP</p>
-                      </button>
-                      <button
-                        onClick={() => updateTA({ priceChoice: "ho" })}
-                        className={`flex-1 rounded-lg border-2 p-3 text-left transition-all cursor-pointer ${takeAction.priceChoice === "ho" ? "border-green-500 bg-green-50" : "border-border hover:border-green-300 hover:bg-green-50/40"}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className={`h-6 w-6 rounded flex items-center justify-center shrink-0 ${takeAction.priceChoice === "ho" ? "bg-green-200" : "bg-green-100"}`}>
-                            <TrendingDown className="h-3.5 w-3.5 text-green-600" />
-                          </div>
-                          <span className="text-xs font-semibold text-green-900">Zero Out (HO Net)</span>
-                          {takeAction.priceChoice === "ho" && <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />}
-                          <span className="font-mono text-xs font-semibold text-green-700 ml-auto">0.00 EUR</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1 pl-8">Do not pay this charge — set payable to 0</p>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* TIDs · Disputes · Issues · BIDs ─────────────────── */}
+                  {/* TIDs · Final Price · Disputes · Issues · BIDs ──── */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">TIDs · Disputes · Issues · BIDs</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">TIDs · Final Price · Disputes · Issues · BIDs</div>
                       <div className="flex items-center gap-1.5">
                         <Button size="sm" variant="outline" className="h-6 text-xs"
                           onClick={() => updateTA({ disputeTids: new Set(selectedTids.map(t => t.tid)), issueTids: new Set(selectedTids.map(t => t.tid)) })}>
@@ -547,12 +507,11 @@ export function CancellationsWorkspace() {
 
                     <div className="rounded-md border overflow-hidden">
                       {/* Table header */}
-                      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto] items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b gap-2">
+                      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto] items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b gap-2">
                         <div>TID / Fulfillment</div>
                         <div className="w-12 text-center">BIDs</div>
                         <div className="w-20 text-right">SP Net</div>
-                        <div className="w-24 text-right">Applied</div>
-                        <div className="w-36">Override</div>
+                        <div className="w-28 text-right">Final Price</div>
                         <div className="w-10 text-center">Disp?</div>
                         <div className="w-24 text-right">Disp. Amt</div>
                         <div className="w-10 text-center">Issue?</div>
@@ -560,15 +519,14 @@ export function CancellationsWorkspace() {
                       </div>
 
                       {selectedTids.map(tid => {
-                        const ov = takeAction.tidOverrides[tid.tid];
-                        const applied = getAppliedPrice(tid, takeAction.priceChoice ?? "sp", takeAction.tidOverrides, takeAction.paxPrices);
-                        const isPaxExpanded = takeAction.paxExpandedTid === tid.tid;
+                        const isPaxExpanded = takeAction.expandedPaxTids.has(tid.tid);
                         const isBidExpanded = takeAction.expandedBidTids.has(tid.tid);
                         const disputeChecked = takeAction.disputeTids.has(tid.tid);
                         const issueChecked = takeAction.issueTids.has(tid.tid);
                         const mockBids = Array.from({ length: tid.bidCount }, (_, i) =>
                           `BK-${tid.tid.replace("TID-", "")}-${String(i + 1).padStart(2, "0")}`
                         );
+                        const paxTotal = tid.hasPax ? computePaxTotal(tid, takeAction.paxPrices) : 0;
                         const rowBg = disputeChecked && issueChecked
                           ? "bg-orange-50/40"
                           : disputeChecked
@@ -579,7 +537,7 @@ export function CancellationsWorkspace() {
                         return (
                           <div key={tid.tid} className="border-b last:border-0">
                             {/* Main TID row */}
-                            <div className={`grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto] items-center px-3 h-11 gap-2 transition-colors ${rowBg}`}>
+                            <div className={`grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto] items-center px-3 h-11 gap-2 transition-colors ${rowBg}`}>
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <span className="font-mono text-sm font-medium text-primary truncate">{tid.tid}</span>
                                 <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{tid.fulfillment}</Badge>
@@ -599,35 +557,32 @@ export function CancellationsWorkspace() {
                               </button>
                               {/* SP Net */}
                               <div className="w-20 text-right font-mono text-xs text-blue-700">{fmt(Math.abs(tid.spNetLc))}</div>
-                              {/* Applied price */}
-                              <div className={`w-24 text-right font-mono text-xs font-semibold ${ov === "pax" ? "text-violet-600" : !takeAction.priceChoice ? "text-muted-foreground" : applied === 0 ? "text-green-600" : "text-blue-600"}`}>
-                                {takeAction.priceChoice ? fmt(applied) : "—"}
-                                {ov === "pax" && <span className="ml-1 text-[10px] font-normal bg-violet-100 text-violet-700 px-1 rounded">pax</span>}
-                              </div>
-                              {/* Override select */}
-                              <div className="w-36">
-                                <Select
-                                  value={ov ?? "follow"}
-                                  onValueChange={val => {
-                                    const newOverrides = { ...takeAction.tidOverrides };
-                                    if (val === "follow") delete newOverrides[tid.tid];
-                                    else newOverrides[tid.tid] = val as "sp" | "ho" | "pax";
-                                    const newPaxExpanded = val === "pax" ? tid.tid : (takeAction.paxExpandedTid === tid.tid ? null : takeAction.paxExpandedTid);
-                                    updateTA({ tidOverrides: newOverrides, paxExpandedTid: newPaxExpanded });
-                                  }}
-                                >
-                                  <SelectTrigger className="h-7 text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="follow">
-                                      Follow ({takeAction.priceChoice === "sp" ? "SP Net" : takeAction.priceChoice === "ho" ? "Zero Out" : "—"})
-                                    </SelectItem>
-                                    <SelectItem value="sp">SP Net</SelectItem>
-                                    <SelectItem value="ho">Zero Out (0)</SelectItem>
-                                    {tid.hasPax && <SelectItem value="pax">Pax Pricing</SelectItem>}
-                                  </SelectContent>
-                                </Select>
+                              {/* Final Price — direct input (non-pax) or pax-computed + Pax toggle */}
+                              <div className="w-28 flex items-center justify-end gap-1">
+                                {tid.hasPax ? (
+                                  <>
+                                    <span className={`font-mono text-xs font-semibold ${paxTotal > 0 ? "text-violet-700" : "text-muted-foreground"}`}>
+                                      {paxTotal > 0 ? fmt(paxTotal) : "—"}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        const next = new Set(takeAction.expandedPaxTids);
+                                        isPaxExpanded ? next.delete(tid.tid) : next.add(tid.tid);
+                                        updateTA({ expandedPaxTids: next });
+                                      }}
+                                      className="h-5 px-1.5 text-[10px] font-medium rounded bg-violet-100 text-violet-700 hover:bg-violet-200 flex items-center gap-0.5 shrink-0 transition-colors"
+                                    >
+                                      Pax <ChevronRight className={`h-2.5 w-2.5 transition-transform duration-150 ${isPaxExpanded ? "rotate-90" : ""}`} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <Input
+                                    className="h-7 w-28 text-xs text-right font-mono border-dashed"
+                                    value={takeAction.tidFinalPrices[tid.tid] ?? ""}
+                                    onChange={e => updateTA({ tidFinalPrices: { ...takeAction.tidFinalPrices, [tid.tid]: e.target.value } })}
+                                    placeholder={fmt(Math.abs(tid.spNetLc))}
+                                  />
+                                )}
                               </div>
                               {/* Dispute checkbox */}
                               <div className="w-10 flex justify-center">
@@ -684,9 +639,18 @@ export function CancellationsWorkspace() {
                               <div className="px-4 py-3 bg-violet-50/40 border-t border-violet-100 space-y-2">
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs font-medium text-violet-700">Pax Pricing — {tid.tid}</span>
-                                  <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => updateTA({ paxExpandedTid: null })}>
-                                    <Check className="h-3 w-3 mr-1" /> Apply Pax
-                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">
+                                      Total: <span className="font-mono font-semibold text-violet-700">{fmt(paxTotal)}</span>
+                                    </span>
+                                    <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => {
+                                      const next = new Set(takeAction.expandedPaxTids);
+                                      next.delete(tid.tid);
+                                      updateTA({ expandedPaxTids: next });
+                                    }}>
+                                      <Check className="h-3 w-3 mr-1" /> Done
+                                    </Button>
+                                  </div>
                                 </div>
                                 <div className="rounded-md border overflow-hidden bg-background">
                                   <Table>
@@ -697,12 +661,14 @@ export function CancellationsWorkspace() {
                                         <TableHead className="py-1 text-xs text-right">Count</TableHead>
                                         <TableHead className="py-1 text-xs text-right">SP Unit</TableHead>
                                         <TableHead className="py-1 text-xs text-right">HO Unit</TableHead>
-                                        <TableHead className="py-1 text-xs text-right pr-3">Final Price</TableHead>
+                                        <TableHead className="py-1 text-xs text-right pr-3">Final Unit Price</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                       {tid.paxRows.map(pr => {
                                         const key = `${tid.tid}__${pr.paxType}__${pr.dateRange}`;
+                                        const unitVal = takeAction.paxPrices[key] ?? "";
+                                        const computed = (parseFloat(unitVal) || pr.spUnit) * pr.count;
                                         return (
                                           <TableRow key={key} className="h-8">
                                             <TableCell className="py-1 pl-3 text-xs font-medium">{pr.paxType}</TableCell>
@@ -711,12 +677,15 @@ export function CancellationsWorkspace() {
                                             <TableCell className="py-1 text-right font-mono text-xs text-blue-600">{fmt(pr.spUnit)}</TableCell>
                                             <TableCell className="py-1 text-right font-mono text-xs text-green-600">{fmt(pr.hoUnit)}</TableCell>
                                             <TableCell className="py-1 text-right pr-3">
-                                              <Input
-                                                className="h-6 w-20 text-xs text-right font-mono ml-auto border-dashed"
-                                                value={takeAction.paxPrices[key] ?? ""}
-                                                onChange={e => updateTA({ paxPrices: { ...takeAction.paxPrices, [key]: e.target.value } })}
-                                                placeholder={String(pr.spUnit)}
-                                              />
+                                              <div className="flex items-center justify-end gap-1.5">
+                                                <span className="text-[10px] text-muted-foreground font-mono">= {fmt(computed)}</span>
+                                                <Input
+                                                  className="h-6 w-20 text-xs text-right font-mono ml-auto border-dashed"
+                                                  value={unitVal}
+                                                  onChange={e => updateTA({ paxPrices: { ...takeAction.paxPrices, [key]: e.target.value } })}
+                                                  placeholder={String(pr.spUnit)}
+                                                />
+                                              </div>
                                             </TableCell>
                                           </TableRow>
                                         );
@@ -739,8 +708,8 @@ export function CancellationsWorkspace() {
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className="text-muted-foreground">Pay:</span>
-                    <span className={`font-mono font-semibold ${takeAction.priceChoice ? "text-blue-700" : "text-muted-foreground"}`}>
-                      {takeAction.priceChoice ? `${fmt(totalPayable)} EUR` : "—"}
+                    <span className="font-mono font-semibold text-blue-700">
+                      {fmt(totalPayable)} EUR
                     </span>
                   </div>
                   <div className="h-3 w-px bg-border" />
