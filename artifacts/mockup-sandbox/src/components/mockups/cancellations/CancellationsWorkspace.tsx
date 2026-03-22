@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  XCircle, AlertTriangle, ChevronRight, ArrowLeft,
+  XCircle, AlertTriangle, ChevronRight,
   CheckCircle2, X as XIcon, TrendingUp, TrendingDown, Check, Zap,
 } from "lucide-react";
 
@@ -64,7 +64,6 @@ interface TidRow {
 
 type TakeActionState = {
   rowKey: string;
-  step: 1 | 2 | 3;
   priceChoice: "sp" | "ho" | null;
   tidOverrides: Record<string, "sp" | "ho" | "pax">;
   paxExpandedTid: string | null;
@@ -72,6 +71,7 @@ type TakeActionState = {
   disputeTids: Set<string>;
   disputeAmounts: Record<string, string>;
   issueTids: Set<string>;
+  expandedBidTids: Set<string>;
 } | null;
 
 // ─── Mock Breakup Data (sorted by CANCELLATION_SORT_ORDER) ─────────────────
@@ -243,39 +243,6 @@ function getAppliedPrice(
   return priceChoice === "sp" ? Math.abs(tid.spNetLc) : 0;
 }
 
-// Step indicator sub-component
-function Stepper({ step }: { step: 1 | 2 | 3 }) {
-  const steps = [
-    { n: 1, label: "Net Price" },
-    { n: 2, label: "Disputes" },
-    { n: 3, label: "Issues" },
-  ];
-  return (
-    <div className="flex items-center gap-0 shrink-0">
-      {steps.map((s, i) => {
-        const done = s.n < step;
-        const active = s.n === step;
-        return (
-          <div key={s.n} className="flex items-center">
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors
-              ${active ? "bg-primary text-primary-foreground" : done ? "text-green-600" : "text-muted-foreground"}`}>
-              {done
-                ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                : <span className={`h-5 w-5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold shrink-0
-                    ${active ? "border-primary-foreground text-primary-foreground" : "border-current"}`}>{s.n}</span>
-              }
-              {s.label}
-            </div>
-            {i < steps.length - 1 && (
-              <div className={`h-px w-8 mx-1 ${s.n < step ? "bg-green-400" : "bg-border"}`} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── Main Component ─────────────────────────────────────────────────────────
 export function CancellationsWorkspace() {
   const [takeAction, setTakeAction] = useState<TakeActionState>(null);
@@ -313,14 +280,12 @@ export function CancellationsWorkspace() {
 
   const openTakeAction = (rowKey: string) => {
     const tids = MOCK_TIDS[rowKey] ?? [];
-    const row = MOCK_BREAKUP.find(r => r.rowKey === rowKey)!;
     // pre-init disputes: all tids selected, amounts default to SP Net
     const disputeTids = new Set(tids.map(t => t.tid));
     const disputeAmounts: Record<string, string> = {};
     tids.forEach(t => { disputeAmounts[t.tid] = String(Math.abs(t.spNetLc)); });
     setTakeAction({
       rowKey,
-      step: 1,
       priceChoice: null,
       tidOverrides: {},
       paxExpandedTid: null,
@@ -328,24 +293,8 @@ export function CancellationsWorkspace() {
       disputeTids,
       disputeAmounts,
       issueTids: new Set(),
+      expandedBidTids: new Set(),
     });
-  };
-
-  const goToStep = (step: 1 | 2 | 3) => {
-    if (!takeAction) return;
-    // When advancing to step 2, sync dispute amounts from price choice
-    if (step === 2 && takeAction.priceChoice) {
-      // Only seed amounts for TIDs that have never been touched; preserve manual edits
-      const amounts: Record<string, string> = { ...takeAction.disputeAmounts };
-      selectedTids.forEach(t => {
-        if (!(t.tid in amounts)) {
-          amounts[t.tid] = getAppliedPrice(t, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices).toFixed(2);
-        }
-      });
-      setTakeAction(prev => prev ? { ...prev, step, disputeAmounts: amounts } : prev);
-    } else {
-      setTakeAction(prev => prev ? { ...prev, step } : prev);
-    }
   };
 
   const confirmAction = () => {
@@ -518,351 +467,275 @@ export function CancellationsWorkspace() {
           {/* ══ SECTION 2: Amount Payable (idle) / 3-step panel (active) ══════ */}
           <div className="flex-1 flex flex-col overflow-hidden">
 
-            {/* ── Active action: 3-step panel ──────────────────────────────── */}
+            {/* ── Active action: single-page panel ─────────────────────────── */}
             {takeAction && selectedRow && (
               <div className="flex-1 flex flex-col overflow-hidden">
 
               {/* Panel header */}
               <div className="px-5 py-2.5 border-b bg-card shrink-0 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Stepper step={takeAction.step} />
-                  <div className="text-xs text-muted-foreground shrink-0">
-                    · {selectedTids.length} TIDs · {selectedRow.bidCount} bookings
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
                   {subCategoryBadge(selectedRow.subCategory)}
                   {selectedRow.actionPoint !== "No action needed" && (
-                    <div className="hidden sm:flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 max-w-[300px]">
+                    <div className="hidden sm:flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 max-w-[320px]">
                       <AlertTriangle className="h-3 w-3 shrink-0" />
                       <span className="truncate">{selectedRow.actionPoint}</span>
                     </div>
                   )}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-muted-foreground">{selectedTids.length} TIDs · {selectedRow.bidCount} bookings</span>
                   <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setTakeAction(null)}>
                     <XIcon className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
 
-              {/* Step content */}
+              {/* ── Body: single-page all-in-one ──────────────────────── */}
               <div className="flex-1 overflow-auto">
+                <div className="px-5 py-4 space-y-5">
 
-                {/* ── STEP 1: Net Price ─────────────────────────────────── */}
-                {takeAction.step === 1 && (
-                  <div className="px-5 py-4 space-y-4">
-                    <div>
-                      <div className="text-sm font-semibold mb-0.5">What should be paid for these {selectedRow.bidCount} bookings?</div>
-                      <div className="text-xs text-muted-foreground">Select the correct price for all TIDs, then override per-TID if needed.</div>
-                    </div>
-
-                    {/* Price choice cards */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Pay SP Net */}
+                  {/* Net Price ─────────────────────────────────────────── */}
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Net Price</div>
+                    <div className="flex gap-3">
                       <button
                         onClick={() => updateTA({ priceChoice: "sp" })}
-                        className={`rounded-lg border-2 p-4 text-left transition-all cursor-pointer
-                          ${takeAction.priceChoice === "sp"
-                            ? "border-blue-500 bg-blue-50"
-                            : "border-border hover:border-blue-300 hover:bg-blue-50/40"}`}
+                        className={`flex-1 rounded-lg border-2 p-3 text-left transition-all cursor-pointer ${takeAction.priceChoice === "sp" ? "border-blue-500 bg-blue-50" : "border-border hover:border-blue-300 hover:bg-blue-50/40"}`}
                       >
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`h-7 w-7 rounded-md flex items-center justify-center ${takeAction.priceChoice === "sp" ? "bg-blue-200" : "bg-blue-100"}`}>
-                            <TrendingUp className="h-4 w-4 text-blue-600" />
+                        <div className="flex items-center gap-2">
+                          <div className={`h-6 w-6 rounded flex items-center justify-center shrink-0 ${takeAction.priceChoice === "sp" ? "bg-blue-200" : "bg-blue-100"}`}>
+                            <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
                           </div>
-                          <span className="text-sm font-semibold text-blue-900">Pay SP Net</span>
-                          {takeAction.priceChoice === "sp" && <Check className="h-4 w-4 text-blue-600 ml-auto" />}
+                          <span className="text-xs font-semibold text-blue-900">Pay SP Net</span>
+                          {takeAction.priceChoice === "sp" && <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
+                          <span className="font-mono text-xs font-semibold text-blue-700 ml-auto">{fmt(Math.abs(selectedRow.spNetLc))} EUR</span>
                         </div>
-                        <p className="text-xs text-muted-foreground mb-1">Accept the cancellation charge as billed by SP</p>
-                        <p className="font-mono font-semibold text-blue-700">{fmt(Math.abs(selectedRow.spNetLc))} EUR</p>
+                        <p className="text-xs text-muted-foreground mt-1 pl-8">Accept the cancellation charge as billed by SP</p>
                       </button>
-
-                      {/* Zero Out */}
                       <button
                         onClick={() => updateTA({ priceChoice: "ho" })}
-                        className={`rounded-lg border-2 p-4 text-left transition-all cursor-pointer
-                          ${takeAction.priceChoice === "ho"
-                            ? "border-green-500 bg-green-50"
-                            : "border-border hover:border-green-300 hover:bg-green-50/40"}`}
+                        className={`flex-1 rounded-lg border-2 p-3 text-left transition-all cursor-pointer ${takeAction.priceChoice === "ho" ? "border-green-500 bg-green-50" : "border-border hover:border-green-300 hover:bg-green-50/40"}`}
                       >
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`h-7 w-7 rounded-md flex items-center justify-center ${takeAction.priceChoice === "ho" ? "bg-green-200" : "bg-green-100"}`}>
-                            <TrendingDown className="h-4 w-4 text-green-600" />
+                        <div className="flex items-center gap-2">
+                          <div className={`h-6 w-6 rounded flex items-center justify-center shrink-0 ${takeAction.priceChoice === "ho" ? "bg-green-200" : "bg-green-100"}`}>
+                            <TrendingDown className="h-3.5 w-3.5 text-green-600" />
                           </div>
-                          <span className="text-sm font-semibold text-green-900">Zero Out (HO Net)</span>
-                          {takeAction.priceChoice === "ho" && <Check className="h-4 w-4 text-green-600 ml-auto" />}
+                          <span className="text-xs font-semibold text-green-900">Zero Out (HO Net)</span>
+                          {takeAction.priceChoice === "ho" && <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />}
+                          <span className="font-mono text-xs font-semibold text-green-700 ml-auto">0.00 EUR</span>
                         </div>
-                        <p className="text-xs text-muted-foreground mb-1">Do not pay this charge — set payable to 0</p>
-                        <p className="font-mono font-semibold text-green-700">0.00 EUR</p>
+                        <p className="text-xs text-muted-foreground mt-1 pl-8">Do not pay this charge — set payable to 0</p>
                       </button>
                     </div>
-
-                    {/* TID list — shown after a price choice */}
-                    {takeAction.priceChoice && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">TID Breakdown</span>
-                          <span className="text-xs text-muted-foreground">Override individual TIDs or enable Pax Pricing</span>
-                        </div>
-                        <div className="rounded-md border overflow-hidden">
-                          <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b gap-2">
-                            <div>TID / Fulfillment</div>
-                            <div className="text-right w-24">SP Net</div>
-                            <div className="text-right w-10">BIDs</div>
-                            <div className="text-right w-24">Applied Price</div>
-                            <div className="w-36">Override</div>
-                            <div className="w-3" />
-                          </div>
-
-                          {selectedTids.map(tid => {
-                            const ov = takeAction.tidOverrides[tid.tid];
-                            const applied = getAppliedPrice(tid, takeAction.priceChoice!, takeAction.tidOverrides, takeAction.paxPrices);
-                            const isPaxExpanded = takeAction.paxExpandedTid === tid.tid;
-
-                            return (
-                              <div key={tid.tid} className="border-b last:border-0">
-                                <div className={`grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center px-3 h-10 gap-2 transition-colors ${isPaxExpanded ? "bg-violet-50/60" : "hover:bg-muted/20"}`}>
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="font-mono text-sm font-medium text-primary truncate">{tid.tid}</span>
-                                    <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{tid.fulfillment}</Badge>
-                                  </div>
-                                  <div className="text-right w-24 font-mono text-sm text-blue-700">{fmt(Math.abs(tid.spNetLc))}</div>
-                                  <div className="text-right w-10 text-sm">{tid.bidCount}</div>
-                                  <div className={`text-right w-24 font-mono text-sm font-semibold flex items-center justify-end gap-1 ${ov === "pax" ? "text-violet-600" : applied === 0 ? "text-green-600" : "text-blue-600"}`}>
-                                    {fmt(applied)}
-                                    {ov === "pax" && <span className="text-[10px] font-normal bg-violet-100 text-violet-700 px-1 rounded leading-4">pax</span>}
-                                  </div>
-                                  <div className="w-36">
-                                    <Select
-                                      value={ov ?? "follow"}
-                                      onValueChange={val => {
-                                        const newOverrides = { ...takeAction.tidOverrides };
-                                        if (val === "follow") delete newOverrides[tid.tid];
-                                        else newOverrides[tid.tid] = val as "sp" | "ho" | "pax";
-                                        const newPaxExpanded = val === "pax" ? tid.tid : (takeAction.paxExpandedTid === tid.tid ? null : takeAction.paxExpandedTid);
-                                        updateTA({ tidOverrides: newOverrides, paxExpandedTid: newPaxExpanded });
-                                      }}
-                                    >
-                                      <SelectTrigger className="h-7 text-xs">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="follow">
-                                          Follow global ({takeAction.priceChoice === "sp" ? "SP Net" : "HO Net"})
-                                        </SelectItem>
-                                        <SelectItem value="sp">SP Net</SelectItem>
-                                        <SelectItem value="ho">HO Net (0)</SelectItem>
-                                        {tid.hasPax && <SelectItem value="pax">Pax Pricing</SelectItem>}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="w-3" />
-                                </div>
-
-                                {/* Inline pax sub-table */}
-                                {isPaxExpanded && (
-                                  <div className="px-4 py-3 bg-violet-50/40 border-t border-violet-100 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs font-medium text-violet-700">Pax Pricing — {tid.tid}</span>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-6 text-xs"
-                                        onClick={() => updateTA({ paxExpandedTid: null })}
-                                      >
-                                        <Check className="h-3 w-3 mr-1" /> Apply Pax
-                                      </Button>
-                                    </div>
-                                    <div className="rounded-md border overflow-hidden bg-background">
-                                      <Table>
-                                        <TableHeader>
-                                          <TableRow className="h-7 bg-muted/30">
-                                            <TableHead className="py-1 text-xs pl-3">Pax Type</TableHead>
-                                            <TableHead className="py-1 text-xs">Date Range</TableHead>
-                                            <TableHead className="py-1 text-xs text-right">Count</TableHead>
-                                            <TableHead className="py-1 text-xs text-right">SP Unit</TableHead>
-                                            <TableHead className="py-1 text-xs text-right">HO Unit</TableHead>
-                                            <TableHead className="py-1 text-xs text-right pr-3">Final Price</TableHead>
-                                          </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                          {tid.paxRows.map(pr => {
-                                            const key = `${tid.tid}__${pr.paxType}__${pr.dateRange}`;
-                                            return (
-                                              <TableRow key={key} className="h-8">
-                                                <TableCell className="py-1 pl-3 text-xs font-medium">{pr.paxType}</TableCell>
-                                                <TableCell className="py-1 text-xs text-muted-foreground">{pr.dateRange}</TableCell>
-                                                <TableCell className="py-1 text-right text-xs">{pr.count}</TableCell>
-                                                <TableCell className="py-1 text-right font-mono text-xs text-blue-600">{fmt(pr.spUnit)}</TableCell>
-                                                <TableCell className="py-1 text-right font-mono text-xs text-green-600">{fmt(pr.hoUnit)}</TableCell>
-                                                <TableCell className="py-1 text-right pr-3">
-                                                  <Input
-                                                    className="h-6 w-20 text-xs text-right font-mono ml-auto border-dashed"
-                                                    value={takeAction.paxPrices[key] ?? ""}
-                                                    onChange={e => updateTA({ paxPrices: { ...takeAction.paxPrices, [key]: e.target.value } })}
-                                                    placeholder={String(pr.spUnit)}
-                                                  />
-                                                </TableCell>
-                                              </TableRow>
-                                            );
-                                          })}
-                                        </TableBody>
-                                      </Table>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Running total */}
-                        <div className="flex items-center justify-end gap-2 text-xs pt-1">
-                          <span className="text-muted-foreground">Total Payable:</span>
-                          <span className="font-mono font-semibold text-foreground">{fmt(totalPayable)} EUR</span>
-                          <span className="text-muted-foreground">· {selectedTids.length} TIDs · {selectedRow.bidCount} bookings</span>
-                        </div>
-                      </div>
-                    )}
                   </div>
-                )}
 
-                {/* ── STEP 2: Disputes ─────────────────────────────────── */}
-                {takeAction.step === 2 && (
-                  <div className="px-5 py-4 space-y-3">
-                    <div>
-                      <div className="text-sm font-semibold mb-0.5">Which TIDs should have a dispute raised?</div>
-                      <div className="text-xs text-muted-foreground">Cancellation charge to be claimed from SP / RO. Amounts default to the applied price from Step 1.</div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" className="h-6 text-xs"
-                        onClick={() => updateTA({ disputeTids: new Set(selectedTids.map(t => t.tid)) })}>
-                        Select all
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-6 text-xs"
-                        onClick={() => updateTA({ disputeTids: new Set() })}>
-                        Deselect all
-                      </Button>
+                  {/* TIDs · Disputes · Issues · BIDs ─────────────────── */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">TIDs · Disputes · Issues · BIDs</div>
+                      <div className="flex items-center gap-1.5">
+                        <Button size="sm" variant="outline" className="h-6 text-xs"
+                          onClick={() => updateTA({ disputeTids: new Set(selectedTids.map(t => t.tid)), issueTids: new Set(selectedTids.map(t => t.tid)) })}>
+                          Select all
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-6 text-xs"
+                          onClick={() => updateTA({ disputeTids: new Set(), issueTids: new Set() })}>
+                          Clear all
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="rounded-md border overflow-hidden">
-                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto_1fr] items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b gap-2">
-                        <div className="w-4" />
+                      {/* Table header */}
+                      <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto] items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b gap-2">
                         <div>TID / Fulfillment</div>
-                        <div className="text-right w-24">Applied Price</div>
-                        <div className="text-right w-28">Dispute Amount</div>
-                        <div className="w-2" />
-                        <div>Reason</div>
+                        <div className="w-12 text-center">BIDs</div>
+                        <div className="w-20 text-right">SP Net</div>
+                        <div className="w-24 text-right">Applied</div>
+                        <div className="w-36">Override</div>
+                        <div className="w-10 text-center">Disp?</div>
+                        <div className="w-24 text-right">Disp. Amt</div>
+                        <div className="w-10 text-center">Issue?</div>
+                        <div className="w-28">DRI</div>
                       </div>
 
                       {selectedTids.map(tid => {
-                        const checked = takeAction.disputeTids.has(tid.tid);
-                        const appliedPrice = takeAction.priceChoice
-                          ? getAppliedPrice(tid, takeAction.priceChoice, takeAction.tidOverrides, takeAction.paxPrices)
-                          : Math.abs(tid.spNetLc);
+                        const ov = takeAction.tidOverrides[tid.tid];
+                        const applied = getAppliedPrice(tid, takeAction.priceChoice ?? "sp", takeAction.tidOverrides, takeAction.paxPrices);
+                        const isPaxExpanded = takeAction.paxExpandedTid === tid.tid;
+                        const isBidExpanded = takeAction.expandedBidTids.has(tid.tid);
+                        const disputeChecked = takeAction.disputeTids.has(tid.tid);
+                        const issueChecked = takeAction.issueTids.has(tid.tid);
+                        const mockBids = Array.from({ length: tid.bidCount }, (_, i) =>
+                          `BK-${tid.tid.replace("TID-", "")}-${String(i + 1).padStart(2, "0")}`
+                        );
+                        const rowBg = disputeChecked && issueChecked
+                          ? "bg-orange-50/40"
+                          : disputeChecked
+                          ? "bg-amber-50/30"
+                          : issueChecked
+                          ? "bg-orange-50/20"
+                          : "bg-background";
                         return (
-                          <div key={tid.tid} className={`grid grid-cols-[auto_1fr_auto_auto_auto_1fr] items-center px-3 h-11 border-b last:border-0 gap-2 transition-colors ${checked ? "bg-amber-50/40" : "bg-background opacity-60"}`}>
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={v => {
-                                const next = new Set(takeAction.disputeTids);
-                                v ? next.add(tid.tid) : next.delete(tid.tid);
-                                updateTA({ disputeTids: next });
-                              }}
-                              className="h-4 w-4"
-                            />
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
-                              <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{tid.fulfillment}</Badge>
+                          <div key={tid.tid} className="border-b last:border-0">
+                            {/* Main TID row */}
+                            <div className={`grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto_auto] items-center px-3 h-11 gap-2 transition-colors ${rowBg}`}>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-mono text-sm font-medium text-primary truncate">{tid.tid}</span>
+                                <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{tid.fulfillment}</Badge>
+                              </div>
+                              {/* BID expand chip */}
+                              <button
+                                className="w-12 h-6 text-xs font-mono rounded bg-muted/60 hover:bg-muted flex items-center justify-center gap-0.5 shrink-0 transition-colors"
+                                onClick={() => {
+                                  const next = new Set(takeAction.expandedBidTids);
+                                  isBidExpanded ? next.delete(tid.tid) : next.add(tid.tid);
+                                  updateTA({ expandedBidTids: next });
+                                }}
+                                title={isBidExpanded ? "Collapse BIDs" : "Show BIDs"}
+                              >
+                                {tid.bidCount}
+                                <ChevronRight className={`h-2.5 w-2.5 transition-transform duration-150 ${isBidExpanded ? "rotate-90" : ""}`} />
+                              </button>
+                              {/* SP Net */}
+                              <div className="w-20 text-right font-mono text-xs text-blue-700">{fmt(Math.abs(tid.spNetLc))}</div>
+                              {/* Applied price */}
+                              <div className={`w-24 text-right font-mono text-xs font-semibold ${ov === "pax" ? "text-violet-600" : !takeAction.priceChoice ? "text-muted-foreground" : applied === 0 ? "text-green-600" : "text-blue-600"}`}>
+                                {takeAction.priceChoice ? fmt(applied) : "—"}
+                                {ov === "pax" && <span className="ml-1 text-[10px] font-normal bg-violet-100 text-violet-700 px-1 rounded">pax</span>}
+                              </div>
+                              {/* Override select */}
+                              <div className="w-36">
+                                <Select
+                                  value={ov ?? "follow"}
+                                  onValueChange={val => {
+                                    const newOverrides = { ...takeAction.tidOverrides };
+                                    if (val === "follow") delete newOverrides[tid.tid];
+                                    else newOverrides[tid.tid] = val as "sp" | "ho" | "pax";
+                                    const newPaxExpanded = val === "pax" ? tid.tid : (takeAction.paxExpandedTid === tid.tid ? null : takeAction.paxExpandedTid);
+                                    updateTA({ tidOverrides: newOverrides, paxExpandedTid: newPaxExpanded });
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="follow">
+                                      Follow ({takeAction.priceChoice === "sp" ? "SP Net" : takeAction.priceChoice === "ho" ? "Zero Out" : "—"})
+                                    </SelectItem>
+                                    <SelectItem value="sp">SP Net</SelectItem>
+                                    <SelectItem value="ho">Zero Out (0)</SelectItem>
+                                    {tid.hasPax && <SelectItem value="pax">Pax Pricing</SelectItem>}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              {/* Dispute checkbox */}
+                              <div className="w-10 flex justify-center">
+                                <Checkbox
+                                  checked={disputeChecked}
+                                  onCheckedChange={v => {
+                                    const next = new Set(takeAction.disputeTids);
+                                    v ? next.add(tid.tid) : next.delete(tid.tid);
+                                    updateTA({ disputeTids: next });
+                                  }}
+                                  className="h-3.5 w-3.5"
+                                />
+                              </div>
+                              {/* Dispute amount */}
+                              <div className="w-24">
+                                <Input
+                                  disabled={!disputeChecked}
+                                  className="h-7 text-xs text-right font-mono border-dashed"
+                                  value={takeAction.disputeAmounts[tid.tid] ?? ""}
+                                  onChange={e => updateTA({ disputeAmounts: { ...takeAction.disputeAmounts, [tid.tid]: e.target.value } })}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              {/* Issue checkbox */}
+                              <div className="w-10 flex justify-center">
+                                <Checkbox
+                                  checked={issueChecked}
+                                  onCheckedChange={v => {
+                                    const next = new Set(takeAction.issueTids);
+                                    v ? next.add(tid.tid) : next.delete(tid.tid);
+                                    updateTA({ issueTids: next });
+                                  }}
+                                  className="h-3.5 w-3.5"
+                                />
+                              </div>
+                              {/* DRI Team */}
+                              <div className="w-28">
+                                <Badge variant="outline" className={`text-[10px] ${tid.driTeam !== "N/A" ? "bg-blue-50 text-blue-700 border-blue-200" : "text-muted-foreground"}`}>
+                                  {tid.driTeam}
+                                </Badge>
+                              </div>
                             </div>
-                            <div className="text-right w-24 font-mono text-xs text-blue-700">{fmt(appliedPrice)}</div>
-                            <div className="w-28">
-                              <Input
-                                disabled={!checked}
-                                className="h-7 text-xs text-right font-mono border-dashed"
-                                value={takeAction.disputeAmounts[tid.tid] ?? ""}
-                                onChange={e => updateTA({ disputeAmounts: { ...takeAction.disputeAmounts, [tid.tid]: e.target.value } })}
-                              />
-                            </div>
-                            <div className="w-2" />
-                            <div className="text-xs text-muted-foreground truncate">Cancellation charge to be claimed from SP / RO</div>
+                            {/* BID sub-row */}
+                            {isBidExpanded && (
+                              <div className="px-4 py-2.5 bg-muted/20 border-t flex flex-wrap gap-1.5">
+                                <span className="text-[10px] font-medium text-muted-foreground mr-1 self-center">Booking IDs:</span>
+                                {mockBids.map(bid => (
+                                  <span key={bid} className="font-mono text-[10px] bg-background border rounded px-1.5 py-0.5">{bid}</span>
+                                ))}
+                              </div>
+                            )}
+                            {/* Pax pricing sub-panel */}
+                            {isPaxExpanded && (
+                              <div className="px-4 py-3 bg-violet-50/40 border-t border-violet-100 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-medium text-violet-700">Pax Pricing — {tid.tid}</span>
+                                  <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => updateTA({ paxExpandedTid: null })}>
+                                    <Check className="h-3 w-3 mr-1" /> Apply Pax
+                                  </Button>
+                                </div>
+                                <div className="rounded-md border overflow-hidden bg-background">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow className="h-7 bg-muted/30">
+                                        <TableHead className="py-1 text-xs pl-3">Pax Type</TableHead>
+                                        <TableHead className="py-1 text-xs">Date Range</TableHead>
+                                        <TableHead className="py-1 text-xs text-right">Count</TableHead>
+                                        <TableHead className="py-1 text-xs text-right">SP Unit</TableHead>
+                                        <TableHead className="py-1 text-xs text-right">HO Unit</TableHead>
+                                        <TableHead className="py-1 text-xs text-right pr-3">Final Price</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {tid.paxRows.map(pr => {
+                                        const key = `${tid.tid}__${pr.paxType}__${pr.dateRange}`;
+                                        return (
+                                          <TableRow key={key} className="h-8">
+                                            <TableCell className="py-1 pl-3 text-xs font-medium">{pr.paxType}</TableCell>
+                                            <TableCell className="py-1 text-xs text-muted-foreground">{pr.dateRange}</TableCell>
+                                            <TableCell className="py-1 text-right text-xs">{pr.count}</TableCell>
+                                            <TableCell className="py-1 text-right font-mono text-xs text-blue-600">{fmt(pr.spUnit)}</TableCell>
+                                            <TableCell className="py-1 text-right font-mono text-xs text-green-600">{fmt(pr.hoUnit)}</TableCell>
+                                            <TableCell className="py-1 text-right pr-3">
+                                              <Input
+                                                className="h-6 w-20 text-xs text-right font-mono ml-auto border-dashed"
+                                                value={takeAction.paxPrices[key] ?? ""}
+                                                onChange={e => updateTA({ paxPrices: { ...takeAction.paxPrices, [key]: e.target.value } })}
+                                                placeholder={String(pr.spUnit)}
+                                              />
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
-
-                    <div className="flex items-center justify-end gap-2 text-xs pt-1">
-                      <span className="text-muted-foreground">Disputes:</span>
-                      <span className="font-mono font-semibold text-amber-700">{disputeCount} TIDs · {fmt(totalDisputeAmt)} EUR</span>
-                    </div>
                   </div>
-                )}
-
-                {/* ── STEP 3: Issues ───────────────────────────────────── */}
-                {takeAction.step === 3 && (
-                  <div className="px-5 py-4 space-y-3">
-                    <div>
-                      <div className="text-sm font-semibold mb-0.5">Which TIDs need an internal issue logged?</div>
-                      <div className="text-xs text-muted-foreground">Internal tracking — check with Finance / RO. DRI teams are pre-filled based on fulfillment type.</div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" className="h-6 text-xs"
-                        onClick={() => updateTA({ issueTids: new Set(selectedTids.map(t => t.tid)) })}>
-                        Select all
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-6 text-xs"
-                        onClick={() => updateTA({ issueTids: new Set() })}>
-                        Deselect all
-                      </Button>
-                    </div>
-
-                    <div className="rounded-md border overflow-hidden">
-                      <div className="grid grid-cols-[auto_1fr_auto_auto_auto] items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b gap-2">
-                        <div className="w-4" />
-                        <div>TID</div>
-                        <div className="w-36">DRI Team</div>
-                        <div className="w-24">Fulfillment</div>
-                        <div className="text-right w-10">BIDs</div>
-                      </div>
-
-                      {selectedTids.map(tid => {
-                        const checked = takeAction.issueTids.has(tid.tid);
-                        return (
-                          <div key={tid.tid} className={`grid grid-cols-[auto_1fr_auto_auto_auto] items-center px-3 h-10 border-b last:border-0 gap-2 transition-colors ${checked ? "bg-orange-50/40" : "bg-background opacity-60"}`}>
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={v => {
-                                const next = new Set(takeAction.issueTids);
-                                v ? next.add(tid.tid) : next.delete(tid.tid);
-                                updateTA({ issueTids: next });
-                              }}
-                              className="h-4 w-4"
-                            />
-                            <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
-                            <div className="w-36">
-                              <Badge variant="outline" className={`text-xs ${tid.driTeam !== "N/A" ? "bg-blue-50 text-blue-700 border-blue-200" : ""}`}>
-                                {tid.driTeam}
-                              </Badge>
-                            </div>
-                            <div className="w-24 text-xs text-muted-foreground">{tid.fulfillment}</div>
-                            <div className="text-right w-10 text-sm">{tid.bidCount}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 text-xs pt-1">
-                      <span className="text-muted-foreground">Issues:</span>
-                      <span className="font-mono font-semibold text-orange-700">{issueCount} TIDs</span>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
-              {/* ── Persistent bottom bar ─────────────────────────────────── */}
-              <div className="border-t bg-card px-5 py-3 shrink-0 space-y-2">
-                {/* Live summary */}
+              {/* ── Bottom bar ────────────────────────────────────────────── */}
+              <div className="border-t bg-card px-5 py-3 shrink-0 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className="text-muted-foreground">Pay:</span>
@@ -885,37 +758,14 @@ export function CancellationsWorkspace() {
                     </span>
                   </div>
                 </div>
-                {/* Navigation */}
-                <div className="flex items-center justify-between">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (takeAction.step === 1) setTakeAction(null);
-                      else goToStep((takeAction.step - 1) as 1 | 2 | 3);
-                    }}
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5 mr-1.5" />
-                    {takeAction.step === 1 ? "Close" : "Back"}
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setTakeAction(null)}>Cancel</Button>
+                  <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={confirmAction}>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Confirm & Apply
                   </Button>
-
-                  <span className="text-xs text-muted-foreground">Step {takeAction.step} of 3</span>
-
-                  {takeAction.step < 3 ? (
-                    <Button
-                      size="sm"
-                      disabled={takeAction.step === 1 && !takeAction.priceChoice}
-                      onClick={() => goToStep((takeAction.step + 1) as 2 | 3)}
-                    >
-                      Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                    </Button>
-                  ) : (
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={confirmAction}>
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Confirm & Apply
-                    </Button>
-                  )}
                 </div>
               </div>
+
             </div>
           )}
 
