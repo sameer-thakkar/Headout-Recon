@@ -330,7 +330,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       discrepancyUsd: number;
       previousBe: string | null;
       bidCount: number;
-      tids: string[];
+      ticketIds: string[];
       paymentMethods: string[];
     }> = [];
     const toUsd = (lc: number, currency: string) => {
@@ -347,7 +347,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         discrepancyUsd: discUsd,
         previousBe: null,
         bidCount: bks.length,
-        tids: [...new Set(bks.map(b => b.tid).filter(Boolean) as string[])],
+        ticketIds: [...new Set(bks.map(b => b.ticketId).filter(Boolean) as string[])],
         paymentMethods: [...new Set(bks.map(b => b.paymentMethod || b.spPaymentMethod).filter(Boolean) as string[])],
       });
     }
@@ -367,7 +367,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
           discrepancyUsd: discUsd,
           previousBe: prevBe === "unknown" ? null : prevBe,
           bidCount: bks.length,
-          tids: [...new Set(bks.map(b => b.tid).filter(Boolean) as string[])],
+          ticketIds: [...new Set(bks.map(b => b.ticketId).filter(Boolean) as string[])],
           paymentMethods: [...new Set(bks.map(b => b.paymentMethod || b.spPaymentMethod).filter(Boolean) as string[])],
         });
       }
@@ -1284,7 +1284,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       <TableCell className="py-2 font-mono text-muted-foreground">{row.previousBe || "—"}</TableCell>
                       <TableCell className="py-2">{row.paymentMethods.join(", ") || "—"}</TableCell>
                       <TableCell className="py-2 text-right font-mono">{row.bidCount}</TableCell>
-                      <TableCell className="py-2 font-mono text-[10px] text-muted-foreground max-w-[180px] truncate" title={row.tids.join(", ")}>{row.tids.join(", ") || "—"}</TableCell>
+                      <TableCell className="py-2 font-mono text-[10px] text-muted-foreground max-w-[180px] truncate" title={row.ticketIds.join(", ")}>{row.ticketIds.join(", ") || "—"}</TableCell>
                     </TableRow>
                   );
                 })}

@@ -16,13 +16,14 @@ interface AnalysisRow {
   discrepancyUsd: number;
   previousBe: string | null;
   bidCount: number;
-  tids: string[];
+  ticketIds: string[];
   paymentMethods: string[];
 }
 
 interface BookingRow {
   bookingId: string;
   tid: string;
+  ticketId: string;
   hoNet: number;
   spNet: number;
   paymentMethod: string;
@@ -33,15 +34,15 @@ interface BookingRow {
 }
 
 const MOCK_BOOKINGS: BookingRow[] = [
-  { bookingId: "BID-100201", tid: "TID-50001", hoNet: 245.00, spNet: 245.00, paymentMethod: "Freesale", dateOfPayment: "15/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
-  { bookingId: "BID-100202", tid: "TID-50001", hoNet: 180.00, spNet: 180.00, paymentMethod: "Freesale", dateOfPayment: "15/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
-  { bookingId: "BID-100203", tid: "TID-50002", hoNet: 320.00, spNet: 325.50, paymentMethod: "Freesale", dateOfPayment: "16/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
-  { bookingId: "BID-100204", tid: "TID-50002", hoNet: 150.00, spNet: 152.00, paymentMethod: "Manual", dateOfPayment: "16/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
-  { bookingId: "BID-100205", tid: "TID-50003", hoNet: 410.00, spNet: 410.00, paymentMethod: "Freesale", dateOfPayment: "17/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
-  { bookingId: "BID-100301", tid: "TID-60001", hoNet: 520.00, spNet: 545.00, paymentMethod: "Freesale", dateOfPayment: "18/01/2026", hoBeId: "BE-102", spBeId: "BE-101", type: "Diff BE" },
-  { bookingId: "BID-100302", tid: "TID-60001", hoNet: 380.00, spNet: 395.00, paymentMethod: "Freesale", dateOfPayment: "18/01/2026", hoBeId: "BE-102", spBeId: "BE-101", type: "Diff BE" },
-  { bookingId: "BID-100303", tid: "TID-60002", hoNet: 290.00, spNet: 310.00, paymentMethod: "Manual", dateOfPayment: "19/01/2026", hoBeId: "BE-103", spBeId: "BE-101", type: "Diff BE" },
-  { bookingId: "BID-100304", tid: "TID-60003", hoNet: 175.00, spNet: 180.00, paymentMethod: "Freesale", dateOfPayment: "20/01/2026", hoBeId: "BE-104", spBeId: "BE-101", type: "Diff BE" },
+  { bookingId: "BID-100201", tid: "TID-50001", ticketId: "TKT-8001", hoNet: 245.00, spNet: 245.00, paymentMethod: "Freesale", dateOfPayment: "15/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
+  { bookingId: "BID-100202", tid: "TID-50001", ticketId: "TKT-8001", hoNet: 180.00, spNet: 180.00, paymentMethod: "Freesale", dateOfPayment: "15/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
+  { bookingId: "BID-100203", tid: "TID-50002", ticketId: "TKT-8002", hoNet: 320.00, spNet: 325.50, paymentMethod: "Freesale", dateOfPayment: "16/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
+  { bookingId: "BID-100204", tid: "TID-50002", ticketId: "TKT-8002", hoNet: 150.00, spNet: 152.00, paymentMethod: "Manual", dateOfPayment: "16/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
+  { bookingId: "BID-100205", tid: "TID-50003", ticketId: "TKT-8003", hoNet: 410.00, spNet: 410.00, paymentMethod: "Freesale", dateOfPayment: "17/01/2026", hoBeId: "BE-101", spBeId: "BE-101", type: "Same BE" },
+  { bookingId: "BID-100301", tid: "TID-60001", ticketId: "TKT-9001", hoNet: 520.00, spNet: 545.00, paymentMethod: "Freesale", dateOfPayment: "18/01/2026", hoBeId: "BE-102", spBeId: "BE-101", type: "Diff BE" },
+  { bookingId: "BID-100302", tid: "TID-60001", ticketId: "TKT-9001", hoNet: 380.00, spNet: 395.00, paymentMethod: "Freesale", dateOfPayment: "18/01/2026", hoBeId: "BE-102", spBeId: "BE-101", type: "Diff BE" },
+  { bookingId: "BID-100303", tid: "TID-60002", ticketId: "TKT-9002", hoNet: 290.00, spNet: 310.00, paymentMethod: "Manual", dateOfPayment: "19/01/2026", hoBeId: "BE-103", spBeId: "BE-101", type: "Diff BE" },
+  { bookingId: "BID-100304", tid: "TID-60003", ticketId: "TKT-9003", hoNet: 175.00, spNet: 180.00, paymentMethod: "Freesale", dateOfPayment: "20/01/2026", hoBeId: "BE-104", spBeId: "BE-101", type: "Diff BE" },
 ];
 
 function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
@@ -51,7 +52,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
   const rows: AnalysisRow[] = [];
 
   if (sameBe.length > 0) {
-    const tids = [...new Set(sameBe.map(b => b.tid))];
+    const ticketIds = [...new Set(sameBe.map(b => b.ticketId).filter(Boolean))];
     const paymentMethods = [...new Set(sameBe.map(b => b.paymentMethod).filter(Boolean))];
     rows.push({
       type: "Same BE",
@@ -59,7 +60,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
       discrepancyUsd: sameBe.reduce((s, b) => s + (b.spNet - b.hoNet), 0) * 1.084,
       previousBe: null,
       bidCount: sameBe.length,
-      tids,
+      ticketIds,
       paymentMethods,
     });
   }
@@ -72,7 +73,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
       byPrevBe.get(key)!.push(b);
     }
     for (const [prevBe, group] of byPrevBe) {
-      const tids = [...new Set(group.map(b => b.tid))];
+      const ticketIds = [...new Set(group.map(b => b.ticketId).filter(Boolean))];
       const paymentMethods = [...new Set(group.map(b => b.paymentMethod).filter(Boolean))];
       rows.push({
         type: "Diff BE",
@@ -80,7 +81,7 @@ function buildAnalysisRows(bookings: BookingRow[]): AnalysisRow[] {
         discrepancyUsd: group.reduce((s, b) => s + (b.spNet - b.hoNet), 0) * 1.084,
         previousBe: prevBe,
         bidCount: group.length,
-        tids,
+        ticketIds,
         paymentMethods,
       });
     }
@@ -199,8 +200,8 @@ export default function AnalysisWorkspace() {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {row.tids.map(tid => (
-                          <Badge key={tid} variant="outline" className="text-[10px] font-mono">{tid}</Badge>
+                        {row.ticketIds.map(id => (
+                          <Badge key={id} variant="outline" className="text-[10px] font-mono">{id}</Badge>
                         ))}
                       </div>
                     </TableCell>
