@@ -77,22 +77,13 @@ type TakeActionState = {
 // ─── Mock Breakup Data (sorted by CANCELLATION_SORT_ORDER) ─────────────────
 const MOCK_BREAKUP_RAW: BreakupRow[] = [
   {
-    rowKey: "sp-error-freesale", subCategory: "Cancelled-SP error", hasActions: true,
-    cancellable: "Yes", spNetLc: 14820, hoNetLc: 0,
+    rowKey: "sp-error", subCategory: "Cancelled-SP error", hasActions: true,
+    cancellable: "Yes", spNetLc: 20160, hoNetLc: 0,
     cancellationInsurance: "N/A", chargeLoss: "",
     actionPoint: "Check why did we cancel the booking with SP? If cancelled on time — raise with SP, if delayed — raise with RO.",
-    driTeam: "Tech", fulfillment: "Freesale", bidCount: 9,
-    startDate: "02/01/2026", endDate: "18/01/2026", totalBids: 52,
-    discLc: -14820, discUsd: -172.34, tidConcentration: "TID-40021",
-  },
-  {
-    rowKey: "sp-error-manual", subCategory: "Cancelled-SP error", hasActions: true,
-    cancellable: "Yes", spNetLc: 5340, hoNetLc: 0,
-    cancellationInsurance: "N/A", chargeLoss: "",
-    actionPoint: "Check why did we cancel the booking with SP? If cancelled on time — raise with SP, if delayed — raise with RO.",
-    driTeam: "Reservation Ops", fulfillment: "Manual", bidCount: 4,
-    startDate: "05/01/2026", endDate: "20/01/2026", totalBids: 28,
-    discLc: -5340, discUsd: -62.10, tidConcentration: "TID-40031",
+    driTeam: "Tech / Res Ops", fulfillment: "Mixed", bidCount: 13,
+    startDate: "02/01/2026", endDate: "20/01/2026", totalBids: 80,
+    discLc: -20160, discUsd: -234.44, tidConcentration: "TID-40021, TID-40031",
   },
   {
     rowKey: "charge-loss-freesale", subCategory: "Cancelled-Check for Charge loss", hasActions: true,
@@ -145,7 +136,7 @@ const MOCK_BREAKUP = [...MOCK_BREAKUP_RAW].sort((a, b) => sortKey(a.subCategory)
 
 // ─── Mock TIDs per breakup row ──────────────────────────────────────────────
 const MOCK_TIDS: Record<string, TidRow[]> = {
-  "sp-error-freesale": [
+  "sp-error": [
     {
       tid: "TID-40021", bidCount: 5, spNetLc: 8250, discLc: -8250, discUsd: -95.94,
       fulfillment: "Freesale", driTeam: "Tech", hasPax: true, hasActions: true,
@@ -165,8 +156,6 @@ const MOCK_TIDS: Record<string, TidRow[]> = {
       fulfillment: "Freesale", driTeam: "Tech", hasPax: false, hasActions: true,
       paxRows: [],
     },
-  ],
-  "sp-error-manual": [
     {
       tid: "TID-40031", bidCount: 2, spNetLc: 3240, discLc: -3240, discUsd: -37.67,
       fulfillment: "Manual", driTeam: "Reservation Ops", hasPax: true, hasActions: true,
@@ -517,9 +506,8 @@ export function CancellationsWorkspace() {
                   const tids = MOCK_TIDS[row.rowKey] ?? [];
                   const isDone = doneRows.has(row.rowKey);
                   return (
-                    <div key={row.rowKey} className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center gap-4 flex-wrap">
+                    <div key={row.rowKey} className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center gap-4">
                       {subCategoryBadge(row.subCategory)}
-                      <span className="text-xs text-muted-foreground">{row.fulfillment}</span>
                       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tids.length} TIDs:</span>
                       <div className="h-4 w-px bg-border" />
                       {isDone ? (
