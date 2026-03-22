@@ -7,8 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  XCircle, ChevronRight, AlertTriangle, Info,
-  CheckCircle2, X as XIcon, ArrowLeft, TrendingUp, TrendingDown, Check,
+  XCircle, AlertTriangle, ChevronRight, ArrowLeft,
+  CheckCircle2, X as XIcon, TrendingUp, TrendingDown, Check, Zap,
 } from "lucide-react";
 
 const fmt = (n: number) =>
@@ -392,8 +392,8 @@ export function CancellationsWorkspace() {
 
           {/* ══ SECTION 1: Analysis Breakup Table ══════════════════════════ */}
           <div
-            className={`${takeAction ? "border-b" : ""} overflow-auto shrink-0 transition-all`}
-            style={{ maxHeight: takeAction ? "40%" : "100%" }}
+            className="border-b overflow-auto shrink-0 transition-all"
+            style={{ maxHeight: takeAction ? "40%" : "55%" }}
           >
             <div className="px-5 pt-4 pb-2">
               <div className="flex items-center justify-between mb-3">
@@ -414,7 +414,6 @@ export function CancellationsWorkspace() {
                             ${[2,3,9,12,13,14].includes(i) ? "text-right" : [1,4,5].includes(i) ? "text-center" : ""}
                           `}>{h}</TableHead>
                         ))}
-                        <TableHead className="py-1.5 text-xs font-medium bg-muted/90 whitespace-nowrap text-right pr-3 sticky right-0 z-20 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -476,40 +475,6 @@ export function CancellationsWorkspace() {
                             </TableCell>
                             <TableCell className="py-1.5 font-mono text-xs text-muted-foreground whitespace-nowrap">{row.tidConcentration || "—"}</TableCell>
 
-                            {/* Action column — sticky right */}
-                            <TableCell
-                              className={`py-1.5 text-right pr-3 whitespace-nowrap sticky right-0 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)]
-                                ${isActive ? "bg-blue-50/70" : isDone ? "bg-green-50/40" : "bg-background"}
-                              `}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              {isDone ? (
-                                <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-                                  <CheckCircle2 className="h-3.5 w-3.5" /> Done
-                                </span>
-                              ) : row.hasActions ? (
-                                <Button
-                                  size="sm"
-                                  className="h-7 px-2.5 text-xs"
-                                  variant={isActive ? "secondary" : "default"}
-                                  onClick={() => isActive ? setTakeAction(null) : openTakeAction(row.rowKey)}
-                                >
-                                  {isActive ? <><XIcon className="h-3 w-3 mr-1" />Close</> : <>Take Action <ChevronRight className="h-3 w-3 ml-0.5" /></>}
-                                </Button>
-                              ) : (
-                                <span className={`inline-flex items-center gap-1 text-xs font-medium
-                                  ${row.actionPoint === "No action needed" ? "text-green-600" : "text-blue-600"}`}>
-                                  {row.actionPoint === "No action needed"
-                                    ? <><CheckCircle2 className="h-3 w-3" />No action</>
-                                    : row.actionPoint.startsWith("Claim")
-                                    ? <><Info className="h-3 w-3" />Claim insurance</>
-                                    : row.actionPoint.startsWith("Covered")
-                                    ? <><CheckCircle2 className="h-3 w-3 text-violet-500" /><span className="text-violet-600">DSS covered</span></>
-                                    : <><Info className="h-3 w-3" />{row.actionPoint.slice(0, 18)}…</>
-                                  }
-                                </span>
-                              )}
-                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -517,7 +482,7 @@ export function CancellationsWorkspace() {
                   </Table>
                 </div>
                 {/* Pinned total */}
-                <div className="border-t-2 bg-muted/60 px-3 py-1.5 grid grid-cols-[200px_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center text-xs font-semibold">
+                <div className="border-t-2 bg-muted/60 px-3 py-1.5 grid grid-cols-[200px_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto_auto] items-center text-xs font-semibold">
                   <span>Total</span>
                   <span />
                   <span className="text-right font-mono">{fmt(MOCK_BREAKUP.reduce((s,r)=>s+r.spNetLc,0))}</span>
@@ -531,15 +496,57 @@ export function CancellationsWorkspace() {
                   <span className={`text-right font-mono px-2 ${totalDiscLc < 0 ? "text-red-600" : ""}`}>{fmt(totalDiscLc)}</span>
                   <span className={`text-right font-mono px-2 ${totalDiscUsd < 0 ? "text-red-600" : ""}`}>{fmt(totalDiscUsd)}</span>
                   <span />
-                  <span />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ══ SECTION 2: 3-Step Take Action Panel ════════════════════════ */}
-          {takeAction && selectedRow && (
-            <div className="flex-1 flex flex-col overflow-hidden">
+          {/* ══ SECTION 2: Actions (pills when idle, 3-step panel when active) ═ */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+
+            {/* ── No active action: show NPD-style pills per actionable row ── */}
+            {!takeAction && (
+              <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-semibold">Actions</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {MOCK_BREAKUP.filter(r => r.hasActions).length} rows
+                  </Badge>
+                </div>
+                {MOCK_BREAKUP.filter(r => r.hasActions).map(row => {
+                  const tids = MOCK_TIDS[row.rowKey] ?? [];
+                  const isDone = doneRows.has(row.rowKey);
+                  return (
+                    <div key={row.rowKey} className="rounded-lg border bg-muted/30 px-4 py-3 flex items-center gap-4 flex-wrap">
+                      {subCategoryBadge(row.subCategory)}
+                      <span className="text-xs text-muted-foreground">{row.fulfillment}</span>
+                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tids.length} TIDs:</span>
+                      <div className="h-4 w-px bg-border" />
+                      {isDone ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-green-600 font-medium">
+                          <CheckCircle2 className="h-4 w-4" /> Done
+                        </span>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0"
+                            onClick={() => openTakeAction(row.rowKey)}
+                          >
+                            <Zap className="h-3.5 w-3.5" /> Take Action
+                          </Button>
+                          <span className="text-xs text-muted-foreground">Set price, raise disputes &amp; log issues in one guided flow</span>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── Active action: 3-step panel ──────────────────────────────── */}
+            {takeAction && selectedRow && (
+              <div className="flex-1 flex flex-col overflow-hidden">
 
               {/* Panel header */}
               <div className="px-5 py-2.5 border-b bg-card shrink-0 flex items-center justify-between gap-4">
@@ -557,6 +564,9 @@ export function CancellationsWorkspace() {
                       <span className="truncate">{selectedRow.actionPoint}</span>
                     </div>
                   )}
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setTakeAction(null)}>
+                    <XIcon className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
 
@@ -934,6 +944,7 @@ export function CancellationsWorkspace() {
               </div>
             </div>
           )}
+        </div>
         </div>
 
         {/* ── Toast ──────────────────────────────────────────────────────── */}
