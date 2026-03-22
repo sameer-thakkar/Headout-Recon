@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from "react";
 import { authFetch } from "@/lib/queryClient";
-import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2, Check, Info, Search, Calendar, TrendingUp, CreditCard } from "lucide-react";
+import { Upload, FileSpreadsheet, X, Play, Download, ChevronRight, DollarSign, FileDown, Calculator, ChevronDown, ExternalLink, AlertTriangle, XCircle, Loader2, Check, Info } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -143,9 +143,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [arDecisions, setArDecisions] = useState<Map<string, { decision: "pay" | "dont_pay"; reason: string; customReason: string; finalAmount: number }>>(new Map());
   const [arActiveDisputes, setArActiveDisputes] = useState<Set<string>>(new Set());
   const [arDisputeAmounts, setArDisputeAmounts] = useState<Map<string, number>>(new Map());
-  const [arSearchQuery, setArSearchQuery] = useState("");
-  const [arSelectedBookings, setArSelectedBookings] = useState<Set<string>>(new Set());
-  const [arExpandedTids, setArExpandedTids] = useState<Set<string>>(new Set());
   // Cancellations modal state
   const [isCancellationsModalOpen, setIsCancellationsModalOpen] = useState(false);
   const { toast } = useToast();
