@@ -680,7 +680,7 @@ export function DiscrepancySummaryWorkspace({
                       <Zap className="h-4 w-4 text-primary" />
                       Take Action — All {allTids.length} TIDs
                     </div>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowTakeAction(false)} data-testid="close-take-action">
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setShowTakeAction(false); setTakeActionDisputes(new Set()); }} data-testid="close-take-action">
                       <XIcon className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -947,7 +947,7 @@ export function DiscrepancySummaryWorkspace({
                   </div>
 
                   <div className="flex items-center justify-between pt-1 border-t">
-                    <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setShowTakeAction(false)} data-testid="cancel-take-action">Cancel</Button>
+                    <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setShowTakeAction(false); setTakeActionDisputes(new Set()); }} data-testid="cancel-take-action">Cancel</Button>
                     <Button size="sm" className="h-8 text-xs gap-1.5" data-testid="confirm-take-action" disabled={priceOverrideMutation.isPending || disputeMutation.isPending || issueMutation.isPending} onClick={() => {
                       const allBookingIds = allTids.flatMap(t => t.bookings.map(b => b.bookingId));
                       const flashParts: string[] = [];
@@ -958,6 +958,7 @@ export function DiscrepancySummaryWorkspace({
                         if (completeParts.length > 0) flash(completeParts.join(" · "));
                         if (failParts.length > 0) toast({ title: "Some actions failed", description: failParts.join("; "), variant: "destructive" });
                         setShowTakeAction(false);
+                        setTakeActionDisputes(new Set());
                         setSelectedTids(new Set());
                       };
 
