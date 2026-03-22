@@ -447,27 +447,28 @@ export function CancellationsWorkspace() {
                 <span className="text-xs text-muted-foreground">Click a row to view TID-level actions</span>
               </div>
 
-              <Card className="overflow-hidden border">
-                <div className="overflow-x-auto">
+              <Card className="overflow-hidden border flex flex-col" style={{ maxHeight: selectedRowKey ? "none" : "calc(100vh - 150px)" }}>
+                {/* Scrollable table body */}
+                <div className="overflow-auto flex-1 min-h-0">
                   <Table>
-                    <TableHeader>
-                      <TableRow className="h-8 bg-muted/60">
-                        <TableHead className="py-1.5 text-xs font-medium pl-3 min-w-[210px] whitespace-nowrap">Sub Category</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-center whitespace-nowrap">Cancellable</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap">SP Net (LC)</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap">HO Net (LC)</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-center whitespace-nowrap">Cancel. Insurance</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-center whitespace-nowrap">Charge Loss</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium min-w-[200px]">Action Point</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap">DRI Team</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap">Fulfillment</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap">BID Count</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap">Start Date</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap">End Date</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap">Total BIDs</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap">Disc. (LC)</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap">Disc. (USD)</TableHead>
-                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap pr-3">TID Concentration</TableHead>
+                    <TableHeader className="sticky top-0 z-10">
+                      <TableRow className="h-8 bg-muted/90">
+                        <TableHead className="py-1.5 text-xs font-medium pl-3 min-w-[210px] whitespace-nowrap bg-muted/90">Sub category</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-center whitespace-nowrap bg-muted/90">Cancellable</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap bg-muted/90">SP Net (LC)</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap bg-muted/90">HO Net (LC)</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-center whitespace-nowrap bg-muted/90">Cancellation Insurance</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-center whitespace-nowrap bg-muted/90">Charge Loss</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium min-w-[200px] bg-muted/90">Action point</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap bg-muted/90">DRI Team</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap bg-muted/90">Fulfillment</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap bg-muted/90">BID Count</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap bg-muted/90">Start Date</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap bg-muted/90">End Date</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap bg-muted/90">Total BIDs</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap bg-muted/90">Discrepancy (LC)</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium text-right whitespace-nowrap bg-muted/90">Discrepancy (USD)</TableHead>
+                        <TableHead className="py-1.5 text-xs font-medium whitespace-nowrap pr-3 bg-muted/90">TID Concentration</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -548,21 +549,35 @@ export function CancellationsWorkspace() {
                           </TableRow>
                         );
                       })}
+                    </TableBody>
+                  </Table>
+                </div>
 
-                      {/* Total row */}
-                      <TableRow className="h-9 bg-muted/60 font-semibold border-t-2">
-                        <TableCell className="py-1.5 pl-3 text-xs" colSpan={9}>
-                          <span className="font-bold text-foreground">Total</span>
-                        </TableCell>
-                        <TableCell className="py-1.5 text-right font-mono text-xs">{totalBidCount}</TableCell>
-                        <TableCell colSpan={3} />
-                        <TableCell className={`py-1.5 text-right font-mono text-xs font-bold ${totalDiscLc < 0 ? "text-red-600" : ""}`}>
+                {/* Pinned total row — always visible at bottom, outside the scroll area */}
+                <div className="border-t-2 bg-muted/70 shrink-0 overflow-x-auto">
+                  <Table>
+                    <TableBody>
+                      <TableRow className="h-9">
+                        <TableCell className="py-1.5 pl-3 text-xs font-bold text-foreground min-w-[210px] whitespace-nowrap">Total</TableCell>
+                        <TableCell className="py-1.5 whitespace-nowrap" />
+                        <TableCell className="py-1.5 text-right font-mono text-xs font-semibold whitespace-nowrap">{fmt(MOCK_BREAKUP.reduce((s,r)=>s+r.spNetLc,0))}</TableCell>
+                        <TableCell className="py-1.5 text-right font-mono text-xs whitespace-nowrap">—</TableCell>
+                        <TableCell className="py-1.5 text-center whitespace-nowrap" />
+                        <TableCell className="py-1.5 text-center whitespace-nowrap" />
+                        <TableCell className="py-1.5 min-w-[200px]" />
+                        <TableCell className="py-1.5 whitespace-nowrap" />
+                        <TableCell className="py-1.5 whitespace-nowrap" />
+                        <TableCell className="py-1.5 text-right font-mono text-xs font-semibold whitespace-nowrap">{totalBidCount}</TableCell>
+                        <TableCell className="py-1.5 whitespace-nowrap" />
+                        <TableCell className="py-1.5 whitespace-nowrap" />
+                        <TableCell className="py-1.5 text-right font-mono text-xs whitespace-nowrap">{MOCK_BREAKUP.reduce((s,r)=>s+r.totalBids,0)}</TableCell>
+                        <TableCell className={`py-1.5 text-right font-mono text-xs font-bold whitespace-nowrap ${totalDiscLc < 0 ? "text-red-600" : ""}`}>
                           {fmt(totalDiscLc)}
                         </TableCell>
-                        <TableCell className={`py-1.5 text-right font-mono text-xs font-bold ${totalDiscUsd < 0 ? "text-red-600" : ""}`}>
+                        <TableCell className={`py-1.5 text-right font-mono text-xs font-bold whitespace-nowrap ${totalDiscUsd < 0 ? "text-red-600" : ""}`}>
                           {fmt(totalDiscUsd)}
                         </TableCell>
-                        <TableCell className="pr-3" />
+                        <TableCell className="py-1.5 pr-3 whitespace-nowrap" />
                       </TableRow>
                     </TableBody>
                   </Table>
