@@ -281,6 +281,10 @@ export function CancellationsWorkspace() {
   const [takeAction, setTakeAction] = useState<TakeActionState>(null);
   const [doneRows, setDoneRows] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  // Amount Payable table state
+  const [committedDisputes, setCommittedDisputes] = useState<Record<string, number>>({});
+  const [tapOverrides, setTapOverrides] = useState<Record<string, string>>({});
+  const [tapConfirmedRows, setTapConfirmedRows] = useState<Set<string>>(new Set());
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -346,16 +350,37 @@ export function CancellationsWorkspace() {
 
   const confirmAction = () => {
     if (!takeAction || !selectedRow) return;
+    const rowKey = takeAction.rowKey;
+    // Persist total dispute amount for this sub-category into the Amount Payable table
+    const totalDisp = [...takeAction.disputeTids].reduce((s, tid) => {
+      const amt = parseFloat(takeAction.disputeAmounts[tid] ?? "0") || 0;
+      return s + amt;
+    }, 0);
+    setCommittedDisputes(prev => ({ ...prev, [rowKey]: totalDisp }));
+    // Clear any previously confirmed TAP override so it recomputes from new dispute total
+    setTapConfirmedRows(prev => { const next = new Set(prev); next.delete(rowKey); return next; });
+    setTapOverrides(prev => { const next = { ...prev }; delete next[rowKey]; return next; });
     const m = selectedRow.bidCount;
     const d = disputeCount;
     const i = issueCount;
     showToast(`Applied — ${m} bookings · ${d} dispute${d !== 1 ? "s" : ""} raised · ${i} issue${i !== 1 ? "s" : ""} logged`);
-    setDoneRows(prev => new Set(prev).add(takeAction.rowKey));
+    setDoneRows(prev => new Set(prev).add(rowKey));
     setTakeAction(null);
   };
 
   const updateTA = (patch: Partial<NonNullable<TakeActionState>>) => {
     setTakeAction(prev => prev ? { ...prev, ...patch } : prev);
+  };
+
+  // Returns live dispute total for a rowKey (live if panel open, committed otherwise)
+  const liveDispute = (rowKey: string): number => {
+    if (takeAction?.rowKey === rowKey) {
+      return [...takeAction.disputeTids].reduce((s, tid) => {
+        const amt = parseFloat(takeAction.disputeAmounts[tid] ?? "0") || 0;
+        return s + amt;
+      }, 0);
+    }
+    return committedDisputes[rowKey] ?? 0;
   };
 
   return (
@@ -932,6 +957,132 @@ export function CancellationsWorkspace() {
               </div>
             </div>
           )}
+
+          {/* ══ Amount Payable Summary Table ════════════════════════════════ */}
+          <div className="shrink-0 border-t bg-background" style={{ maxHeight: 280, overflowY: "auto" }}>
+            {/* Sticky sub-header */}
+            <div className="px-5 pt-2.5 pb-1.5 flex items-center gap-2 sticky top-0 bg-background z-10 border-b">
+              <span className="text-xs font-semibold uppercase tracking-wide">Amount Payable</span>
+              <Badge variant="secondary" className="text-xs">{MOCK_BREAKUP.length} rows</Badge>
+              <span className="ml-auto text-xs text-muted-foreground">Confirm payable amount per sub-category</span>
+            </div>
+
+            <Table>
+              <TableHeader>
+                <TableRow className="h-7 bg-muted/50">
+                  {[
+                    { label: "Sub Category",         cls: "pl-3 min-w-[200px]",  align: "" },
+                    { label: "BID Count",            cls: "",                    align: "text-right" },
+                    { label: "SP Net LC",            cls: "",                    align: "text-right" },
+                    { label: "HO Net LC",            cls: "",                    align: "text-right" },
+                    { label: "Disc. LC",             cls: "",                    align: "text-right" },
+                    { label: "Disc. USD",            cls: "",                    align: "text-right" },
+                    { label: "Dispute Raised",       cls: "",                    align: "text-right" },
+                    { label: "Total Amount Payable", cls: "pr-3 min-w-[200px]", align: "text-right" },
+                  ].map(col => (
+                    <TableHead key={col.label} className={`py-1 text-xs font-medium bg-muted/50 whitespace-nowrap ${col.align} ${col.cls}`}>
+                      {col.label}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {MOCK_BREAKUP.map(row => {
+                  const disputeAmt = liveDispute(row.rowKey);
+                  const defaultTap = Math.max(0, row.spNetLc - disputeAmt);
+                  const tapStr = tapOverrides[row.rowKey] !== undefined
+                    ? tapOverrides[row.rowKey]
+                    : defaultTap.toFixed(2);
+                  const isConfirmed = tapConfirmedRows.has(row.rowKey);
+                  return (
+                    <TableRow
+                      key={row.rowKey}
+                      className={`h-8 text-xs ${isConfirmed ? "bg-green-50/70 dark:bg-green-950/20" : ""}`}
+                    >
+                      <TableCell className="py-1 pl-3">{subCategoryBadge(row.subCategory)}</TableCell>
+                      <TableCell className="py-1 text-right font-mono">{row.bidCount}</TableCell>
+                      <TableCell className={`py-1 text-right font-mono ${row.spNetLc > 0 ? "text-red-600" : row.spNetLc < 0 ? "text-green-600" : ""}`}>
+                        {fmt(row.spNetLc)}
+                      </TableCell>
+                      <TableCell className="py-1 text-right font-mono">{fmt(row.hoNetLc)}</TableCell>
+                      <TableCell className={`py-1 text-right font-mono ${row.discLc < 0 ? "text-red-600" : row.discLc > 0 ? "text-green-600" : ""}`}>
+                        {fmt(row.discLc)}
+                      </TableCell>
+                      <TableCell className={`py-1 text-right font-mono ${row.discUsd < 0 ? "text-red-600" : row.discUsd > 0 ? "text-green-600" : ""}`}>
+                        {fmt(row.discUsd)}
+                      </TableCell>
+                      <TableCell className="py-1 text-right font-mono">
+                        {disputeAmt > 0
+                          ? <span className="text-amber-600 font-semibold">{fmt(disputeAmt)}</span>
+                          : <span className="text-muted-foreground">—</span>
+                        }
+                      </TableCell>
+                      <TableCell className="py-1 pr-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Input
+                            className="h-6 w-28 text-right text-xs font-mono py-0 px-2"
+                            value={tapStr}
+                            onChange={e => {
+                              setTapOverrides(prev => ({ ...prev, [row.rowKey]: e.target.value }));
+                              setTapConfirmedRows(prev => { const n = new Set(prev); n.delete(row.rowKey); return n; });
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant={isConfirmed ? "ghost" : "outline"}
+                            className={`h-6 w-6 p-0 shrink-0 ${isConfirmed ? "text-green-600 hover:text-green-700" : ""}`}
+                            onClick={() => {
+                              const parsed = parseFloat(tapStr);
+                              setTapOverrides(prev => ({ ...prev, [row.rowKey]: isNaN(parsed) ? "0.00" : parsed.toFixed(2) }));
+                              setTapConfirmedRows(prev => new Set(prev).add(row.rowKey));
+                            }}
+                            title={isConfirmed ? "Confirmed" : "Confirm this amount"}
+                          >
+                            <Check className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+
+              {/* ── Totals footer ─────────────────────────────────────────── */}
+              <tfoot>
+                <tr className="border-t-2 bg-muted/40 text-xs font-semibold">
+                  <td className="py-2 pl-3">Totals</td>
+                  <td className="py-2 text-right font-mono pr-2">{MOCK_BREAKUP.reduce((s, r) => s + r.bidCount, 0)}</td>
+                  <td className="py-2 text-right font-mono pr-2 text-red-600">
+                    {fmt(MOCK_BREAKUP.reduce((s, r) => s + r.spNetLc, 0))}
+                  </td>
+                  <td className="py-2 text-right font-mono pr-2">
+                    {fmt(MOCK_BREAKUP.reduce((s, r) => s + r.hoNetLc, 0))}
+                  </td>
+                  <td className={`py-2 text-right font-mono pr-2 ${totalDiscLc < 0 ? "text-red-600" : ""}`}>
+                    {fmt(totalDiscLc)}
+                  </td>
+                  <td className={`py-2 text-right font-mono pr-2 ${totalDiscUsd < 0 ? "text-red-600" : ""}`}>
+                    {fmt(totalDiscUsd)}
+                  </td>
+                  <td className="py-2 text-right font-mono pr-2 text-amber-600">
+                    {(() => {
+                      const tot = MOCK_BREAKUP.reduce((s, r) => s + liveDispute(r.rowKey), 0);
+                      return tot > 0 ? fmt(tot) : "—";
+                    })()}
+                  </td>
+                  <td className="py-2 text-right font-mono pr-3">
+                    {fmt(MOCK_BREAKUP.reduce((s, r) => {
+                      const d = liveDispute(r.rowKey);
+                      const def = Math.max(0, r.spNetLc - d);
+                      return s + (parseFloat(tapOverrides[r.rowKey] ?? def.toFixed(2)) || 0);
+                    }, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </Table>
+          </div>
+
         </div>
         </div>
 
