@@ -545,39 +545,68 @@ export function CancellationsWorkspace() {
                   <div className="px-5 pt-3 pb-4 space-y-3">
 
                     {/* Bulk action cards */}
-                    {selectedRow.hasActions ? (
+                    <div className="space-y-2">
                       <div className="grid grid-cols-3 gap-2">
-                        <div className="rounded-md border p-2.5 cursor-pointer hover:bg-blue-50/80 transition-colors"
-                          onClick={() => { setDisputeChecked(false); setIssueChecked(false); setView({ level: "subcat-spnet", rowKey: selectedRow.rowKey }); }}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="h-6 w-6 rounded bg-blue-100 flex items-center justify-center"><TrendingUp className="h-3 w-3 text-blue-600" /></div>
-                            <span className="text-xs font-medium">Set all SP Net</span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground font-mono">{fmt(selectedRow.spNetLc)} EUR</p>
-                        </div>
-                        <div className="rounded-md border p-2.5 cursor-pointer hover:bg-green-50/80 transition-colors"
-                          onClick={() => { showToast(`All ${selectedRow.bidCount} bookings → HO Net (0)`); selectedTids.forEach(t => markResolved(t.tid)); }}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="h-6 w-6 rounded bg-green-100 flex items-center justify-center"><TrendingDown className="h-3 w-3 text-green-600" /></div>
-                            <span className="text-xs font-medium">Set all HO Net</span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground font-mono">{fmt(selectedRow.hoNetLc)} EUR</p>
-                        </div>
-                        <div className="rounded-md border p-2.5 cursor-pointer hover:bg-amber-50/80 transition-colors"
-                          onClick={() => showToast("Dispute raised for all TIDs")}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="h-6 w-6 rounded bg-amber-100 flex items-center justify-center"><Gavel className="h-3 w-3 text-amber-600" /></div>
-                            <span className="text-xs font-medium">Dispute All</span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground font-mono">{fmt(Math.abs(selectedRow.discLc))} EUR</p>
-                        </div>
+                        {selectedRow.hasActions ? (
+                          <>
+                            <div className="rounded-md border p-2.5 cursor-pointer hover:bg-blue-50/80 transition-colors"
+                              onClick={() => { setDisputeChecked(false); setIssueChecked(false); setView({ level: "subcat-spnet", rowKey: selectedRow.rowKey }); }}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="h-6 w-6 rounded bg-blue-100 flex items-center justify-center"><TrendingUp className="h-3 w-3 text-blue-600" /></div>
+                                <span className="text-xs font-medium">Set all SP Net</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-mono">{fmt(selectedRow.spNetLc)} EUR</p>
+                            </div>
+                            <div className="rounded-md border p-2.5 cursor-pointer hover:bg-green-50/80 transition-colors"
+                              onClick={() => { showToast(`All ${selectedRow.bidCount} bookings → HO Net (0)`); selectedTids.forEach(t => markResolved(t.tid)); }}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="h-6 w-6 rounded bg-green-100 flex items-center justify-center"><TrendingDown className="h-3 w-3 text-green-600" /></div>
+                                <span className="text-xs font-medium">Set all HO Net</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-mono">{fmt(selectedRow.hoNetLc)} EUR</p>
+                            </div>
+                            <div className="rounded-md border p-2.5 cursor-pointer hover:bg-amber-50/80 transition-colors"
+                              onClick={() => showToast("Dispute raised for all TIDs")}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="h-6 w-6 rounded bg-amber-100 flex items-center justify-center"><Gavel className="h-3 w-3 text-amber-600" /></div>
+                                <span className="text-xs font-medium">Dispute All</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-mono">{fmt(Math.abs(selectedRow.discLc))} EUR</p>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="rounded-md border p-2.5 opacity-40 cursor-not-allowed bg-muted/20">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="h-6 w-6 rounded bg-muted flex items-center justify-center"><TrendingUp className="h-3 w-3 text-muted-foreground" /></div>
+                                <span className="text-xs font-medium text-muted-foreground">Set all SP Net</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-mono">{fmt(selectedRow.spNetLc)} EUR</p>
+                            </div>
+                            <div className="rounded-md border p-2.5 opacity-40 cursor-not-allowed bg-muted/20">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="h-6 w-6 rounded bg-muted flex items-center justify-center"><TrendingDown className="h-3 w-3 text-muted-foreground" /></div>
+                                <span className="text-xs font-medium text-muted-foreground">Set all HO Net</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-mono">{fmt(selectedRow.hoNetLc)} EUR</p>
+                            </div>
+                            <div className="rounded-md border p-2.5 opacity-40 cursor-not-allowed bg-muted/20">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="h-6 w-6 rounded bg-muted flex items-center justify-center"><Gavel className="h-3 w-3 text-muted-foreground" /></div>
+                                <span className="text-xs font-medium text-muted-foreground">Dispute All</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground font-mono">{fmt(Math.abs(selectedRow.discLc))} EUR</p>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2 px-3 py-2.5 rounded-md bg-muted/40 border text-xs text-muted-foreground">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                        <span>No price update actions required for <strong className="text-foreground">{selectedRow.subCategory}</strong> — {selectedRow.actionPoint.toLowerCase()}</span>
-                      </div>
-                    )}
+                      {!selectedRow.hasActions && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/40 border text-xs text-muted-foreground">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                          <span>No action required for this sub-category — <strong className="text-foreground">{selectedRow.subCategory}</strong>: {selectedRow.actionPoint.toLowerCase()}</span>
+                        </div>
+                      )}
+                    </div>
 
                     {/* TID list */}
                     <div className="rounded-md border overflow-hidden">
