@@ -663,7 +663,7 @@ export function DiscrepancySummaryWorkspace({
                     }, 0);
                   }
                 }
-                return t.spNet;
+                return isSp ? t.spNet : t.hoNet;
               };
 
               const disputeTotal = allTids.filter(t => takeActionDisputes.has(t.tid)).reduce((s, t) => s + getDisputeDiff(t), 0);
