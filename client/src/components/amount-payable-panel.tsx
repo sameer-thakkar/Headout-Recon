@@ -1604,7 +1604,7 @@ export function AmountPayablePanel({
     if (amountPaidTotals[booking.bookingId] !== undefined) {
       return amountPaidTotals[booking.bookingId];
     }
-    const sel = localSelections[booking.bookingId] || "ho";
+    const sel = localSelections[booking.bookingId] || "sp";
     return sel === "ho" ? booking.hoNet : booking.spNet;
   }, [amountPaidTotals, localSelections]);
 
@@ -1714,7 +1714,7 @@ export function AmountPayablePanel({
     return amountPaidBookings.reduce((sum, b) => {
       const totalPayable = amountPaidTotals[b.bookingId] !== undefined
         ? amountPaidTotals[b.bookingId]
-        : ((localSelections[b.bookingId] || "ho") === "ho" ? b.hoNet : b.spNet);
+        : ((localSelections[b.bookingId] || "sp") === "ho" ? b.hoNet : b.spNet);
       return sum + (totalPayable - (b.amountPaid || 0));
     }, 0);
   }, [amountPaidBookings, amountPaidTotals, localSelections]);
@@ -2075,7 +2075,7 @@ export function AmountPayablePanel({
         const originalAmount = originalDisputes.get(booking.bookingId) || 0;
 
         if (isNowDisputed && (!wasDisputed || currentAmount !== originalAmount)) {
-          const selection = localSelections[booking.bookingId] || "ho";
+          const selection = localSelections[booking.bookingId] || "sp";
           const reconciledNet = selection === "ho" ? booking.hoNet : booking.spNet;
           newDisputes.push({
             bookingId: booking.bookingId,
@@ -3938,7 +3938,7 @@ export function AmountPayablePanel({
                       <div className="max-h-80 overflow-y-auto">
                         {amountPaidBookings.map((booking) => {
                           const totalPayable = getAmountPaidTotal(booking);
-                          const netType = localSelections[booking.bookingId] || "ho";
+                          const netType = localSelections[booking.bookingId] || "sp";
                           const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
                           return (
                             <div 
