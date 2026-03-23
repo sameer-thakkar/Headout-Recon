@@ -398,6 +398,11 @@ export function AmountPayableModal({
       next.set(bookingId, maxDispute);
       return next;
     });
+    // When raising a dispute, default Total Amount Payable to SP net
+    setLocalSelections(prev => ({
+      ...prev,
+      [bookingId]: "sp"
+    }));
     // Note: Disputes are saved to backend only when Apply is clicked
   }, []);
 
