@@ -636,28 +636,32 @@ export function DiscrepancySummaryWorkspace({
 
               const getDisputeDiff = (t: TidGroup) => {
                 if (t.hasPax) {
-                  const allPax = t.bookings.flatMap(b => b.paxBreakdown || []);
-                  if (allPax.length === 0) return Math.abs(t.spNet - t.hoNet);
-                  return allPax.reduce((s, p) => {
-                    const k = `${p.paxType}__${p.unitPrice}`;
-                    const entry = (disputePaxPrices[t.tid] || {})[k];
-                    const disp = entry?.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : (p.unitPrice - (p.priceNet / p.count || 0));
-                    return s + Math.abs(disp) * p.count;
-                  }, 0);
+                  const tidPaxEdits = disputePaxPrices[t.tid];
+                  if (tidPaxEdits && Object.keys(tidPaxEdits).length > 0) {
+                    const allPax = t.bookings.flatMap(b => b.paxBreakdown || []);
+                    return allPax.reduce((s, p) => {
+                      const k = `${p.paxType}__${p.unitPrice}`;
+                      const entry = tidPaxEdits[k];
+                      const disp = entry?.dispute !== undefined && entry.dispute !== "" ? parseFloat(entry.dispute) : (p.unitPrice - (p.priceNet / p.count || 0));
+                      return s + Math.abs(disp) * p.count;
+                    }, 0);
+                  }
                 }
                 return Math.abs(t.spNet - t.hoNet);
               };
 
               const getTidTap = (t: TidGroup) => {
                 if (t.hasPax) {
-                  const allPax = t.bookings.flatMap(b => b.paxBreakdown || []);
-                  if (allPax.length === 0) return t.spNet;
-                  return allPax.reduce((s, p) => {
-                    const k = `${p.paxType}__${p.unitPrice}`;
-                    const entry = (disputePaxPrices[t.tid] || {})[k];
-                    const tap = entry?.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : p.unitPrice;
-                    return s + tap * p.count;
-                  }, 0);
+                  const tidPaxEdits = disputePaxPrices[t.tid];
+                  if (tidPaxEdits && Object.keys(tidPaxEdits).length > 0) {
+                    const allPax = t.bookings.flatMap(b => b.paxBreakdown || []);
+                    return allPax.reduce((s, p) => {
+                      const k = `${p.paxType}__${p.unitPrice}`;
+                      const entry = tidPaxEdits[k];
+                      const tap = entry?.tap !== undefined && entry.tap !== "" ? parseFloat(entry.tap) : p.unitPrice;
+                      return s + tap * p.count;
+                    }, 0);
+                  }
                 }
                 return t.spNet;
               };
