@@ -1326,9 +1326,9 @@ export function DiscrepancySummaryWorkspace({
                   <div className="text-left px-3 w-[5.5rem]">Fulfillment</div>
                   <div className="text-right px-3 w-[7.5rem]">SP Net</div>
                   <div className="text-right px-3 w-[7.5rem]">HO Net</div>
+                  <div className="text-right px-3 w-[7.5rem]">Difference LC</div>
                   <div className="text-right px-3 w-[7.5rem] text-violet-600">TAP</div>
                   <div className="text-right px-3 w-[7.5rem] text-violet-600">Dispute</div>
-                  <div className="text-right px-3 w-[7.5rem]">Disc.</div>
                   <div className="text-center px-3 w-14 pr-4">BIDs</div>
                 </div>
 
@@ -1367,6 +1367,10 @@ export function DiscrepancySummaryWorkspace({
                         </div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.spNet)}</div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
+                        <div className="text-right px-3 w-[7.5rem] leading-tight">
+                          <div className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</div>
+                          <div className="text-[10px] text-muted-foreground">{pct}%</div>
+                        </div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => {
                           const sel = bookingSelections[b.bookingId];
                           if (sel) return s + getBookingFinalPrice(b);
@@ -1374,10 +1378,6 @@ export function DiscrepancySummaryWorkspace({
                           return s + (b.spNetInHo || 0);
                         }, 0))}</div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
-                        <div className="text-right px-3 w-[7.5rem] leading-tight">
-                          <div className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</div>
-                          <div className="text-[10px] text-muted-foreground">{pct}%</div>
-                        </div>
                         <div className="text-center px-3 w-14 text-sm pr-4">{tid.bidCount}</div>
                       </div>
 
