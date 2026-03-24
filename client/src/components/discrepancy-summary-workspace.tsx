@@ -1395,14 +1395,12 @@ export function DiscrepancySummaryWorkspace({
                             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => handleTidAction(tid, "ho")} disabled={priceOverrideMutation.isPending} data-testid={`tid-ho-net-${tid.tid}`}>
                               <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
                             </Button>
-                            {tid.hasPax && (
-                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50" onClick={() => {
-                                setPaxTid(tid);
-                                setPaxOpen(true);
-                              }} data-testid={`tid-pax-${tid.tid}`}>
-                                <Calculator className="h-3.5 w-3.5" /> Pax Pricing
-                              </Button>
-                            )}
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50" onClick={() => {
+                              setPaxTid(tid);
+                              setPaxOpen(true);
+                            }} data-testid={`tid-pax-${tid.tid}`}>
+                              <Calculator className="h-3.5 w-3.5" /> Pax Pricing
+                            </Button>
                             <div className="flex-1" />
                             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => handleTidDispute(tid)} disabled={disputeMutation.isPending} data-testid={`tid-dispute-${tid.tid}`}>
                               <Gavel className="h-3.5 w-3.5" /> Dispute
@@ -1590,94 +1588,97 @@ export function DiscrepancySummaryWorkspace({
               </Collapsible>
             )}
 
-            {paxOpen && paxTid && (
-              <div className="rounded-lg border-2 border-violet-200 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-950/20 p-3 space-y-3 animate-in fade-in duration-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-violet-800 dark:text-violet-300">
-                    <Calculator className="h-4 w-4" />
-                    Pax Pricing — {paxTid.tid}
-                  </div>
-                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); }}>
-                    <XIcon className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <div className="rounded-md border overflow-hidden bg-white dark:bg-card">
-                  <table className="w-full text-[11px]">
-                    <thead>
-                      <tr className="h-7 bg-muted/30 border-b">
-                        <th className="text-left font-medium text-muted-foreground px-2 py-1">Booking ID</th>
-                        <th className="text-left font-medium text-muted-foreground px-2 py-1">Pax Types</th>
-                        <th className="text-right font-medium text-muted-foreground px-2 py-1 w-24">SP Net</th>
-                        <th className="text-right font-medium text-muted-foreground px-2 py-1 w-28">Final Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paxTid.bookings.map(b => {
-                        const paxSummary = b.paxBreakdown && b.paxBreakdown.length > 0
-                          ? b.paxBreakdown.map(p => `${p.paxType}×${p.count}`).join(", ")
-                          : "—";
-                        return (
-                          <tr key={b.bookingId} className="h-8 border-b last:border-0">
-                            <td className="px-2 py-1 font-mono text-primary font-medium">{b.bookingId}</td>
-                            <td className="px-2 py-1 text-muted-foreground">{paxSummary}</td>
-                            <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(b.spNetInHo || 0)}</td>
-                            <td className="text-right px-2 py-1">
-                              <Input
-                                className="h-6 w-24 text-xs text-right font-mono ml-auto"
-                                type="number"
-                                placeholder={String(b.spNetInHo || 0)}
-                                value={paxPrices[b.bookingId] || ""}
-                                onChange={e => setPaxPrices(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                data-testid={`pax-price-${b.bookingId}`}
-                              />
-                            </td>
+            <Dialog open={paxOpen && !!paxTid} onOpenChange={open => { if (!open) { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); } }}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-base">
+                    <Calculator className="h-4 w-4 text-violet-600" />
+                    Pax Pricing — {paxTid?.tid}
+                  </DialogTitle>
+                </DialogHeader>
+                {paxTid && (
+                  <div className="space-y-3">
+                    <div className="rounded-md border overflow-hidden bg-white dark:bg-card">
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="h-7 bg-muted/30 border-b">
+                            <th className="text-left font-medium text-muted-foreground px-2 py-1">Booking ID</th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-1">Pax Types</th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-1 w-24">SP Net</th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-1 w-24">HO Net</th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-1 w-28">Final Price</th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11px] text-muted-foreground">{Object.keys(paxPrices).filter(k => paxPrices[k]).length} prices set</span>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); }}>Cancel</Button>
-                    <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
-                      const bookingIds = Object.keys(paxPrices).filter(k => paxPrices[k]);
-                      if (bookingIds.length === 0) { flash("No prices set"); return; }
-                      const customPricesNum: Record<string, number> = {};
-                      bookingIds.forEach(id => { customPricesNum[id] = parseFloat(paxPrices[id]) || 0; });
-                      priceOverrideMutation.mutate({ bookingIds, selection: "sp", customPrices: customPricesNum }, {
-                        onSuccess: () => {
-                          setBookingSelections(prev => {
-                            const next = { ...prev };
-                            bookingIds.forEach(id => { next[id] = "custom"; });
-                            return next;
+                        </thead>
+                        <tbody>
+                          {paxTid.bookings.map(b => {
+                            const paxSummary = b.paxBreakdown && b.paxBreakdown.length > 0
+                              ? b.paxBreakdown.map(p => `${p.paxType}×${p.count}`).join(", ")
+                              : "—";
+                            return (
+                              <tr key={b.bookingId} className="h-8 border-b last:border-0">
+                                <td className="px-2 py-1 font-mono text-primary font-medium">{b.bookingId}</td>
+                                <td className="px-2 py-1 text-muted-foreground">{paxSummary}</td>
+                                <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(b.spNetInHo || 0)}</td>
+                                <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(b.hoNet || 0)}</td>
+                                <td className="text-right px-2 py-1">
+                                  <Input
+                                    className="h-6 w-24 text-xs text-right font-mono ml-auto"
+                                    type="number"
+                                    placeholder={String(b.spNetInHo || 0)}
+                                    value={paxPrices[b.bookingId] || ""}
+                                    onChange={e => setPaxPrices(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
+                                    data-testid={`pax-price-${b.bookingId}`}
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] text-muted-foreground">{Object.keys(paxPrices).filter(k => paxPrices[k]).length} prices set</span>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); }}>Cancel</Button>
+                        <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                          const bookingIds = Object.keys(paxPrices).filter(k => paxPrices[k]);
+                          if (bookingIds.length === 0) { flash("No prices set"); return; }
+                          const customPricesNum: Record<string, number> = {};
+                          bookingIds.forEach(id => { customPricesNum[id] = parseFloat(paxPrices[id]) || 0; });
+                          priceOverrideMutation.mutate({ bookingIds, selection: "sp", customPrices: customPricesNum }, {
+                            onSuccess: () => {
+                              setBookingSelections(prev => {
+                                const next = { ...prev };
+                                bookingIds.forEach(id => { next[id] = "custom"; });
+                                return next;
+                              });
+                              setBookingCustomPrices(prev => {
+                                const next = { ...prev };
+                                bookingIds.forEach(id => { next[id] = paxPrices[id]; });
+                                return next;
+                              });
+                              setSavedBookings(prev => {
+                                const next = new Set(prev);
+                                bookingIds.forEach(id => next.add(id));
+                                return next;
+                              });
+                              resolve(paxTid!.tid);
+                              flash(`Pax pricing applied for ${paxTid!.tid}`);
+                              setPaxOpen(false);
+                              setPaxTid(null);
+                              setPaxPrices({});
+                            },
                           });
-                          setBookingCustomPrices(prev => {
-                            const next = { ...prev };
-                            bookingIds.forEach(id => { next[id] = paxPrices[id]; });
-                            return next;
-                          });
-                          setSavedBookings(prev => {
-                            const next = new Set(prev);
-                            bookingIds.forEach(id => next.add(id));
-                            return next;
-                          });
-                          resolve(paxTid.tid);
-                          flash(`Pax pricing applied for ${paxTid.tid}`);
-                          setPaxOpen(false);
-                          setPaxTid(null);
-                          setPaxPrices({});
-                        },
-                      });
-                    }} disabled={priceOverrideMutation.isPending} data-testid="apply-pax-pricing">
-                      {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                      Apply Pax Pricing
-                    </Button>
+                        }} disabled={priceOverrideMutation.isPending} data-testid="apply-pax-pricing">
+                          {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                          Apply Pax Pricing
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
+              </DialogContent>
+            </Dialog>
 
             <Dialog open={!!issueModalTid} onOpenChange={open => { if (!open) setIssueModalTid(null); }}>
               <DialogContent className="max-w-lg">
