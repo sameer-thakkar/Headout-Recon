@@ -131,6 +131,8 @@ export function DiscrepancySummaryWorkspace({
   const [takeActionIssues, setTakeActionIssues] = useState<Set<string>>(new Set());
   const [disputePaxExpanded, setDisputePaxExpanded] = useState<string | null>(null);
   const [disputePaxPrices, setDisputePaxPrices] = useState<Record<string, Record<string, { tap?: string; dispute?: string }>>>({});
+  const [step2Collapsed, setStep2Collapsed] = useState(false);
+  const [step3Collapsed, setStep3Collapsed] = useState(true);
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -670,8 +672,8 @@ export function DiscrepancySummaryWorkspace({
               const disputeCount = takeActionDisputes.size;
               const issueCount = takeActionIssues.size;
 
-              const toggleDisputeTid = (tid: string) => setTakeActionDisputes(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else next.add(tid); return next; });
-              const toggleIssueTid = (tid: string) => setTakeActionIssues(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else next.add(tid); return next; });
+              const toggleDisputeTid = (tid: string) => { setTakeActionDisputes(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else { next.add(tid); setStep2Collapsed(false); } return next; }); };
+              const toggleIssueTid = (tid: string) => { setTakeActionIssues(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else { next.add(tid); setStep3Collapsed(false); } return next; }); };
 
               const summaryParts = [isSp ? "SP Net" : "HO Net"];
               if (disputeCount > 0) summaryParts.push(`${disputeCount} dispute${disputeCount > 1 ? "s" : ""}`);
@@ -717,7 +719,17 @@ export function DiscrepancySummaryWorkspace({
 
                   {isSp && (
                     <div className="space-y-2">
-                      <div className="text-xs font-medium text-muted-foreground">Step 2: Raise Dispute <span className="text-[10px] font-normal">(optional)</span></div>
+                      <div className="flex items-center gap-2 cursor-pointer select-none group" onClick={() => setStep2Collapsed(p => !p)} data-testid="step2-toggle">
+                        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${!step2Collapsed ? "rotate-90" : ""}`} />
+                        <span className="text-xs font-medium text-muted-foreground">Step 2: Raise Dispute <span className="text-[10px] font-normal">(optional)</span></span>
+                        {step2Collapsed && disputeCount > 0 && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-300 text-amber-700 bg-amber-50">{disputeCount} TID{disputeCount > 1 ? "s" : ""} • {fmt(disputeTotal)}</Badge>
+                        )}
+                        {step2Collapsed && disputeCount === 0 && (
+                          <span className="text-[10px] text-muted-foreground/60 italic">collapsed</span>
+                        )}
+                      </div>
+                      {!step2Collapsed && (
                       <div className={`rounded-md border-2 overflow-hidden transition-colors ${disputeCount > 0 ? "border-amber-500 bg-amber-50/50" : "border-border bg-muted/10"}`}>
                         <div className="px-3 py-2.5">
                           <div className="flex items-start gap-2.5">
@@ -878,11 +890,22 @@ export function DiscrepancySummaryWorkspace({
                           )}
                         </div>
                       </div>
+                      )}
                     </div>
                   )}
 
                   <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">{isSp ? "Step 3" : "Step 2"}: Raise Issue <span className="text-[10px] font-normal">(optional)</span></div>
+                    <div className="flex items-center gap-2 cursor-pointer select-none group" onClick={() => setStep3Collapsed(p => !p)} data-testid="step3-toggle">
+                      <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${!step3Collapsed ? "rotate-90" : ""}`} />
+                      <span className="text-xs font-medium text-muted-foreground">{isSp ? "Step 3" : "Step 2"}: Raise Issue <span className="text-[10px] font-normal">(optional)</span></span>
+                      {step3Collapsed && issueCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-300 text-orange-700 bg-orange-50">{issueCount} TID{issueCount > 1 ? "s" : ""}</Badge>
+                      )}
+                      {step3Collapsed && issueCount === 0 && (
+                        <span className="text-[10px] text-muted-foreground/60 italic">collapsed</span>
+                      )}
+                    </div>
+                    {!step3Collapsed && (
                     <div className={`rounded-md border-2 overflow-hidden transition-colors ${issueCount > 0 ? "border-orange-500 bg-orange-50/50" : "border-border bg-muted/10"}`}>
                       <div className="px-3 py-2.5">
                         <div className="flex items-start gap-2.5">
@@ -948,6 +971,7 @@ export function DiscrepancySummaryWorkspace({
                         })()}
                       </div>
                     </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pt-1 border-t">
