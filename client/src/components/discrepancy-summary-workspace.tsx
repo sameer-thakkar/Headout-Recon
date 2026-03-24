@@ -1325,7 +1325,7 @@ export function DiscrepancySummaryWorkspace({
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">SP Net</th>
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">HO Net</th>
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">Diff</th>
-                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-36">Final Price</th>
+                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-36">TAP</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-8"></th>
                                 </tr>
                               </thead>
