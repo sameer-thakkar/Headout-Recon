@@ -1416,10 +1416,10 @@ export function DiscrepancySummaryWorkspace({
                                 <tr className="h-7 bg-muted/30 border-b">
                                   <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Booking ID</th>
                                   <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Ticket ID</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">HO Net</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">SP Net</th>
-                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">Selection</th>
-                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-16">Dispute</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">SP Net</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">HO Net</th>
+                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[5.5rem]">Selection</th>
+                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[4.5rem]">Dispute</th>
                                   <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-24">TAP</th>
                                   <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-24">Dispute Amt</th>
                                   <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-24">Reconciled</th>
@@ -1450,11 +1450,11 @@ export function DiscrepancySummaryWorkspace({
                                       <td className="px-2 py-1 text-muted-foreground truncate max-w-[100px]" title={b.ticketId || ""} data-testid={`cell-ticketid-${b.bookingId}`}>
                                         {b.ticketId || "—"}
                                       </td>
-                                      <td className="text-right px-2 py-1 font-mono text-green-600" data-testid={`booking-ho-${b.bookingId}`}>
-                                        {fmt(b.hoNet || 0)}
-                                      </td>
                                       <td className="text-right px-2 py-1 font-mono text-blue-600" data-testid={`booking-sp-${b.bookingId}`}>
                                         {fmt(b.spNetInHo || 0)}
+                                      </td>
+                                      <td className="text-right px-2 py-1 font-mono text-green-600" data-testid={`booking-ho-${b.bookingId}`}>
+                                        {fmt(b.hoNet || 0)}
                                       </td>
                                       <td className="text-center px-1 py-1">
                                         {selection === "custom" ? (
@@ -1466,7 +1466,7 @@ export function DiscrepancySummaryWorkspace({
                                           </div>
                                         ) : (
                                           <Select value={selection} onValueChange={(v) => updateBidSelection(b.bookingId, v as "ho" | "sp")}>
-                                            <SelectTrigger className="w-16 h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
+                                            <SelectTrigger className="w-[4.5rem] h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
                                               <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1483,7 +1483,7 @@ export function DiscrepancySummaryWorkspace({
                                               Clear
                                             </Button>
                                           ) : (
-                                            <Button size="sm" variant="outline" className="h-5 px-1 text-[9px]" onClick={() => activateBidDispute(b.bookingId, b)} data-testid={`button-dispute-${b.bookingId}`}>
+                                            <Button size="sm" variant="outline" className="h-5 px-1.5 text-[9px]" onClick={() => activateBidDispute(b.bookingId, b)} data-testid={`button-dispute-${b.bookingId}`}>
                                               Dispute
                                             </Button>
                                           )
@@ -1532,8 +1532,8 @@ export function DiscrepancySummaryWorkspace({
                               <tfoot>
                                 <tr className="h-8 bg-muted/40 border-t font-semibold text-[11px]">
                                   <td className="px-2 py-1 text-muted-foreground" colSpan={2}>Total ({tid.bookings.length})</td>
-                                  <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(tid.hoNet)}</td>
                                   <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(tid.spNet)}</td>
+                                  <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(tid.hoNet)}</td>
                                   <td colSpan={2} className="text-center px-1 py-1">
                                     {(() => {
                                       const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
