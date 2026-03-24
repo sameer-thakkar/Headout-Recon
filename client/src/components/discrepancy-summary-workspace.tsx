@@ -341,9 +341,10 @@ export function DiscrepancySummaryWorkspace({
     return b.spNetInHo || 0;
   }, [bookingSelections, bookingCustomPrices]);
 
-  const getBidSelection = useCallback((bookingId: string): "ho" | "sp" => {
+  const getBidSelection = useCallback((bookingId: string): "ho" | "sp" | "custom" => {
     const sel = bookingSelections[bookingId];
     if (sel === "ho") return "ho";
+    if (sel === "custom") return "custom";
     return "sp";
   }, [bookingSelections]);
 
@@ -359,9 +360,14 @@ export function DiscrepancySummaryWorkspace({
   }, []);
 
   const getBidFinalNet = useCallback((b: PrimaryRow): number => {
+    const rawSel = bookingSelections[b.bookingId];
+    if (rawSel === "custom") {
+      const v = parseFloat(bookingCustomPrices[b.bookingId] || "0");
+      return isNaN(v) ? (b.spNetInHo || 0) : v;
+    }
     const sel = getBidSelection(b.bookingId);
     return sel === "ho" ? (b.hoNet || 0) : (b.spNetInHo || 0);
-  }, [getBidSelection]);
+  }, [getBidSelection, bookingSelections, bookingCustomPrices]);
 
   const getBidMaxDispute = useCallback((b: PrimaryRow): number => {
     return Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
@@ -397,7 +403,7 @@ export function DiscrepancySummaryWorkspace({
   const handleTidBulkDispute = useCallback((tid: TidGroup, action: "all" | "clear") => {
     tid.bookings.forEach(b => {
       const sel = getBidSelection(b.bookingId);
-      if (action === "all" && sel === "sp") {
+      if (action === "all" && (sel === "sp" || sel === "custom")) {
         setBidDisputeActive(prev => { const n = new Set(prev); n.add(b.bookingId); return n; });
         const maxD = Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
         setBidDisputeAmounts(prev => ({ ...prev, [b.bookingId]: maxD }));
@@ -1420,7 +1426,7 @@ export function DiscrepancySummaryWorkspace({
                               <tbody>
                                 {tid.bookings.map(b => {
                                   const selection = getBidSelection(b.bookingId);
-                                  const canDispute = selection === "sp";
+                                  const canDispute = selection === "sp" || selection === "custom";
                                   const finalNet = getBidFinalNet(b);
                                   const maxDispute = getBidMaxDispute(b);
                                   const currentDispute = canDispute ? getBidDisputeAmount(b.bookingId) : 0;
@@ -1448,15 +1454,24 @@ export function DiscrepancySummaryWorkspace({
                                         {fmt(b.spNetInHo || 0)}
                                       </td>
                                       <td className="text-center px-1 py-1">
-                                        <Select value={selection} onValueChange={(v) => updateBidSelection(b.bookingId, v as "ho" | "sp")}>
-                                          <SelectTrigger className="w-16 h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="ho">HO</SelectItem>
-                                            <SelectItem value="sp">SP</SelectItem>
-                                          </SelectContent>
-                                        </Select>
+                                        {selection === "custom" ? (
+                                          <div className="flex items-center justify-center gap-1">
+                                            <Badge variant="outline" className="text-[9px] px-1 py-0 text-violet-600 border-violet-200">Custom</Badge>
+                                            <Button size="sm" variant="ghost" className="h-4 px-0.5 text-[9px] text-muted-foreground" onClick={() => updateBidSelection(b.bookingId, "sp")} data-testid={`clear-custom-${b.bookingId}`}>
+                                              <XIcon className="h-2.5 w-2.5" />
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          <Select value={selection} onValueChange={(v) => updateBidSelection(b.bookingId, v as "ho" | "sp")}>
+                                            <SelectTrigger className="w-16 h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="ho">HO</SelectItem>
+                                              <SelectItem value="sp">SP</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        )}
                                       </td>
                                       <td className="text-center px-1 py-1">
                                         {canDispute ? (
@@ -1519,7 +1534,7 @@ export function DiscrepancySummaryWorkspace({
                                   <td colSpan={2} className="text-center px-1 py-1">
                                     {(() => {
                                       const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
-                                      const disputable = tid.bookings.filter(b => getBidSelection(b.bookingId) === "sp").length;
+                                      const disputable = tid.bookings.filter(b => { const s = getBidSelection(b.bookingId); return s === "sp" || s === "custom"; }).length;
                                       if (disputable === 0) return null;
                                       if (disputed > 0) {
                                         return (
@@ -1538,14 +1553,14 @@ export function DiscrepancySummaryWorkspace({
                                   <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getBidFinalNet(b), 0))}</td>
                                   <td className="text-right px-2 py-1 font-mono text-orange-600">
                                     {(() => {
-                                      const totalDisp = tid.bookings.reduce((s, b) => s + (getBidSelection(b.bookingId) === "sp" ? getBidDisputeAmount(b.bookingId) : 0), 0);
+                                      const totalDisp = tid.bookings.reduce((s, b) => { const sel = getBidSelection(b.bookingId); return s + (sel === "sp" || sel === "custom" ? getBidDisputeAmount(b.bookingId) : 0); }, 0);
                                       return totalDisp > 0 ? fmt(totalDisp) : null;
                                     })()}
                                   </td>
                                   <td className="text-right px-2 py-1 font-mono text-green-600 dark:text-green-400 font-bold">
                                     {fmt(tid.bookings.reduce((s, b) => {
                                       const fn = getBidFinalNet(b);
-                                      const disp = getBidSelection(b.bookingId) === "sp" ? getBidDisputeAmount(b.bookingId) : 0;
+                                      const bSel = getBidSelection(b.bookingId); const disp = (bSel === "sp" || bSel === "custom") ? getBidDisputeAmount(b.bookingId) : 0;
                                       return s + fn - disp;
                                     }, 0))}
                                   </td>
@@ -1628,6 +1643,21 @@ export function DiscrepancySummaryWorkspace({
                       bookingIds.forEach(id => { customPricesNum[id] = parseFloat(paxPrices[id]) || 0; });
                       priceOverrideMutation.mutate({ bookingIds, selection: "sp", customPrices: customPricesNum }, {
                         onSuccess: () => {
+                          setBookingSelections(prev => {
+                            const next = { ...prev };
+                            bookingIds.forEach(id => { next[id] = "custom"; });
+                            return next;
+                          });
+                          setBookingCustomPrices(prev => {
+                            const next = { ...prev };
+                            bookingIds.forEach(id => { next[id] = paxPrices[id]; });
+                            return next;
+                          });
+                          setSavedBookings(prev => {
+                            const next = new Set(prev);
+                            bookingIds.forEach(id => next.add(id));
+                            return next;
+                          });
                           resolve(paxTid.tid);
                           flash(`Pax pricing applied for ${paxTid.tid}`);
                           setPaxOpen(false);
