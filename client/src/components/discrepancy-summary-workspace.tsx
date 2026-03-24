@@ -1238,12 +1238,13 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
+                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
                   <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
                   <div className="w-5" />
                   <div className="pl-2">TID</div>
+                  <div className="text-left px-3 w-24">Fulfillment</div>
                   <div className="text-right px-3 w-28">SP Net</div>
                   <div className="text-right px-3 w-28">HO Net</div>
                   <div className="text-right px-3 w-28 text-violet-600">TAP</div>
@@ -1262,7 +1263,7 @@ export function DiscrepancySummaryWorkspace({
                   return (
                     <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
-                        className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto] gap-0 items-center px-3 h-11 cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
+                        className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
                         onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                       >
                         <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
@@ -1274,11 +1275,16 @@ export function DiscrepancySummaryWorkspace({
                         <div className="pl-2 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
-                            {tid.fulfillmentMethods.length > 0 && (
-                              <Badge variant="outline" className="text-[10px] px-1 py-0">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</Badge>
-                            )}
                             {tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
                           </div>
+                          {(tid.bookings[0]?.experienceName || tid.bookings[0]?.productName) && (
+                            <div className="text-[10px] text-muted-foreground truncate max-w-[280px]">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
+                          )}
+                        </div>
+                        <div className="text-left px-3 w-24">
+                          {tid.fulfillmentMethods.length > 0 && (
+                            <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
+                          )}
                         </div>
                         <div className="text-right px-3 w-28 font-mono text-sm">{fmt(tid.spNet)}</div>
                         <div className="text-right px-3 w-28 font-mono text-sm">{fmt(tid.hoNet)}</div>
@@ -1346,7 +1352,6 @@ export function DiscrepancySummaryWorkspace({
                                           {hasDisp && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
                                           {isSaved && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
                                         </div>
-                                        {(b.experienceName || b.productName) && <div className="text-[10px] text-muted-foreground truncate max-w-[280px]">{b.experienceName || b.productName}</div>}
                                       </td>
                                       <td className={`text-right px-2 py-1 font-mono cursor-pointer transition-colors rounded ${bSel === "sp" ? "text-blue-700 font-semibold bg-blue-50 dark:bg-blue-950/20" : "text-blue-600 hover:bg-blue-50/50"}`} onClick={() => { setBookingSelections(prev => ({ ...prev, [b.bookingId]: "sp" })); setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }} data-testid={`booking-sp-${b.bookingId}`}>
                                         {fmt(b.spNetInHo || 0)}
