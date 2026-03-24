@@ -137,6 +137,8 @@ export function DiscrepancySummaryWorkspace({
   const [bookingCustomPrices, setBookingCustomPrices] = useState<Record<string, string>>({});
   const [bookingEditMode, setBookingEditMode] = useState<Record<string, boolean>>({});
   const [savedBookings, setSavedBookings] = useState<Set<string>>(new Set());
+  const [bidDisputeActive, setBidDisputeActive] = useState<Set<string>>(new Set());
+  const [bidDisputeAmounts, setBidDisputeAmounts] = useState<Record<string, number>>({});
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -339,6 +341,73 @@ export function DiscrepancySummaryWorkspace({
     return b.spNetInHo || 0;
   }, [bookingSelections, bookingCustomPrices]);
 
+  const getBidSelection = useCallback((bookingId: string): "ho" | "sp" => {
+    const sel = bookingSelections[bookingId];
+    if (sel === "ho") return "ho";
+    return "sp";
+  }, [bookingSelections]);
+
+  const updateBidSelection = useCallback((bookingId: string, value: "ho" | "sp") => {
+    setBookingSelections(prev => ({ ...prev, [bookingId]: value }));
+    setBookingCustomPrices(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    setBookingEditMode(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    setSavedBookings(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+    if (value === "ho") {
+      setBidDisputeActive(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+      setBidDisputeAmounts(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    }
+  }, []);
+
+  const getBidFinalNet = useCallback((b: PrimaryRow): number => {
+    const sel = getBidSelection(b.bookingId);
+    return sel === "ho" ? (b.hoNet || 0) : (b.spNetInHo || 0);
+  }, [getBidSelection]);
+
+  const getBidMaxDispute = useCallback((b: PrimaryRow): number => {
+    return Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
+  }, []);
+
+  const getBidDisputeAmount = useCallback((bookingId: string): number => {
+    return bidDisputeAmounts[bookingId] || 0;
+  }, [bidDisputeAmounts]);
+
+  const setBidDisputeAmountForBooking = useCallback((bookingId: string, amount: number, booking?: PrimaryRow) => {
+    const rounded = Math.round(amount * 100) / 100;
+    if (rounded <= 0) {
+      setBidDisputeActive(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+      setBidDisputeAmounts(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    } else {
+      let clamped = rounded;
+      if (booking) {
+        const maxD = Math.round(Math.abs((booking.hoNet || 0) - (booking.spNetInHo || 0)) * 100) / 100;
+        if (clamped > maxD) clamped = maxD;
+      }
+      setBidDisputeAmounts(prev => ({ ...prev, [bookingId]: clamped }));
+    }
+  }, []);
+
+  const activateBidDispute = useCallback((bookingId: string, b: PrimaryRow) => {
+    setBidDisputeActive(prev => { const n = new Set(prev); n.add(bookingId); return n; });
+    const maxD = Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
+    setBidDisputeAmounts(prev => ({ ...prev, [bookingId]: maxD }));
+    setBookingSelections(prev => ({ ...prev, [bookingId]: "sp" }));
+    setSavedBookings(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+  }, []);
+
+  const handleTidBulkDispute = useCallback((tid: TidGroup, action: "all" | "clear") => {
+    tid.bookings.forEach(b => {
+      const sel = getBidSelection(b.bookingId);
+      if (action === "all" && sel === "sp") {
+        setBidDisputeActive(prev => { const n = new Set(prev); n.add(b.bookingId); return n; });
+        const maxD = Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
+        setBidDisputeAmounts(prev => ({ ...prev, [b.bookingId]: maxD }));
+      } else if (action === "clear") {
+        setBidDisputeActive(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; });
+        setBidDisputeAmounts(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; });
+      }
+    });
+  }, [getBidSelection]);
+
   const handleBookingSave = useCallback((b: PrimaryRow) => {
     const sel = bookingSelections[b.bookingId] || "sp";
     const finalSel = sel === "custom" ? "sp" : sel;
@@ -392,6 +461,10 @@ export function DiscrepancySummaryWorkspace({
       bookingIds.forEach(id => { delete next[id]; });
       return next;
     });
+    if (action === "ho") {
+      setBidDisputeActive(prev => { const n = new Set(prev); bookingIds.forEach(id => n.delete(id)); return n; });
+      setBidDisputeAmounts(prev => { const n = { ...prev }; bookingIds.forEach(id => { delete n[id]; }); return n; });
+    }
     priceOverrideMutation.mutate({ bookingIds, selection: action }, {
       onSuccess: () => {
         setSavedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
@@ -1333,24 +1406,31 @@ export function DiscrepancySummaryWorkspace({
                               <thead>
                                 <tr className="h-7 bg-muted/30 border-b">
                                   <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Booking ID</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">SP Net</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">HO Net</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">Diff</th>
-                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-36">TAP</th>
+                                  <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Ticket ID</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">HO Net</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">SP Net</th>
+                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">Selection</th>
+                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-16">Dispute</th>
+                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-24">Final Amt</th>
+                                  <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-24">Dispute Amt</th>
+                                  <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-24">Reconciled</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-8"></th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {tid.bookings.map(b => {
-                                  const diff = (b.hoNet || 0) - (b.spNetInHo || 0);
-                                  const hasDisp = disputedBookings.has(b.bookingId);
-                                  const bSel = bookingSelections[b.bookingId];
-                                  const isEditing = bookingEditMode[b.bookingId];
+                                  const selection = getBidSelection(b.bookingId);
+                                  const canDispute = selection === "sp";
+                                  const finalNet = getBidFinalNet(b);
+                                  const maxDispute = getBidMaxDispute(b);
+                                  const currentDispute = canDispute ? getBidDisputeAmount(b.bookingId) : 0;
+                                  const exceedsMax = currentDispute > maxDispute;
+                                  const reconciledNet = finalNet - currentDispute;
                                   const isSaved = savedBookings.has(b.bookingId);
-                                  const finalPrice = getBookingFinalPrice(b);
-                                  const hasOverride = !!bSel;
+                                  const hasOverride = !!bookingSelections[b.bookingId];
+                                  const hasDisp = disputedBookings.has(b.bookingId);
                                   return (
-                                    <tr key={b.bookingId} className={`h-9 border-b last:border-0 hover:bg-muted/20 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${hasOverride && !isSaved ? "bg-violet-50/30 dark:bg-violet-950/10" : ""}`} data-testid={`booking-row-${b.bookingId}`}>
+                                    <tr key={b.bookingId} className={`h-9 border-b last:border-0 hover:bg-muted/20 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${bidDisputeActive.has(b.bookingId) ? "bg-orange-50/30 dark:bg-orange-950/10" : ""}`} data-testid={`booking-row-${b.bookingId}`}>
                                       <td className="px-2 py-1">
                                         <div className="flex items-center gap-1">
                                           <span className="font-mono text-primary font-medium">{b.bookingId}</span>
@@ -1358,38 +1438,67 @@ export function DiscrepancySummaryWorkspace({
                                           {isSaved && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
                                         </div>
                                       </td>
-                                      <td className={`text-right px-2 py-1 font-mono cursor-pointer transition-colors rounded ${bSel === "sp" ? "text-blue-700 font-semibold bg-blue-50 dark:bg-blue-950/20" : "text-blue-600 hover:bg-blue-50/50"}`} onClick={() => { setBookingSelections(prev => ({ ...prev, [b.bookingId]: "sp" })); setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }} data-testid={`booking-sp-${b.bookingId}`}>
-                                        {fmt(b.spNetInHo || 0)}
-                                        {bSel === "sp" && <Check className="h-2.5 w-2.5 inline ml-0.5" />}
+                                      <td className="px-2 py-1 text-muted-foreground truncate max-w-[100px]" title={b.ticketId || ""} data-testid={`cell-ticketid-${b.bookingId}`}>
+                                        {b.ticketId || "—"}
                                       </td>
-                                      <td className={`text-right px-2 py-1 font-mono cursor-pointer transition-colors rounded ${bSel === "ho" ? "text-green-700 font-semibold bg-green-50 dark:bg-green-950/20" : "text-green-600 hover:bg-green-50/50"}`} onClick={() => { setBookingSelections(prev => ({ ...prev, [b.bookingId]: "ho" })); setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }} data-testid={`booking-ho-${b.bookingId}`}>
+                                      <td className="text-right px-2 py-1 font-mono text-green-600" data-testid={`booking-ho-${b.bookingId}`}>
                                         {fmt(b.hoNet || 0)}
-                                        {bSel === "ho" && <Check className="h-2.5 w-2.5 inline ml-0.5" />}
                                       </td>
-                                      <td className={`text-right px-2 py-1 font-mono ${diff < 0 ? "text-red-600" : diff > 0 ? "text-green-600" : "text-muted-foreground"}`}>
-                                        {diff > 0 ? "+" : ""}{fmt(diff)}
+                                      <td className="text-right px-2 py-1 font-mono text-blue-600" data-testid={`booking-sp-${b.bookingId}`}>
+                                        {fmt(b.spNetInHo || 0)}
+                                      </td>
+                                      <td className="text-center px-1 py-1">
+                                        <Select value={selection} onValueChange={(v) => updateBidSelection(b.bookingId, v as "ho" | "sp")}>
+                                          <SelectTrigger className="w-16 h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="ho">HO</SelectItem>
+                                            <SelectItem value="sp">SP</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </td>
+                                      <td className="text-center px-1 py-1">
+                                        {canDispute ? (
+                                          bidDisputeActive.has(b.bookingId) ? (
+                                            <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => setBidDisputeAmountForBooking(b.bookingId, 0)} data-testid={`button-clear-dispute-${b.bookingId}`}>
+                                              Clear
+                                            </Button>
+                                          ) : (
+                                            <Button size="sm" variant="outline" className="h-5 px-1 text-[9px]" onClick={() => activateBidDispute(b.bookingId, b)} data-testid={`button-dispute-${b.bookingId}`}>
+                                              Dispute
+                                            </Button>
+                                          )
+                                        ) : null}
+                                      </td>
+                                      <td className="text-right px-2 py-1 font-mono font-medium" data-testid={`booking-final-${b.bookingId}`}>
+                                        {fmt(finalNet)}
                                       </td>
                                       <td className="text-right px-2 py-1">
-                                        {isEditing ? (
-                                          <div className="flex items-center justify-end gap-1">
+                                        {bidDisputeActive.has(b.bookingId) ? (
+                                          <div className="relative group flex justify-end">
                                             <Input
                                               type="number"
-                                              className="h-6 w-24 text-[11px] font-mono text-right px-1.5 border-violet-300"
-                                              value={bookingCustomPrices[b.bookingId] ?? ""}
-                                              placeholder={String(b.spNetInHo || 0)}
-                                              onChange={e => { setBookingCustomPrices(prev => ({ ...prev, [b.bookingId]: e.target.value })); setBookingSelections(prev => ({ ...prev, [b.bookingId]: "custom" })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }}
-                                              onKeyDown={e => { if (e.key === "Enter") { setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); } if (e.key === "Escape") { setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setBookingCustomPrices(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; }); if (bSel === "custom") setBookingSelections(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; }); } }}
-                                              autoFocus
-                                              data-testid={`booking-custom-input-${b.bookingId}`}
+                                              min="0"
+                                              step="0.01"
+                                              value={currentDispute || ""}
+                                              onChange={(e) => setBidDisputeAmountForBooking(b.bookingId, parseFloat(e.target.value) || 0, b)}
+                                              className={`w-20 h-5 text-xs text-right font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
+                                              placeholder="0"
+                                              data-testid={`input-dispute-booking-${b.bookingId}`}
                                             />
-                                            <button className="p-0.5 rounded hover:bg-muted" onClick={() => setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false }))}><Check className="h-3 w-3 text-violet-600" /></button>
+                                            {exceedsMax && (
+                                              <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
+                                                <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
+                                                  Max: {fmt(maxDispute)}
+                                                </div>
+                                              </div>
+                                            )}
                                           </div>
-                                        ) : (
-                                          <div className="flex items-center justify-end gap-1">
-                                            <span className={`font-mono font-medium ${bSel === "custom" ? "text-violet-700" : bSel === "ho" ? "text-green-700" : bSel === "sp" ? "text-blue-700" : "text-violet-600"}`} data-testid={`booking-final-${b.bookingId}`}>{fmt(finalPrice)}</span>
-                                            <button className="p-0.5 rounded hover:bg-violet-100 text-muted-foreground hover:text-violet-600 transition-colors" onClick={() => { setBookingEditMode(prev => ({ ...prev, [b.bookingId]: true })); setBookingCustomPrices(prev => ({ ...prev, [b.bookingId]: prev[b.bookingId] ?? String(finalPrice) })); }} data-testid={`booking-edit-${b.bookingId}`}><Pencil className="h-3 w-3" /></button>
-                                          </div>
-                                        )}
+                                        ) : null}
+                                      </td>
+                                      <td className="text-right px-2 py-1 font-mono font-medium text-green-600 dark:text-green-400" data-testid={`booking-reconciled-${b.bookingId}`}>
+                                        {fmt(reconciledNet)}
                                       </td>
                                       <td className="text-center px-1 py-1">
                                         {hasOverride && !isSaved && (
@@ -1404,11 +1513,42 @@ export function DiscrepancySummaryWorkspace({
                               </tbody>
                               <tfoot>
                                 <tr className="h-8 bg-muted/40 border-t font-semibold text-[11px]">
-                                  <td className="px-2 py-1 text-muted-foreground">Total ({tid.bookings.length})</td>
-                                  <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(tid.spNet)}</td>
+                                  <td className="px-2 py-1 text-muted-foreground" colSpan={2}>Total ({tid.bookings.length})</td>
                                   <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(tid.hoNet)}</td>
-                                  <td className={`text-right px-2 py-1 font-mono ${tid.discLc < 0 ? "text-red-600" : "text-green-600"}`}>{tid.discLc > 0 ? "+" : ""}{fmt(tid.discLc)}</td>
-                                  <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getBookingFinalPrice(b), 0))}</td>
+                                  <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(tid.spNet)}</td>
+                                  <td colSpan={2} className="text-center px-1 py-1">
+                                    {(() => {
+                                      const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
+                                      const disputable = tid.bookings.filter(b => getBidSelection(b.bookingId) === "sp").length;
+                                      if (disputable === 0) return null;
+                                      if (disputed > 0) {
+                                        return (
+                                          <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => handleTidBulkDispute(tid, "clear")} data-testid={`tid-clear-dispute-${tid.tid}`}>
+                                            Clear All
+                                          </Button>
+                                        );
+                                      }
+                                      return (
+                                        <Button size="sm" variant="outline" className="h-5 px-1 text-[9px]" onClick={() => handleTidBulkDispute(tid, "all")} data-testid={`tid-dispute-all-${tid.tid}`}>
+                                          Dispute All
+                                        </Button>
+                                      );
+                                    })()}
+                                  </td>
+                                  <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getBidFinalNet(b), 0))}</td>
+                                  <td className="text-right px-2 py-1 font-mono text-orange-600">
+                                    {(() => {
+                                      const totalDisp = tid.bookings.reduce((s, b) => s + (getBidSelection(b.bookingId) === "sp" ? getBidDisputeAmount(b.bookingId) : 0), 0);
+                                      return totalDisp > 0 ? fmt(totalDisp) : null;
+                                    })()}
+                                  </td>
+                                  <td className="text-right px-2 py-1 font-mono text-green-600 dark:text-green-400 font-bold">
+                                    {fmt(tid.bookings.reduce((s, b) => {
+                                      const fn = getBidFinalNet(b);
+                                      const disp = getBidSelection(b.bookingId) === "sp" ? getBidDisputeAmount(b.bookingId) : 0;
+                                      return s + fn - disp;
+                                    }, 0))}
+                                  </td>
                                   <td className="text-center px-1 py-1">
                                     {tid.bookings.some(b => bookingSelections[b.bookingId] && !savedBookings.has(b.bookingId)) && (
                                       <button className="p-1 rounded-md bg-violet-600 hover:bg-violet-700 text-white transition-colors" onClick={() => handleTidSaveAll(tid)} disabled={priceOverrideMutation.isPending} data-testid={`tid-save-all-${tid.tid}`}>
