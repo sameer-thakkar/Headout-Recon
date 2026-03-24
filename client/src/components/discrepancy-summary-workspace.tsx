@@ -1346,6 +1346,7 @@ export function DiscrepancySummaryWorkspace({
                                           {hasDisp && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
                                           {isSaved && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
                                         </div>
+                                        {(b.experienceName || b.productName) && <div className="text-[10px] text-muted-foreground truncate max-w-[280px]">{b.experienceName || b.productName}</div>}
                                       </td>
                                       <td className={`text-right px-2 py-1 font-mono cursor-pointer transition-colors rounded ${bSel === "sp" ? "text-blue-700 font-semibold bg-blue-50 dark:bg-blue-950/20" : "text-blue-600 hover:bg-blue-50/50"}`} onClick={() => { setBookingSelections(prev => ({ ...prev, [b.bookingId]: "sp" })); setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }} data-testid={`booking-sp-${b.bookingId}`}>
                                         {fmt(b.spNetInHo || 0)}
