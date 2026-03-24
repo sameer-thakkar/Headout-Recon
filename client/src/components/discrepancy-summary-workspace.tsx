@@ -1512,24 +1512,24 @@ export function DiscrepancySummaryWorkspace({
                                         ) : null}
                                       </td>
                                       <td className="text-right px-2 py-1" data-testid={`booking-final-${b.bookingId}`}>
-                                        <div className="relative group flex justify-end items-center gap-1">
-                                          <Input
+                                        <div className="relative group flex justify-end items-center">
+                                          <input
                                             type="number"
                                             step="0.01"
                                             value={bidTapOverrides[b.bookingId] ?? ""}
                                             placeholder={String(Math.round(finalNet * 100) / 100)}
                                             onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                            className={`w-22 h-5 text-xs text-right font-mono px-1 ${hasTapOverride && effectiveTap !== finalNet ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-950/20' : ''}`}
+                                            className={`w-20 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b focus:outline-none focus:border-violet-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${hasTapOverride && effectiveTap !== finalNet ? 'border-violet-400 text-violet-700 dark:text-violet-300 font-medium' : 'border-transparent hover:border-muted-foreground/30'}`}
                                             data-testid={`input-tap-${b.bookingId}`}
                                           />
                                           {hasTapOverride && (
-                                            <Button size="sm" variant="ghost" className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
+                                            <button className="ml-0.5 p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
                                               <XIcon className="h-2.5 w-2.5" />
-                                            </Button>
+                                            </button>
                                           )}
-                                          <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
-                                            <div className="bg-muted text-muted-foreground text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border">
-                                              Range: {fmt(tapMin)} — {fmt(tapMax)}
+                                          <div className="absolute right-0 top-full mt-0.5 z-50 hidden group-hover:block pointer-events-none">
+                                            <div className="text-[9px] text-muted-foreground/60 whitespace-nowrap">
+                                              ±10%: {fmt(tapMin)} – {fmt(tapMax)}
                                             </div>
                                           </div>
                                         </div>
