@@ -1322,18 +1322,20 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
+                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
                   <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
                   <div className="w-5" />
                   <div className="pl-2">TID</div>
                   <div className="text-left px-3 w-[5.5rem]">Fulfillment</div>
-                  <div className="text-right px-3 w-[7.5rem]">SP Net</div>
-                  <div className="text-right px-3 w-[7.5rem]">HO Net</div>
-                  <div className="text-right px-3 w-[7.5rem]">Difference LC</div>
-                  <div className="text-right px-3 w-[7.5rem] text-violet-600">TAP</div>
-                  <div className="text-right px-3 w-[7.5rem] text-violet-600">Dispute</div>
+                  <div className="text-right px-3 w-[7rem]">SP Net</div>
+                  <div className="text-right px-3 w-[7rem]">HO Net</div>
+                  <div className="text-right px-3 w-[7rem]">Difference LC</div>
+                  <div className="text-right px-3 w-[7rem] text-violet-600">TAP</div>
+                  <div className="text-right px-3 w-[7rem]">totalAmountPaid</div>
+                  <div className="text-right px-3 w-[7rem] text-violet-600">Dispute</div>
+                  <div className="text-right px-3 w-[7.5rem] text-green-600">Balance Amt Payable</div>
                   <div className="text-center px-3 w-14 pr-4">BIDs</div>
                 </div>
 
@@ -1347,7 +1349,7 @@ export function DiscrepancySummaryWorkspace({
                   return (
                     <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
-                        className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
+                        className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
                         onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                       >
                         <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
@@ -1370,19 +1372,30 @@ export function DiscrepancySummaryWorkspace({
                             <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
                           )}
                         </div>
-                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.spNet)}</div>
-                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right px-3 w-[7.5rem]">
+                        <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.spNet)}</div>
+                        <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
+                        <div className="text-right px-3 w-[7rem]">
                           <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
                           <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
                         </div>
-                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => {
+                        <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => {
                           const sel = bookingSelections[b.bookingId];
                           if (sel) return s + getBookingFinalPrice(b);
                           if (showTakeAction && takeActionPrice === "ho") return s + (b.hoNet || 0);
                           return s + (b.spNetInHo || 0);
                         }, 0))}</div>
-                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                        <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                        <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-green-600 font-medium">{fmt((() => {
+                          const tidTap = tid.bookings.reduce((s, b) => {
+                            const sel = bookingSelections[b.bookingId];
+                            if (sel) return s + getBookingFinalPrice(b);
+                            if (showTakeAction && takeActionPrice === "ho") return s + (b.hoNet || 0);
+                            return s + (b.spNetInHo || 0);
+                          }, 0);
+                          const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
+                          return tidTap - tidAmtPaid;
+                        })())}</div>
                         <div className="text-center px-3 w-14 text-sm pr-4">{tid.bidCount}</div>
                       </div>
 
@@ -1421,8 +1434,9 @@ export function DiscrepancySummaryWorkspace({
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[5.5rem]">Selection</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[4.5rem]">Dispute</th>
                                   <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-24">TAP</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">totalAmountPaid</th>
                                   <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-24">Dispute Amt</th>
-                                  <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-24">Reconciled</th>
+                                  <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-[7rem]">Balance Amt Payable</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-8"></th>
                                 </tr>
                               </thead>
@@ -1434,7 +1448,8 @@ export function DiscrepancySummaryWorkspace({
                                   const maxDispute = getBidMaxDispute(b);
                                   const currentDispute = canDispute ? getBidDisputeAmount(b.bookingId) : 0;
                                   const exceedsMax = currentDispute > maxDispute;
-                                  const reconciledNet = finalNet - currentDispute;
+                                  const bookingAmountPaid = b.amountPaid || 0;
+                                  const balanceAmountPayable = finalNet - bookingAmountPaid;
                                   const isSaved = savedBookings.has(b.bookingId);
                                   const hasOverride = !!bookingSelections[b.bookingId];
                                   const hasDisp = disputedBookings.has(b.bookingId);
@@ -1492,6 +1507,9 @@ export function DiscrepancySummaryWorkspace({
                                       <td className="text-right px-2 py-1 font-mono font-medium" data-testid={`booking-final-${b.bookingId}`}>
                                         {fmt(finalNet)}
                                       </td>
+                                      <td className="text-right px-2 py-1 font-mono text-muted-foreground" data-testid={`booking-amtpaid-${b.bookingId}`}>
+                                        {bookingAmountPaid > 0 ? fmt(bookingAmountPaid) : "—"}
+                                      </td>
                                       <td className="text-right px-2 py-1">
                                         {bidDisputeActive.has(b.bookingId) ? (
                                           <div className="relative group flex justify-end">
@@ -1515,8 +1533,8 @@ export function DiscrepancySummaryWorkspace({
                                           </div>
                                         ) : null}
                                       </td>
-                                      <td className="text-right px-2 py-1 font-mono font-medium text-green-600 dark:text-green-400" data-testid={`booking-reconciled-${b.bookingId}`}>
-                                        {fmt(reconciledNet)}
+                                      <td className="text-right px-2 py-1 font-mono font-medium text-green-600 dark:text-green-400" data-testid={`booking-balance-${b.bookingId}`}>
+                                        {fmt(balanceAmountPayable)}
                                       </td>
                                       <td className="text-center px-1 py-1">
                                         {hasOverride && !isSaved && (
@@ -1554,6 +1572,7 @@ export function DiscrepancySummaryWorkspace({
                                     })()}
                                   </td>
                                   <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getBidFinalNet(b), 0))}</td>
+                                  <td className="text-right px-2 py-1 font-mono text-muted-foreground">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</td>
                                   <td className="text-right px-2 py-1 font-mono text-orange-600">
                                     {(() => {
                                       const totalDisp = tid.bookings.reduce((s, b) => { const sel = getBidSelection(b.bookingId); return s + (sel === "sp" || sel === "custom" ? getBidDisputeAmount(b.bookingId) : 0); }, 0);
@@ -1563,8 +1582,8 @@ export function DiscrepancySummaryWorkspace({
                                   <td className="text-right px-2 py-1 font-mono text-green-600 dark:text-green-400 font-bold">
                                     {fmt(tid.bookings.reduce((s, b) => {
                                       const fn = getBidFinalNet(b);
-                                      const bSel = getBidSelection(b.bookingId); const disp = (bSel === "sp" || bSel === "custom") ? getBidDisputeAmount(b.bookingId) : 0;
-                                      return s + fn - disp;
+                                      const ap = b.amountPaid || 0;
+                                      return s + fn - ap;
                                     }, 0))}
                                   </td>
                                   <td className="text-center px-1 py-1">
