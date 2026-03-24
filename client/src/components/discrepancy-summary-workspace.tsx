@@ -1411,7 +1411,7 @@ export function DiscrepancySummaryWorkspace({
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">SP Net</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-20">Selection</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-16">Dispute</th>
-                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-24">Final Amt</th>
+                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-24">TAP</th>
                                   <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-24">Dispute Amt</th>
                                   <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-24">Reconciled</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-8"></th>
