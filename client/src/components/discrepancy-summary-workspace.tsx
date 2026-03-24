@@ -15,7 +15,7 @@ import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Check, Gavel, FileWarning, AlertTriangle, X as XIcon,
   BarChart3, PanelTopClose, PanelTop, CheckCheck, Calculator, Loader2,
-  Sparkles, Zap
+  Sparkles, Zap, Pencil, Save
 } from "lucide-react";
 import type { DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 import { driTeams } from "@shared/schema";
@@ -133,6 +133,10 @@ export function DiscrepancySummaryWorkspace({
   const [disputePaxPrices, setDisputePaxPrices] = useState<Record<string, Record<string, { tap?: string; dispute?: string }>>>({});
   const [step2Collapsed, setStep2Collapsed] = useState(false);
   const [step3Collapsed, setStep3Collapsed] = useState(true);
+  const [bookingSelections, setBookingSelections] = useState<Record<string, "sp" | "ho" | "custom">>({});
+  const [bookingCustomPrices, setBookingCustomPrices] = useState<Record<string, string>>({});
+  const [bookingEditMode, setBookingEditMode] = useState<Record<string, boolean>>({});
+  const [savedBookings, setSavedBookings] = useState<Set<string>>(new Set());
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -325,10 +329,72 @@ export function DiscrepancySummaryWorkspace({
     setBulkConfirm(null);
   }, [tidGroups, selectedTids, bulkScope, priceOverrideMutation, disputeMutation, toast]);
 
+  const getBookingFinalPrice = useCallback((b: PrimaryRow): number => {
+    const sel = bookingSelections[b.bookingId];
+    if (sel === "custom") {
+      const v = parseFloat(bookingCustomPrices[b.bookingId] || "0");
+      return isNaN(v) ? (b.spNetInHo || 0) : v;
+    }
+    if (sel === "ho") return b.hoNet || 0;
+    return b.spNetInHo || 0;
+  }, [bookingSelections, bookingCustomPrices]);
+
+  const handleBookingSave = useCallback((b: PrimaryRow) => {
+    const sel = bookingSelections[b.bookingId] || "sp";
+    const finalSel = sel === "custom" ? "sp" : sel;
+    const customPrices: Record<string, number> = {};
+    if (sel === "custom") {
+      customPrices[b.bookingId] = getBookingFinalPrice(b);
+    }
+    priceOverrideMutation.mutate({ bookingIds: [b.bookingId], selection: finalSel, customPrices: Object.keys(customPrices).length > 0 ? customPrices : undefined }, {
+      onSuccess: () => {
+        setSavedBookings(prev => { const next = new Set(prev); next.add(b.bookingId); return next; });
+        flash(`${b.bookingId} → price saved`);
+      },
+      onError: (err) => {
+        toast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [bookingSelections, getBookingFinalPrice, priceOverrideMutation, toast]);
+
+  const handleTidSaveAll = useCallback((tid: TidGroup) => {
+    const customPrices: Record<string, number> = {};
+    const bookingIds = tid.bookings.map(b => b.bookingId);
+    tid.bookings.forEach(b => {
+      customPrices[b.bookingId] = getBookingFinalPrice(b);
+    });
+    priceOverrideMutation.mutate({ bookingIds, selection: "sp", customPrices }, {
+      onSuccess: () => {
+        setSavedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+        resolve(tid.tid);
+        flash(`${tid.tid} → all booking prices saved`);
+      },
+      onError: (err) => {
+        toast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [getBookingFinalPrice, priceOverrideMutation, toast]);
+
   const handleTidAction = useCallback((tid: TidGroup, action: "sp" | "ho") => {
     const bookingIds = tid.bookings.map(b => b.bookingId);
+    setBookingSelections(prev => {
+      const next = { ...prev };
+      bookingIds.forEach(id => { next[id] = action; });
+      return next;
+    });
+    setBookingCustomPrices(prev => {
+      const next = { ...prev };
+      bookingIds.forEach(id => { delete next[id]; });
+      return next;
+    });
+    setBookingEditMode(prev => {
+      const next = { ...prev };
+      bookingIds.forEach(id => { delete next[id]; });
+      return next;
+    });
     priceOverrideMutation.mutate({ bookingIds, selection: action }, {
       onSuccess: () => {
+        setSavedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
         resolve(tid.tid);
         setExpandedTid(null);
         flash(`${tid.tid} → ${action === "sp" ? "SP" : "HO"} Net applied`);
@@ -1259,24 +1325,67 @@ export function DiscrepancySummaryWorkspace({
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">SP Net</th>
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">HO Net</th>
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">Diff</th>
+                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-36">Final Price</th>
+                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-8"></th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {tid.bookings.map(b => {
                                   const diff = (b.hoNet || 0) - (b.spNetInHo || 0);
                                   const hasDisp = disputedBookings.has(b.bookingId);
+                                  const bSel = bookingSelections[b.bookingId];
+                                  const isEditing = bookingEditMode[b.bookingId];
+                                  const isSaved = savedBookings.has(b.bookingId);
+                                  const finalPrice = getBookingFinalPrice(b);
+                                  const hasOverride = !!bSel;
                                   return (
-                                    <tr key={b.bookingId} className={`h-8 border-b last:border-0 hover:bg-muted/20 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}>
+                                    <tr key={b.bookingId} className={`h-9 border-b last:border-0 hover:bg-muted/20 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${hasOverride && !isSaved ? "bg-violet-50/30 dark:bg-violet-950/10" : ""}`} data-testid={`booking-row-${b.bookingId}`}>
                                       <td className="px-2 py-1">
                                         <div className="flex items-center gap-1">
                                           <span className="font-mono text-primary font-medium">{b.bookingId}</span>
                                           {hasDisp && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
+                                          {isSaved && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
                                         </div>
                                       </td>
-                                      <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(b.spNetInHo || 0)}</td>
-                                      <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(b.hoNet || 0)}</td>
+                                      <td className={`text-right px-2 py-1 font-mono cursor-pointer transition-colors rounded ${bSel === "sp" ? "text-blue-700 font-semibold bg-blue-50 dark:bg-blue-950/20" : "text-blue-600 hover:bg-blue-50/50"}`} onClick={() => { setBookingSelections(prev => ({ ...prev, [b.bookingId]: "sp" })); setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }} data-testid={`booking-sp-${b.bookingId}`}>
+                                        {fmt(b.spNetInHo || 0)}
+                                        {bSel === "sp" && <Check className="h-2.5 w-2.5 inline ml-0.5" />}
+                                      </td>
+                                      <td className={`text-right px-2 py-1 font-mono cursor-pointer transition-colors rounded ${bSel === "ho" ? "text-green-700 font-semibold bg-green-50 dark:bg-green-950/20" : "text-green-600 hover:bg-green-50/50"}`} onClick={() => { setBookingSelections(prev => ({ ...prev, [b.bookingId]: "ho" })); setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }} data-testid={`booking-ho-${b.bookingId}`}>
+                                        {fmt(b.hoNet || 0)}
+                                        {bSel === "ho" && <Check className="h-2.5 w-2.5 inline ml-0.5" />}
+                                      </td>
                                       <td className={`text-right px-2 py-1 font-mono ${diff < 0 ? "text-red-600" : diff > 0 ? "text-green-600" : "text-muted-foreground"}`}>
                                         {diff > 0 ? "+" : ""}{fmt(diff)}
+                                      </td>
+                                      <td className="text-right px-2 py-1">
+                                        {isEditing ? (
+                                          <div className="flex items-center justify-end gap-1">
+                                            <Input
+                                              type="number"
+                                              className="h-6 w-24 text-[11px] font-mono text-right px-1.5 border-violet-300"
+                                              value={bookingCustomPrices[b.bookingId] ?? ""}
+                                              placeholder={String(b.spNetInHo || 0)}
+                                              onChange={e => { setBookingCustomPrices(prev => ({ ...prev, [b.bookingId]: e.target.value })); setBookingSelections(prev => ({ ...prev, [b.bookingId]: "custom" })); setSavedBookings(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; }); }}
+                                              onKeyDown={e => { if (e.key === "Enter") { setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); } if (e.key === "Escape") { setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false })); setBookingCustomPrices(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; }); if (bSel === "custom") setBookingSelections(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; }); } }}
+                                              autoFocus
+                                              data-testid={`booking-custom-input-${b.bookingId}`}
+                                            />
+                                            <button className="p-0.5 rounded hover:bg-muted" onClick={() => setBookingEditMode(prev => ({ ...prev, [b.bookingId]: false }))}><Check className="h-3 w-3 text-violet-600" /></button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center justify-end gap-1">
+                                            <span className={`font-mono font-medium ${bSel === "custom" ? "text-violet-700" : bSel === "ho" ? "text-green-700" : bSel === "sp" ? "text-blue-700" : "text-violet-600"}`} data-testid={`booking-final-${b.bookingId}`}>{fmt(finalPrice)}</span>
+                                            <button className="p-0.5 rounded hover:bg-violet-100 text-muted-foreground hover:text-violet-600 transition-colors" onClick={() => { setBookingEditMode(prev => ({ ...prev, [b.bookingId]: true })); setBookingCustomPrices(prev => ({ ...prev, [b.bookingId]: prev[b.bookingId] ?? String(finalPrice) })); }} data-testid={`booking-edit-${b.bookingId}`}><Pencil className="h-3 w-3" /></button>
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="text-center px-1 py-1">
+                                        {hasOverride && !isSaved && (
+                                          <button className="p-1 rounded-md bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors" onClick={() => handleBookingSave(b)} disabled={priceOverrideMutation.isPending} data-testid={`booking-save-${b.bookingId}`}>
+                                            {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                          </button>
+                                        )}
                                       </td>
                                     </tr>
                                   );
@@ -1288,6 +1397,14 @@ export function DiscrepancySummaryWorkspace({
                                   <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(tid.spNet)}</td>
                                   <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(tid.hoNet)}</td>
                                   <td className={`text-right px-2 py-1 font-mono ${tid.discLc < 0 ? "text-red-600" : "text-green-600"}`}>{tid.discLc > 0 ? "+" : ""}{fmt(tid.discLc)}</td>
+                                  <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getBookingFinalPrice(b), 0))}</td>
+                                  <td className="text-center px-1 py-1">
+                                    {tid.bookings.some(b => bookingSelections[b.bookingId] && !savedBookings.has(b.bookingId)) && (
+                                      <button className="p-1 rounded-md bg-violet-600 hover:bg-violet-700 text-white transition-colors" onClick={() => handleTidSaveAll(tid)} disabled={priceOverrideMutation.isPending} data-testid={`tid-save-all-${tid.tid}`}>
+                                        {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                      </button>
+                                    )}
+                                  </td>
                                 </tr>
                               </tfoot>
                             </table>
