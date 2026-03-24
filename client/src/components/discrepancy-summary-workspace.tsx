@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -123,6 +123,7 @@ export function DiscrepancySummaryWorkspace({
   const [paxOpen, setPaxOpen] = useState(false);
   const [paxTid, setPaxTid] = useState<TidGroup | null>(null);
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
+  const [issueModalTid, setIssueModalTid] = useState<TidGroup | null>(null);
 
   const [showTidBreakdown, setShowTidBreakdown] = useState(false);
   const [showTakeAction, setShowTakeAction] = useState(false);
@@ -500,10 +501,12 @@ export function DiscrepancySummaryWorkspace({
   const [issueScopeTids, setIssueScopeTids] = useState<string[] | null>(null);
 
   const handleTidIssue = useCallback((tid: TidGroup) => {
+    setIssueModalTid(tid);
     setIssueScopeTids([tid.tid]);
-    setIssueOpen(true);
+    setIssueDriTeam("");
+    setIssuePriority("medium");
     const insight = analyzeTakeRateInsight(tid.bookings);
-    if (insight) setIssueDescription(insight);
+    setIssueDescription(insight || "");
   }, []);
 
   const handleSubmitIssue = useCallback(() => {
@@ -521,6 +524,7 @@ export function DiscrepancySummaryWorkspace({
         flash("Issue logged successfully");
         toast({ title: "Issue created", description: `Issue logged for ${reason}` });
         setIssueOpen(false);
+        setIssueModalTid(null);
         setIssueDescription("");
       },
       onError: (err) => {
@@ -593,6 +597,7 @@ export function DiscrepancySummaryWorkspace({
         setTidSearch("");
         setFeedback(null);
         setIssueOpen(false);
+        setIssueModalTid(null);
         setDisputeOpen(false);
         setIssueDescription("");
         setIssueScopeTids(null);
@@ -1673,6 +1678,109 @@ export function DiscrepancySummaryWorkspace({
                 </div>
               </div>
             )}
+
+            <Dialog open={!!issueModalTid} onOpenChange={open => { if (!open) setIssueModalTid(null); }}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-base">
+                    <FileWarning className="h-4 w-4 text-orange-600" />
+                    Raise Issue
+                  </DialogTitle>
+                </DialogHeader>
+                {issueModalTid && (() => {
+                  const t = issueModalTid;
+                  const discLc = Math.abs(t.discLc);
+                  const discUsdTotal = t.bookings.reduce((s, b) => s + Math.abs(b.discrepancyUsd || 0), 0);
+                  const discPcts = t.bookings.map(b => {
+                    const sp = Math.abs(b.spNetInHo || 0);
+                    return sp > 0 ? Math.round((Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) / sp) * 100) : 0;
+                  }).filter(p => p > 0);
+                  const pctMin = discPcts.length > 0 ? Math.min(...discPcts) : 0;
+                  const pctMax = discPcts.length > 0 ? Math.max(...discPcts) : 0;
+                  const pctDisplay = pctMin === pctMax ? `${pctMin}%` : `${pctMin}% – ${pctMax}%`;
+                  const bookingDriTeams = new Set(t.bookings.map(b => b.driTeam).filter(Boolean));
+                  const tidDriTeam = bookingDriTeams.size === 1 ? Array.from(bookingDriTeams)[0] : detectedDriTeam;
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="rounded-md border bg-muted/30 p-3">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">TID</span>
+                            <span className="font-mono font-medium text-primary">{t.tid}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Count of BIDs</span>
+                            <span className="font-medium">{t.bidCount}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Discrepancy LC</span>
+                            <span className="font-mono text-red-600 font-medium">{fmt(discLc)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Discrepancy USD</span>
+                            <span className="font-mono text-red-600 font-medium">{fmt(discUsdTotal)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Discrepancy %</span>
+                            <span className="font-medium text-red-600">{pctDisplay}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">DRI Team</span>
+                            <span className="font-medium">{tidDriTeam || "—"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-muted-foreground">Priority</label>
+                          <Select value={issuePriority} onValueChange={setIssuePriority}>
+                            <SelectTrigger className="h-8 text-xs" data-testid="issue-modal-priority">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-medium text-muted-foreground">DRI Team</label>
+                          <Select value={issueDriTeam || tidDriTeam || ""} onValueChange={setIssueDriTeam}>
+                            <SelectTrigger className="h-8 text-xs" data-testid="issue-modal-dri">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {driTeams.map(team => <SelectItem key={team} value={team}>{team}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-muted-foreground">Description</label>
+                        <Textarea
+                          className="text-xs min-h-[60px]"
+                          placeholder="Describe the issue..."
+                          value={issueDescription}
+                          onChange={e => setIssueDescription(e.target.value)}
+                          data-testid="issue-modal-description"
+                        />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={handleSubmitIssue} disabled={issueMutation.isPending || !issueDescription.trim()} data-testid="issue-modal-submit">
+                          {issueMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                          Log Issue
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </DialogContent>
+            </Dialog>
 
             <Collapsible open={issueOpen} onOpenChange={setIssueOpen}>
               <CollapsibleTrigger asChild>
