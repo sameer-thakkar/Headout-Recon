@@ -140,6 +140,7 @@ export function DiscrepancySummaryWorkspace({
   const [savedBookings, setSavedBookings] = useState<Set<string>>(new Set());
   const [bidDisputeActive, setBidDisputeActive] = useState<Set<string>>(new Set());
   const [bidDisputeAmounts, setBidDisputeAmounts] = useState<Record<string, number>>({});
+  const [bidTapOverrides, setBidTapOverrides] = useState<Record<string, string>>({});
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -377,6 +378,17 @@ export function DiscrepancySummaryWorkspace({
   const getBidDisputeAmount = useCallback((bookingId: string): number => {
     return bidDisputeAmounts[bookingId] || 0;
   }, [bidDisputeAmounts]);
+
+  const getEffectiveTap = useCallback((b: PrimaryRow): number => {
+    const base = getBidFinalNet(b);
+    const override = bidTapOverrides[b.bookingId];
+    if (override === undefined || override === "") return base;
+    const val = parseFloat(override);
+    if (isNaN(val)) return base;
+    const minTap = Math.round(base * 0.9 * 100) / 100;
+    const maxTap = Math.round(base * 1.1 * 100) / 100;
+    return Math.round(Math.min(Math.max(val, minTap), maxTap) * 100) / 100;
+  }, [getBidFinalNet, bidTapOverrides]);
 
   const setBidDisputeAmountForBooking = useCallback((bookingId: string, amount: number, booking?: PrimaryRow) => {
     const rounded = Math.round(amount * 100) / 100;
@@ -1378,21 +1390,11 @@ export function DiscrepancySummaryWorkspace({
                           <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
                           <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
                         </div>
-                        <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => {
-                          const sel = bookingSelections[b.bookingId];
-                          if (sel) return s + getBookingFinalPrice(b);
-                          if (showTakeAction && takeActionPrice === "ho") return s + (b.hoNet || 0);
-                          return s + (b.spNetInHo || 0);
-                        }, 0))}</div>
+                        <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-green-600 font-medium">{fmt((() => {
-                          const tidTap = tid.bookings.reduce((s, b) => {
-                            const sel = bookingSelections[b.bookingId];
-                            if (sel) return s + getBookingFinalPrice(b);
-                            if (showTakeAction && takeActionPrice === "ho") return s + (b.hoNet || 0);
-                            return s + (b.spNetInHo || 0);
-                          }, 0);
+                          const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
                           const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
                           return tidTap - tidAmtPaid;
                         })())}</div>
@@ -1445,11 +1447,16 @@ export function DiscrepancySummaryWorkspace({
                                   const selection = getBidSelection(b.bookingId);
                                   const canDispute = selection === "sp" || selection === "custom";
                                   const finalNet = getBidFinalNet(b);
+                                  const effectiveTap = getEffectiveTap(b);
+                                  const tapBase = finalNet;
+                                  const tapMin = Math.round(tapBase * 0.9 * 100) / 100;
+                                  const tapMax = Math.round(tapBase * 1.1 * 100) / 100;
+                                  const hasTapOverride = bidTapOverrides[b.bookingId] !== undefined && bidTapOverrides[b.bookingId] !== "";
                                   const maxDispute = getBidMaxDispute(b);
                                   const currentDispute = canDispute ? getBidDisputeAmount(b.bookingId) : 0;
                                   const exceedsMax = currentDispute > maxDispute;
                                   const bookingAmountPaid = b.amountPaid || 0;
-                                  const balanceAmountPayable = finalNet - bookingAmountPaid;
+                                  const balanceAmountPayable = effectiveTap - bookingAmountPaid;
                                   const isSaved = savedBookings.has(b.bookingId);
                                   const hasOverride = !!bookingSelections[b.bookingId];
                                   const hasDisp = disputedBookings.has(b.bookingId);
@@ -1504,8 +1511,28 @@ export function DiscrepancySummaryWorkspace({
                                           )
                                         ) : null}
                                       </td>
-                                      <td className="text-right px-2 py-1 font-mono font-medium" data-testid={`booking-final-${b.bookingId}`}>
-                                        {fmt(finalNet)}
+                                      <td className="text-right px-2 py-1" data-testid={`booking-final-${b.bookingId}`}>
+                                        <div className="relative group flex justify-end items-center gap-1">
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={bidTapOverrides[b.bookingId] ?? ""}
+                                            placeholder={String(Math.round(finalNet * 100) / 100)}
+                                            onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
+                                            className={`w-22 h-5 text-xs text-right font-mono px-1 ${hasTapOverride && effectiveTap !== finalNet ? 'border-violet-400 bg-violet-50/50 dark:bg-violet-950/20' : ''}`}
+                                            data-testid={`input-tap-${b.bookingId}`}
+                                          />
+                                          {hasTapOverride && (
+                                            <Button size="sm" variant="ghost" className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
+                                              <XIcon className="h-2.5 w-2.5" />
+                                            </Button>
+                                          )}
+                                          <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
+                                            <div className="bg-muted text-muted-foreground text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border">
+                                              Range: {fmt(tapMin)} — {fmt(tapMax)}
+                                            </div>
+                                          </div>
+                                        </div>
                                       </td>
                                       <td className="text-right px-2 py-1 font-mono text-muted-foreground" data-testid={`booking-amtpaid-${b.bookingId}`}>
                                         {bookingAmountPaid > 0 ? fmt(bookingAmountPaid) : "—"}
@@ -1571,7 +1598,7 @@ export function DiscrepancySummaryWorkspace({
                                       );
                                     })()}
                                   </td>
-                                  <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getBidFinalNet(b), 0))}</td>
+                                  <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</td>
                                   <td className="text-right px-2 py-1 font-mono text-muted-foreground">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</td>
                                   <td className="text-right px-2 py-1 font-mono text-orange-600">
                                     {(() => {
@@ -1581,9 +1608,9 @@ export function DiscrepancySummaryWorkspace({
                                   </td>
                                   <td className="text-right px-2 py-1 font-mono text-green-600 dark:text-green-400 font-bold">
                                     {fmt(tid.bookings.reduce((s, b) => {
-                                      const fn = getBidFinalNet(b);
+                                      const tap = getEffectiveTap(b);
                                       const ap = b.amountPaid || 0;
-                                      return s + fn - ap;
+                                      return s + tap - ap;
                                     }, 0))}
                                   </td>
                                   <td className="text-center px-1 py-1">
