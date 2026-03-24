@@ -1244,13 +1244,13 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                   <div className="w-5" />
                   <div className="pl-2">TID</div>
-                  <div className="text-left px-3 w-24">Fulfillment</div>
-                  <div className="text-right px-3 w-28">SP Net</div>
-                  <div className="text-right px-3 w-28">HO Net</div>
-                  <div className="text-right px-3 w-28 text-violet-600">TAP</div>
-                  <div className="text-right px-3 w-28 text-violet-600">Dispute</div>
-                  <div className="text-right px-3 w-28">Disc.</div>
-                  <div className="text-center px-3 w-16 pr-4">BIDs</div>
+                  <div className="text-left px-3 w-[5.5rem]">Fulfillment</div>
+                  <div className="text-right px-3 w-[7.5rem]">SP Net</div>
+                  <div className="text-right px-3 w-[7.5rem]">HO Net</div>
+                  <div className="text-right px-3 w-[7.5rem] text-violet-600">TAP</div>
+                  <div className="text-right px-3 w-[7.5rem] text-violet-600">Dispute</div>
+                  <div className="text-right px-3 w-[7.5rem]">Disc.</div>
+                  <div className="text-center px-3 w-14 pr-4">BIDs</div>
                 </div>
 
                 {filteredTids.map(tid => {
@@ -1278,23 +1278,23 @@ export function DiscrepancySummaryWorkspace({
                             {tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
                           </div>
                           {(tid.bookings[0]?.experienceName || tid.bookings[0]?.productName) && (
-                            <div className="text-[10px] text-muted-foreground truncate max-w-[280px]">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
+                            <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
                           )}
                         </div>
-                        <div className="text-left px-3 w-24">
+                        <div className="text-left px-3 w-[5.5rem]">
                           {tid.fulfillmentMethods.length > 0 && (
                             <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
                           )}
                         </div>
-                        <div className="text-right px-3 w-28 font-mono text-sm">{fmt(tid.spNet)}</div>
-                        <div className="text-right px-3 w-28 font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right px-3 w-28 font-mono text-sm text-violet-600 font-medium">{fmt(showTakeAction && takeActionPrice === "ho" ? tid.hoNet : tid.spNet)}</div>
-                        <div className="text-right px-3 w-28 font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
-                        <div className="text-right px-3 w-28 leading-tight">
+                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.spNet)}</div>
+                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
+                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(showTakeAction && takeActionPrice === "ho" ? tid.hoNet : tid.spNet)}</div>
+                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                        <div className="text-right px-3 w-[7.5rem] leading-tight">
                           <div className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</div>
                           <div className="text-[10px] text-muted-foreground">{pct}%</div>
                         </div>
-                        <div className="text-center px-3 w-16 text-sm pr-4">{tid.bidCount}</div>
+                        <div className="text-center px-3 w-14 text-sm pr-4">{tid.bidCount}</div>
                       </div>
 
                       {isExpanded && (
