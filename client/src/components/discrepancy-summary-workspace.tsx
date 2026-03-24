@@ -1288,7 +1288,12 @@ export function DiscrepancySummaryWorkspace({
                         </div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.spNet)}</div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(showTakeAction && takeActionPrice === "ho" ? tid.hoNet : tid.spNet)}</div>
+                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => {
+                          const sel = bookingSelections[b.bookingId];
+                          if (sel) return s + getBookingFinalPrice(b);
+                          if (showTakeAction && takeActionPrice === "ho") return s + (b.hoNet || 0);
+                          return s + (b.spNetInHo || 0);
+                        }, 0))}</div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
                         <div className="text-right px-3 w-[7.5rem] leading-tight">
                           <div className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</div>
