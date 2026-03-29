@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition, forwardRef, useImperativeHandle } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, CheckCircle2, X, Pencil, Search, Download, FileText } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, CheckCircle2, X, Search, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -26,7 +26,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { PrimaryRow, VendorBalance, PaxBreakdown, PortalReload, ReloadAdjustment, UnmappedResolution } from "@shared/schema";
+import type { PrimaryRow, VendorBalance, PaxBreakdown, PortalReload, ReloadAdjustment } from "@shared/schema";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type PurchaseBooking = {
@@ -101,8 +101,6 @@ interface BookingRowProps {
   reasonName: string;
   onUpdateFnp: (bookingId: string, value: number) => void;
   onOpenIssueModal: (booking: BookingForDispute) => void;
-  unmappedResolution?: UnmappedResolution;
-  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution, bookingData?: { spNet: number; tid: string; reason: string; ticketId: string; difference: number }) => void;
 }
 
 const BookingRow = memo(function BookingRow({
@@ -120,8 +118,6 @@ const BookingRow = memo(function BookingRow({
   reasonName,
   onUpdateFnp,
   onOpenIssueModal,
-  unmappedResolution,
-  onManageUnmapped,
 }: BookingRowProps) {
   const [localFnp, setLocalFnp] = useState(fnpValue.toFixed(2));
   const [fnpFocused, setFnpFocused] = useState(false);
@@ -211,27 +207,6 @@ const BookingRow = memo(function BookingRow({
         {runId && (
           <TableCell className="py-1">
             <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-              {reasonName === "Unmapped" && onManageUnmapped && (
-                <Button
-                  size="sm"
-                  variant={unmappedResolution ? "default" : "outline"}
-                  className={`text-xs ${unmappedResolution ? "bg-green-600 hover:bg-green-700 text-white" : "text-amber-600 border-amber-300"}`}
-                  onClick={() => onManageUnmapped(booking.bookingId, unmappedResolution, { spNet: booking.spNet, tid: booking.tid, reason: booking.reason, ticketId: booking.ticketId, difference: booking.difference })}
-                  data-testid={`button-manage-unmapped-${booking.bookingId}`}
-                >
-                  {unmappedResolution ? (
-                    <>
-                      <Check className="h-3 w-3 mr-1" />
-                      {unmappedResolution.resolutionType === "prepurchase" ? "Prepurchase" : "Other"}
-                    </>
-                  ) : (
-                    <>
-                      <Pencil className="h-3 w-3 mr-1" />
-                      Manage
-                    </>
-                  )}
-                </Button>
-              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -551,15 +526,12 @@ interface TidGroupProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openIssueModal: (booking: BookingForDispute) => void;
-  unmappedResolutions?: Map<string, UnmappedResolution>;
-  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
 }
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
-  openIssueModal, unmappedResolutions, onManageUnmapped,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
   const expName = useMemo(() => tidBookings.find(b => b.experienceName)?.experienceName, [tidBookings]);
@@ -633,8 +605,6 @@ const TidGroup = memo(function TidGroup({
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
                     onOpenIssueModal={openIssueModal}
-                    unmappedResolution={unmappedResolutions?.get(booking.bookingId)}
-                    onManageUnmapped={onManageUnmapped}
                   />
                 );
               })}
@@ -671,8 +641,6 @@ interface ReasonGroupProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openIssueModal: (booking: BookingForDispute) => void;
-  unmappedResolutions?: Map<string, UnmappedResolution>;
-  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
   negativeSpVerified?: boolean;
   onSetNegativeSpVerified?: (val: boolean) => void;
 }
@@ -683,7 +651,6 @@ const ReasonGroup = memo(function ReasonGroup({
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
-  openIssueModal, unmappedResolutions, onManageUnmapped,
   negativeSpVerified, onSetNegativeSpVerified,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
@@ -831,8 +798,6 @@ const ReasonGroup = memo(function ReasonGroup({
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
                 openIssueModal={openIssueModal}
-                unmappedResolutions={unmappedResolutions}
-                onManageUnmapped={onManageUnmapped}
               />
             );
           })}
@@ -873,8 +838,6 @@ interface BreakupSectionProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openIssueModal: (booking: BookingForDispute) => void;
-  unmappedResolutions?: Map<string, UnmappedResolution>;
-  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
   negativeSpVerified?: boolean;
   onSetNegativeSpVerified?: (val: boolean) => void;
 }
@@ -885,7 +848,6 @@ const BreakupSection = memo(function BreakupSection({
   toggleReasonExpand, toggleTidExpand, showMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openIssueModal,
-  unmappedResolutions, onManageUnmapped,
   negativeSpVerified, onSetNegativeSpVerified,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
@@ -985,8 +947,6 @@ const BreakupSection = memo(function BreakupSection({
             getFinalNetPrice={getFinalNetPrice}
             updateFinalNetPrice={updateFinalNetPrice}
             openIssueModal={openIssueModal}
-            unmappedResolutions={unmappedResolutions}
-            onManageUnmapped={onManageUnmapped}
             negativeSpVerified={negativeSpVerified}
             onSetNegativeSpVerified={onSetNegativeSpVerified}
           />
@@ -1017,340 +977,6 @@ const BreakupSection = memo(function BreakupSection({
     </div>
   );
 });
-
-interface UnmappedResolutionModalHandle {
-  open: (bookingId: string, existingResolution?: UnmappedResolution, bookingData?: { spNet: number; tid: string; reason: string; ticketId: string; difference: number }) => void;
-}
-
-interface UnmappedResolutionModalProps {
-  runId: string;
-  currency: string;
-  onSaved: () => void;
-  onApplySpNet?: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  onRaiseDispute?: (tidBookings: PurchaseBooking[], reason: string) => void;
-  onLogIssue?: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
-}
-
-const UnmappedResolutionModal = memo(forwardRef<UnmappedResolutionModalHandle, UnmappedResolutionModalProps>(function UnmappedResolutionModal(
-  { runId, currency, onSaved, onApplySpNet, onRaiseDispute, onLogIssue },
-  ref
-) {
-  const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
-  const [bookingId, setBookingId] = useState("");
-  const [resolutionType, setResolutionType] = useState<"prepurchase" | "other">("prepurchase");
-  const [referenceNumber, setReferenceNumber] = useState("");
-  const [amountPaid, setAmountPaid] = useState("");
-  const [note, setNote] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [existingId, setExistingId] = useState<number | null>(null);
-  const [spNet, setSpNet] = useState(0);
-  const [tid, setTid] = useState("");
-  const [reason, setReason] = useState("");
-  const [ticketId, setTicketId] = useState("");
-  const [difference, setDifference] = useState(0);
-  const [disputeChecked, setDisputeChecked] = useState(false);
-  const [issueChecked, setIssueChecked] = useState(false);
-
-  useImperativeHandle(ref, () => ({
-    open: (bid: string, existing?: UnmappedResolution, bookingData?: { spNet: number; tid: string; reason: string; ticketId: string; difference: number }) => {
-      setBookingId(bid);
-      if (existing) {
-        setResolutionType(existing.resolutionType);
-        setReferenceNumber(existing.referenceNumber || "");
-        setAmountPaid(existing.amountPaid != null ? String(existing.amountPaid) : "");
-        setNote(existing.note || "");
-        setExistingId(existing.id);
-      } else {
-        setResolutionType("prepurchase");
-        setReferenceNumber("");
-        setAmountPaid("");
-        setNote("");
-        setExistingId(null);
-      }
-      if (bookingData) {
-        setSpNet(bookingData.spNet);
-        setTid(bookingData.tid);
-        setReason(bookingData.reason);
-        setTicketId(bookingData.ticketId);
-        setDifference(bookingData.difference);
-      }
-      setDisputeChecked(false);
-      setIssueChecked(false);
-      setIsOpen(true);
-    },
-  }));
-
-  const handleSave = useCallback(async () => {
-    if (!bookingId) return;
-    setIsSaving(true);
-    try {
-      await apiRequest("POST", "/api/unmapped-resolutions", {
-        runId,
-        bookingId,
-        resolutionType,
-        referenceNumber: resolutionType === "prepurchase" ? referenceNumber || null : null,
-        amountPaid: resolutionType === "prepurchase" && amountPaid ? parseFloat(amountPaid) : null,
-        note: note || null,
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/unmapped-resolutions', runId] });
-      onSaved();
-      toast({ title: "Resolution saved", description: `Booking ${bookingId} marked as ${resolutionType}` });
-      setIsOpen(false);
-    } catch (e) {
-      toast({ title: "Error", description: "Failed to save resolution", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [runId, bookingId, resolutionType, referenceNumber, amountPaid, note, toast, onSaved]);
-
-  const handleDelete = useCallback(async () => {
-    if (existingId === null) return;
-    setIsSaving(true);
-    try {
-      await apiRequest("DELETE", `/api/unmapped-resolutions/${existingId}`);
-      queryClient.invalidateQueries({ queryKey: ['/api/unmapped-resolutions', runId] });
-      onSaved();
-      toast({ title: "Resolution removed" });
-      setIsOpen(false);
-    } catch (e) {
-      toast({ title: "Error", description: "Failed to remove resolution", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [existingId, runId, toast, onSaved]);
-
-  const handleApplySpNetAction = useCallback(() => {
-    if (onApplySpNet) {
-      onApplySpNet([{ bookingId, spNet, hoNet: 0 }]);
-    }
-    if (disputeChecked && onRaiseDispute) {
-      onRaiseDispute([{ bookingId, spNet, hoNet: 0, difference, reason, tid, ticketId } as PurchaseBooking], reason);
-    }
-    if (issueChecked && onLogIssue) {
-      onLogIssue([{ bookingId, spNet, hoNet: 0, difference, reason, tid, ticketId } as PurchaseBooking], reason, tid);
-    }
-    setIsOpen(false);
-  }, [bookingId, spNet, difference, reason, tid, ticketId, onApplySpNet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue]);
-
-  const handleDisputeIssueOnly = useCallback(() => {
-    if (disputeChecked && onRaiseDispute) {
-      onRaiseDispute([{ bookingId, spNet, hoNet: 0, difference, reason, tid, ticketId } as PurchaseBooking], reason);
-    }
-    if (issueChecked && onLogIssue) {
-      onLogIssue([{ bookingId, spNet, hoNet: 0, difference, reason, tid, ticketId } as PurchaseBooking], reason, tid);
-    }
-    setIsOpen(false);
-  }, [bookingId, spNet, difference, reason, tid, ticketId, disputeChecked, issueChecked, onRaiseDispute, onLogIssue]);
-
-  return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            Manage Unmapped Booking
-          </DialogTitle>
-          <DialogDescription>
-            Booking <span className="font-mono font-semibold">{bookingId}</span>{tid ? <> — TID <span className="font-mono font-semibold">{tid}</span></> : null}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-          <div className="rounded-md border bg-background p-4 space-y-3">
-            <div className="text-sm font-medium flex items-center gap-2">
-              <FileText className="h-4 w-4 text-primary" />
-              Resolution Classification
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={resolutionType === "prepurchase" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setResolutionType("prepurchase")}
-                data-testid="button-type-prepurchase"
-              >
-                Prepurchase
-              </Button>
-              <Button
-                variant={resolutionType === "other" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setResolutionType("other")}
-                data-testid="button-type-other"
-              >
-                Other
-              </Button>
-            </div>
-
-            {resolutionType === "prepurchase" && (
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Reference Number</label>
-                  <Input
-                    className="h-8 text-sm font-mono"
-                    placeholder="Enter reference number"
-                    value={referenceNumber}
-                    onChange={(e) => setReferenceNumber(e.target.value)}
-                    data-testid="input-unmapped-reference"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Amount Paid ({currency})</label>
-                  <Input
-                    className="h-8 text-sm font-mono"
-                    placeholder="Enter amount"
-                    type="number"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    data-testid="input-unmapped-amount"
-                  />
-                </div>
-              </div>
-            )}
-
-            {resolutionType === "other" && (
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Note</label>
-                <Input
-                  className="h-8 text-sm"
-                  placeholder="Add a note (optional)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  data-testid="input-unmapped-note"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-1">
-              {existingId !== null && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={isSaving}
-                  data-testid="button-delete-unmapped-resolution"
-                >
-                  Remove
-                </Button>
-              )}
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={isSaving || (resolutionType === "prepurchase" && !referenceNumber && !amountPaid)}
-                data-testid="button-save-unmapped-resolution"
-              >
-                {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
-                {existingId !== null ? "Update" : "Save"} Resolution
-              </Button>
-            </div>
-          </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">Pricing & Actions</span>
-            </div>
-          </div>
-
-          {onApplySpNet && (
-            <div className="rounded-md border bg-background overflow-hidden">
-              <div
-                className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
-                onClick={handleApplySpNetAction}
-                data-testid={`modal-btn-spnet-unmapped-${bookingId}`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                    <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Update to SP Net</div>
-                    <div className="text-xs text-muted-foreground">
-                      Set Total Amount Payable = SP Net ({formatNumber(spNet)} {currency})
-                    </div>
-                  </div>
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
-          )}
-
-          {runId && (
-            <>
-              <div
-                className={`rounded-md border-2 overflow-hidden transition-colors ${disputeChecked ? "border-amber-500 dark:border-amber-400 bg-amber-50/50 dark:bg-amber-900/15" : "border-border bg-background"}`}
-                data-testid={`manage-unmapped-dispute-card-${bookingId}`}
-              >
-                <div className="flex items-center justify-between px-4 py-3 gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-8 w-8 rounded-md flex-shrink-0 ${disputeChecked ? "bg-amber-100 dark:bg-amber-900/40" : "bg-muted"}`}>
-                      <FileWarning className={`h-4 w-4 ${disputeChecked ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">Raise Dispute</div>
-                      <div className="text-xs text-muted-foreground">
-                        Raise a dispute for this unmapped booking
-                      </div>
-                    </div>
-                  </div>
-                  <Checkbox
-                    checked={disputeChecked}
-                    onCheckedChange={(checked) => setDisputeChecked(checked === true)}
-                    data-testid={`checkbox-unmapped-dispute-${bookingId}`}
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-md border bg-background overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-8 w-8 rounded-md ${issueChecked ? "bg-orange-100 dark:bg-orange-900/30" : "bg-muted"}`}>
-                      <AlertTriangle className={`h-4 w-4 ${issueChecked ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">Flag Issue</div>
-                      <div className="text-xs text-muted-foreground">
-                        Log this booking as an issue for the {reason || "Unmapped"} team to review
-                      </div>
-                    </div>
-                  </div>
-                  <Checkbox
-                    checked={issueChecked}
-                    onCheckedChange={(checked) => setIssueChecked(checked === true)}
-                    data-testid={`checkbox-unmapped-issue-${bookingId}`}
-                  />
-                </div>
-              </div>
-
-              {(disputeChecked || issueChecked) && (
-                <div className="rounded-md border p-3 bg-muted/50 flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    Applies to booking <span className="font-mono font-medium">{bookingId}</span>
-                  </p>
-                  <Button
-                    size="sm"
-                    onClick={handleDisputeIssueOnly}
-                    data-testid={`button-submit-dispute-issue-unmapped-${bookingId}`}
-                  >
-                    <Check className="h-3.5 w-3.5 mr-1.5" />
-                    {disputeChecked && issueChecked ? "Raise Dispute & Flag Issue" : disputeChecked ? "Raise Dispute" : "Flag Issue"}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <DialogFooter className="flex-shrink-0">
-          <Button variant="outline" size="sm" onClick={() => setIsOpen(false)} data-testid="button-cancel-unmapped">
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}));
 
 interface ManageReloadsModalHandle {
   open: () => void;
@@ -1758,8 +1384,6 @@ interface LineItemsTableCardProps {
   openIssueModal: (booking: BookingForDispute) => void;
   onManageReloads?: () => void;
   runId?: string | null;
-  unmappedResolutions?: Map<string, UnmappedResolution>;
-  onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
   negativeSpVerified?: boolean;
   onSetNegativeSpVerified?: (val: boolean) => void;
   summaryCurrency?: string;
@@ -1794,8 +1418,6 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   openIssueModal,
   onManageReloads,
   runId,
-  unmappedResolutions,
-  onManageUnmapped,
   negativeSpVerified,
   onSetNegativeSpVerified,
   summaryCurrency: sumCcy,
@@ -1960,8 +1582,6 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                                   getFinalNetPrice={getFinalNetPrice}
                                   updateFinalNetPrice={updateFinalNetPrice}
                                   openIssueModal={openIssueModal}
-                                  unmappedResolutions={unmappedResolutions}
-                                  onManageUnmapped={onManageUnmapped}
                                   negativeSpVerified={negativeSpVerified}
                                   onSetNegativeSpVerified={onSetNegativeSpVerified}
                                 />
@@ -2379,7 +1999,6 @@ export function PurchaseReconciliationPanel({
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
   const manageReloadsModalRef = useRef<ManageReloadsModalHandle>(null);
-  const unmappedResolutionModalRef = useRef<UnmappedResolutionModalHandle>(null);
   
   const effectiveFxRate = useMemo(() => {
     if (fxRateToUsd) return fxRateToUsd;
@@ -2467,25 +2086,6 @@ export function PurchaseReconciliationPanel({
     });
   }, [primaryRows]);
 
-  const { data: unmappedResolutionsData } = useQuery<UnmappedResolution[]>({
-    queryKey: ['/api/unmapped-resolutions', runId],
-    enabled: !!runId,
-  });
-
-  const unmappedResolutions = useMemo(() => {
-    const map = new Map<string, UnmappedResolution>();
-    if (unmappedResolutionsData) {
-      for (const r of unmappedResolutionsData) {
-        map.set(r.bookingId, r);
-      }
-    }
-    return map;
-  }, [unmappedResolutionsData]);
-
-  const handleManageUnmapped = useCallback((bookingId: string, existing?: UnmappedResolution, bookingData?: { spNet: number; tid: string; reason: string; ticketId: string; difference: number }) => {
-    unmappedResolutionModalRef.current?.open(bookingId, existing, bookingData);
-  }, []);
-
   const [, startExpandTransition] = useTransition();
 
   const toggleRowExpand = useCallback((rowId: number) => {
@@ -2553,21 +2153,6 @@ export function PurchaseReconciliationPanel({
     return finalVendorIdsRef.current.has(bookingId) ? finalVendorIdsRef.current.get(bookingId)! : defaultVid;
   }, []);
 
-  const applyBulkFinalNetPrice = useCallback((source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
-    setFinalNetPrices(prev => {
-      const next = new Map(prev);
-      for (const b of bookings) {
-        next.set(b.bookingId, source === "spNet" ? b.spNet : b.hoNet);
-      }
-      return next;
-    });
-    setFnpVersion(v => v + 1);
-    toast({
-      title: "Bulk Update Applied",
-      description: `Total Amount Payable set to ${source === "spNet" ? "SP Net" : "HO Net"} for ${bookings.length} bookings.`,
-    });
-  }, [toast]);
-
   const [, startConfirmTransition] = useTransition();
   const handleConfirmApply = useCallback(() => {
     setShowApplyConfirmation(false);
@@ -2630,75 +2215,6 @@ export function PurchaseReconciliationPanel({
       setIsExporting(false);
     }
   }, [runId, toast]);
-
-  const handleApplySpNet = useCallback((bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
-    applyBulkFinalNetPrice("spNet", bookings);
-  }, [applyBulkFinalNetPrice]);
-
-  const handleTidBulkDispute = useCallback(async (tidBookings: PurchaseBooking[], reason: string) => {
-    if (!runId) return;
-    let count = 0;
-    for (const booking of tidBookings) {
-      if (activeDisputes.has(booking.bookingId)) continue;
-      try {
-        await apiRequest("POST", `/api/disputes/${runId}`, {
-          bookingId: booking.bookingId,
-          billingEntityId: beId,
-          billingEntityName: billingEntityName,
-          ticketId: booking.ticketId,
-          tid: booking.tid,
-          currency: currency,
-          disputeAmount: Math.abs(booking.difference),
-          maxDisputeAmount: Math.abs(booking.difference),
-          reconciledNet: Math.abs(booking.hoNet),
-          status: "pending",
-          closureStatus: "open",
-        });
-        setActiveDisputes(prev => { const next = new Set(prev); next.add(booking.bookingId); return next; });
-        setDisputeAmounts(prev => { const next = new Map(prev); next.set(booking.bookingId, Math.abs(booking.difference)); return next; });
-        count++;
-      } catch (err) {
-        console.error(`Failed to raise dispute for ${booking.bookingId}:`, err);
-      }
-    }
-    if (count > 0) {
-      toast({ title: "Bulk Disputes Raised", description: `${count} disputes raised for TID group.` });
-      queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
-    }
-  }, [runId, activeDisputes, beId, billingEntityName, currency, toast]);
-
-  const handleTidBulkIssue = useCallback(async (tidBookings: PurchaseBooking[], reason: string, tid: string) => {
-    if (!runId) return;
-    const fxRate = effectiveFxRate || 1;
-    let driTeam = "Finance";
-    if (reason.includes("Cancelled")) driTeam = "Operations";
-    else if (reason.includes("NPD") || reason.includes("MTB")) driTeam = "Supplier Management";
-    const totalDiscrepancy = tidBookings.reduce((sum, b) => sum + b.difference, 0);
-    try {
-      await apiRequest("POST", `/api/issues`, {
-        runId,
-        createdDate: new Date().toISOString(),
-        billingEntityId: beId,
-        billingEntityName: billingEntityName,
-        currency: currency,
-        discrepancyLocal: totalDiscrepancy,
-        discrepancyUsd: totalDiscrepancy * fxRate,
-        reason: reason,
-        driTeam: driTeam,
-        bookingIds: tidBookings.map(b => b.bookingId),
-        ticketId: tidBookings[0]?.ticketId || "",
-        tid: tid,
-        paymentMethod: "PORTAL_DEPOSIT",
-        errorBucket: reason,
-      });
-      setLoggedIssues(prev => { const next = new Set(prev); tidBookings.forEach(b => next.add(b.bookingId)); return next; });
-      toast({ title: "Issue Flagged", description: `Issue created for TID ${tid} with ${tidBookings.length} bookings.` });
-      queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
-    } catch (err) {
-      console.error("Failed to flag TID issue:", err);
-      toast({ title: "Error", description: "Failed to flag issue.", variant: "destructive" });
-    }
-  }, [runId, beId, billingEntityName, currency, effectiveFxRate, toast]);
 
   const openDisputeModal = useCallback((booking: BookingForDispute) => {
     disputeModalRef.current?.open(booking);
@@ -3460,8 +2976,6 @@ export function PurchaseReconciliationPanel({
         openIssueModal={openIssueModal}
         onManageReloads={() => manageReloadsModalRef.current?.open()}
         runId={runId}
-        unmappedResolutions={unmappedResolutions}
-        onManageUnmapped={handleManageUnmapped}
         negativeSpVerified={negativeSpVerified}
         onSetNegativeSpVerified={setNegativeSpVerified}
         summaryCurrency={summaryCurrency}
@@ -3570,17 +3084,6 @@ export function PurchaseReconciliationPanel({
         originalTotal={portalReloadOriginalTotal}
         adjustedTotal={portalReloadTotal}
       />
-      {runId && (
-        <UnmappedResolutionModal
-          ref={unmappedResolutionModalRef}
-          runId={runId}
-          currency={currency}
-          onSaved={() => {}}
-          onApplySpNet={handleApplySpNet}
-          onRaiseDispute={handleTidBulkDispute}
-          onLogIssue={handleTidBulkIssue}
-        />
-      )}
 
     </div>
   );
