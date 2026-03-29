@@ -1051,7 +1051,7 @@ export function CancellationsWorkspace({
                                 {tid.cancellable && <Badge variant={tid.cancellable === "Yes" ? "outline" : "secondary"} className="text-[9px] px-1 py-0">{tid.cancellable}</Badge>}
                               </div>
                               <div className="text-center">
-                                {tid.cancellationInsurance && <span className={`text-[10px] font-medium ${tid.cancellationInsurance === "Yes" ? "text-blue-600" : "text-muted-foreground"}`}>{tid.cancellationInsurance}</span>}
+                                {tid.cancellationInsurance && <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${tid.cancellationInsurance === "Yes" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300" : ""}`}>{tid.cancellationInsurance}</Badge>}
                               </div>
                               <div className="text-center">
                                 {tid.chargeLoss && <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${tid.chargeLoss === "FALSE" ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-300" : "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300"}`}>{tid.chargeLoss}</Badge>}
@@ -1157,7 +1157,7 @@ export function CancellationsWorkspace({
                                           {b.cancellable && <Badge variant={b.cancellable === "Yes" ? "outline" : "secondary"} className="text-[9px] px-1 py-0">{b.cancellable}</Badge>}
                                         </div>
                                         <div className="text-center py-1">
-                                          {b.cancellationInsurance && <span className={`text-[9px] font-medium ${b.cancellationInsurance === "Yes" ? "text-blue-600" : "text-muted-foreground"}`}>{b.cancellationInsurance}</span>}
+                                          {b.cancellationInsurance && <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${b.cancellationInsurance === "Yes" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300" : ""}`}>{b.cancellationInsurance}</Badge>}
                                         </div>
                                         <div className="text-center py-1">
                                           {b.chargedLoss && <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${b.chargedLoss === "FALSE" ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-300" : "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300"}`}>{b.chargedLoss}</Badge>}
