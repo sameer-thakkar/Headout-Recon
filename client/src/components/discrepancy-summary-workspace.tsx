@@ -1979,7 +1979,7 @@ export function DiscrepancySummaryWorkspace({
                               affectedBookingIds.push(b.bookingId);
                             }
                           });
-                          if (affectedBookingIds.length === 0) { flash("No prices edited"); return; }
+                          if (editedCount === 0 || affectedBookingIds.length === 0) { flash("No prices edited"); return; }
                           priceOverrideMutation.mutate({ bookingIds: affectedBookingIds, selection: "sp", customPrices: customPricesNum }, {
                             onSuccess: () => {
                               setBookingSelections(prev => {
