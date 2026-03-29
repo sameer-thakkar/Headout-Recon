@@ -1334,7 +1334,7 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
+                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
                   <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
@@ -1343,8 +1343,7 @@ export function DiscrepancySummaryWorkspace({
                   <div className="text-left px-3 w-[5.5rem]">Fulfillment</div>
                   <div className="text-right px-3 w-[7rem]">SP Net</div>
                   <div className="text-right px-3 w-[7rem]">HO Net</div>
-                  <div className="text-right px-3 w-[7rem]">Difference LC</div>
-                  <div className="text-right px-3 w-[7rem] text-violet-600">TAP</div>
+                  <div className="text-right px-3 w-[9rem] text-violet-600">TAP</div>
                   <div className="text-right px-3 w-[7rem]">totalAmountPaid</div>
                   <div className="text-right px-3 w-[7rem] text-violet-600">Dispute</div>
                   <div className="text-right px-3 w-[7.5rem] text-green-600">Balance Amt Payable</div>
@@ -1386,10 +1385,6 @@ export function DiscrepancySummaryWorkspace({
                         </div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.spNet)}</div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right px-3 w-[9rem]">
-                          <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
-                          <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
-                        </div>
                         <div className="text-right px-3 w-[9rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
