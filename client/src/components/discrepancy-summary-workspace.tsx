@@ -334,6 +334,11 @@ export function DiscrepancySummaryWorkspace({
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
+  const ANALYSIS_GRID_COLUMNS = isMTB
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
+    : isNPD
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(4.5rem,0.8fr) minmax(4rem,0.7fr) minmax(3.5rem,0.6fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
+    : "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)";
 
   useEffect(() => {
     setShowTidBreakdown(false);
@@ -872,86 +877,86 @@ export function DiscrepancySummaryWorkspace({
                 ) : filteredAnalysis.length === 0 ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">No analysis data available</div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="h-8 bg-violet-50/40 dark:bg-violet-950/20">
-                        <TableHead className="py-1.5 text-xs pl-4">TID</TableHead>
-                        <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
-                        <TableHead className="py-1.5 text-xs">Fulfilment</TableHead>
+                  <div className="w-full">
+                    <div
+                      className="grid gap-x-4 items-center h-8 bg-muted/30 border-b px-3"
+                      style={{ gridTemplateColumns: ANALYSIS_GRID_COLUMNS }}
+                    >
+                      <div className="text-xs font-medium text-center text-violet-700 dark:text-violet-300">TID</div>
+                      <div className="text-xs font-medium text-center">Disc. USD</div>
+                      <div className="text-xs font-medium text-center">Fulfilment</div>
+                      {isMTB && (
+                        <>
+                          <div className="text-xs font-medium text-center">Times Charged</div>
+                          <div className="text-xs font-medium text-center">BID Count</div>
+                          <div className="text-xs font-medium text-center">BID Count Dur.</div>
+                          <div className="text-xs font-medium text-center">DRI Team</div>
+                        </>
+                      )}
+                      {isNPD && (
+                        <>
+                          <div className="text-xs font-medium text-center">HO Rate</div>
+                          <div className="text-xs font-medium text-center">Actual</div>
+                          <div className="text-xs font-medium text-center">Disc %</div>
+                          <div className="text-xs font-medium text-center">Loss?</div>
+                          <div className="text-xs font-medium text-center">Loss USD</div>
+                        </>
+                      )}
+                      <div className="text-xs font-medium text-center">Start</div>
+                      <div className="text-xs font-medium text-center">End</div>
+                      <div className="text-xs font-medium text-center">BIDs w/ Disc</div>
+                      <div className="text-xs font-medium text-center">BIDs Dur.</div>
+                    </div>
+                    {filteredAnalysis.map((row, i) => (
+                      <div
+                        key={`${row.tid}-${i}`}
+                        className={`grid gap-x-4 items-center h-9 border-b px-3 cursor-pointer hover:bg-violet-50/60 dark:hover:bg-violet-950/40 transition-colors ${resolvedTids.has(row.tid) ? "opacity-50" : ""}`}
+                        style={{ gridTemplateColumns: ANALYSIS_GRID_COLUMNS }}
+                        onClick={() => handleAnalysisClick(row.tid)}
+                        data-testid={`analysis-row-${row.tid}`}
+                      >
+                        <div className="text-xs font-mono text-center text-primary font-medium truncate">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {resolvedTids.has(row.tid) && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />}
+                            {row.tid}
+                          </div>
+                        </div>
+                        <div className="text-xs font-mono text-center text-red-600 dark:text-red-400">{fmt(row.discrepancyUsd)}</div>
+                        <div className="text-xs text-center truncate">{row.fulfillmentMethod}</div>
                         {isMTB && (
                           <>
-                            <TableHead className="py-1.5 text-xs">Times Charged</TableHead>
-                            <TableHead className="py-1.5 text-xs text-right">BID Count</TableHead>
-                            <TableHead className="py-1.5 text-xs text-right">BID Count Dur.</TableHead>
-                            <TableHead className="py-1.5 text-xs">DRI Team</TableHead>
+                            <div className="text-xs font-mono text-center">{row.timesCharged}</div>
+                            <div className="text-xs font-mono text-center">{row.countBidWithDiscrepancy}</div>
+                            <div className="text-xs font-mono text-center">{row.countBidsInDuration}</div>
+                            <div className="text-xs text-center truncate">{row.driTeam}</div>
                           </>
                         )}
                         {isNPD && (
                           <>
-                            <TableHead className="py-1.5 text-xs text-right">HO Rate</TableHead>
-                            <TableHead className="py-1.5 text-xs text-right">Actual</TableHead>
-                            <TableHead className="py-1.5 text-xs text-right">Disc %</TableHead>
-                            <TableHead className="py-1.5 text-xs text-center">Loss?</TableHead>
-                            <TableHead className="py-1.5 text-xs text-right">Loss USD</TableHead>
+                            <div className="text-xs font-mono text-center">{row.hoTakeRatePercent?.toFixed(2) ?? "—"}%</div>
+                            <div className={`text-xs font-mono text-center ${(row.actualTakeRatePercent ?? 0) < 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
+                              {row.actualTakeRatePercent?.toFixed(2) ?? "—"}%
+                            </div>
+                            <div className={`text-xs font-mono text-center ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
+                              {row.discrepancyPercentRange || "—"}
+                            </div>
+                            <div className="text-xs text-center">
+                              <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0">
+                                {row.soldAtLoss || "—"}
+                              </Badge>
+                            </div>
+                            <div className={`text-xs font-mono text-center ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
+                              {row.lossUsd != null ? fmt(row.lossUsd) : "—"}
+                            </div>
                           </>
                         )}
-                        <TableHead className="py-1.5 text-xs">Start</TableHead>
-                        <TableHead className="py-1.5 text-xs">End</TableHead>
-                        <TableHead className="py-1.5 text-xs text-right">BIDs w/ Disc</TableHead>
-                        <TableHead className="py-1.5 text-xs text-right pr-4">BIDs Dur.</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredAnalysis.map((row, i) => (
-                        <TableRow
-                          key={`${row.tid}-${i}`}
-                          className={`h-9 cursor-pointer hover:bg-violet-50/60 dark:hover:bg-violet-950/40 ${resolvedTids.has(row.tid) ? "opacity-50" : ""}`}
-                          onClick={() => handleAnalysisClick(row.tid)}
-                          data-testid={`analysis-row-${row.tid}`}
-                        >
-                          <TableCell className="py-1.5 pl-4 font-mono text-sm text-primary font-medium">
-                            <div className="flex items-center gap-1.5">
-                              {resolvedTids.has(row.tid) && <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />}
-                              {row.tid}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-1.5 text-right font-mono text-sm text-red-600 dark:text-red-400">{fmt(row.discrepancyUsd)}</TableCell>
-                          <TableCell className="py-1.5 text-sm">{row.fulfillmentMethod}</TableCell>
-                          {isMTB && (
-                            <>
-                              <TableCell className="py-1.5 text-sm">{row.timesCharged}</TableCell>
-                              <TableCell className="py-1.5 text-right text-sm">{row.countBidWithDiscrepancy}</TableCell>
-                              <TableCell className="py-1.5 text-right text-sm">{row.countBidsInDuration}</TableCell>
-                              <TableCell className="py-1.5 text-sm">{row.driTeam}</TableCell>
-                            </>
-                          )}
-                          {isNPD && (
-                            <>
-                              <TableCell className="py-1.5 text-right font-mono text-sm">{row.hoTakeRatePercent?.toFixed(2) ?? "—"}%</TableCell>
-                              <TableCell className={`py-1.5 text-right font-mono text-sm ${(row.actualTakeRatePercent ?? 0) < 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
-                                {row.actualTakeRatePercent?.toFixed(2) ?? "—"}%
-                              </TableCell>
-                              <TableCell className={`py-1.5 text-right font-mono text-sm ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
-                                {row.discrepancyPercentRange || "—"}
-                              </TableCell>
-                              <TableCell className="py-1.5 text-center">
-                                <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0">
-                                  {row.soldAtLoss || "—"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className={`py-1.5 text-right font-mono text-sm ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
-                                {row.lossUsd != null ? fmt(row.lossUsd) : "—"}
-                              </TableCell>
-                            </>
-                          )}
-                          <TableCell className="py-1.5 text-sm">{formatDate(row.startDate)}</TableCell>
-                          <TableCell className="py-1.5 text-sm">{formatDate(row.endDate)}</TableCell>
-                          <TableCell className="py-1.5 text-right text-sm">{row.countBidWithDiscrepancy}</TableCell>
-                          <TableCell className="py-1.5 text-right text-sm pr-4">{row.countBidsInDuration}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                        <div className="text-xs font-mono text-center">{formatDate(row.startDate)}</div>
+                        <div className="text-xs font-mono text-center">{formatDate(row.endDate)}</div>
+                        <div className="text-xs font-mono text-center">{row.countBidWithDiscrepancy}</div>
+                        <div className="text-xs font-mono text-center">{row.countBidsInDuration}</div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
