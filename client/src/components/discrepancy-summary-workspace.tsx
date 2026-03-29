@@ -662,6 +662,13 @@ export function DiscrepancySummaryWorkspace({
   }, [getBidSelection]);
 
   const handleBookingSave = useCallback((b: PrimaryRow) => {
+    if (isSecondaryVendor) {
+      const bookingTid = b.tid || b.bookingId;
+      if (!vendorIdConfirmed.has(bookingTid)) {
+        toast({ title: "Vendor ID not confirmed", description: "Please confirm the Final Vendor ID before saving.", variant: "destructive" });
+        return;
+      }
+    }
     const sel = bookingSelections[b.bookingId] || "sp";
     const finalSel = sel === "custom" ? "sp" : sel;
     const customPrices: Record<string, number> = {};
@@ -677,7 +684,7 @@ export function DiscrepancySummaryWorkspace({
         toast({ title: "Failed", description: String(err), variant: "destructive" });
       },
     });
-  }, [bookingSelections, getBookingFinalPrice, priceOverrideMutation, toast]);
+  }, [bookingSelections, getBookingFinalPrice, priceOverrideMutation, toast, isSecondaryVendor, vendorIdConfirmed]);
 
   const handleTidSaveAll = useCallback((tid: TidGroup) => {
     if (isSecondaryVendor && !vendorIdConfirmed.has(tid.tid)) {
@@ -1839,7 +1846,14 @@ export function DiscrepancySummaryWorkspace({
                                     <CheckCircle2 className="h-3 w-3 mr-0.5" /> Confirmed
                                   </Badge>
                                 ) : (
-                                  <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => setVendorIdConfirmed(prev => { const next = new Set(prev); next.add(tid.tid); return next; })} data-testid={`sv-confirm-vendor-${tid.tid}`}>
+                                  <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => {
+                                    const finalId = vendorIdCorrections[tid.tid] ?? (tid.bookings[0]?.spBeId || "");
+                                    if (!finalId.trim()) {
+                                      toast({ title: "Empty Vendor ID", description: "Please enter a valid Final Vendor ID before confirming.", variant: "destructive" });
+                                      return;
+                                    }
+                                    setVendorIdConfirmed(prev => { const next = new Set(prev); next.add(tid.tid); return next; });
+                                  }} data-testid={`sv-confirm-vendor-${tid.tid}`}>
                                     <Check className="h-3 w-3 mr-0.5" /> Confirm
                                   </Button>
                                 )}
@@ -2256,6 +2270,10 @@ export function DiscrepancySummaryWorkspace({
                       <div className="flex items-center justify-end gap-2 pt-1">
                         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); }}>Cancel</Button>
                         <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                          if (isSecondaryVendor && paxTid && !vendorIdConfirmed.has(paxTid.tid)) {
+                            toast({ title: "Vendor ID not confirmed", description: "Please confirm the Final Vendor ID before applying pax pricing.", variant: "destructive" });
+                            return;
+                          }
                           const customPricesNum: Record<string, number> = {};
                           const affectedBookingIds: string[] = [];
                           paxTid!.bookings.forEach(b => {
