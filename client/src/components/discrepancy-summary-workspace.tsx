@@ -1341,14 +1341,14 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                   <div />
                   <div>TID</div>
-                  <div className="text-left">Fulfillment</div>
-                  <div className="text-right">SP Net</div>
-                  <div className="text-right">HO Net</div>
-                  <div className="text-right">Difference LC</div>
-                  <div className="text-right text-violet-600">TAP</div>
-                  <div className="text-right">totalAmountPaid</div>
-                  <div className="text-right text-violet-600">Dispute</div>
-                  <div className="text-right text-green-600">Balance Amt Payable</div>
+                  <div className="text-center">Fulfillment</div>
+                  <div className="text-center">SP Net</div>
+                  <div className="text-center">HO Net</div>
+                  <div className="text-center">Difference LC</div>
+                  <div className="text-center text-violet-600">TAP</div>
+                  <div className="text-center">totalAmountPaid</div>
+                  <div className="text-center text-violet-600">Dispute</div>
+                  <div className="text-center text-green-600">Balance Amt Payable</div>
                   <div className="text-center">BIDs</div>
                 </div>
 
@@ -1381,21 +1381,21 @@ export function DiscrepancySummaryWorkspace({
                             <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
                           )}
                         </div>
-                        <div className="text-left">
+                        <div className="text-center">
                           {tid.fulfillmentMethods.length > 0 && (
                             <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
                           )}
                         </div>
-                        <div className="text-right font-mono text-sm">{fmt(tid.spNet)}</div>
-                        <div className="text-right font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right">
+                        <div className="text-center font-mono text-sm">{fmt(tid.spNet)}</div>
+                        <div className="text-center font-mono text-sm">{fmt(tid.hoNet)}</div>
+                        <div className="text-center">
                           <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
                           <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
                         </div>
-                        <div className="text-right font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
-                        <div className="text-right font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
-                        <div className="text-right font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
-                        <div className="text-right font-mono text-sm text-green-600 font-medium">{fmt((() => {
+                        <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                        <div className="text-center font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                        <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                        <div className="text-center font-mono text-sm text-green-600 font-medium">{fmt((() => {
                           const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
                           const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
                           return tidTap - tidAmtPaid;
