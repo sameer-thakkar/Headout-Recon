@@ -1334,20 +1334,21 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
+                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
                   <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
                   <div className="w-5" />
                   <div className="pl-2">TID</div>
-                  <div className="text-left px-3 w-[5.5rem]">Fulfillment</div>
-                  <div className="text-right px-3 w-[7rem]">SP Net</div>
-                  <div className="text-right px-3 w-[7rem]">HO Net</div>
-                  <div className="text-right px-3 w-[9rem] text-violet-600">TAP</div>
-                  <div className="text-right px-3 w-[7rem]">totalAmountPaid</div>
-                  <div className="text-right px-3 w-[7rem] text-violet-600">Dispute</div>
-                  <div className="text-right px-3 w-[7.5rem] text-green-600">Balance Amt Payable</div>
-                  <div className="text-center px-3 w-14 pr-4">BIDs</div>
+                  <div className="text-left px-2 w-[4.5rem]">Fulfillment</div>
+                  <div className="text-right px-2 w-[6.5rem]">SP Net</div>
+                  <div className="text-right px-2 w-[6.5rem]">HO Net</div>
+                  <div className="text-right px-2 w-[7.5rem]">Difference LC</div>
+                  <div className="text-right px-2 w-[7.5rem] text-violet-600">TAP</div>
+                  <div className="text-right px-2 w-[6.5rem]">totalAmountPaid</div>
+                  <div className="text-right px-2 w-[6rem] text-violet-600">Dispute</div>
+                  <div className="text-right px-2 w-[6.5rem] text-green-600">Balance Amt Payable</div>
+                  <div className="text-center px-2 w-10 pr-2">BIDs</div>
                 </div>
 
                 {filteredTids.map(tid => {
@@ -1378,22 +1379,26 @@ export function DiscrepancySummaryWorkspace({
                             <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
                           )}
                         </div>
-                        <div className="text-left px-3 w-[5.5rem]">
+                        <div className="text-left px-2 w-[4.5rem]">
                           {tid.fulfillmentMethods.length > 0 && (
                             <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
                           )}
                         </div>
-                        <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.spNet)}</div>
-                        <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right px-3 w-[9rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
-                        <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
-                        <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
-                        <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-green-600 font-medium">{fmt((() => {
+                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm">{fmt(tid.spNet)}</div>
+                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
+                        <div className="text-right px-2 w-[7.5rem]">
+                          <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
+                          <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
+                        </div>
+                        <div className="text-right px-2 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                        <div className="text-right px-2 w-[6rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm text-green-600 font-medium">{fmt((() => {
                           const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
                           const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
                           return tidTap - tidAmtPaid;
                         })())}</div>
-                        <div className="text-center px-3 w-14 text-sm pr-4">{tid.bidCount}</div>
+                        <div className="text-center px-2 w-10 text-sm pr-2">{tid.bidCount}</div>
                       </div>
 
                       {isExpanded && (
