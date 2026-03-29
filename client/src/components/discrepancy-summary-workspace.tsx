@@ -342,6 +342,7 @@ export function DiscrepancySummaryWorkspace({
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
   const isUnmapped = reason === "Unmapped";
+  const isReconciled = reason === "Reconciled";
   const UNMAPPED_TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(4.5rem,0.8fr) minmax(6.5rem,1fr)";
   const UNMAPPED_BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(8rem,1.5fr) minmax(6rem,1fr) minmax(7rem,1.2fr)";
 
@@ -890,9 +891,10 @@ export function DiscrepancySummaryWorkspace({
       <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col p-0 gap-0" data-testid="discrepancy-workspace">
         <div className="border-b px-5 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
+            {isReconciled && <CheckCircle2 className="h-4 w-4 text-green-600" />}
             {isUnmapped && <AlertTriangle className="h-4 w-4 text-orange-600" />}
             {isSecondaryVendor && <AlertTriangle className="h-4 w-4 text-amber-600" />}
-            <span className={`text-sm font-semibold ${isUnmapped ? "text-orange-800 dark:text-orange-300" : isSecondaryVendor ? "text-amber-800 dark:text-amber-300" : ""}`}>{reason}{isSecondaryVendor ? " (Secondary Vendor)" : ""}</span>
+            <span className={`text-sm font-semibold ${isReconciled ? "text-green-700 dark:text-green-400" : isUnmapped ? "text-orange-800 dark:text-orange-300" : isSecondaryVendor ? "text-amber-800 dark:text-amber-300" : ""}`}>{reason}{isSecondaryVendor ? " (Secondary Vendor)" : ""}</span>
             <Badge variant={isUnmapped ? "outline" : isSecondaryVendor ? "outline" : "secondary"} className={`text-xs ${isUnmapped ? "border-orange-300 text-orange-700 bg-orange-50" : isSecondaryVendor ? "border-amber-300 text-amber-700 bg-amber-50" : ""}`}>{tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
             <Badge variant="outline" className="text-xs">{tidGroups.length} TIDs</Badge>
           </div>
@@ -949,7 +951,7 @@ export function DiscrepancySummaryWorkspace({
         )}
 
         <div className="flex-1 overflow-auto flex flex-col min-h-0">
-          <div className="flex-shrink-0 border-b">
+          {!isReconciled && <div className="flex-shrink-0 border-b">
             <div
               className="flex items-center justify-between px-4 py-2 bg-violet-50/70 dark:bg-violet-950/30 border-b cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-950/50"
               onClick={() => setAnalysisOpen(!analysisOpen)}
@@ -1099,7 +1101,7 @@ export function DiscrepancySummaryWorkspace({
                 )}
               </div>
             )}
-          </div>
+          </div>}
 
           <div className="flex-1 overflow-auto px-4 pb-4 pt-2 space-y-3">
             <div className="flex items-center justify-between">

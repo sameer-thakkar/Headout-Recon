@@ -608,7 +608,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   };
 
   const handleReasonClick = (reason: string) => {
-    if (reason === "Reconciled") return;
     setSelectedReason(reason);
     setIsModalOpen(true);
   };
@@ -1004,7 +1003,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         })()}
                         {/* Regular summary rows */}
                         {processedSummary.rows.map((row, index) => {
-                          const isClickable = row.reason !== "Reconciled";
+                          const isClickable = true;
                           const isReconciled = row.reason === "Reconciled";
                           const usd = Math.abs(row.discrepancyUsd);
                           const severityClass = isReconciled ? "bg-green-500" : usd > 5000 ? "bg-red-500" : usd > 1000 ? "bg-amber-500" : usd > 0 ? "bg-blue-400" : "bg-green-500";
