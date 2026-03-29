@@ -338,28 +338,12 @@ export function DiscrepancySummaryWorkspace({
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
   const isUnmapped = reason === "Unmapped";
-  const ANALYSIS_GRID_COLUMNS = isUnmapped
-    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr)"
-    : isMTB
-    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
-    : isNPD
-    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(4.5rem,0.8fr) minmax(4rem,0.7fr) minmax(3.5rem,0.6fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
-    : "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)";
   const UNMAPPED_TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(4.5rem,0.8fr) minmax(6.5rem,1fr)";
   const UNMAPPED_BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(8rem,1.5fr) minmax(6rem,1fr) minmax(7rem,1.2fr)";
 
   useEffect(() => {
     setShowTidBreakdown(false);
   }, [reason]);
-
-  useEffect(() => {
-    if (isUnmapped && open && tidGroups.length > 0) {
-      const allBookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
-      const customPrices: Record<string, number> = {};
-      allBookingIds.forEach(id => { customPrices[id] = 0; });
-      priceOverrideMutation.mutate({ bookingIds: allBookingIds, selection: "sp", customPrices });
-    }
-  }, [isUnmapped, open, tidGroups.length]);
 
   const filteredAnalysis = useMemo(() => {
     if (!analysisRows || !reason) return [];
@@ -413,6 +397,15 @@ export function DiscrepancySummaryWorkspace({
     return { spBeId: first?.spBeId || "", hoBeId: first?.hoBeId || "" };
   }, [isSecondaryVendor, tidGroups]);
 
+  useEffect(() => {
+    if (isUnmapped && open && tidGroups.length > 0) {
+      const allBookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
+      const customPrices: Record<string, number> = {};
+      allBookingIds.forEach(id => { customPrices[id] = 0; });
+      priceOverrideMutation.mutate({ bookingIds: allBookingIds, selection: "sp", customPrices });
+    }
+  }, [isUnmapped, open, tidGroups.length]);
+
   const allVendorIdsConfirmed = useMemo(() => {
     if (!isSecondaryVendor) return true;
     return tidGroups.every(t => vendorIdConfirmed.has(t.tid));
@@ -423,6 +416,18 @@ export function DiscrepancySummaryWorkspace({
     const match = allRows.find(r => r.reason === reason && r.driTeam);
     return match?.driTeam || "Tech";
   }, [allRows, reason, isUnmapped, isSecondaryVendor]);
+
+  const ANALYSIS_GRID_COLUMNS = isUnmapped
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr)"
+    : isMTB
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
+    : isNPD
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(4.5rem,0.8fr) minmax(4rem,0.7fr) minmax(3.5rem,0.6fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
+    : isSecondaryVendor
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
+    : "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)";
+
+  const SV_TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(5rem,0.8fr) minmax(5rem,0.8fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
 
   const predictiveInsight = useMemo(() => {
     if (!reason || tidGroups.length === 0) return null;
@@ -675,6 +680,10 @@ export function DiscrepancySummaryWorkspace({
   }, [bookingSelections, getBookingFinalPrice, priceOverrideMutation, toast]);
 
   const handleTidSaveAll = useCallback((tid: TidGroup) => {
+    if (isSecondaryVendor && !vendorIdConfirmed.has(tid.tid)) {
+      toast({ title: "Vendor ID not confirmed", description: "Please confirm the Final Vendor ID before saving.", variant: "destructive" });
+      return;
+    }
     const customPrices: Record<string, number> = {};
     const bookingIds = tid.bookings.map(b => b.bookingId);
     tid.bookings.forEach(b => {
@@ -690,9 +699,13 @@ export function DiscrepancySummaryWorkspace({
         toast({ title: "Failed", description: String(err), variant: "destructive" });
       },
     });
-  }, [getBookingFinalPrice, priceOverrideMutation, toast]);
+  }, [getBookingFinalPrice, priceOverrideMutation, toast, isSecondaryVendor, vendorIdConfirmed]);
 
   const handleTidAction = useCallback((tid: TidGroup, action: "sp" | "ho") => {
+    if (isSecondaryVendor && !vendorIdConfirmed.has(tid.tid)) {
+      toast({ title: "Vendor ID not confirmed", description: "Please confirm the Final Vendor ID before applying.", variant: "destructive" });
+      return;
+    }
     const bookingIds = tid.bookings.map(b => b.bookingId);
     setBookingSelections(prev => {
       const next = { ...prev };
@@ -724,7 +737,7 @@ export function DiscrepancySummaryWorkspace({
         toast({ title: "Failed", description: String(err), variant: "destructive" });
       },
     });
-  }, [priceOverrideMutation, toast]);
+  }, [priceOverrideMutation, toast, isSecondaryVendor, vendorIdConfirmed]);
 
   const handleTidDispute = useCallback((tid: TidGroup) => {
     const bookingIds = tid.bookings.map(b => b.bookingId);
@@ -981,6 +994,12 @@ export function DiscrepancySummaryWorkspace({
                               <div className="text-xs font-medium text-center">Loss USD</div>
                             </>
                           )}
+                          {isSecondaryVendor && (
+                            <>
+                              <div className="text-xs font-medium text-center text-amber-700">SP BE</div>
+                              <div className="text-xs font-medium text-center text-amber-700">HO BE</div>
+                            </>
+                          )}
                           <div className="text-xs font-medium text-center">Start</div>
                           <div className="text-xs font-medium text-center">End</div>
                           <div className="text-xs font-medium text-center">BIDs w/ Disc</div>
@@ -1041,6 +1060,18 @@ export function DiscrepancySummaryWorkspace({
                                 </div>
                               </>
                             )}
+                            {isSecondaryVendor && (() => {
+                              const tidG = tidGroups.find(t => t.tid === row.tid);
+                              const spBe = tidG?.bookings[0]?.spBeId || "—";
+                              const hoBe = tidG?.bookings[0]?.hoBeId || "—";
+                              const mismatch = spBe !== hoBe;
+                              return (
+                                <>
+                                  <div className={`text-xs font-mono text-center truncate ${mismatch ? "text-amber-700 dark:text-amber-400 font-semibold" : ""}`} title={spBe}>{spBe}</div>
+                                  <div className={`text-xs font-mono text-center truncate ${mismatch ? "text-amber-700 dark:text-amber-400 font-semibold" : ""}`} title={hoBe}>{hoBe}</div>
+                                </>
+                              );
+                            })()}
                             <div className="text-xs font-mono text-center">{formatDate(row.startDate)}</div>
                             <div className="text-xs font-mono text-center">{formatDate(row.endDate)}</div>
                             <div className="text-xs font-mono text-center">{row.countBidWithDiscrepancy}</div>
@@ -1643,7 +1674,7 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-4" style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_TID_GRID_COLUMNS : TID_GRID_COLUMNS }}>
+                <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-4" style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_TID_GRID_COLUMNS : isSecondaryVendor ? SV_TID_GRID_COLUMNS : TID_GRID_COLUMNS }}>
                   <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
@@ -1657,6 +1688,12 @@ export function DiscrepancySummaryWorkspace({
                     </>
                   ) : (
                     <>
+                      {isSecondaryVendor && (
+                        <>
+                          <div className="text-center text-amber-700">SP BE</div>
+                          <div className="text-center text-amber-700">HO BE</div>
+                        </>
+                      )}
                       <div className="text-center">SP Net</div>
                       <div className="text-center">HO Net</div>
                       <div className="text-center">Difference LC</div>
@@ -1680,7 +1717,7 @@ export function DiscrepancySummaryWorkspace({
                     <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
                         className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-4 ${isExpanded ? "bg-muted/20" : ""}`}
-                        style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_TID_GRID_COLUMNS : TID_GRID_COLUMNS }}
+                        style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_TID_GRID_COLUMNS : isSecondaryVendor ? SV_TID_GRID_COLUMNS : TID_GRID_COLUMNS }}
                         onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                       >
                         <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
@@ -1710,6 +1747,17 @@ export function DiscrepancySummaryWorkspace({
                           </>
                         ) : (
                           <>
+                            {isSecondaryVendor && (() => {
+                              const spBe = tid.bookings[0]?.spBeId || "—";
+                              const hoBe = tid.bookings[0]?.hoBeId || "—";
+                              const mismatch = spBe !== hoBe;
+                              return (
+                                <>
+                                  <div className={`text-center font-mono text-xs truncate ${mismatch ? "text-amber-700 dark:text-amber-400 font-semibold" : ""}`} title={spBe}>{spBe}</div>
+                                  <div className={`text-center font-mono text-xs truncate ${mismatch ? "text-amber-700 dark:text-amber-400 font-semibold" : ""}`} title={hoBe}>{hoBe}</div>
+                                </>
+                              );
+                            })()}
                             <div className="text-center font-mono text-sm">{fmt(tid.spNet)}</div>
                             <div className="text-center font-mono text-sm">{fmt(tid.hoNet)}</div>
                             <div className="text-center">
@@ -1778,7 +1826,12 @@ export function DiscrepancySummaryWorkspace({
                                   className="h-6 text-[10px] font-mono w-36 border-amber-200"
                                   placeholder="Final Vendor ID"
                                   value={vendorIdCorrections[tid.tid] ?? (tid.bookings[0]?.spBeId || "")}
-                                  onChange={(e) => setVendorIdCorrections(prev => ({ ...prev, [tid.tid]: e.target.value }))}
+                                  onChange={(e) => {
+                                    setVendorIdCorrections(prev => ({ ...prev, [tid.tid]: e.target.value }));
+                                    if (vendorIdConfirmed.has(tid.tid)) {
+                                      setVendorIdConfirmed(prev => { const next = new Set(prev); next.delete(tid.tid); return next; });
+                                    }
+                                  }}
                                   data-testid={`sv-final-vendor-${tid.tid}`}
                                 />
                                 {vendorIdConfirmed.has(tid.tid) ? (
@@ -2260,7 +2313,7 @@ export function DiscrepancySummaryWorkspace({
                 {issueModalTid && (() => {
                   const t = issueModalTid;
                   const discLc = Math.abs(t.discLc);
-                  const discUsdTotal = t.bookings.reduce((s, b) => s + Math.abs(b.discrepancyUsd || 0), 0);
+                  const discUsdTotal = t.bookings.reduce((s, b) => s + Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)), 0);
                   const discPcts = t.bookings.map(b => {
                     const sp = Math.abs(b.spNetInHo || 0);
                     return sp > 0 ? Math.round((Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) / sp) * 100) : 0;
