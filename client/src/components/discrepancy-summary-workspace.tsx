@@ -878,6 +878,10 @@ export function DiscrepancySummaryWorkspace({
         setDisputePaxExpanded(null);
         setDisputePaxPrices({});
         setUnmappedResolutions({});
+        setUnmappedChoice({});
+        setUnmappedAllotment({});
+        setUnmappedOrderValue({});
+        setUnmappedConfirmed(new Set());
         setVendorIdCorrections({});
         setVendorIdConfirmed(new Set());
       }
