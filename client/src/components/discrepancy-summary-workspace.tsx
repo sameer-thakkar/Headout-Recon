@@ -334,11 +334,16 @@ export function DiscrepancySummaryWorkspace({
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
-  const ANALYSIS_GRID_COLUMNS = isMTB
+  const isUnmapped = reason === "Unmapped";
+  const ANALYSIS_GRID_COLUMNS = isUnmapped
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr)"
+    : isMTB
     ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
     : isNPD
     ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(4.5rem,0.8fr) minmax(4rem,0.7fr) minmax(3.5rem,0.6fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
     : "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)";
+  const UNMAPPED_TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(4.5rem,0.8fr) minmax(6.5rem,1fr)";
+  const UNMAPPED_BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(8rem,1.5fr) minmax(6rem,1fr)";
 
   useEffect(() => {
     setShowTidBreakdown(false);
@@ -386,9 +391,10 @@ export function DiscrepancySummaryWorkspace({
   }, [allRows, reason]);
 
   const detectedDriTeam = useMemo(() => {
+    if (isUnmapped) return "Supply";
     const match = allRows.find(r => r.reason === reason && r.driTeam);
     return match?.driTeam || "Tech";
-  }, [allRows, reason]);
+  }, [allRows, reason, isUnmapped]);
 
   const predictiveInsight = useMemo(() => {
     if (!reason || tidGroups.length === 0) return null;
@@ -844,10 +850,24 @@ export function DiscrepancySummaryWorkspace({
           </div>
         )}
 
-        {predictiveInsight && (
+        {predictiveInsight && !isUnmapped && (
           <div className="mx-4 mt-2 px-3 py-2 rounded-md border border-violet-200 dark:border-violet-700 bg-violet-50/50 dark:bg-violet-950/20 flex items-start gap-2 text-xs">
             <Sparkles className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 flex-shrink-0 mt-0.5" />
             <span className="text-violet-800 dark:text-violet-300">{predictiveInsight}</span>
+          </div>
+        )}
+
+        {isUnmapped && (
+          <div className="mx-4 mt-2 px-3 py-2.5 rounded-md border-2 border-orange-300 dark:border-orange-700 bg-orange-50/70 dark:bg-orange-950/30 flex items-start gap-2.5 text-xs" data-testid="unmapped-summary-banner">
+            <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-orange-800 dark:text-orange-300">
+                {tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings found in SP invoice but not in HO data.
+              </span>
+              <span className="ml-1 text-orange-700 dark:text-orange-400">
+                Total SP claim: <span className="font-mono font-bold">{fmt(tidGroups.reduce((s, t) => s + t.spNet, 0))}</span>
+              </span>
+            </div>
           </div>
         )}
 
@@ -883,29 +903,41 @@ export function DiscrepancySummaryWorkspace({
                       style={{ gridTemplateColumns: ANALYSIS_GRID_COLUMNS }}
                     >
                       <div className="text-xs font-medium text-center text-violet-700 dark:text-violet-300">TID</div>
-                      <div className="text-xs font-medium text-center">Disc. USD</div>
-                      <div className="text-xs font-medium text-center">Fulfilment</div>
-                      {isMTB && (
+                      {isUnmapped ? (
                         <>
-                          <div className="text-xs font-medium text-center">Times Charged</div>
+                          <div className="text-xs font-medium text-center">SP Net USD</div>
+                          <div className="text-xs font-medium text-center">Fulfilment</div>
                           <div className="text-xs font-medium text-center">BID Count</div>
-                          <div className="text-xs font-medium text-center">BID Count Dur.</div>
-                          <div className="text-xs font-medium text-center">DRI Team</div>
+                          <div className="text-xs font-medium text-center">Start</div>
+                          <div className="text-xs font-medium text-center">End</div>
                         </>
-                      )}
-                      {isNPD && (
+                      ) : (
                         <>
-                          <div className="text-xs font-medium text-center">HO Rate</div>
-                          <div className="text-xs font-medium text-center">Actual</div>
-                          <div className="text-xs font-medium text-center">Disc %</div>
-                          <div className="text-xs font-medium text-center">Loss?</div>
-                          <div className="text-xs font-medium text-center">Loss USD</div>
+                          <div className="text-xs font-medium text-center">Disc. USD</div>
+                          <div className="text-xs font-medium text-center">Fulfilment</div>
+                          {isMTB && (
+                            <>
+                              <div className="text-xs font-medium text-center">Times Charged</div>
+                              <div className="text-xs font-medium text-center">BID Count</div>
+                              <div className="text-xs font-medium text-center">BID Count Dur.</div>
+                              <div className="text-xs font-medium text-center">DRI Team</div>
+                            </>
+                          )}
+                          {isNPD && (
+                            <>
+                              <div className="text-xs font-medium text-center">HO Rate</div>
+                              <div className="text-xs font-medium text-center">Actual</div>
+                              <div className="text-xs font-medium text-center">Disc %</div>
+                              <div className="text-xs font-medium text-center">Loss?</div>
+                              <div className="text-xs font-medium text-center">Loss USD</div>
+                            </>
+                          )}
+                          <div className="text-xs font-medium text-center">Start</div>
+                          <div className="text-xs font-medium text-center">End</div>
+                          <div className="text-xs font-medium text-center">BIDs w/ Disc</div>
+                          <div className="text-xs font-medium text-center">BIDs Dur.</div>
                         </>
                       )}
-                      <div className="text-xs font-medium text-center">Start</div>
-                      <div className="text-xs font-medium text-center">End</div>
-                      <div className="text-xs font-medium text-center">BIDs w/ Disc</div>
-                      <div className="text-xs font-medium text-center">BIDs Dur.</div>
                     </div>
                     {filteredAnalysis.map((row, i) => (
                       <div
@@ -921,39 +953,51 @@ export function DiscrepancySummaryWorkspace({
                             {row.tid}
                           </div>
                         </div>
-                        <div className="text-xs font-mono text-center text-red-600 dark:text-red-400">{fmt(row.discrepancyUsd)}</div>
-                        <div className="text-xs text-center truncate">{row.fulfillmentMethod}</div>
-                        {isMTB && (
+                        {isUnmapped ? (
                           <>
-                            <div className="text-xs font-mono text-center">{row.timesCharged}</div>
+                            <div className="text-xs font-mono text-center text-blue-600 dark:text-blue-400">{fmt(row.discrepancyUsd ? Math.abs(row.discrepancyUsd) : 0)}</div>
+                            <div className="text-xs text-center truncate">{row.fulfillmentMethod}</div>
+                            <div className="text-xs font-mono text-center">{row.countBidWithDiscrepancy}</div>
+                            <div className="text-xs font-mono text-center">{formatDate(row.startDate)}</div>
+                            <div className="text-xs font-mono text-center">{formatDate(row.endDate)}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-xs font-mono text-center text-red-600 dark:text-red-400">{fmt(row.discrepancyUsd)}</div>
+                            <div className="text-xs text-center truncate">{row.fulfillmentMethod}</div>
+                            {isMTB && (
+                              <>
+                                <div className="text-xs font-mono text-center">{row.timesCharged}</div>
+                                <div className="text-xs font-mono text-center">{row.countBidWithDiscrepancy}</div>
+                                <div className="text-xs font-mono text-center">{row.countBidsInDuration}</div>
+                                <div className="text-xs text-center truncate">{row.driTeam}</div>
+                              </>
+                            )}
+                            {isNPD && (
+                              <>
+                                <div className="text-xs font-mono text-center">{row.hoTakeRatePercent?.toFixed(2) ?? "—"}%</div>
+                                <div className={`text-xs font-mono text-center ${(row.actualTakeRatePercent ?? 0) < 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
+                                  {row.actualTakeRatePercent?.toFixed(2) ?? "—"}%
+                                </div>
+                                <div className={`text-xs font-mono text-center ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
+                                  {row.discrepancyPercentRange || "—"}
+                                </div>
+                                <div className="text-xs text-center">
+                                  <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0">
+                                    {row.soldAtLoss || "—"}
+                                  </Badge>
+                                </div>
+                                <div className={`text-xs font-mono text-center ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
+                                  {row.lossUsd != null ? fmt(row.lossUsd) : "—"}
+                                </div>
+                              </>
+                            )}
+                            <div className="text-xs font-mono text-center">{formatDate(row.startDate)}</div>
+                            <div className="text-xs font-mono text-center">{formatDate(row.endDate)}</div>
                             <div className="text-xs font-mono text-center">{row.countBidWithDiscrepancy}</div>
                             <div className="text-xs font-mono text-center">{row.countBidsInDuration}</div>
-                            <div className="text-xs text-center truncate">{row.driTeam}</div>
                           </>
                         )}
-                        {isNPD && (
-                          <>
-                            <div className="text-xs font-mono text-center">{row.hoTakeRatePercent?.toFixed(2) ?? "—"}%</div>
-                            <div className={`text-xs font-mono text-center ${(row.actualTakeRatePercent ?? 0) < 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
-                              {row.actualTakeRatePercent?.toFixed(2) ?? "—"}%
-                            </div>
-                            <div className={`text-xs font-mono text-center ${row.discrepancyPercentRange?.startsWith("-") ? "text-red-600 dark:text-red-400" : ""}`}>
-                              {row.discrepancyPercentRange || "—"}
-                            </div>
-                            <div className="text-xs text-center">
-                              <Badge variant={row.soldAtLoss === "Yes" ? "destructive" : "secondary"} className="text-[10px] px-1.5 py-0">
-                                {row.soldAtLoss || "—"}
-                              </Badge>
-                            </div>
-                            <div className={`text-xs font-mono text-center ${(row.lossUsd ?? 0) > 0 ? "text-red-600 dark:text-red-400 font-semibold" : ""}`}>
-                              {row.lossUsd != null ? fmt(row.lossUsd) : "—"}
-                            </div>
-                          </>
-                        )}
-                        <div className="text-xs font-mono text-center">{formatDate(row.startDate)}</div>
-                        <div className="text-xs font-mono text-center">{formatDate(row.endDate)}</div>
-                        <div className="text-xs font-mono text-center">{row.countBidWithDiscrepancy}</div>
-                        <div className="text-xs font-mono text-center">{row.countBidsInDuration}</div>
                       </div>
                     ))}
                   </div>
@@ -978,10 +1022,30 @@ export function DiscrepancySummaryWorkspace({
               <div className="rounded-lg border bg-muted/30 dark:bg-muted/10 px-4 py-3 flex items-center gap-4 flex-wrap">
                 <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tidGroups.length} TIDs:</span>
                 <div className="h-4 w-px bg-border" />
-                <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); setDisputePaxExpanded(null); setDisputePaxPrices({}); }} data-testid="take-action-btn">
-                  <Zap className="h-3.5 w-3.5" /> Take Action
-                </Button>
-                <span className="text-xs text-muted-foreground">Set price, raise disputes &amp; log issues in one guided flow</span>
+                {isUnmapped ? (
+                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0" onClick={() => {
+                    const allBookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
+                    const customPrices: Record<string, number> = {};
+                    allBookingIds.forEach(id => { customPrices[id] = 0; });
+                    priceOverrideMutation.mutate({ bookingIds: allBookingIds, selection: "sp", customPrices }, {
+                      onSuccess: () => {
+                        resolveMultiple(tidGroups.map(t => t.tid));
+                        flash(`${tidGroups.length} TIDs → TAP set to 0 (unmapped)`);
+                        toast({ title: "Unmapped bookings resolved", description: `TAP set to 0 for ${allBookingIds.length} bookings` });
+                      },
+                      onError: (err) => {
+                        toast({ title: "Failed to apply", description: String(err), variant: "destructive" });
+                      },
+                    });
+                  }} disabled={priceOverrideMutation.isPending} data-testid="unmapped-set-tap-zero">
+                    {priceOverrideMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />} Set TAP = 0
+                  </Button>
+                ) : (
+                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); setDisputePaxExpanded(null); setDisputePaxPrices({}); }} data-testid="take-action-btn">
+                    <Zap className="h-3.5 w-3.5" /> Take Action
+                  </Button>
+                )}
+                <span className="text-xs text-muted-foreground">{isUnmapped ? "Bookings not in HO data — TAP defaults to 0" : "Set price, raise disputes & log issues in one guided flow"}</span>
               </div>
             )}
 
@@ -1400,18 +1464,26 @@ export function DiscrepancySummaryWorkspace({
                   <span className="text-sm font-semibold">{selectedTids.size} TIDs selected</span>
                 </div>
                 <div className="h-5 w-px bg-border" />
-                <Button size="sm" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openSelectionAction("sp")}>
-                  <TrendingUp className="h-3 w-3" /> SP Net
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openSelectionAction("ho")}>
-                  <TrendingDown className="h-3 w-3" /> HO Net
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openSelectionAction("dispute")}>
-                  <Gavel className="h-3 w-3" /> Dispute
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => openSelectionAction("issue")}>
-                  <FileWarning className="h-3 w-3" /> Issue
-                </Button>
+                {isUnmapped ? (
+                  <Button size="sm" className="h-7 text-xs gap-1 bg-orange-600 hover:bg-orange-700 text-white" onClick={() => openSelectionAction("issue")}>
+                    <FileWarning className="h-3 w-3" /> Issue
+                  </Button>
+                ) : (
+                  <>
+                    <Button size="sm" className="h-7 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => openSelectionAction("sp")}>
+                      <TrendingUp className="h-3 w-3" /> SP Net
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openSelectionAction("ho")}>
+                      <TrendingDown className="h-3 w-3" /> HO Net
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => openSelectionAction("dispute")}>
+                      <Gavel className="h-3 w-3" /> Dispute
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => openSelectionAction("issue")}>
+                      <FileWarning className="h-3 w-3" /> Issue
+                    </Button>
+                  </>
+                )}
                 <div className="flex-1" />
                 <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedTids(new Set())}>
                   <XIcon className="h-3 w-3 mr-1" /> Clear
@@ -1529,21 +1601,30 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-4" style={{ gridTemplateColumns: TID_GRID_COLUMNS }}>
+                <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-4" style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_TID_GRID_COLUMNS : TID_GRID_COLUMNS }}>
                   <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
                   <div />
                   <div>TID</div>
                   <div className="text-center">Fulfillment</div>
-                  <div className="text-center">SP Net</div>
-                  <div className="text-center">HO Net</div>
-                  <div className="text-center">Difference LC</div>
-                  <div className="text-center text-violet-600">Total Amount Payable</div>
-                  <div className="text-center">Amount Paid</div>
-                  <div className="text-center text-violet-600">Dispute</div>
-                  <div className="text-center text-green-600">Balance Amt Payable</div>
-                  <div className="text-center">BIDs</div>
+                  {isUnmapped ? (
+                    <>
+                      <div className="text-center">BIDs</div>
+                      <div className="text-center text-blue-600">SP Net</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-center">SP Net</div>
+                      <div className="text-center">HO Net</div>
+                      <div className="text-center">Difference LC</div>
+                      <div className="text-center text-violet-600">Total Amount Payable</div>
+                      <div className="text-center">Amount Paid</div>
+                      <div className="text-center text-violet-600">Dispute</div>
+                      <div className="text-center text-green-600">Balance Amt Payable</div>
+                      <div className="text-center">BIDs</div>
+                    </>
+                  )}
                 </div>
 
                 {filteredTids.map(tid => {
@@ -1557,7 +1638,7 @@ export function DiscrepancySummaryWorkspace({
                     <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
                         className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-4 ${isExpanded ? "bg-muted/20" : ""}`}
-                        style={{ gridTemplateColumns: TID_GRID_COLUMNS }}
+                        style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_TID_GRID_COLUMNS : TID_GRID_COLUMNS }}
                         onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                       >
                         <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
@@ -1569,7 +1650,7 @@ export function DiscrepancySummaryWorkspace({
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
-                            {tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
+                            {!isUnmapped && tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
                           </div>
                           {(tid.bookings[0]?.experienceName || tid.bookings[0]?.productName) && (
                             <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
@@ -1580,63 +1661,111 @@ export function DiscrepancySummaryWorkspace({
                             <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
                           )}
                         </div>
-                        <div className="text-center font-mono text-sm">{fmt(tid.spNet)}</div>
-                        <div className="text-center font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-center">
-                          <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
-                          <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
-                        </div>
-                        <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
-                        <div className="text-center font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
-                        <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
-                        <div className="text-center font-mono text-sm text-green-600 font-medium">{fmt((() => {
-                          const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
-                          const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
-                          return tidTap - tidAmtPaid;
-                        })())}</div>
-                        <div className="text-center text-sm">{tid.bidCount}</div>
+                        {isUnmapped ? (
+                          <>
+                            <div className="text-center text-sm">{tid.bidCount}</div>
+                            <div className="text-center font-mono text-sm text-blue-600">{fmt(tid.spNet)}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-center font-mono text-sm">{fmt(tid.spNet)}</div>
+                            <div className="text-center font-mono text-sm">{fmt(tid.hoNet)}</div>
+                            <div className="text-center">
+                              <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
+                              <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
+                            </div>
+                            <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                            <div className="text-center font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                            <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                            <div className="text-center font-mono text-sm text-green-600 font-medium">{fmt((() => {
+                              const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
+                              const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
+                              return tidTap - tidAmtPaid;
+                            })())}</div>
+                            <div className="text-center text-sm">{tid.bidCount}</div>
+                          </>
+                        )}
                       </div>
 
                       {isExpanded && (
                         <div className="border-b bg-muted/10 dark:bg-muted/5 px-4 py-3 space-y-3">
-                          <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 flex-wrap">
-                            <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTidAction(tid, "sp")} disabled={priceOverrideMutation.isPending} data-testid={`tid-sp-net-${tid.tid}`}>
-                              {priceOverrideMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5" />} Set SP Net
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => handleTidAction(tid, "ho")} disabled={priceOverrideMutation.isPending} data-testid={`tid-ho-net-${tid.tid}`}>
-                              <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50" onClick={() => {
-                              setPaxTid(tid);
-                              setPaxOpen(true);
-                            }} data-testid={`tid-pax-${tid.tid}`}>
-                              <Calculator className="h-3.5 w-3.5" /> Pax Pricing
-                            </Button>
-                            <div className="flex-1" />
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => handleTidDispute(tid)} disabled={disputeMutation.isPending} data-testid={`tid-dispute-${tid.tid}`}>
-                              <Gavel className="h-3.5 w-3.5" /> Dispute
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
-                              <FileWarning className="h-3.5 w-3.5" /> Issue
-                            </Button>
-                          </div>
+                          {isUnmapped ? (
+                            <div className="flex items-center gap-2 p-2 rounded-md bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 flex-wrap">
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
+                                <FileWarning className="h-3.5 w-3.5" /> Raise Issue
+                              </Button>
+                              <span className="text-[11px] text-muted-foreground">TAP = 0 for unmapped bookings</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 flex-wrap">
+                              <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTidAction(tid, "sp")} disabled={priceOverrideMutation.isPending} data-testid={`tid-sp-net-${tid.tid}`}>
+                                {priceOverrideMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5" />} Set SP Net
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => handleTidAction(tid, "ho")} disabled={priceOverrideMutation.isPending} data-testid={`tid-ho-net-${tid.tid}`}>
+                                <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50" onClick={() => {
+                                setPaxTid(tid);
+                                setPaxOpen(true);
+                              }} data-testid={`tid-pax-${tid.tid}`}>
+                                <Calculator className="h-3.5 w-3.5" /> Pax Pricing
+                              </Button>
+                              <div className="flex-1" />
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => handleTidDispute(tid)} disabled={disputeMutation.isPending} data-testid={`tid-dispute-${tid.tid}`}>
+                                <Gavel className="h-3.5 w-3.5" /> Dispute
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
+                                <FileWarning className="h-3.5 w-3.5" /> Issue
+                              </Button>
+                            </div>
+                          )}
 
                           <div className="rounded-md border overflow-hidden bg-background text-[11px]">
-                            <div className="grid items-center h-7 bg-muted/30 border-b gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                            <div className="grid items-center h-7 bg-muted/30 border-b gap-x-4 px-3" style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_BID_GRID_COLUMNS : BID_GRID_COLUMNS }}>
                               <div className="text-left font-medium text-muted-foreground whitespace-nowrap">Booking ID</div>
                               <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Ticket ID</div>
-                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">SP Net</div>
-                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">HO Net</div>
-                              <div className="text-center font-medium text-red-600 whitespace-nowrap">Diff LC</div>
-                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Selection</div>
-                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Dispute</div>
-                              <div className="text-center font-medium text-violet-600 whitespace-nowrap">Total Amount Payable</div>
-                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Amount Paid</div>
-                              <div className="text-center font-medium text-orange-600 whitespace-nowrap">Dispute Amt</div>
-                              <div className="text-center font-medium text-green-600 whitespace-nowrap">Balance Amt Payable</div>
-                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap"></div>
+                              <div className="text-center font-medium text-blue-600 whitespace-nowrap">SP Net</div>
+                              {isUnmapped ? (
+                                <>
+                                  <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Product Name</div>
+                                  <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Experience Date</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="text-center font-medium text-muted-foreground whitespace-nowrap">HO Net</div>
+                                  <div className="text-center font-medium text-red-600 whitespace-nowrap">Diff LC</div>
+                                  <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Selection</div>
+                                  <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Dispute</div>
+                                  <div className="text-center font-medium text-violet-600 whitespace-nowrap">Total Amount Payable</div>
+                                  <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Amount Paid</div>
+                                  <div className="text-center font-medium text-orange-600 whitespace-nowrap">Dispute Amt</div>
+                                  <div className="text-center font-medium text-green-600 whitespace-nowrap">Balance Amt Payable</div>
+                                  <div className="text-center font-medium text-muted-foreground whitespace-nowrap"></div>
+                                </>
+                              )}
                             </div>
                             {tid.bookings.map(b => {
+                              if (isUnmapped) {
+                                return (
+                                  <div key={b.bookingId} className="grid items-center min-h-[2.25rem] border-b last:border-0 hover:bg-muted/20 gap-x-4 px-3" style={{ gridTemplateColumns: UNMAPPED_BID_GRID_COLUMNS }} data-testid={`booking-row-${b.bookingId}`}>
+                                    <div className="text-left py-1 min-w-0">
+                                      <span className="font-mono text-primary font-medium">{b.bookingId}</span>
+                                    </div>
+                                    <div className="text-center py-1 text-muted-foreground truncate" title={b.ticketId || ""}>
+                                      {b.ticketId || "—"}
+                                    </div>
+                                    <div className="text-center py-1 font-mono text-blue-600">
+                                      {fmt(b.spNetInHo || 0)}
+                                    </div>
+                                    <div className="text-center py-1 text-muted-foreground truncate" title={b.experienceName || ""}>
+                                      {b.experienceName || "—"}
+                                    </div>
+                                    <div className="text-center py-1 font-mono text-muted-foreground">
+                                      {b.experienceDate ? formatDate(b.experienceDate) : "—"}
+                                    </div>
+                                  </div>
+                                );
+                              }
                               const selection = getBidSelection(b.bookingId);
                               const canDispute = selection === "sp" || selection === "custom";
                               const finalNet = getBidFinalNet(b);
@@ -1775,9 +1904,13 @@ export function DiscrepancySummaryWorkspace({
                                 </div>
                               );
                             })}
-                            <div className="grid items-center h-8 bg-muted/40 border-t font-semibold gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                            <div className="grid items-center h-8 bg-muted/40 border-t font-semibold gap-x-4 px-3" style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_BID_GRID_COLUMNS : BID_GRID_COLUMNS }}>
                               <div className="py-1 text-muted-foreground" style={{ gridColumn: "span 2" }}>Total ({tid.bookings.length})</div>
                               <div className="text-center py-1 font-mono text-blue-600">{fmt(tid.spNet)}</div>
+                              {isUnmapped ? (
+                                <div className="text-center py-1" style={{ gridColumn: "span 2" }} />
+                              ) : (
+                              <>
                               <div className="text-center py-1 font-mono text-green-600">{fmt(tid.hoNet)}</div>
                               <div className="text-center py-1 font-mono text-red-600 dark:text-red-400 font-bold">{fmt(Math.round((tid.hoNet - tid.spNet) * 100) / 100)}</div>
                               <div className="text-center py-1" style={{ gridColumn: "span 2" }}>
@@ -1821,6 +1954,8 @@ export function DiscrepancySummaryWorkspace({
                                   </button>
                                 )}
                               </div>
+                              </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2134,9 +2269,13 @@ export function DiscrepancySummaryWorkspace({
         <div className="border-t bg-muted/30 dark:bg-muted/10 px-5 py-2 flex items-center justify-between flex-shrink-0 text-xs">
           <span className="text-muted-foreground">{tidGroups.length} TIDs · {tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings</span>
           <div className="flex items-center gap-4">
-            <span><span className="text-muted-foreground mr-1">SP</span><span className="font-mono font-medium text-blue-700 dark:text-blue-400">{fmt(tidGroups.reduce((s, t) => s + t.spNet, 0))}</span></span>
-            <span><span className="text-muted-foreground mr-1">HO</span><span className="font-mono font-medium text-green-700 dark:text-green-400">{fmt(tidGroups.reduce((s, t) => s + t.hoNet, 0))}</span></span>
-            <span><span className="text-muted-foreground mr-1">Disc.</span><span className="font-mono font-semibold text-red-600 dark:text-red-400">{fmt(tidGroups.reduce((s, t) => s + Math.abs(t.discLc), 0))}</span></span>
+            <span><span className="text-muted-foreground mr-1">SP Net</span><span className="font-mono font-medium text-blue-700 dark:text-blue-400">{fmt(tidGroups.reduce((s, t) => s + t.spNet, 0))}</span></span>
+            {!isUnmapped && (
+              <>
+                <span><span className="text-muted-foreground mr-1">HO</span><span className="font-mono font-medium text-green-700 dark:text-green-400">{fmt(tidGroups.reduce((s, t) => s + t.hoNet, 0))}</span></span>
+                <span><span className="text-muted-foreground mr-1">Disc.</span><span className="font-mono font-semibold text-red-600 dark:text-red-400">{fmt(tidGroups.reduce((s, t) => s + Math.abs(t.discLc), 0))}</span></span>
+              </>
+            )}
           </div>
         </div>
       </DialogContent>
