@@ -1530,7 +1530,7 @@ export function DiscrepancySummaryWorkspace({
                                         <input
                                           type="number"
                                           step="0.01"
-                                          value={finalNet}
+                                          value={finalNet.toFixed(2)}
                                           readOnly
                                           className="w-28 h-5 text-xs text-center font-mono bg-transparent border-0 cursor-default"
                                           onClick={() => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: String(finalNet) }))}
