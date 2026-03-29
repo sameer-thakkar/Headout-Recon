@@ -1345,7 +1345,7 @@ export function DiscrepancySummaryWorkspace({
                   <div className="text-center">SP Net</div>
                   <div className="text-center">HO Net</div>
                   <div className="text-center">Difference LC</div>
-                  <div className="text-center text-violet-600">TAP</div>
+                  <div className="text-center text-violet-600">Total Amount Payable</div>
                   <div className="text-center">totalAmountPaid</div>
                   <div className="text-center text-violet-600">Dispute</div>
                   <div className="text-center text-green-600">Balance Amt Payable</div>
