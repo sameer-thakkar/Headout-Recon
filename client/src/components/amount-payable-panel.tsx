@@ -1368,8 +1368,11 @@ export function AmountPayablePanel({
       }
       grouped[booking.reason].push(booking);
     }
+    if (reconciledBookings.length > 0) {
+      grouped["Reconciled"] = reconciledBookings;
+    }
     return grouped;
-  }, [discrepancyBookings]);
+  }, [discrepancyBookings, reconciledBookings]);
 
   const bookingsByReasonAndTid = useMemo(() => {
     const result: Record<string, Record<string, BookingForPayable[]>> = {};
@@ -3014,6 +3017,18 @@ export function AmountPayablePanel({
                 <Check className="h-4 w-4 text-green-600" />
                 <span className="text-sm font-medium">Reconciled</span>
                 <Badge variant="secondary" className="text-xs">{reconciledBookings.length}</Badge>
+                {reconciledBookings.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => reasonModalRef.current?.open("Reconciled", "discrepancy")}
+                    data-testid="button-manage-reason-Reconciled"
+                  >
+                    <Settings className="h-3 w-3 mr-1" />
+                    Manage
+                  </Button>
+                )}
               </div>
               <div className="col-span-6 text-right">
                 <span className="text-sm font-mono font-semibold" data-testid="text-reconciled-total">
