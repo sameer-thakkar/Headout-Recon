@@ -804,7 +804,11 @@ export async function registerRoutes(
       if (!runId || !overrides || typeof overrides !== "object") {
         return res.status(400).json({ error: "runId and overrides required" });
       }
-      await storage.setPriceOverrides(runId, overrides);
+      const clampedOverrides: Record<string, { totalAmountPayable: number; selection?: string }> = {};
+      for (const [key, val] of Object.entries(overrides as Record<string, { totalAmountPayable: number; selection?: string }>)) {
+        clampedOverrides[key] = { ...val, totalAmountPayable: Math.max(0, val.totalAmountPayable) };
+      }
+      await storage.setPriceOverrides(runId, clampedOverrides);
       res.json({ success: true });
     } catch (error) {
       console.error("Set price overrides error:", error);
