@@ -103,7 +103,7 @@ export function DiscrepancySummaryWorkspace({
   billingEntityName,
   currency,
 }: DiscrepancySummaryWorkspaceProps) {
-  const TID_GRID_COLUMNS = "1.75rem 1.25rem 1fr minmax(4.5rem,auto) minmax(6.5rem,auto) minmax(6.5rem,auto) minmax(6.5rem,auto) minmax(6.5rem,auto) minmax(6.5rem,auto) minmax(6.5rem,auto) minmax(6.5rem,auto) minmax(2.5rem,auto)";
+  const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
   const { toast } = useToast();
   const [analysisOpen, setAnalysisOpen] = useState(true);
   const [expandedTid, setExpandedTid] = useState<string | null>(null);
