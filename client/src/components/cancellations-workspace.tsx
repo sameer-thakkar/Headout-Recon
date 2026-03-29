@@ -164,6 +164,22 @@ const CANCELLATION_ACTION_POINTS: Record<string, string> = {
 
 const CANCELLATION_FULFILLMENT_SPLIT = new Set(["Cancelled-SP error", "Cancelled-Check for Charge loss"]);
 
+const CANCELLATION_TAP_RULES: Record<string, { source: "sp" | "zero"; hint: string }> = {
+  "Cancelled-Check for Charge loss": { source: "sp", hint: "SP Net — verify charge loss" },
+  "Cancelled-SP error": { source: "sp", hint: "SP Net — SP error, pay invoice amount" },
+  "Cancelled-Insured Booking": { source: "sp", hint: "SP Net — covered by insurance" },
+  "Cancelled-DSS policy": { source: "sp", hint: "SP Net — covered under DSS policy" },
+  "Cancelled-OK": { source: "zero", hint: "Zero — cancellation accepted, no payment" },
+  "Cancelled-Refund OK": { source: "zero", hint: "Zero — refund processed, no payment" },
+};
+
+function getRuleTap(subCategory: string, spNetLc: number, disputeAmt: number): number {
+  const rule = CANCELLATION_TAP_RULES[subCategory];
+  if (!rule) return Math.max(0, Math.abs(spNetLc) - disputeAmt);
+  if (rule.source === "zero") return 0;
+  return Math.max(0, Math.abs(spNetLc) - disputeAmt);
+}
+
 function getCancellationDriTeam(reason: string, fulfillmentMethod: string): string {
   const noAction = ["Cancelled-OK", "Cancelled-Refund OK", "Cancelled-Insured Booking", "Cancelled-DSS policy"];
   if (noAction.includes(reason)) return "N/A";
@@ -1383,8 +1399,8 @@ export function CancellationsWorkspace({
                   <TableBody>
                     {breakupRows.map(row => {
                       const disputeAmt = liveDispute(row.rowKey);
-                      const absSpNet = Math.abs(row.spNetLc);
-                      const defaultTap = Math.max(0, absSpNet - disputeAmt);
+                      const defaultTap = getRuleTap(row.subCategory, row.spNetLc, disputeAmt);
+                      const tapRule = CANCELLATION_TAP_RULES[row.subCategory];
                       const tapStr = tapOverrides[row.rowKey] !== undefined
                         ? tapOverrides[row.rowKey]
                         : defaultTap.toFixed(2);
@@ -1415,30 +1431,37 @@ export function CancellationsWorkspace({
                             }
                           </TableCell>
                           <TableCell className="py-1 pr-3">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Input
-                                className="h-6 w-28 text-right text-xs font-mono py-0 px-2"
-                                value={tapStr}
-                                onChange={e => {
-                                  setTapOverrides(prev => ({ ...prev, [row.rowKey]: e.target.value }));
-                                  setTapConfirmedRows(prev => { const n = new Set(prev); n.delete(row.rowKey); return n; });
-                                }}
-                                data-testid={`tap-input-${row.rowKey}`}
-                              />
-                              <Button
-                                size="sm"
-                                variant={isConfirmed ? "ghost" : "outline"}
-                                className={`h-6 w-6 p-0 shrink-0 ${isConfirmed ? "text-green-600 hover:text-green-700" : ""}`}
-                                onClick={() => {
-                                  const parsed = parseFloat(tapStr);
-                                  setTapOverrides(prev => ({ ...prev, [row.rowKey]: isNaN(parsed) ? "0.00" : parsed.toFixed(2) }));
-                                  setTapConfirmedRows(prev => new Set(prev).add(row.rowKey));
-                                }}
-                                title={isConfirmed ? "Confirmed" : "Confirm this amount"}
-                                data-testid={`tap-confirm-${row.rowKey}`}
-                              >
-                                <Check className="h-3 w-3" />
-                              </Button>
+                            <div className="flex flex-col items-end gap-0.5">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Input
+                                  className="h-6 w-28 text-right text-xs font-mono py-0 px-2"
+                                  value={tapStr}
+                                  onChange={e => {
+                                    setTapOverrides(prev => ({ ...prev, [row.rowKey]: e.target.value }));
+                                    setTapConfirmedRows(prev => { const n = new Set(prev); n.delete(row.rowKey); return n; });
+                                  }}
+                                  data-testid={`tap-input-${row.rowKey}`}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant={isConfirmed ? "ghost" : "outline"}
+                                  className={`h-6 w-6 p-0 shrink-0 ${isConfirmed ? "text-green-600 hover:text-green-700" : ""}`}
+                                  onClick={() => {
+                                    const parsed = parseFloat(tapStr);
+                                    setTapOverrides(prev => ({ ...prev, [row.rowKey]: isNaN(parsed) ? "0.00" : parsed.toFixed(2) }));
+                                    setTapConfirmedRows(prev => new Set(prev).add(row.rowKey));
+                                  }}
+                                  title={isConfirmed ? "Confirmed" : "Confirm this amount"}
+                                  data-testid={`tap-confirm-${row.rowKey}`}
+                                >
+                                  <Check className="h-3 w-3" />
+                                </Button>
+                              </div>
+                              {tapRule && (
+                                <span className="text-[9px] text-muted-foreground italic leading-tight" data-testid={`tap-hint-${row.rowKey}`}>
+                                  {tapRule.hint}
+                                </span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="py-1 pr-3 text-center">
@@ -1487,7 +1510,7 @@ export function CancellationsWorkspace({
                       <td className="py-2 text-right font-mono pr-2">
                         {fmt(breakupRows.reduce((s, r) => {
                           const d = liveDispute(r.rowKey);
-                          const def = Math.max(0, Math.abs(r.spNetLc) - d);
+                          const def = getRuleTap(r.subCategory, r.spNetLc, d);
                           return s + (parseFloat(tapOverrides[r.rowKey] ?? def.toFixed(2)) || 0);
                         }, 0))}
                       </td>
