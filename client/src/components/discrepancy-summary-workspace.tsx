@@ -419,12 +419,12 @@ export function DiscrepancySummaryWorkspace({
 
   const ANALYSIS_GRID_COLUMNS = isUnmapped
     ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr)"
+    : isSecondaryVendor
+    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
     : isMTB
     ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
     : isNPD
     ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(4.5rem,0.8fr) minmax(4rem,0.7fr) minmax(3.5rem,0.6fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
-    : isSecondaryVendor
-    ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
     : "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)";
 
   const SV_TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(5rem,0.8fr) minmax(5rem,0.8fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
