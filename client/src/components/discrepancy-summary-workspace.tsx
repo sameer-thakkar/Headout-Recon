@@ -279,7 +279,7 @@ export function DiscrepancySummaryWorkspace({
   currency,
 }: DiscrepancySummaryWorkspaceProps) {
   const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
-  const BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
+  const BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
   const { toast } = useToast();
   const [analysisOpen, setAnalysisOpen] = useState(true);
   const [expandedTid, setExpandedTid] = useState<string | null>(null);
@@ -1627,6 +1627,7 @@ export function DiscrepancySummaryWorkspace({
                               <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Ticket ID</div>
                               <div className="text-center font-medium text-muted-foreground whitespace-nowrap">SP Net</div>
                               <div className="text-center font-medium text-muted-foreground whitespace-nowrap">HO Net</div>
+                              <div className="text-center font-medium text-red-600 whitespace-nowrap">Diff LC</div>
                               <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Selection</div>
                               <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Dispute</div>
                               <div className="text-center font-medium text-violet-600 whitespace-nowrap">Total Amount Payable</div>
@@ -1669,6 +1670,9 @@ export function DiscrepancySummaryWorkspace({
                                   </div>
                                   <div className="text-center py-1 font-mono text-green-600" data-testid={`booking-ho-${b.bookingId}`}>
                                     {fmt(b.hoNet || 0)}
+                                  </div>
+                                  <div className="text-center py-1 font-mono text-red-600 dark:text-red-400" data-testid={`booking-diff-${b.bookingId}`}>
+                                    {fmt(Math.round(((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100)}
                                   </div>
                                   <div className="text-center py-1">
                                     {selection === "custom" ? (
@@ -1775,6 +1779,7 @@ export function DiscrepancySummaryWorkspace({
                               <div className="py-1 text-muted-foreground" style={{ gridColumn: "span 2" }}>Total ({tid.bookings.length})</div>
                               <div className="text-center py-1 font-mono text-blue-600">{fmt(tid.spNet)}</div>
                               <div className="text-center py-1 font-mono text-green-600">{fmt(tid.hoNet)}</div>
+                              <div className="text-center py-1 font-mono text-red-600 dark:text-red-400 font-bold">{fmt(Math.round((tid.hoNet - tid.spNet) * 100) / 100)}</div>
                               <div className="text-center py-1" style={{ gridColumn: "span 2" }}>
                                 {(() => {
                                   const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
