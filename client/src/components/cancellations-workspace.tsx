@@ -1403,7 +1403,7 @@ export function CancellationsWorkspace({
                       const tapRule = CANCELLATION_TAP_RULES[row.subCategory];
                       const tapStr = tapOverrides[row.rowKey] !== undefined
                         ? tapOverrides[row.rowKey]
-                        : defaultTap.toFixed(2);
+                        : fmt(defaultTap);
                       const isConfirmed = tapConfirmedRows.has(row.rowKey);
                       const isDone = doneRows.has(row.rowKey);
                       return (
@@ -1447,8 +1447,8 @@ export function CancellationsWorkspace({
                                   variant={isConfirmed ? "ghost" : "outline"}
                                   className={`h-6 w-6 p-0 shrink-0 ${isConfirmed ? "text-green-600 hover:text-green-700" : ""}`}
                                   onClick={() => {
-                                    const parsed = parseFloat(tapStr);
-                                    setTapOverrides(prev => ({ ...prev, [row.rowKey]: isNaN(parsed) ? "0.00" : parsed.toFixed(2) }));
+                                    const parsed = parseFloat(tapStr.replace(/,/g, ""));
+                                    setTapOverrides(prev => ({ ...prev, [row.rowKey]: isNaN(parsed) ? "0.00" : fmt(parsed) }));
                                     setTapConfirmedRows(prev => new Set(prev).add(row.rowKey));
                                   }}
                                   title={isConfirmed ? "Confirmed" : "Confirm this amount"}
@@ -1511,7 +1511,8 @@ export function CancellationsWorkspace({
                         {fmt(breakupRows.reduce((s, r) => {
                           const d = liveDispute(r.rowKey);
                           const def = getRuleTap(r.subCategory, r.spNetLc, d);
-                          return s + (parseFloat(tapOverrides[r.rowKey] ?? def.toFixed(2)) || 0);
+                          const raw = tapOverrides[r.rowKey] !== undefined ? tapOverrides[r.rowKey].replace(/,/g, "") : def.toFixed(2);
+                          return s + (parseFloat(raw) || 0);
                         }, 0))}
                       </td>
                       <td className="py-2 pr-3" />
