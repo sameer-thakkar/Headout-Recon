@@ -1489,7 +1489,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
       {/* Cancellations Workspace - Full-screen analysis + TID action */}
       <Dialog open={isCancellationsModalOpen} onOpenChange={setIsCancellationsModalOpen}>
-        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 gap-0 flex flex-col overflow-hidden" data-testid="cancellations-workspace-dialog">
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 gap-0 flex flex-col overflow-hidden [&>button.absolute]:hidden" data-testid="cancellations-workspace-dialog">
           <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading workspace…</div>}>
             <CancellationsWorkspace
               cancellationBookings={primaryRows.filter(r => cancellationReasons.includes(r.reason))}
