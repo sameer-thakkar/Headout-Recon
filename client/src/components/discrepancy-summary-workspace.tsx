@@ -305,7 +305,7 @@ export function DiscrepancySummaryWorkspace({
   useEffect(() => {
     if (paxOpen && paxTid) {
       const { paxDateRows } = buildPaxDateRows(paxTid.bookings);
-      if (paxDateRows.length > 0 && Object.keys(paxPrices).length === 0) {
+      if (paxDateRows.length > 0) {
         const filled: Record<string, string> = {};
         for (const row of paxDateRows) {
           filled[row.rowKey] = String(row.spUnitPrice);
