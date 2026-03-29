@@ -1113,7 +1113,7 @@ export function registerExportRoutes(app: Express) {
         const isPortalDeposit = (row.paymentMethod || "").toUpperCase() === "PORTAL_DEPOSIT";
         const ccy = row.hoCurrency;
         const override = priceOverrides[row.bookingId];
-        const amount = Math.max(0, override ? override.totalAmountPayable : row.spNetInHo);
+        const amount = override ? override.totalAmountPayable : row.spNetInHo;
         if (isPortalDeposit) {
           portalDepositPayableTotals.set(ccy, (portalDepositPayableTotals.get(ccy) || 0) + amount);
           if (!portalDepositBeId && row.beId) {
@@ -1586,14 +1586,13 @@ export function registerExportRoutes(app: Express) {
         };
         
         const priceOverride = priceOverrides[bookingId];
-        const rawTap = priceOverride 
+        const totalAmountPayable = priceOverride 
           ? priceOverride.totalAmountPayable 
           : (reason === "Reconciled" ? spNet : finalNetPrice);
-        const totalAmountPayable = typeof rawTap === "number" ? Math.max(0, rawTap) : rawTap;
         
         const amountPaidValue = reconRow?.amountPaid || 0;
         const netPricePayable = typeof totalAmountPayable === "number"
-          ? Math.max(0, totalAmountPayable - amountPaidValue)
+          ? totalAmountPayable - amountPaidValue
           : totalAmountPayable;
         
         for (const key of originalKeys) {
@@ -2724,7 +2723,7 @@ export function registerExportRoutes(app: Express) {
         const isPortalDeposit = (row.paymentMethod || "").toUpperCase() === "PORTAL_DEPOSIT";
         const ccy = row.hoCurrency;
         const override = priceOverrides[row.bookingId];
-        const amount = Math.max(0, override ? override.totalAmountPayable : row.spNetInHo);
+        const amount = override ? override.totalAmountPayable : row.spNetInHo;
         if (isPortalDeposit) {
           gsPortalDepositTotals.set(ccy, (gsPortalDepositTotals.get(ccy) || 0) + amount);
           if (!gsPortalDepositBeId && row.beId) {
@@ -3039,13 +3038,12 @@ export function registerExportRoutes(app: Express) {
         }
 
         const priceOverride = priceOverrides[bookingId];
-        const rawTap2 = priceOverride
+        const totalAmountPayable = priceOverride
           ? priceOverride.totalAmountPayable
           : (reason === "Reconciled" ? spNet : finalNetPrice);
-        const totalAmountPayable = typeof rawTap2 === "number" ? Math.max(0, rawTap2) : rawTap2;
         const amountPaidValue = reconRow?.amountPaid || 0;
         const netPricePayable = typeof totalAmountPayable === "number"
-          ? Math.max(0, totalAmountPayable - amountPaidValue)
+          ? totalAmountPayable - amountPaidValue
           : totalAmountPayable;
 
         const newRow: Record<string, unknown> = {};

@@ -441,11 +441,11 @@ export function DiscrepancySummaryWorkspace({
       const overrides: Record<string, { totalAmountPayable: number; selection: "ho" | "sp" }> = {};
       bookingIds.forEach(id => {
         if (customPrices && customPrices[id] !== undefined) {
-          overrides[id] = { totalAmountPayable: Math.max(0, customPrices[id]), selection };
+          overrides[id] = { totalAmountPayable: customPrices[id], selection };
         } else {
           const row = allRows.find(r => r.bookingId === id);
           const amt = selection === "ho" ? (row?.hoNet || 0) : (row?.spNetInHo || 0);
-          overrides[id] = { totalAmountPayable: Math.max(0, amt), selection };
+          overrides[id] = { totalAmountPayable: amt, selection };
         }
       });
       await apiRequest("POST", "/api/price-overrides", { runId, overrides });
@@ -616,12 +616,12 @@ export function DiscrepancySummaryWorkspace({
   const getEffectiveTap = useCallback((b: PrimaryRow): number => {
     const base = getBidFinalNet(b);
     const override = bidTapOverrides[b.bookingId];
-    if (override === undefined || override === "") return Math.max(0, base);
+    if (override === undefined || override === "") return base;
     const val = parseFloat(override);
-    if (isNaN(val)) return Math.max(0, base);
+    if (isNaN(val)) return base;
     const minTap = Math.round(base * 0.9 * 100) / 100;
     const maxTap = Math.round(base * 1.1 * 100) / 100;
-    return Math.max(0, Math.round(Math.min(Math.max(val, minTap), maxTap) * 100) / 100);
+    return Math.round(Math.min(Math.max(val, minTap), maxTap) * 100) / 100;
   }, [getBidFinalNet, bidTapOverrides]);
 
   const setBidDisputeAmountForBooking = useCallback((bookingId: string, amount: number, booking?: PrimaryRow) => {

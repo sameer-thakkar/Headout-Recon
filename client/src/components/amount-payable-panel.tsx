@@ -1294,7 +1294,7 @@ export function AmountPayablePanel({
         } else {
           pricePayable = sel === "ho" ? b.hoNet : b.spNet;
         }
-        overrides[b.bookingId] = { totalAmountPayable: Math.max(0, pricePayable), selection: sel };
+        overrides[b.bookingId] = { totalAmountPayable: pricePayable, selection: sel };
       }
       if (Object.keys(overrides).length > 0) {
         apiRequest("POST", "/api/price-overrides", { runId, overrides }).catch(console.error);
