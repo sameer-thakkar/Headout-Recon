@@ -104,6 +104,7 @@ export function DiscrepancySummaryWorkspace({
   currency,
 }: DiscrepancySummaryWorkspaceProps) {
   const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
+  const BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
   const { toast } = useToast();
   const [analysisOpen, setAnalysisOpen] = useState(true);
   const [expandedTid, setExpandedTid] = useState<string | null>(null);
@@ -1346,7 +1347,7 @@ export function DiscrepancySummaryWorkspace({
                   <div className="text-center">HO Net</div>
                   <div className="text-center">Difference LC</div>
                   <div className="text-center text-violet-600">Total Amount Payable</div>
-                  <div className="text-center">totalAmountPaid</div>
+                  <div className="text-center">Amount Paid</div>
                   <div className="text-center text-violet-600">Dispute</div>
                   <div className="text-center text-green-600">Balance Amt Payable</div>
                   <div className="text-center">BIDs</div>
@@ -1427,210 +1428,202 @@ export function DiscrepancySummaryWorkspace({
                             </Button>
                           </div>
 
-                          <div className="rounded-md border overflow-hidden bg-background">
-                            <table className="w-full text-[11px]" style={{ tableLayout: "fixed" }}>
-                              <thead>
-                                <tr className="h-7 bg-muted/30 border-b">
-                                  <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Booking ID</th>
-                                  <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Ticket ID</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[7rem]">SP Net</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[7rem]">HO Net</th>
-                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[5.5rem]">Selection</th>
-                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[4.5rem]">Dispute</th>
-                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-[9rem]">TAP</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[7rem]">totalAmountPaid</th>
-                                  <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-[7rem]">Dispute Amt</th>
-                                  <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-[7.5rem]">Balance Amt Payable</th>
-                                  <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-8"></th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {tid.bookings.map(b => {
-                                  const selection = getBidSelection(b.bookingId);
-                                  const canDispute = selection === "sp" || selection === "custom";
-                                  const finalNet = getBidFinalNet(b);
-                                  const effectiveTap = getEffectiveTap(b);
-                                  const tapBase = finalNet;
-                                  const tapMin = Math.round(tapBase * 0.9 * 100) / 100;
-                                  const tapMax = Math.round(tapBase * 1.1 * 100) / 100;
-                                  const hasTapOverride = bidTapOverrides[b.bookingId] !== undefined && bidTapOverrides[b.bookingId] !== "";
-                                  const maxDispute = getBidMaxDispute(b);
-                                  const currentDispute = canDispute ? getBidDisputeAmount(b.bookingId) : 0;
-                                  const exceedsMax = currentDispute > maxDispute;
-                                  const bookingAmountPaid = b.amountPaid || 0;
-                                  const balanceAmountPayable = effectiveTap - bookingAmountPaid;
-                                  const isSaved = savedBookings.has(b.bookingId);
-                                  const hasOverride = !!bookingSelections[b.bookingId];
-                                  const hasDisp = disputedBookings.has(b.bookingId);
-                                  return (
-                                    <tr key={b.bookingId} className={`h-9 border-b last:border-0 hover:bg-muted/20 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${bidDisputeActive.has(b.bookingId) ? "bg-orange-50/30 dark:bg-orange-950/10" : ""}`} data-testid={`booking-row-${b.bookingId}`}>
-                                      <td className="px-2 py-1">
-                                        <div className="flex items-center gap-1">
-                                          <span className="font-mono text-primary font-medium">{b.bookingId}</span>
-                                          {hasDisp && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
-                                          {isSaved && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
-                                        </div>
-                                      </td>
-                                      <td className="px-2 py-1 text-muted-foreground truncate max-w-[100px]" title={b.ticketId || ""} data-testid={`cell-ticketid-${b.bookingId}`}>
-                                        {b.ticketId || "—"}
-                                      </td>
-                                      <td className="text-right px-2 py-1 font-mono text-blue-600" data-testid={`booking-sp-${b.bookingId}`}>
-                                        {fmt(b.spNetInHo || 0)}
-                                      </td>
-                                      <td className="text-right px-2 py-1 font-mono text-green-600" data-testid={`booking-ho-${b.bookingId}`}>
-                                        {fmt(b.hoNet || 0)}
-                                      </td>
-                                      <td className="text-center px-1 py-1">
-                                        {selection === "custom" ? (
-                                          <div className="flex items-center justify-center gap-1">
-                                            <Badge variant="outline" className="text-[9px] px-1 py-0 text-violet-600 border-violet-200">Custom</Badge>
-                                            <Button size="sm" variant="ghost" className="h-4 px-0.5 text-[9px] text-muted-foreground" onClick={() => updateBidSelection(b.bookingId, "sp")} data-testid={`clear-custom-${b.bookingId}`}>
-                                              <XIcon className="h-2.5 w-2.5" />
-                                            </Button>
-                                          </div>
-                                        ) : (
-                                          <Select value={selection} onValueChange={(v) => updateBidSelection(b.bookingId, v as "ho" | "sp")}>
-                                            <SelectTrigger className="w-[4.5rem] h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="ho">HO</SelectItem>
-                                              <SelectItem value="sp">SP</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                        )}
-                                      </td>
-                                      <td className="text-center px-1 py-1">
-                                        {canDispute ? (
-                                          bidDisputeActive.has(b.bookingId) ? (
-                                            <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => setBidDisputeAmountForBooking(b.bookingId, 0)} data-testid={`button-clear-dispute-${b.bookingId}`}>
-                                              Clear
-                                            </Button>
-                                          ) : (
-                                            <Button size="sm" variant="outline" className="h-5 px-1.5 text-[9px]" onClick={() => activateBidDispute(b.bookingId, b)} data-testid={`button-dispute-${b.bookingId}`}>
-                                              Dispute
-                                            </Button>
-                                          )
-                                        ) : null}
-                                      </td>
-                                      <td className="text-right px-2 py-1 font-mono font-medium" data-testid={`booking-final-${b.bookingId}`}>
-                                        <div className="relative flex justify-end items-center gap-1">
-                                          {hasTapOverride ? (
-                                            <>
-                                              <input
-                                                type="number"
-                                                step="0.01"
-                                                value={bidTapOverrides[b.bookingId] ?? ""}
-                                                onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                                className="w-28 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
-                                                data-testid={`input-tap-${b.bookingId}`}
-                                              />
-                                              <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
-                                                <XIcon className="h-2.5 w-2.5" />
-                                              </button>
-                                            </>
-                                          ) : (
-                                            <input
-                                              type="number"
-                                              step="0.01"
-                                              value={finalNet}
-                                              readOnly
-                                              className="w-28 h-5 text-xs text-right font-mono bg-transparent border-0 cursor-default"
-                                              onClick={() => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: String(finalNet) }))}
-                                              data-testid={`input-tap-${b.bookingId}`}
-                                            />
-                                          )}
-                                        </div>
-                                      </td>
-                                      <td className="text-right px-2 py-1 font-mono text-muted-foreground" data-testid={`booking-amtpaid-${b.bookingId}`}>
-                                        {bookingAmountPaid > 0 ? fmt(bookingAmountPaid) : "—"}
-                                      </td>
-                                      <td className="text-right px-2 py-1">
-                                        {bidDisputeActive.has(b.bookingId) ? (
-                                          <div className="relative group flex justify-end">
-                                            <Input
-                                              type="number"
-                                              min="0"
-                                              step="0.01"
-                                              value={currentDispute || ""}
-                                              onChange={(e) => setBidDisputeAmountForBooking(b.bookingId, parseFloat(e.target.value) || 0, b)}
-                                              className={`w-20 h-5 text-xs text-right font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
-                                              placeholder="0"
-                                              data-testid={`input-dispute-booking-${b.bookingId}`}
-                                            />
-                                            {exceedsMax && (
-                                              <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
-                                                <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
-                                                  Max: {fmt(maxDispute)}
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        ) : null}
-                                      </td>
-                                      <td className="text-right px-2 py-1 font-mono font-medium text-green-600 dark:text-green-400" data-testid={`booking-balance-${b.bookingId}`}>
-                                        {fmt(balanceAmountPayable)}
-                                      </td>
-                                      <td className="text-center px-1 py-1">
-                                        {hasOverride && !isSaved && (
-                                          <button className="p-1 rounded-md bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors" onClick={() => handleBookingSave(b)} disabled={priceOverrideMutation.isPending} data-testid={`booking-save-${b.bookingId}`}>
-                                            {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                                          </button>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                              <tfoot>
-                                <tr className="h-8 bg-muted/40 border-t font-semibold text-[11px]">
-                                  <td className="px-2 py-1 text-muted-foreground" colSpan={2}>Total ({tid.bookings.length})</td>
-                                  <td className="text-right px-2 py-1 font-mono text-blue-600">{fmt(tid.spNet)}</td>
-                                  <td className="text-right px-2 py-1 font-mono text-green-600">{fmt(tid.hoNet)}</td>
-                                  <td colSpan={2} className="text-center px-1 py-1">
-                                    {(() => {
-                                      const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
-                                      const disputable = tid.bookings.filter(b => { const s = getBidSelection(b.bookingId); return s === "sp" || s === "custom"; }).length;
-                                      if (disputable === 0) return null;
-                                      if (disputed > 0) {
-                                        return (
-                                          <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => handleTidBulkDispute(tid, "clear")} data-testid={`tid-clear-dispute-${tid.tid}`}>
-                                            Clear All
-                                          </Button>
-                                        );
-                                      }
-                                      return (
-                                        <Button size="sm" variant="outline" className="h-5 px-1 text-[9px]" onClick={() => handleTidBulkDispute(tid, "all")} data-testid={`tid-dispute-all-${tid.tid}`}>
-                                          Dispute All
+                          <div className="rounded-md border overflow-hidden bg-background text-[11px]">
+                            <div className="grid items-center h-7 bg-muted/30 border-b gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                              <div className="text-left font-medium text-muted-foreground whitespace-nowrap">Booking ID</div>
+                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Ticket ID</div>
+                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">SP Net</div>
+                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">HO Net</div>
+                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Selection</div>
+                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Dispute</div>
+                              <div className="text-center font-medium text-violet-600 whitespace-nowrap">Total Amount Payable</div>
+                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Amount Paid</div>
+                              <div className="text-center font-medium text-orange-600 whitespace-nowrap">Dispute Amt</div>
+                              <div className="text-center font-medium text-green-600 whitespace-nowrap">Balance Amt Payable</div>
+                              <div className="text-center font-medium text-muted-foreground whitespace-nowrap"></div>
+                            </div>
+                            {tid.bookings.map(b => {
+                              const selection = getBidSelection(b.bookingId);
+                              const canDispute = selection === "sp" || selection === "custom";
+                              const finalNet = getBidFinalNet(b);
+                              const effectiveTap = getEffectiveTap(b);
+                              const tapBase = finalNet;
+                              const tapMin = Math.round(tapBase * 0.9 * 100) / 100;
+                              const tapMax = Math.round(tapBase * 1.1 * 100) / 100;
+                              const hasTapOverride = bidTapOverrides[b.bookingId] !== undefined && bidTapOverrides[b.bookingId] !== "";
+                              const maxDispute = getBidMaxDispute(b);
+                              const currentDispute = canDispute ? getBidDisputeAmount(b.bookingId) : 0;
+                              const exceedsMax = currentDispute > maxDispute;
+                              const bookingAmountPaid = b.amountPaid || 0;
+                              const balanceAmountPayable = effectiveTap - bookingAmountPaid;
+                              const isSaved = savedBookings.has(b.bookingId);
+                              const hasOverride = !!bookingSelections[b.bookingId];
+                              const hasDisp = disputedBookings.has(b.bookingId);
+                              return (
+                                <div key={b.bookingId} className={`grid items-center min-h-[2.25rem] border-b last:border-0 hover:bg-muted/20 gap-x-4 px-3 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${bidDisputeActive.has(b.bookingId) ? "bg-orange-50/30 dark:bg-orange-950/10" : ""}`} style={{ gridTemplateColumns: BID_GRID_COLUMNS }} data-testid={`booking-row-${b.bookingId}`}>
+                                  <div className="text-left py-1 min-w-0">
+                                    <div className="flex items-center gap-1">
+                                      <span className="font-mono text-primary font-medium">{b.bookingId}</span>
+                                      {hasDisp && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
+                                      {isSaved && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
+                                    </div>
+                                  </div>
+                                  <div className="text-center py-1 text-muted-foreground truncate" title={b.ticketId || ""} data-testid={`cell-ticketid-${b.bookingId}`}>
+                                    {b.ticketId || "—"}
+                                  </div>
+                                  <div className="text-center py-1 font-mono text-blue-600" data-testid={`booking-sp-${b.bookingId}`}>
+                                    {fmt(b.spNetInHo || 0)}
+                                  </div>
+                                  <div className="text-center py-1 font-mono text-green-600" data-testid={`booking-ho-${b.bookingId}`}>
+                                    {fmt(b.hoNet || 0)}
+                                  </div>
+                                  <div className="text-center py-1">
+                                    {selection === "custom" ? (
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Badge variant="outline" className="text-[9px] px-1 py-0 text-violet-600 border-violet-200">Custom</Badge>
+                                        <Button size="sm" variant="ghost" className="h-4 px-0.5 text-[9px] text-muted-foreground" onClick={() => updateBidSelection(b.bookingId, "sp")} data-testid={`clear-custom-${b.bookingId}`}>
+                                          <XIcon className="h-2.5 w-2.5" />
                                         </Button>
-                                      );
-                                    })()}
-                                  </td>
-                                  <td className="text-right px-2 py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</td>
-                                  <td className="text-right px-2 py-1 font-mono text-muted-foreground">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</td>
-                                  <td className="text-right px-2 py-1 font-mono text-orange-600">
-                                    {(() => {
-                                      const totalDisp = tid.bookings.reduce((s, b) => { const sel = getBidSelection(b.bookingId); return s + (sel === "sp" || sel === "custom" ? getBidDisputeAmount(b.bookingId) : 0); }, 0);
-                                      return totalDisp > 0 ? fmt(totalDisp) : null;
-                                    })()}
-                                  </td>
-                                  <td className="text-right px-2 py-1 font-mono text-green-600 dark:text-green-400 font-bold">
-                                    {fmt(tid.bookings.reduce((s, b) => {
-                                      const tap = getEffectiveTap(b);
-                                      const ap = b.amountPaid || 0;
-                                      return s + tap - ap;
-                                    }, 0))}
-                                  </td>
-                                  <td className="text-center px-1 py-1">
-                                    {tid.bookings.some(b => bookingSelections[b.bookingId] && !savedBookings.has(b.bookingId)) && (
-                                      <button className="p-1 rounded-md bg-violet-600 hover:bg-violet-700 text-white transition-colors" onClick={() => handleTidSaveAll(tid)} disabled={priceOverrideMutation.isPending} data-testid={`tid-save-all-${tid.tid}`}>
+                                      </div>
+                                    ) : (
+                                      <Select value={selection} onValueChange={(v) => updateBidSelection(b.bookingId, v as "ho" | "sp")}>
+                                        <SelectTrigger className="w-[4.5rem] h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="ho">HO</SelectItem>
+                                          <SelectItem value="sp">SP</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
+                                  <div className="text-center py-1">
+                                    {canDispute ? (
+                                      bidDisputeActive.has(b.bookingId) ? (
+                                        <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => setBidDisputeAmountForBooking(b.bookingId, 0)} data-testid={`button-clear-dispute-${b.bookingId}`}>
+                                          Clear
+                                        </Button>
+                                      ) : (
+                                        <Button size="sm" variant="outline" className="h-5 px-1.5 text-[9px]" onClick={() => activateBidDispute(b.bookingId, b)} data-testid={`button-dispute-${b.bookingId}`}>
+                                          Dispute
+                                        </Button>
+                                      )
+                                    ) : null}
+                                  </div>
+                                  <div className="text-center py-1 font-mono font-medium" data-testid={`booking-final-${b.bookingId}`}>
+                                    <div className="relative flex justify-center items-center gap-1">
+                                      {hasTapOverride ? (
+                                        <>
+                                          <input
+                                            type="number"
+                                            step="0.01"
+                                            value={bidTapOverrides[b.bookingId] ?? ""}
+                                            onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
+                                            className="w-28 h-5 text-xs text-center font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
+                                            data-testid={`input-tap-${b.bookingId}`}
+                                          />
+                                          <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
+                                            <XIcon className="h-2.5 w-2.5" />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={finalNet}
+                                          readOnly
+                                          className="w-28 h-5 text-xs text-center font-mono bg-transparent border-0 cursor-default"
+                                          onClick={() => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: String(finalNet) }))}
+                                          data-testid={`input-tap-${b.bookingId}`}
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-center py-1 font-mono text-muted-foreground" data-testid={`booking-amtpaid-${b.bookingId}`}>
+                                    {bookingAmountPaid > 0 ? fmt(bookingAmountPaid) : "—"}
+                                  </div>
+                                  <div className="text-center py-1">
+                                    {bidDisputeActive.has(b.bookingId) ? (
+                                      <div className="relative group flex justify-center">
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          value={currentDispute || ""}
+                                          onChange={(e) => setBidDisputeAmountForBooking(b.bookingId, parseFloat(e.target.value) || 0, b)}
+                                          className={`w-20 h-5 text-xs text-center font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
+                                          placeholder="0"
+                                          data-testid={`input-dispute-booking-${b.bookingId}`}
+                                        />
+                                        {exceedsMax && (
+                                          <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
+                                            <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
+                                              Max: {fmt(maxDispute)}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-center py-1 font-mono font-medium text-green-600 dark:text-green-400" data-testid={`booking-balance-${b.bookingId}`}>
+                                    {fmt(balanceAmountPayable)}
+                                  </div>
+                                  <div className="text-center py-1">
+                                    {hasOverride && !isSaved && (
+                                      <button className="p-1 rounded-md bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors" onClick={() => handleBookingSave(b)} disabled={priceOverrideMutation.isPending} data-testid={`booking-save-${b.bookingId}`}>
                                         {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                                       </button>
                                     )}
-                                  </td>
-                                </tr>
-                              </tfoot>
-                            </table>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            <div className="grid items-center h-8 bg-muted/40 border-t font-semibold gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                              <div className="py-1 text-muted-foreground" style={{ gridColumn: "span 2" }}>Total ({tid.bookings.length})</div>
+                              <div className="text-center py-1 font-mono text-blue-600">{fmt(tid.spNet)}</div>
+                              <div className="text-center py-1 font-mono text-green-600">{fmt(tid.hoNet)}</div>
+                              <div className="text-center py-1" style={{ gridColumn: "span 2" }}>
+                                {(() => {
+                                  const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
+                                  const disputable = tid.bookings.filter(b => { const s = getBidSelection(b.bookingId); return s === "sp" || s === "custom"; }).length;
+                                  if (disputable === 0) return null;
+                                  if (disputed > 0) {
+                                    return (
+                                      <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => handleTidBulkDispute(tid, "clear")} data-testid={`tid-clear-dispute-${tid.tid}`}>
+                                        Clear All
+                                      </Button>
+                                    );
+                                  }
+                                  return (
+                                    <Button size="sm" variant="outline" className="h-5 px-1 text-[9px]" onClick={() => handleTidBulkDispute(tid, "all")} data-testid={`tid-dispute-all-${tid.tid}`}>
+                                      Dispute All
+                                    </Button>
+                                  );
+                                })()}
+                              </div>
+                              <div className="text-center py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                              <div className="text-center py-1 font-mono text-muted-foreground">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                              <div className="text-center py-1 font-mono text-orange-600">
+                                {(() => {
+                                  const totalDisp = tid.bookings.reduce((s, b) => { const sel = getBidSelection(b.bookingId); return s + (sel === "sp" || sel === "custom" ? getBidDisputeAmount(b.bookingId) : 0); }, 0);
+                                  return totalDisp > 0 ? fmt(totalDisp) : null;
+                                })()}
+                              </div>
+                              <div className="text-center py-1 font-mono text-green-600 dark:text-green-400 font-bold">
+                                {fmt(tid.bookings.reduce((s, b) => {
+                                  const tap = getEffectiveTap(b);
+                                  const ap = b.amountPaid || 0;
+                                  return s + tap - ap;
+                                }, 0))}
+                              </div>
+                              <div className="text-center py-1">
+                                {tid.bookings.some(b => bookingSelections[b.bookingId] && !savedBookings.has(b.bookingId)) && (
+                                  <button className="p-1 rounded-md bg-violet-600 hover:bg-violet-700 text-white transition-colors" onClick={() => handleTidSaveAll(tid)} disabled={priceOverrideMutation.isPending} data-testid={`tid-save-all-${tid.tid}`}>
+                                    {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
