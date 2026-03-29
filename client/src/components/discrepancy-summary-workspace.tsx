@@ -1334,21 +1334,21 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b">
-                  <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
+                <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-3" style={{ gridTemplateColumns: "1.75rem 1.25rem 1fr minmax(4rem,auto) minmax(6rem,auto) minmax(6rem,auto) minmax(7rem,auto) minmax(7rem,auto) minmax(6rem,auto) minmax(5rem,auto) minmax(6rem,auto) minmax(2.5rem,auto)" }}>
+                  <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
-                  <div className="w-5" />
-                  <div className="pl-2">TID</div>
-                  <div className="text-left px-2 w-[4.5rem]">Fulfillment</div>
-                  <div className="text-right px-2 w-[6.5rem]">SP Net</div>
-                  <div className="text-right px-2 w-[6.5rem]">HO Net</div>
-                  <div className="text-right px-2 w-[7.5rem]">Difference LC</div>
-                  <div className="text-right px-2 w-[7.5rem] text-violet-600">TAP</div>
-                  <div className="text-right px-2 w-[6.5rem]">totalAmountPaid</div>
-                  <div className="text-right px-2 w-[6rem] text-violet-600">Dispute</div>
-                  <div className="text-right px-2 w-[6.5rem] text-green-600">Balance Amt Payable</div>
-                  <div className="text-center px-2 w-10 pr-2">BIDs</div>
+                  <div />
+                  <div>TID</div>
+                  <div className="text-left">Fulfillment</div>
+                  <div className="text-right">SP Net</div>
+                  <div className="text-right">HO Net</div>
+                  <div className="text-right">Difference LC</div>
+                  <div className="text-right text-violet-600">TAP</div>
+                  <div className="text-right">totalAmountPaid</div>
+                  <div className="text-right text-violet-600">Dispute</div>
+                  <div className="text-right text-green-600">Balance Amt Payable</div>
+                  <div className="text-center">BIDs</div>
                 </div>
 
                 {filteredTids.map(tid => {
@@ -1361,16 +1361,17 @@ export function DiscrepancySummaryWorkspace({
                   return (
                     <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
-                        className={`grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto_auto_auto_auto_auto_auto] gap-0 items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b ${isExpanded ? "bg-muted/20" : ""}`}
+                        className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-3 ${isExpanded ? "bg-muted/20" : ""}`}
+                        style={{ gridTemplateColumns: "1.75rem 1.25rem 1fr minmax(4rem,auto) minmax(6rem,auto) minmax(6rem,auto) minmax(7rem,auto) minmax(7rem,auto) minmax(6rem,auto) minmax(5rem,auto) minmax(6rem,auto) minmax(2.5rem,auto)" }}
                         onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                       >
-                        <div className="w-7 flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
+                        <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
                           {!isResolved && <Checkbox checked={isSelected} className="h-3.5 w-3.5" />}
                         </div>
-                        <div className="w-5 flex items-center">
+                        <div className="flex items-center">
                           {isResolved ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                         </div>
-                        <div className="pl-2 min-w-0">
+                        <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
                             {tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
@@ -1379,26 +1380,26 @@ export function DiscrepancySummaryWorkspace({
                             <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
                           )}
                         </div>
-                        <div className="text-left px-2 w-[4.5rem]">
+                        <div className="text-left">
                           {tid.fulfillmentMethods.length > 0 && (
                             <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
                           )}
                         </div>
-                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm">{fmt(tid.spNet)}</div>
-                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm">{fmt(tid.hoNet)}</div>
-                        <div className="text-right px-2 w-[7.5rem]">
+                        <div className="text-right font-mono text-sm">{fmt(tid.spNet)}</div>
+                        <div className="text-right font-mono text-sm">{fmt(tid.hoNet)}</div>
+                        <div className="text-right">
                           <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
                           <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
                         </div>
-                        <div className="text-right px-2 w-[7.5rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
-                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
-                        <div className="text-right px-2 w-[6rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
-                        <div className="text-right px-2 w-[6.5rem] font-mono text-sm text-green-600 font-medium">{fmt((() => {
+                        <div className="text-right font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                        <div className="text-right font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                        <div className="text-right font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                        <div className="text-right font-mono text-sm text-green-600 font-medium">{fmt((() => {
                           const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
                           const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
                           return tidTap - tidAmtPaid;
                         })())}</div>
-                        <div className="text-center px-2 w-10 text-sm pr-2">{tid.bidCount}</div>
+                        <div className="text-center text-sm">{tid.bidCount}</div>
                       </div>
 
                       {isExpanded && (
