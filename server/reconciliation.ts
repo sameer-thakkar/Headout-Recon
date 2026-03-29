@@ -96,6 +96,7 @@ interface HORow {
   disputeStatus?: string;
   adjustedInTicketId?: string;
   reconciliationStatus?: string;
+  hoExtras?: Record<string, unknown>;
 }
 
 // Result from reason assignment
@@ -208,6 +209,55 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
     return str || null;
   };
 
+  const knownColumnPatterns = new Set([
+    "bookingcreationdate", "booking_creation_date", "creationdate",
+    "bookingid", "booking_id",
+    "netprice", "net_price", "totalamountpayable", "total_amount_payable",
+    "currency", "billingcurrency", "billing_currency",
+    "bookingstatus", "booking_status",
+    "experiencedate", "experience_date", "fulfilmentdate", "fulfilment_date",
+    "fulfillmentdate", "fulfillment_date", "tour_date", "tourdate",
+    "traveldate", "travel_date", "dateofexperience", "date_of_experience",
+    "visitdate", "visit_date", "activitydate", "activity_date",
+    "tourstartdate", "tour_start_date", "servicedate", "service_date",
+    "eventdate", "event_date",
+    "chargedloss", "charged_loss", "charge_loss",
+    "comment", "comments", "notes",
+    "cancellable",
+    "cancellationinsurance", "cancellation_insurance",
+    "experiencename", "experience_name",
+    "vendorname", "vendor_name", "suppliername", "supplier_name",
+    "tid", "tourid", "tour_id",
+    "fulfillmentmethod", "fulfillment_method", "fulfilmentmethod", "fulfilment_method",
+    "driteam", "dri_team", "dri",
+    "headoutsellingprice", "headout_selling_price", "sellingprice", "selling_price",
+    "pricesync", "price_sync",
+    "beid", "be_id", "billingentityid", "billing_entity_id",
+    "billingentityname", "billing_entity_name", "bename", "be_name",
+    "paymentbasis", "payment_basis",
+    "paymentmethod", "payment_method",
+    "reason", "reconreason", "recon_reason", "reconciliation_reason",
+    "dateofpayment", "date_of_payment", "paymentdate", "payment_date",
+    "vid", "vendorid", "vendor_id",
+    "amountpaid", "amount_paid", "amtpaid", "amt_paid",
+    "amountpaidtilldate", "amount_paid_till_date", "amountpaidtlldate",
+    "disputesettled", "dispute_settled", "disputeamountsettled", "dispute_amount_settled",
+    "disputedamount", "disputed_amount",
+    "disputeadjustedtotal", "dispute_adjusted_total",
+    "discrepancyamount", "discrepancy_amount",
+    "disputeadjustment", "dispute_adjustment",
+    "finaldiscrepancytotal", "final_discrepancy_total",
+    "disputestatus", "dispute_status",
+    "adjustedinticketid", "adjusted_in_ticket_id",
+    "status", "reconciliation_status", "reconciliationstatus", "recon_status",
+  ]);
+
+  for (const dc of detectedPaxColumns) {
+    if (dc.countKey) knownColumnPatterns.add(dc.countKey.toLowerCase().replace(/\s+/g, "_"));
+    if (dc.unitPriceKey) knownColumnPatterns.add(dc.unitPriceKey.toLowerCase().replace(/\s+/g, "_"));
+    if (dc.priceNetKey) knownColumnPatterns.add(dc.priceNetKey.toLowerCase().replace(/\s+/g, "_"));
+  }
+
   const result = sheet.rows.map((row) => {
     const bookingCreationDate = getRowValue(row, "bookingCreationDate", "Booking Creation Date", "booking_creation_date", "creationDate");
     const bookingId = getRowValue(row, "bookingId", "Booking ID", "booking_id");
@@ -219,6 +269,17 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
     
     const chargedLoss = getRowValue(row, "chargedLoss", "Charged Loss", "charged_loss", "charge_loss");
     const commentValue = getRowValue(row, "comment", "Comment", "comments", "Comments", "notes", "Notes");
+
+    const extras: Record<string, unknown> = {};
+    for (const key of Object.keys(row)) {
+      const normalized = key.toLowerCase().replace(/\s+/g, "_");
+      if (!knownColumnPatterns.has(normalized)) {
+        const val = row[key];
+        if (val !== undefined && val !== null && val !== "") {
+          extras[key] = val;
+        }
+      }
+    }
     
     return {
       bookingId: String(bookingId || ""),
@@ -261,8 +322,13 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       disputeStatus: String(getRowValue(row, "disputeStatus", "Dispute status", "Dispute Status", "dispute_status", "DisputeStatus") || "") || undefined,
       adjustedInTicketId: String(getRowValue(row, "adjustedInTicketId", "Adjusted in Ticket ID", "Adjusted In Ticket ID", "adjusted_in_ticket_id", "AdjustedInTicketID") || "") || undefined,
       reconciliationStatus: getRowValue(row, "status", "Status", "reconciliation_status", "Reconciliation Status", "recon_status") ? String(getRowValue(row, "status", "Status", "reconciliation_status", "Reconciliation Status", "recon_status")) : undefined,
+      hoExtras: Object.keys(extras).length > 0 ? extras : undefined,
     };
   });
+
+  if (result.length > 0 && result[0].hoExtras) {
+    console.log("[DEBUG] HO Data extra columns detected:", Object.keys(result[0].hoExtras));
+  }
 
   return result;
 }
@@ -946,6 +1012,7 @@ function computeReconciliationRows(
       disputeStatus: ho.disputeStatus,
       adjustedInTicketId: ho.adjustedInTicketId,
       reconciliationStatus: ho.reconciliationStatus,
+      hoExtras: ho.hoExtras,
     });
   });
   
