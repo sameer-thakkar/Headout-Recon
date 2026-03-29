@@ -207,6 +207,22 @@ interface TidGroup {
   bidCount: number;
   fulfillmentMethods: string[];
   hasPax: boolean;
+  cancellable: string;
+  cancellationInsurance: string;
+  chargeLoss: string;
+}
+
+function tidDominant(bkgs: PrimaryRow[], field: "cancellable" | "cancellationInsurance" | "chargedLoss"): string {
+  const vals = bkgs.map(b => {
+    if (field === "cancellable") return b.cancellable || "";
+    if (field === "cancellationInsurance") return b.cancellationInsurance || "";
+    if (field === "chargedLoss") return b.chargedLoss || "";
+    return "";
+  }).filter(Boolean);
+  if (vals.length === 0) return "";
+  const uniq = new Set(vals);
+  if (uniq.size > 1) return "Mixed";
+  return vals[0];
 }
 
 function subCategoryBadge(sub: string) {
@@ -249,8 +265,8 @@ export function CancellationsWorkspace({
   runId,
 }: CancellationsWorkspaceProps) {
   const { toast: shadToast } = useToast();
-  const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
-  const BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
+  const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4rem,0.8fr) minmax(4rem,0.7fr) minmax(4rem,0.7fr) minmax(4rem,0.7fr) minmax(5.5rem,1fr) minmax(5.5rem,1fr) minmax(5.5rem,1fr) minmax(5.5rem,1fr) minmax(5.5rem,1fr) minmax(5.5rem,1fr) minmax(5.5rem,1fr) minmax(2.25rem,0.35fr)";
+  const BID_GRID_COLUMNS = "1.8fr 1fr minmax(5rem,0.9fr) minmax(5rem,0.9fr) minmax(5rem,0.9fr) minmax(4rem,0.65fr) minmax(4rem,0.65fr) minmax(4rem,0.65fr) minmax(4rem,0.6fr) minmax(3.5rem,0.55fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(5rem,0.8fr) minmax(5.5rem,0.9fr) minmax(1.75rem,0.25fr)";
 
   const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [doneRows, setDoneRows] = useState<Set<string>>(new Set());
@@ -519,6 +535,9 @@ export function CancellationsWorkspace({
           bidCount: bkgs.length,
           fulfillmentMethods: Array.from(fmSet),
           hasPax,
+          cancellable: tidDominant(bkgs, "cancellable"),
+          cancellationInsurance: tidDominant(bkgs, "cancellationInsurance"),
+          chargeLoss: tidDominant(bkgs, "chargedLoss"),
         });
       }
       groups.sort((a, b) => Math.abs(b.discLc) - Math.abs(a.discLc));
@@ -982,10 +1001,13 @@ export function CancellationsWorkspace({
                         <div />
                         <div>TID</div>
                         <div className="text-center">Fulfillment</div>
+                        <div className="text-center">Cancellable</div>
+                        <div className="text-center">Canc. Insurance</div>
+                        <div className="text-center">Charge Loss</div>
                         <div className="text-center">SP Net</div>
                         <div className="text-center">HO Net</div>
                         <div className="text-center">Difference LC</div>
-                        <div className="text-center text-violet-600">Total Amount Payable</div>
+                        <div className="text-center text-violet-600">Total Amt Payable</div>
                         <div className="text-center">Amount Paid</div>
                         <div className="text-center text-violet-600">Dispute</div>
                         <div className="text-center text-green-600">Balance Amt Payable</div>
@@ -1025,21 +1047,30 @@ export function CancellationsWorkspace({
                                   <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
                                 )}
                               </div>
-                              <div className="text-center font-mono text-sm">{fmt(tid.spNet)}</div>
-                              <div className="text-center font-mono text-sm">{fmt(tid.hoNet)}</div>
                               <div className="text-center">
-                                <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
-                                <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
+                                {tid.cancellable && <Badge variant={tid.cancellable === "Yes" ? "outline" : "secondary"} className="text-[9px] px-1 py-0">{tid.cancellable}</Badge>}
                               </div>
-                              <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
-                              <div className="text-center font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
-                              <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(disputedBookings.has(tid.bookings[0]?.bookingId) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
-                              <div className="text-center font-mono text-sm text-green-600 font-medium">{fmt((() => {
+                              <div className="text-center">
+                                {tid.cancellationInsurance && <span className={`text-[10px] font-medium ${tid.cancellationInsurance === "Yes" ? "text-blue-600" : "text-muted-foreground"}`}>{tid.cancellationInsurance}</span>}
+                              </div>
+                              <div className="text-center">
+                                {tid.chargeLoss && <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${tid.chargeLoss === "FALSE" ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-300" : "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300"}`}>{tid.chargeLoss}</Badge>}
+                              </div>
+                              <div className="text-center font-mono text-[11px]">{fmt(tid.spNet)}</div>
+                              <div className="text-center font-mono text-[11px]">{fmt(tid.hoNet)}</div>
+                              <div className="text-center">
+                                <span className="font-mono text-[11px] text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
+                                <span className="text-[9px] text-muted-foreground ml-0.5">({pct}%)</span>
+                              </div>
+                              <div className="text-center font-mono text-[11px] text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                              <div className="text-center font-mono text-[11px]">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                              <div className="text-center font-mono text-[11px] text-violet-600 font-medium">{fmt(disputedBookings.has(tid.bookings[0]?.bookingId) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                              <div className="text-center font-mono text-[11px] text-green-600 font-medium">{fmt((() => {
                                 const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
                                 const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
                                 return tidTap - tidAmtPaid;
                               })())}</div>
-                              <div className="text-center text-sm">{tid.bidCount}</div>
+                              <div className="text-center text-[11px]">{tid.bidCount}</div>
                             </div>
 
                             {isExpanded && (
@@ -1066,19 +1097,22 @@ export function CancellationsWorkspace({
                                   </Button>
                                 </div>
 
-                                <div className="rounded-md border overflow-hidden bg-background text-[11px]">
-                                  <div className="grid items-center h-7 bg-muted/30 border-b gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                                <div className="rounded-md border overflow-hidden bg-background text-[10px]">
+                                  <div className="grid items-center h-7 bg-muted/30 border-b gap-x-3 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
                                     <div className="text-left font-medium text-muted-foreground whitespace-nowrap">Booking ID</div>
                                     <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Ticket ID</div>
                                     <div className="text-center font-medium text-blue-600 whitespace-nowrap">SP Net</div>
                                     <div className="text-center font-medium text-muted-foreground whitespace-nowrap">HO Net</div>
                                     <div className="text-center font-medium text-red-600 whitespace-nowrap">Diff LC</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Cancellable</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Canc. Ins.</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Charge Loss</div>
                                     <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Selection</div>
                                     <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Dispute</div>
-                                    <div className="text-center font-medium text-violet-600 whitespace-nowrap">Total Amount Payable</div>
-                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Amount Paid</div>
+                                    <div className="text-center font-medium text-violet-600 whitespace-nowrap">Total Amt Payable</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Amt Paid</div>
                                     <div className="text-center font-medium text-orange-600 whitespace-nowrap">Dispute Amt</div>
-                                    <div className="text-center font-medium text-green-600 whitespace-nowrap">Balance Amt Payable</div>
+                                    <div className="text-center font-medium text-green-600 whitespace-nowrap">Balance Payable</div>
                                     <div className="text-center font-medium text-muted-foreground whitespace-nowrap"></div>
                                   </div>
                                   {tid.bookings.map(b => {
@@ -1099,7 +1133,7 @@ export function CancellationsWorkspace({
                                     const hasOverride = !!bookingSelections[b.bookingId];
                                     const hasDisp = disputedBookings.has(b.bookingId);
                                     return (
-                                      <div key={b.bookingId} className={`grid items-center min-h-[2.25rem] border-b last:border-0 hover:bg-muted/20 gap-x-4 px-3 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${bidDisputeActive.has(b.bookingId) ? "bg-orange-50/30 dark:bg-orange-950/10" : ""}`} style={{ gridTemplateColumns: BID_GRID_COLUMNS }} data-testid={`booking-row-${b.bookingId}`}>
+                                      <div key={b.bookingId} className={`grid items-center min-h-[2.25rem] border-b last:border-0 hover:bg-muted/20 gap-x-3 px-3 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${bidDisputeActive.has(b.bookingId) ? "bg-orange-50/30 dark:bg-orange-950/10" : ""}`} style={{ gridTemplateColumns: BID_GRID_COLUMNS }} data-testid={`booking-row-${b.bookingId}`}>
                                         <div className="text-left py-1 min-w-0">
                                           <div className="flex items-center gap-1">
                                             <span className="font-mono text-primary font-medium">{b.bookingId}</span>
@@ -1118,6 +1152,15 @@ export function CancellationsWorkspace({
                                         </div>
                                         <div className="text-center py-1 font-mono text-red-600 dark:text-red-400" data-testid={`booking-diff-${b.bookingId}`}>
                                           {fmt(Math.round(((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100)}
+                                        </div>
+                                        <div className="text-center py-1">
+                                          {b.cancellable && <Badge variant={b.cancellable === "Yes" ? "outline" : "secondary"} className="text-[9px] px-1 py-0">{b.cancellable}</Badge>}
+                                        </div>
+                                        <div className="text-center py-1">
+                                          {b.cancellationInsurance && <span className={`text-[9px] font-medium ${b.cancellationInsurance === "Yes" ? "text-blue-600" : "text-muted-foreground"}`}>{b.cancellationInsurance}</span>}
+                                        </div>
+                                        <div className="text-center py-1">
+                                          {b.chargedLoss && <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${b.chargedLoss === "FALSE" ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-300" : "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300"}`}>{b.chargedLoss}</Badge>}
                                         </div>
                                         <div className="text-center py-1">
                                           {selection === "custom" ? (
@@ -1220,12 +1263,12 @@ export function CancellationsWorkspace({
                                       </div>
                                     );
                                   })}
-                                  <div className="grid items-center h-8 bg-muted/40 border-t font-semibold gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                                  <div className="grid items-center h-8 bg-muted/40 border-t font-semibold gap-x-3 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
                                     <div className="py-1 text-muted-foreground" style={{ gridColumn: "span 2" }}>Total ({tid.bookings.length})</div>
                                     <div className="text-center py-1 font-mono text-blue-600">{fmt(tid.spNet)}</div>
                                     <div className="text-center py-1 font-mono text-green-600">{fmt(tid.hoNet)}</div>
                                     <div className="text-center py-1 font-mono text-red-600 dark:text-red-400 font-bold">{fmt(Math.round((tid.hoNet - tid.spNet) * 100) / 100)}</div>
-                                    <div className="text-center py-1" style={{ gridColumn: "span 2" }}>
+                                    <div className="text-center py-1" style={{ gridColumn: "span 5" }}>
                                       {(() => {
                                         const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
                                         const disputable = tid.bookings.filter(b => { const s = getBidSelection(b.bookingId); return s === "sp" || s === "custom"; }).length;
