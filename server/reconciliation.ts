@@ -856,7 +856,10 @@ function computeReconciliationRows(
     }
     
     // Compute differences
-    const differenceLc = ho.netPrice - spNetInHo;
+    // For negative SP Net bookings, difference is always absolute: |SP Net - HO Net|
+    const differenceLc = spNetInHo < 0
+      ? Math.abs(spNetInHo - ho.netPrice)
+      : ho.netPrice - spNetInHo;
     const differencePct = ho.netPrice !== 0 ? differenceLc / ho.netPrice : null;
     
     

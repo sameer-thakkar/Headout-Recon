@@ -335,11 +335,11 @@ export function CancellationsWorkspace({
       const overrides: Record<string, { totalAmountPayable: number; selection: "ho" | "sp" }> = {};
       bookingIds.forEach(id => {
         if (customPrices && customPrices[id] !== undefined) {
-          overrides[id] = { totalAmountPayable: customPrices[id], selection };
+          overrides[id] = { totalAmountPayable: Math.max(0, customPrices[id]), selection };
         } else {
           const row = allRows.find(r => r.bookingId === id);
           const amt = selection === "ho" ? (row?.hoNet || 0) : (row?.spNetInHo || 0);
-          overrides[id] = { totalAmountPayable: amt, selection };
+          overrides[id] = { totalAmountPayable: Math.max(0, amt), selection };
         }
       });
       await apiRequest("POST", "/api/price-overrides", { runId, overrides });

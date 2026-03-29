@@ -1586,9 +1586,10 @@ export function registerExportRoutes(app: Express) {
         };
         
         const priceOverride = priceOverrides[bookingId];
-        const totalAmountPayable = priceOverride 
+        const rawTap = priceOverride 
           ? priceOverride.totalAmountPayable 
           : (reason === "Reconciled" ? spNet : finalNetPrice);
+        const totalAmountPayable = typeof rawTap === "number" ? Math.max(0, rawTap) : rawTap;
         
         const amountPaidValue = reconRow?.amountPaid || 0;
         const netPricePayable = typeof totalAmountPayable === "number"
@@ -3038,9 +3039,10 @@ export function registerExportRoutes(app: Express) {
         }
 
         const priceOverride = priceOverrides[bookingId];
-        const totalAmountPayable = priceOverride
+        const rawTap2 = priceOverride
           ? priceOverride.totalAmountPayable
           : (reason === "Reconciled" ? spNet : finalNetPrice);
+        const totalAmountPayable = typeof rawTap2 === "number" ? Math.max(0, rawTap2) : rawTap2;
         const amountPaidValue = reconRow?.amountPaid || 0;
         const netPricePayable = typeof totalAmountPayable === "number"
           ? totalAmountPayable - amountPaidValue
