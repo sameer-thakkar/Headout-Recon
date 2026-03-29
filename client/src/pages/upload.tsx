@@ -1040,37 +1040,6 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         })}
                       </TableBody>
                     </Table>
-                    {/* Grand Total footer */}
-                    {(() => {
-                      const allRows = [
-                        processedSummary.alreadyReconciledRow,
-                        processedSummary.cancellationsRow,
-                        ...processedSummary.rows,
-                      ].filter(Boolean) as typeof processedSummary.rows;
-                      const totalCount = allRows.reduce((s, r) => s + r.countBid, 0);
-                      const totalLc = allRows.reduce((s, r) => s + r.discrepancyLc, 0);
-                      const totalUsd = allRows.reduce((s, r) => s + r.discrepancyUsd, 0);
-                      return (
-                        <div className="border-t bg-muted/30 px-4 py-2.5 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-3">
-                            <span className="font-medium text-muted-foreground">Grand Total</span>
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{totalCount} bookings</Badge>
-                          </div>
-                          <div className="flex items-center gap-5">
-                            <div><span className="text-muted-foreground mr-1.5">LC</span><span className="font-mono font-semibold text-red-600">{formatNumber(totalLc)}</span></div>
-                            <div><span className="text-muted-foreground mr-1.5">USD</span><span className="font-mono font-semibold text-red-600">{formatNumber(totalUsd)}</span></div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {/* Severity legend */}
-                    <div className="flex items-center gap-3 px-4 py-2 text-[10px] text-muted-foreground border-t">
-                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-red-500 rounded-sm" />&gt; 5,000</div>
-                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-amber-500 rounded-sm" />&gt; 1,000</div>
-                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-blue-400 rounded-sm" />&lt; 1,000</div>
-                      <div className="flex items-center gap-1.5"><div className="w-3 h-2 bg-green-500 rounded-sm" />Reconciled</div>
-                    </div>
-                    
                     {/* Secondary Vendor Section */}
                     {secondaryVendorSummary.length > 0 && (
                       <div className="mt-4 pt-3 border-t border-dashed border-amber-500/50">
