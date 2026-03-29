@@ -1511,21 +1511,32 @@ export function DiscrepancySummaryWorkspace({
                                           )
                                         ) : null}
                                       </td>
-                                      <td className="text-right px-2 py-1" data-testid={`booking-final-${b.bookingId}`}>
-                                        <div className="relative group flex justify-end items-center">
-                                          <input
-                                            type="number"
-                                            step="0.01"
-                                            value={bidTapOverrides[b.bookingId] ?? ""}
-                                            placeholder={String(Math.round(finalNet * 100) / 100)}
-                                            onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                            className={`w-20 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b focus:outline-none focus:border-violet-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${hasTapOverride && effectiveTap !== finalNet ? 'border-violet-400 text-violet-700 dark:text-violet-300 font-medium' : 'border-transparent'}`}
-                                            data-testid={`input-tap-${b.bookingId}`}
-                                          />
-                                          {hasTapOverride && (
-                                            <button className="ml-0.5 p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
-                                              <XIcon className="h-2.5 w-2.5" />
-                                            </button>
+                                      <td className="text-right px-2 py-1 font-mono font-medium" data-testid={`booking-final-${b.bookingId}`}>
+                                        <div className="relative flex justify-end items-center gap-1">
+                                          {hasTapOverride ? (
+                                            <>
+                                              <input
+                                                type="number"
+                                                step="0.01"
+                                                value={bidTapOverrides[b.bookingId] ?? ""}
+                                                onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
+                                                className="w-20 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
+                                                data-testid={`input-tap-${b.bookingId}`}
+                                              />
+                                              <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
+                                                <XIcon className="h-2.5 w-2.5" />
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <input
+                                              type="number"
+                                              step="0.01"
+                                              value={finalNet}
+                                              readOnly
+                                              className="w-20 h-5 text-xs text-right font-mono bg-transparent border-0 cursor-default"
+                                              onClick={() => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: String(finalNet) }))}
+                                              data-testid={`input-tap-${b.bookingId}`}
+                                            />
                                           )}
                                         </div>
                                       </td>
