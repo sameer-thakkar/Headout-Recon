@@ -15,7 +15,7 @@ import {
   ChevronRight, ChevronDown, CheckCircle2, Search, TrendingUp, TrendingDown,
   Check, Gavel, FileWarning, AlertTriangle, X as XIcon,
   BarChart3, PanelTopClose, PanelTop, CheckCheck, Calculator, Loader2,
-  Sparkles, Zap, Pencil, Save
+  Sparkles, Zap, Pencil, Save, Info, Package, TicketCheck
 } from "lucide-react";
 import type { DiscrepancyAnalysisRow, PrimaryRow } from "@shared/schema";
 import { driTeams } from "@shared/schema";
@@ -332,6 +332,10 @@ export function DiscrepancySummaryWorkspace({
   const [bidDisputeAmounts, setBidDisputeAmounts] = useState<Record<string, number>>({});
   const [bidTapOverrides, setBidTapOverrides] = useState<Record<string, string>>({});
   const [unmappedResolutions, setUnmappedResolutions] = useState<Record<string, string>>({});
+  const [unmappedChoice, setUnmappedChoice] = useState<Record<string, "prepurchase" | "other">>({});
+  const [unmappedAllotment, setUnmappedAllotment] = useState<Record<string, string>>({});
+  const [unmappedOrderValue, setUnmappedOrderValue] = useState<Record<string, string>>({});
+  const [unmappedConfirmed, setUnmappedConfirmed] = useState<Set<string>>(new Set());
   const [vendorIdCorrections, setVendorIdCorrections] = useState<Record<string, string>>({});
   const [vendorIdConfirmed, setVendorIdConfirmed] = useState<Set<string>>(new Set());
 
@@ -1787,11 +1791,112 @@ export function DiscrepancySummaryWorkspace({
                       {isExpanded && (
                         <div className="border-b bg-muted/10 dark:bg-muted/5 px-4 py-3 space-y-3">
                           {isUnmapped ? (
-                            <div className="flex items-center gap-2 p-2 rounded-md bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 flex-wrap">
-                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
-                                <FileWarning className="h-3.5 w-3.5" /> Raise Issue
-                              </Button>
-                              <span className="text-[11px] text-muted-foreground">TAP = 0 for unmapped bookings</span>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 p-2 rounded-md bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800" data-testid={`unmapped-action-${tid.tid}`}>
+                                <span className="text-[11px] font-medium text-orange-700 dark:text-orange-300 shrink-0">Resolution:</span>
+                                <Button
+                                  size="sm"
+                                  variant={unmappedChoice[tid.tid] === "prepurchase" ? "default" : "outline"}
+                                  className={`h-7 text-xs gap-1.5 ${unmappedChoice[tid.tid] === "prepurchase" ? "bg-orange-600 hover:bg-orange-700 text-white" : "text-orange-700 border-orange-300 hover:bg-orange-50"}`}
+                                  onClick={() => {
+                                    setUnmappedChoice(prev => ({ ...prev, [tid.tid]: "prepurchase" }));
+                                    setUnmappedConfirmed(prev => { const n = new Set(prev); n.delete(tid.tid); return n; });
+                                  }}
+                                  data-testid={`unmapped-prepurchase-${tid.tid}`}
+                                >
+                                  <Package className="h-3 w-3" /> Prepurchase
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant={unmappedChoice[tid.tid] === "other" ? "default" : "outline"}
+                                  className={`h-7 text-xs gap-1.5 ${unmappedChoice[tid.tid] === "other" ? "bg-orange-600 hover:bg-orange-700 text-white" : "text-orange-700 border-orange-300 hover:bg-orange-50"}`}
+                                  onClick={() => {
+                                    setUnmappedChoice(prev => ({ ...prev, [tid.tid]: "other" }));
+                                    setUnmappedConfirmed(prev => { const n = new Set(prev); n.delete(tid.tid); return n; });
+                                  }}
+                                  data-testid={`unmapped-other-${tid.tid}`}
+                                >
+                                  <TicketCheck className="h-3 w-3" /> Other / Mapping Issues
+                                </Button>
+                                <div className="flex-1" />
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
+                                  <FileWarning className="h-3.5 w-3.5" /> Issue
+                                </Button>
+                              </div>
+
+                              {unmappedChoice[tid.tid] === "prepurchase" && (
+                                <div className="rounded-md border border-orange-200 dark:border-orange-700 bg-orange-50/30 dark:bg-orange-950/10 p-3 space-y-2.5" data-testid={`unmapped-prepurchase-panel-${tid.tid}`}>
+                                  <div className="flex items-center gap-1.5 text-xs font-medium text-orange-800 dark:text-orange-300">
+                                    <Package className="h-3.5 w-3.5" />
+                                    Prepurchase Details
+                                  </div>
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    <div className="flex items-center gap-1.5">
+                                      <label className="text-[11px] text-muted-foreground shrink-0">Allotment No. <span className="text-red-500">*</span></label>
+                                      <Input
+                                        className="h-7 w-40 text-xs font-mono"
+                                        placeholder="Enter allotment number"
+                                        value={unmappedAllotment[tid.tid] ?? ""}
+                                        onChange={e => {
+                                          setUnmappedAllotment(prev => ({ ...prev, [tid.tid]: e.target.value }));
+                                          setUnmappedConfirmed(prev => { const n = new Set(prev); n.delete(tid.tid); return n; });
+                                        }}
+                                        data-testid={`unmapped-allotment-${tid.tid}`}
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <label className="text-[11px] text-muted-foreground shrink-0">Order Value <span className="text-red-500">*</span></label>
+                                      <Input
+                                        className="h-7 w-36 text-xs font-mono text-right"
+                                        placeholder="0.00"
+                                        type="number"
+                                        step="0.01"
+                                        value={unmappedOrderValue[tid.tid] ?? ""}
+                                        onChange={e => {
+                                          setUnmappedOrderValue(prev => ({ ...prev, [tid.tid]: e.target.value }));
+                                          setUnmappedConfirmed(prev => { const n = new Set(prev); n.delete(tid.tid); return n; });
+                                        }}
+                                        data-testid={`unmapped-order-value-${tid.tid}`}
+                                      />
+                                    </div>
+                                    {unmappedConfirmed.has(tid.tid) ? (
+                                      <Badge className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800 gap-1">
+                                        <CheckCircle2 className="h-3 w-3" /> Confirmed
+                                      </Badge>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        className="h-7 text-xs gap-1 bg-orange-600 hover:bg-orange-700 text-white"
+                                        onClick={() => {
+                                          const allotment = (unmappedAllotment[tid.tid] ?? "").trim();
+                                          const orderVal = (unmappedOrderValue[tid.tid] ?? "").trim();
+                                          if (!allotment || !orderVal) {
+                                            toast({ title: "Required fields", description: "Both Allotment Number and Order Value are required.", variant: "destructive" });
+                                            return;
+                                          }
+                                          if (isNaN(parseFloat(orderVal))) {
+                                            toast({ title: "Invalid value", description: "Order Value must be a valid number.", variant: "destructive" });
+                                            return;
+                                          }
+                                          setUnmappedConfirmed(prev => new Set(prev).add(tid.tid));
+                                          toast({ title: "Prepurchase confirmed", description: `Allotment ${allotment}, Order Value ${orderVal}` });
+                                        }}
+                                        data-testid={`unmapped-confirm-${tid.tid}`}
+                                      >
+                                        <Check className="h-3 w-3" /> Confirm
+                                      </Button>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground italic">Both fields are mandatory for prepurchase resolution</p>
+                                </div>
+                              )}
+
+                              {unmappedChoice[tid.tid] === "other" && (
+                                <div className="flex items-start gap-2 rounded-md border border-blue-200 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 px-3 py-2.5" data-testid={`unmapped-other-panel-${tid.tid}`}>
+                                  <Info className="h-3.5 w-3.5 text-blue-600 mt-0.5 shrink-0" />
+                                  <span className="text-xs text-blue-800 dark:text-blue-300">Please raise a ticket to Reservation Ops</span>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 flex-wrap">
