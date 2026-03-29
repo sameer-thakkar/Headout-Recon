@@ -177,7 +177,7 @@ function getRuleTap(subCategory: string, spNetLc: number, disputeAmt: number): n
   const rule = CANCELLATION_TAP_RULES[subCategory];
   if (!rule) return Math.max(0, Math.abs(spNetLc) - disputeAmt);
   if (rule.source === "zero") return 0;
-  return Math.max(0, Math.abs(spNetLc) - disputeAmt);
+  return Math.abs(spNetLc);
 }
 
 function getCancellationDriTeam(reason: string, fulfillmentMethod: string): string {
