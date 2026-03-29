@@ -1426,19 +1426,19 @@ export function DiscrepancySummaryWorkspace({
                           </div>
 
                           <div className="rounded-md border overflow-hidden bg-background">
-                            <table className="w-full text-[11px]">
+                            <table className="w-full text-[11px]" style={{ tableLayout: "fixed" }}>
                               <thead>
                                 <tr className="h-7 bg-muted/30 border-b">
                                   <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Booking ID</th>
                                   <th className="text-left font-medium text-muted-foreground px-2 py-1 whitespace-nowrap">Ticket ID</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">SP Net</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">HO Net</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[7rem]">SP Net</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[7rem]">HO Net</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[5.5rem]">Selection</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[4.5rem]">Dispute</th>
-                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-32">TAP</th>
-                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">totalAmountPaid</th>
-                                  <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-24">Dispute Amt</th>
-                                  <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-[7rem]">Balance Amt Payable</th>
+                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-[9rem]">TAP</th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[7rem]">totalAmountPaid</th>
+                                  <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-[7rem]">Dispute Amt</th>
+                                  <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-[7.5rem]">Balance Amt Payable</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-8"></th>
                                 </tr>
                               </thead>
