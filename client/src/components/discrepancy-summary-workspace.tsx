@@ -1390,7 +1390,7 @@ export function DiscrepancySummaryWorkspace({
                           <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
                           <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
                         </div>
-                        <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                        <div className="text-right px-3 w-[8rem] font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
                         <div className="text-right px-3 w-[7rem] font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
                         <div className="text-right px-3 w-[7.5rem] font-mono text-sm text-green-600 font-medium">{fmt((() => {
@@ -1435,7 +1435,7 @@ export function DiscrepancySummaryWorkspace({
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">HO Net</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[5.5rem]">Selection</th>
                                   <th className="text-center font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-[4.5rem]">Dispute</th>
-                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-24">TAP</th>
+                                  <th className="text-right font-medium text-violet-600 px-2 py-1 whitespace-nowrap w-28">TAP</th>
                                   <th className="text-right font-medium text-muted-foreground px-2 py-1 whitespace-nowrap w-24">totalAmountPaid</th>
                                   <th className="text-right font-medium text-orange-600 px-2 py-1 whitespace-nowrap w-24">Dispute Amt</th>
                                   <th className="text-right font-medium text-green-600 px-2 py-1 whitespace-nowrap w-[7rem]">Balance Amt Payable</th>
@@ -1520,7 +1520,7 @@ export function DiscrepancySummaryWorkspace({
                                                 step="0.01"
                                                 value={bidTapOverrides[b.bookingId] ?? ""}
                                                 onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                                className="w-20 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
+                                                className="w-24 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
                                                 data-testid={`input-tap-${b.bookingId}`}
                                               />
                                               <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
@@ -1533,7 +1533,7 @@ export function DiscrepancySummaryWorkspace({
                                               step="0.01"
                                               value={finalNet}
                                               readOnly
-                                              className="w-20 h-5 text-xs text-right font-mono bg-transparent border-0 cursor-default"
+                                              className="w-24 h-5 text-xs text-right font-mono bg-transparent border-0 cursor-default"
                                               onClick={() => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: String(finalNet) }))}
                                               data-testid={`input-tap-${b.bookingId}`}
                                             />
