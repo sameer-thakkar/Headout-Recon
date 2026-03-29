@@ -103,6 +103,7 @@ export function DiscrepancySummaryWorkspace({
   billingEntityName,
   currency,
 }: DiscrepancySummaryWorkspaceProps) {
+  const TID_GRID_COLUMNS = "1.75rem 1.25rem 1fr minmax(4rem,auto) minmax(6rem,auto) minmax(6rem,auto) minmax(7rem,auto) minmax(7rem,auto) minmax(6rem,auto) minmax(5rem,auto) minmax(6rem,auto) minmax(2.5rem,auto)";
   const { toast } = useToast();
   const [analysisOpen, setAnalysisOpen] = useState(true);
   const [expandedTid, setExpandedTid] = useState<string | null>(null);
@@ -1334,7 +1335,7 @@ export function DiscrepancySummaryWorkspace({
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-3" style={{ gridTemplateColumns: "1.75rem 1.25rem 1fr minmax(4rem,auto) minmax(6rem,auto) minmax(6rem,auto) minmax(7rem,auto) minmax(7rem,auto) minmax(6rem,auto) minmax(5rem,auto) minmax(6rem,auto) minmax(2.5rem,auto)" }}>
+                <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-3" style={{ gridTemplateColumns: TID_GRID_COLUMNS }}>
                   <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
                     <Checkbox checked={selectedTids.size > 0 && selectedTids.size === filteredTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                   </div>
@@ -1362,7 +1363,7 @@ export function DiscrepancySummaryWorkspace({
                     <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
                         className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-3 ${isExpanded ? "bg-muted/20" : ""}`}
-                        style={{ gridTemplateColumns: "1.75rem 1.25rem 1fr minmax(4rem,auto) minmax(6rem,auto) minmax(6rem,auto) minmax(7rem,auto) minmax(7rem,auto) minmax(6rem,auto) minmax(5rem,auto) minmax(6rem,auto) minmax(2.5rem,auto)" }}
+                        style={{ gridTemplateColumns: TID_GRID_COLUMNS }}
                         onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                       >
                         <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
