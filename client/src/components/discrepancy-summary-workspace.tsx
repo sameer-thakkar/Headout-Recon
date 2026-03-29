@@ -332,6 +332,8 @@ export function DiscrepancySummaryWorkspace({
   const [bidDisputeAmounts, setBidDisputeAmounts] = useState<Record<string, number>>({});
   const [bidTapOverrides, setBidTapOverrides] = useState<Record<string, string>>({});
   const [unmappedResolutions, setUnmappedResolutions] = useState<Record<string, string>>({});
+  const [vendorIdCorrections, setVendorIdCorrections] = useState<Record<string, string>>({});
+  const [vendorIdConfirmed, setVendorIdConfirmed] = useState<Set<string>>(new Set());
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -400,11 +402,27 @@ export function DiscrepancySummaryWorkspace({
     }).sort((a, b) => Math.abs(b.discLc) - Math.abs(a.discLc));
   }, [allRows, reason]);
 
+  const isSecondaryVendor = useMemo(() => {
+    if (tidGroups.length === 0) return false;
+    return tidGroups.every(t => t.bookings.every(b => b.isSecondaryVendor === true));
+  }, [tidGroups]);
+
+  const svBeIds = useMemo(() => {
+    if (!isSecondaryVendor) return { spBeId: "", hoBeId: "" };
+    const first = tidGroups[0]?.bookings[0];
+    return { spBeId: first?.spBeId || "", hoBeId: first?.hoBeId || "" };
+  }, [isSecondaryVendor, tidGroups]);
+
+  const allVendorIdsConfirmed = useMemo(() => {
+    if (!isSecondaryVendor) return true;
+    return tidGroups.every(t => vendorIdConfirmed.has(t.tid));
+  }, [isSecondaryVendor, tidGroups, vendorIdConfirmed]);
+
   const detectedDriTeam = useMemo(() => {
-    if (isUnmapped) return "Supply";
+    if (isUnmapped || isSecondaryVendor) return "Supply";
     const match = allRows.find(r => r.reason === reason && r.driTeam);
     return match?.driTeam || "Tech";
-  }, [allRows, reason, isUnmapped]);
+  }, [allRows, reason, isUnmapped, isSecondaryVendor]);
 
   const predictiveInsight = useMemo(() => {
     if (!reason || tidGroups.length === 0) return null;
@@ -836,6 +854,8 @@ export function DiscrepancySummaryWorkspace({
         setDisputePaxExpanded(null);
         setDisputePaxPrices({});
         setUnmappedResolutions({});
+        setVendorIdCorrections({});
+        setVendorIdConfirmed(new Set());
       }
       onOpenChange(v);
     }}>
@@ -843,8 +863,9 @@ export function DiscrepancySummaryWorkspace({
         <div className="border-b px-5 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             {isUnmapped && <AlertTriangle className="h-4 w-4 text-orange-600" />}
-            <span className={`text-sm font-semibold ${isUnmapped ? "text-orange-800 dark:text-orange-300" : ""}`}>{reason}</span>
-            <Badge variant={isUnmapped ? "outline" : "secondary"} className={`text-xs ${isUnmapped ? "border-orange-300 text-orange-700 bg-orange-50" : ""}`}>{tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
+            {isSecondaryVendor && <AlertTriangle className="h-4 w-4 text-amber-600" />}
+            <span className={`text-sm font-semibold ${isUnmapped ? "text-orange-800 dark:text-orange-300" : isSecondaryVendor ? "text-amber-800 dark:text-amber-300" : ""}`}>{reason}{isSecondaryVendor ? " (Secondary Vendor)" : ""}</span>
+            <Badge variant={isUnmapped ? "outline" : isSecondaryVendor ? "outline" : "secondary"} className={`text-xs ${isUnmapped ? "border-orange-300 text-orange-700 bg-orange-50" : isSecondaryVendor ? "border-amber-300 text-amber-700 bg-amber-50" : ""}`}>{tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
             <Badge variant="outline" className="text-xs">{tidGroups.length} TIDs</Badge>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -878,6 +899,22 @@ export function DiscrepancySummaryWorkspace({
               </span>
               <span className="ml-1 text-orange-700 dark:text-orange-400">
                 Total SP claim: <span className="font-mono font-bold">{fmt(tidGroups.reduce((s, t) => s + t.spNet, 0))}</span>
+              </span>
+            </div>
+          </div>
+        )}
+        {isSecondaryVendor && (
+          <div className="mx-4 mt-2 px-3 py-2.5 rounded-md border-2 border-amber-300 dark:border-amber-700 bg-amber-50/70 dark:bg-amber-950/30 flex items-start gap-2.5 text-xs" data-testid="sv-mismatch-banner">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-amber-800 dark:text-amber-300">BE ID Mismatch — </span>
+              <span className="text-amber-700 dark:text-amber-400">
+                SP BE: <span className="font-mono font-bold">{svBeIds.spBeId || "—"}</span>
+                <span className="mx-1.5">vs</span>
+                HO BE: <span className="font-mono font-bold">{svBeIds.hoBeId || "—"}</span>
+              </span>
+              <span className="ml-2 text-amber-600 dark:text-amber-500">
+                {vendorIdConfirmed.size}/{tidGroups.length} TIDs confirmed
               </span>
             </div>
           </div>
@@ -1396,7 +1433,10 @@ export function DiscrepancySummaryWorkspace({
 
                   <div className="flex items-center justify-between pt-1 border-t">
                     <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setShowTakeAction(false); setTakeActionDisputes(new Set()); }} data-testid="cancel-take-action">Cancel</Button>
-                    <Button size="sm" className="h-8 text-xs gap-1.5" data-testid="confirm-take-action" disabled={priceOverrideMutation.isPending || disputeMutation.isPending || issueMutation.isPending} onClick={() => {
+                    {isSecondaryVendor && !allVendorIdsConfirmed && (
+                      <span className="text-[10px] text-amber-600 mx-2">Confirm all vendor IDs before applying</span>
+                    )}
+                    <Button size="sm" className="h-8 text-xs gap-1.5" data-testid="confirm-take-action" disabled={priceOverrideMutation.isPending || disputeMutation.isPending || issueMutation.isPending || (isSecondaryVendor && !allVendorIdsConfirmed)} onClick={() => {
                       const allBookingIds = allTids.flatMap(t => t.bookings.map(b => b.bookingId));
                       const flashParts: string[] = [];
                       const completeParts: string[] = [];
@@ -1544,10 +1584,13 @@ export function DiscrepancySummaryWorkspace({
                   )}
                   <div className="flex items-center justify-between pt-1">
                     <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBulkConfirm(null)}>Cancel</Button>
-                    <Button size="sm" className={`h-7 text-xs gap-1 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} variant={isSp ? "default" : "outline"} onClick={() => handleBulkAction(bulkConfirm)} disabled={priceOverrideMutation.isPending} data-testid="bulk-confirm-apply">
+                    <Button size="sm" className={`h-7 text-xs gap-1 ${isSp ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}`} variant={isSp ? "default" : "outline"} onClick={() => handleBulkAction(bulkConfirm)} disabled={priceOverrideMutation.isPending || (isSecondaryVendor && !allVendorIdsConfirmed)} data-testid="bulk-confirm-apply">
                       {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                       Apply {isSp ? "SP Net" : "HO Net"} to {selData.length} TIDs
                     </Button>
+                    {isSecondaryVendor && !allVendorIdsConfirmed && (
+                      <span className="text-[10px] text-amber-600">Confirm all vendor IDs first</span>
+                    )}
                   </div>
                 </div>
               );
@@ -1716,6 +1759,38 @@ export function DiscrepancySummaryWorkspace({
                               <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
                                 <FileWarning className="h-3.5 w-3.5" /> Issue
                               </Button>
+                            </div>
+                          )}
+
+                          {isSecondaryVendor && (
+                            <div className="flex items-center gap-3 p-2 rounded-md bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800" data-testid={`sv-vendor-id-${tid.tid}`}>
+                              <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 shrink-0">
+                                <AlertTriangle className="h-3 w-3" />
+                                <span className="font-medium">Vendor ID:</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+                                <span>SP: <span className="font-mono font-medium">{tid.bookings[0]?.spBeId || "—"}</span></span>
+                                <span className="text-amber-400">→</span>
+                                <span>HO: <span className="font-mono font-medium">{tid.bookings[0]?.hoBeId || "—"}</span></span>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-1">
+                                <Input
+                                  className="h-6 text-[10px] font-mono w-36 border-amber-200"
+                                  placeholder="Final Vendor ID"
+                                  value={vendorIdCorrections[tid.tid] ?? (tid.bookings[0]?.spBeId || "")}
+                                  onChange={(e) => setVendorIdCorrections(prev => ({ ...prev, [tid.tid]: e.target.value }))}
+                                  data-testid={`sv-final-vendor-${tid.tid}`}
+                                />
+                                {vendorIdConfirmed.has(tid.tid) ? (
+                                  <Badge className="text-[10px] px-1.5 py-0 bg-green-100 text-green-700 border-green-200">
+                                    <CheckCircle2 className="h-3 w-3 mr-0.5" /> Confirmed
+                                  </Badge>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => setVendorIdConfirmed(prev => { const next = new Set(prev); next.add(tid.tid); return next; })} data-testid={`sv-confirm-vendor-${tid.tid}`}>
+                                    <Check className="h-3 w-3 mr-0.5" /> Confirm
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           )}
 
