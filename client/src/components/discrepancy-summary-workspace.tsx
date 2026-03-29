@@ -331,6 +331,7 @@ export function DiscrepancySummaryWorkspace({
   const [bidDisputeActive, setBidDisputeActive] = useState<Set<string>>(new Set());
   const [bidDisputeAmounts, setBidDisputeAmounts] = useState<Record<string, number>>({});
   const [bidTapOverrides, setBidTapOverrides] = useState<Record<string, string>>({});
+  const [unmappedResolutions, setUnmappedResolutions] = useState<Record<string, string>>({});
 
   const isMTB = reason === "Multiple Tickets Booked";
   const isNPD = reason === "Net Price Discrepancy";
@@ -343,11 +344,20 @@ export function DiscrepancySummaryWorkspace({
     ? "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(4.5rem,0.8fr) minmax(4.5rem,0.8fr) minmax(4rem,0.7fr) minmax(3.5rem,0.6fr) minmax(5rem,0.8fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)"
     : "minmax(6rem,2fr) minmax(5.5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5rem,1fr) minmax(5.5rem,1fr) minmax(4.5rem,0.8fr)";
   const UNMAPPED_TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(4.5rem,0.8fr) minmax(6.5rem,1fr)";
-  const UNMAPPED_BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(8rem,1.5fr) minmax(6rem,1fr)";
+  const UNMAPPED_BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(8rem,1.5fr) minmax(6rem,1fr) minmax(7rem,1.2fr)";
 
   useEffect(() => {
     setShowTidBreakdown(false);
   }, [reason]);
+
+  useEffect(() => {
+    if (isUnmapped && open && tidGroups.length > 0) {
+      const allBookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
+      const customPrices: Record<string, number> = {};
+      allBookingIds.forEach(id => { customPrices[id] = 0; });
+      priceOverrideMutation.mutate({ bookingIds: allBookingIds, selection: "sp", customPrices });
+    }
+  }, [isUnmapped, open, tidGroups.length]);
 
   const filteredAnalysis = useMemo(() => {
     if (!analysisRows || !reason) return [];
@@ -825,14 +835,16 @@ export function DiscrepancySummaryWorkspace({
         setTakeActionIssues(new Set());
         setDisputePaxExpanded(null);
         setDisputePaxPrices({});
+        setUnmappedResolutions({});
       }
       onOpenChange(v);
     }}>
       <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col p-0 gap-0" data-testid="discrepancy-workspace">
         <div className="border-b px-5 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{reason}</span>
-            <Badge variant="secondary" className="text-xs">{tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
+            {isUnmapped && <AlertTriangle className="h-4 w-4 text-orange-600" />}
+            <span className={`text-sm font-semibold ${isUnmapped ? "text-orange-800 dark:text-orange-300" : ""}`}>{reason}</span>
+            <Badge variant={isUnmapped ? "outline" : "secondary"} className={`text-xs ${isUnmapped ? "border-orange-300 text-orange-700 bg-orange-50" : ""}`}>{tidGroups.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
             <Badge variant="outline" className="text-xs">{tidGroups.length} TIDs</Badge>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1023,23 +1035,10 @@ export function DiscrepancySummaryWorkspace({
                 <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">All {tidGroups.length} TIDs:</span>
                 <div className="h-4 w-px bg-border" />
                 {isUnmapped ? (
-                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0" onClick={() => {
-                    const allBookingIds = tidGroups.flatMap(t => t.bookings.map(b => b.bookingId));
-                    const customPrices: Record<string, number> = {};
-                    allBookingIds.forEach(id => { customPrices[id] = 0; });
-                    priceOverrideMutation.mutate({ bookingIds: allBookingIds, selection: "sp", customPrices }, {
-                      onSuccess: () => {
-                        resolveMultiple(tidGroups.map(t => t.tid));
-                        flash(`${tidGroups.length} TIDs → TAP set to 0 (unmapped)`);
-                        toast({ title: "Unmapped bookings resolved", description: `TAP set to 0 for ${allBookingIds.length} bookings` });
-                      },
-                      onError: (err) => {
-                        toast({ title: "Failed to apply", description: String(err), variant: "destructive" });
-                      },
-                    });
-                  }} disabled={priceOverrideMutation.isPending} data-testid="unmapped-set-tap-zero">
-                    {priceOverrideMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />} Set TAP = 0
-                  </Button>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800" data-testid="unmapped-tap-auto-status">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-orange-600" />
+                    <span className="text-xs font-medium text-orange-700 dark:text-orange-300">TAP = 0 (auto-applied)</span>
+                  </div>
                 ) : (
                   <Button size="sm" className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shrink-0" onClick={() => { setShowTakeAction(true); setTakeActionPrice("sp"); setTakeActionDisputes(new Set()); setTakeActionIssues(new Set()); setDisputePaxExpanded(null); setDisputePaxPrices({}); }} data-testid="take-action-btn">
                     <Zap className="h-3.5 w-3.5" /> Take Action
@@ -1186,7 +1185,7 @@ export function DiscrepancySummaryWorkspace({
                             const isPaxOpen = disputePaxExpanded === t.tid;
                             const tidTapTotal = getTidTap(t);
                             const tidDispTotal = getDisputeDiff(t);
-                            const experience = t.bookings[0]?.experienceName || t.bookings[0]?.productName || "";
+                            const experience = t.bookings[0]?.experienceName || "";
                             return (
                               <div key={t.tid}>
                                 <div className={`grid grid-cols-[auto_5fr_2.5fr_2.5fr_2.5fr_2.5fr_2.5fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)} data-testid={`dispute-tid-${t.tid}`}>
@@ -1358,7 +1357,7 @@ export function DiscrepancySummaryWorkspace({
                         </div>
                         {allTids.map(t => {
                           const isChecked = takeActionIssues.has(t.tid);
-                          const experience = t.bookings[0]?.experienceName || t.bookings[0]?.productName || "";
+                          const experience = t.bookings[0]?.experienceName || "";
                           const tidDriTeam = t.bookings[0]?.driTeam || detectedDriTeam;
                           return (
                             <div key={t.tid} className={`grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)} data-testid={`issue-tid-${t.tid}`}>
@@ -1652,8 +1651,8 @@ export function DiscrepancySummaryWorkspace({
                             <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
                             {!isUnmapped && tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
                           </div>
-                          {(tid.bookings[0]?.experienceName || tid.bookings[0]?.productName) && (
-                            <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName || tid.bookings[0]?.productName}</div>
+                          {tid.bookings[0]?.experienceName && (
+                            <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName}</div>
                           )}
                         </div>
                         <div className="text-center">
@@ -1729,6 +1728,7 @@ export function DiscrepancySummaryWorkspace({
                                 <>
                                   <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Product Name</div>
                                   <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Experience Date</div>
+                                  <div className="text-center font-medium text-orange-600 whitespace-nowrap">Resolution</div>
                                 </>
                               ) : (
                                 <>
@@ -1762,6 +1762,20 @@ export function DiscrepancySummaryWorkspace({
                                     </div>
                                     <div className="text-center py-1 font-mono text-muted-foreground">
                                       {b.experienceDate ? formatDate(b.experienceDate) : "—"}
+                                    </div>
+                                    <div className="text-center py-1">
+                                      <Select value={unmappedResolutions[b.bookingId] || ""} onValueChange={(v) => setUnmappedResolutions(prev => ({ ...prev, [b.bookingId]: v }))}>
+                                        <SelectTrigger className="w-full h-6 text-[10px] mx-auto border-orange-200" data-testid={`resolution-${b.bookingId}`}>
+                                          <SelectValue placeholder="Classify..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="VRN not updated">VRN not updated</SelectItem>
+                                          <SelectItem value="Product Listing Error">Product Listing Error</SelectItem>
+                                          <SelectItem value="Duplicate Entry">Duplicate Entry</SelectItem>
+                                          <SelectItem value="Finance-Prepurchase">Finance-Prepurchase</SelectItem>
+                                          <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                      </Select>
                                     </div>
                                   </div>
                                 );
@@ -1908,7 +1922,7 @@ export function DiscrepancySummaryWorkspace({
                               <div className="py-1 text-muted-foreground" style={{ gridColumn: "span 2" }}>Total ({tid.bookings.length})</div>
                               <div className="text-center py-1 font-mono text-blue-600">{fmt(tid.spNet)}</div>
                               {isUnmapped ? (
-                                <div className="text-center py-1" style={{ gridColumn: "span 2" }} />
+                                <div className="text-center py-1" style={{ gridColumn: "span 3" }} />
                               ) : (
                               <>
                               <div className="text-center py-1 font-mono text-green-600">{fmt(tid.hoNet)}</div>
