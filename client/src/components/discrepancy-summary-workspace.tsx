@@ -1527,11 +1527,6 @@ export function DiscrepancySummaryWorkspace({
                                               <XIcon className="h-2.5 w-2.5" />
                                             </button>
                                           )}
-                                          <div className="absolute right-0 top-full mt-0.5 z-50 hidden group-hover:block pointer-events-none">
-                                            <div className="text-[9px] text-muted-foreground/60 whitespace-nowrap">
-                                              ±10%: {fmt(tapMin)} – {fmt(tapMax)}
-                                            </div>
-                                          </div>
                                         </div>
                                       </td>
                                       <td className="text-right px-2 py-1 font-mono text-muted-foreground" data-testid={`booking-amtpaid-${b.bookingId}`}>
