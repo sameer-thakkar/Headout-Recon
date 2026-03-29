@@ -265,800 +265,6 @@ function formatNumber(value: number): string {
   }).format(value);
 }
 
-function normalizeDate(d: string): Date | null {
-  const num = Number(d);
-  if (!isNaN(num) && num > 10000 && num < 100000) {
-    const epoch = new Date((num - 25569) * 86400000);
-    if (!isNaN(epoch.getTime())) return epoch;
-  }
-  const ts = Date.parse(d);
-  if (!isNaN(ts)) {
-    const dt = new Date(ts);
-    if (dt.getFullYear() > 1900 && dt.getFullYear() < 2200) return dt;
-  }
-  return null;
-}
-
-interface ManageTidModalHandle {
-  open: (bookings: PurchaseBooking[], tid: string, reason: string) => void;
-}
-
-const ManageTidModal = memo(forwardRef<ManageTidModalHandle, {
-  currency: string;
-  runId?: string | null;
-  onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  onApplyPax: (bookings: PurchaseBooking[], newPrices: Record<string, string>, dateToRowKeyMap: Map<string, string>, tid: string) => void;
-  onApplyVendorId: (bookingIds: string[], vendorId: string) => void;
-  onRaiseDispute: (tidBookings: PurchaseBooking[], reason: string) => void;
-  onLogIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
-}>(function ManageTidModal({ currency, runId, onApplySpNet, onApplyHoNet, onApplyPax, onApplyVendorId, onRaiseDispute, onLogIssue }, ref) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [bookings, setBookings] = useState<PurchaseBooking[]>([]);
-  const [tid, setTid] = useState("");
-  const [reason, setReason] = useState("");
-  const [newPrices, setNewPrices] = useState<Record<string, string>>({});
-  const [vendorId, setVendorId] = useState("");
-  const [disputeChecked, setDisputeChecked] = useState(false);
-  const [issueChecked, setIssueChecked] = useState(false);
-  const hasPax = useMemo(() => bookings.some(b => b.paxBreakdown && b.paxBreakdown.length > 0), [bookings]);
-
-  const paymentBasis = useMemo(() => {
-    const first = bookings.find(b => b.paymentBasis);
-    return first?.paymentBasis || "";
-  }, [bookings]);
-
-  const dateField = useMemo<"experienceDate" | "bookingCreationDate">(() => {
-    if (paymentBasis.toUpperCase().includes("EXPERIENCE")) return "experienceDate";
-    return "bookingCreationDate";
-  }, [paymentBasis]);
-
-  type PaxDateRow = {
-    paxType: string;
-    dateRange: string;
-    dates: string[];
-    count: number;
-    spUnitPrice: number;
-    hoUnitPrice: number;
-    rowKey: string;
-  };
-
-  const formatDateShort = useCallback((d: string): string => {
-    const dt = normalizeDate(d);
-    if (!dt) return d;
-    return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
-  }, []);
-
-  const { paxDateRows, dateToRowKeyMap } = useMemo(() => {
-    const dateGroupKey = (b: PurchaseBooking) => {
-      const raw = dateField === "experienceDate" ? b.experienceDate : b.bookingCreationDate;
-      if (!raw) return "Unknown";
-      const dt = normalizeDate(raw);
-      return dt ? dt.toISOString() : "Unknown";
-    };
-
-    const byDateAndPax = new Map<string, {
-      paxType: string;
-      date: string;
-      count: number;
-      spTotal: number;
-      hoUnitPrice: number;
-    }>();
-
-    for (const b of bookings) {
-      if (!b.paxBreakdown) continue;
-      const date = dateGroupKey(b);
-      const bookingHoTotal = b.paxBreakdown.reduce((s, pb) => s + pb.priceNet, 0);
-      for (const pb of b.paxBreakdown) {
-        const spContribution = bookingHoTotal > 0 ? (pb.priceNet / bookingHoTotal) * b.spNet : 0;
-        const key = `${pb.paxType}||${date}`;
-        const existing = byDateAndPax.get(key);
-        if (existing) {
-          existing.count += pb.count;
-          existing.spTotal += spContribution;
-        } else {
-          byDateAndPax.set(key, {
-            paxType: pb.paxType,
-            date,
-            count: pb.count,
-            spTotal: spContribution,
-            hoUnitPrice: pb.unitPrice,
-          });
-        }
-      }
-    }
-
-    const dateEntries = Array.from(byDateAndPax.values()).map(e => ({
-      paxType: e.paxType,
-      date: e.date,
-      count: e.count,
-      spUnitPrice: e.count > 0 ? Math.round((e.spTotal / e.count) * 100) / 100 : 0,
-      hoUnitPrice: e.hoUnitPrice,
-    }));
-
-    type DateEntry = { paxType: string; date: string; count: number; spUnitPrice: number; hoUnitPrice: number };
-    const byPaxType = new Map<string, DateEntry[]>();
-    for (const entry of dateEntries) {
-      const arr = byPaxType.get(entry.paxType) || [];
-      arr.push(entry);
-      byPaxType.set(entry.paxType, arr);
-    }
-
-    const toDateOnly = (d: string): string => {
-      const dt = normalizeDate(d);
-      if (!dt) return "";
-      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-    };
-
-    const rows: PaxDateRow[] = [];
-    const dtRowKeyMap = new Map<string, string>();
-
-    for (const [paxType, paxEntries] of Array.from(byPaxType.entries())) {
-      const unknowns = paxEntries.filter((e: DateEntry) => toDateOnly(e.date) === "");
-      const dated = paxEntries.filter((e: DateEntry) => toDateOnly(e.date) !== "");
-
-      dated.sort((a: DateEntry, b: DateEntry) => toDateOnly(a.date).localeCompare(toDateOnly(b.date)));
-
-      const runs: DateEntry[][] = [];
-      for (const entry of dated) {
-        const lastRun = runs[runs.length - 1];
-        if (lastRun) {
-          const lastEntry = lastRun[lastRun.length - 1];
-          const samePrice = lastEntry.spUnitPrice === entry.spUnitPrice && lastEntry.hoUnitPrice === entry.hoUnitPrice;
-          if (samePrice) {
-            lastRun.push(entry);
-            continue;
-          }
-        }
-        runs.push([entry]);
-      }
-
-      for (const run of runs) {
-        const totalCount = run.reduce((s: number, e: DateEntry) => s + e.count, 0);
-        const firstDate = run[0].date;
-        const lastDate = run[run.length - 1].date;
-        const dateRange = run.length === 1
-          ? formatDateShort(firstDate)
-          : `${formatDateShort(firstDate)} - ${formatDateShort(lastDate)}`;
-        const rowKey = `${paxType}__${dateRange}`;
-        rows.push({
-          paxType,
-          dateRange,
-          dates: run.map((e: DateEntry) => e.date),
-          count: totalCount,
-          spUnitPrice: run[0].spUnitPrice,
-          hoUnitPrice: run[0].hoUnitPrice,
-          rowKey,
-        });
-        for (const e of run) {
-          dtRowKeyMap.set(`${paxType}||${e.date}`, rowKey);
-        }
-      }
-
-      const unknownByPrice = new Map<string, DateEntry[]>();
-      for (const u of unknowns) {
-        const pk = `${u.spUnitPrice}||${u.hoUnitPrice}`;
-        const arr = unknownByPrice.get(pk) || [];
-        arr.push(u);
-        unknownByPrice.set(pk, arr);
-      }
-      let unknownIdx = 0;
-      for (const [, uGroup] of Array.from(unknownByPrice.entries())) {
-        const totalCount = uGroup.reduce((s: number, e: DateEntry) => s + e.count, 0);
-        const suffix = unknownByPrice.size > 1 ? `Unknown_${++unknownIdx}` : "Unknown";
-        const rowKey = `${paxType}__${suffix}`;
-        rows.push({
-          paxType,
-          dateRange: suffix,
-          dates: [suffix],
-          count: totalCount,
-          spUnitPrice: uGroup[0].spUnitPrice,
-          hoUnitPrice: uGroup[0].hoUnitPrice,
-          rowKey,
-        });
-        for (const e of uGroup) {
-          dtRowKeyMap.set(`${paxType}||${e.date}`, rowKey);
-        }
-      }
-    }
-
-    rows.sort((a, b) => a.paxType.localeCompare(b.paxType) || (a.dates[0] || "").localeCompare(b.dates[0] || ""));
-    return { paxDateRows: rows, dateToRowKeyMap: dtRowKeyMap };
-  }, [bookings, dateField, formatDateShort]);
-
-  const spTotal = useMemo(() => bookings.reduce((s, b) => s + b.spNet, 0), [bookings]);
-  const hoTotal = useMemo(() => bookings.reduce((s, b) => s + b.hoNet, 0), [bookings]);
-
-  const vendorCorrectionBookings = useMemo(() => bookings.filter(b => needsVendorCorrection(b)), [bookings]);
-
-  useImperativeHandle(ref, () => ({
-    open: (tidBookings: PurchaseBooking[], tidVal: string, reasonVal: string) => {
-      setNewPrices({});
-      setVendorId("");
-      setDisputeChecked(false);
-      setIssueChecked(false);
-      setBookings(tidBookings);
-      setTid(tidVal);
-      setReason(reasonVal);
-      setIsOpen(true);
-    }
-  }));
-
-  const applyVendorIdIfSet = useCallback(() => {
-    if (vendorId.trim() && vendorCorrectionBookings.length > 0) {
-      onApplyVendorId(vendorCorrectionBookings.map(b => b.bookingId), vendorId.trim());
-    }
-  }, [vendorId, vendorCorrectionBookings, onApplyVendorId]);
-
-  const handleApplySpNet = useCallback(() => {
-    applyVendorIdIfSet();
-    if (disputeChecked) onRaiseDispute(bookings, reason);
-    if (issueChecked) onLogIssue(bookings, reason, tid);
-    setIsOpen(false);
-    onApplySpNet(bookings);
-  }, [bookings, onApplySpNet, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason, tid]);
-
-  const handleApplyHoNet = useCallback(() => {
-    applyVendorIdIfSet();
-    if (disputeChecked) onRaiseDispute(bookings, reason);
-    if (issueChecked) onLogIssue(bookings, reason, tid);
-    setIsOpen(false);
-    onApplyHoNet(bookings);
-  }, [bookings, onApplyHoNet, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason, tid]);
-
-  const allPaxFilled = useMemo(() => {
-    if (!hasPax || paxDateRows.length === 0) return false;
-    for (const row of paxDateRows) {
-      const val = newPrices[row.rowKey];
-      if (val === undefined || val === "") return false;
-    }
-    return true;
-  }, [hasPax, paxDateRows, newPrices]);
-
-  const handleApplyPax = useCallback(() => {
-    if (!allPaxFilled) return;
-    applyVendorIdIfSet();
-    if (disputeChecked) onRaiseDispute(bookings, reason);
-    if (issueChecked) onLogIssue(bookings, reason, tid);
-    setIsOpen(false);
-    onApplyPax(bookings, newPrices, dateToRowKeyMap, tid);
-  }, [bookings, newPrices, dateToRowKeyMap, tid, onApplyPax, allPaxFilled, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason, tid]);
-
-  const handleDisputeIssueOnly = useCallback(() => {
-    applyVendorIdIfSet();
-    if (disputeChecked) onRaiseDispute(bookings, reason);
-    if (issueChecked) onLogIssue(bookings, reason, tid);
-    setIsOpen(false);
-  }, [bookings, reason, tid, applyVendorIdIfSet, disputeChecked, issueChecked, onRaiseDispute, onLogIssue]);
-
-  const formatDisplayName = (paxType: string) =>
-    paxType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-
-  return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Pencil className="h-5 w-5 text-primary" />
-            Manage TID
-          </DialogTitle>
-          <DialogDescription>
-            Manage {bookings.length} bookings in TID {tid} — update pricing, raise disputes, or flag issues.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="modal-scroll-area">
-          <div className="rounded-md border bg-background overflow-hidden">
-            <div
-              className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
-              onClick={handleApplySpNet}
-              data-testid={`modal-btn-spnet-${tid}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                  <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium">Update to SP Net</div>
-                  <div className="text-xs text-muted-foreground">
-                    Set Total Amount Payable = SP Net for all bookings (Total: {formatNumber(spTotal)} {currency})
-                  </div>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </div>
-
-          <div className="rounded-md border bg-background overflow-hidden">
-            <div
-              className="flex items-center justify-between px-4 py-3 cursor-pointer hover-elevate"
-              onClick={handleApplyHoNet}
-              data-testid={`modal-btn-honet-${tid}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-green-100 dark:bg-green-900/30">
-                  <TrendingDown className="h-4 w-4 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium">Update to HO Net</div>
-                  <div className="text-xs text-muted-foreground">
-                    Set Total Amount Payable = HO Net for all bookings (Total: {formatNumber(hoTotal)} {currency})
-                  </div>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </div>
-
-          {hasPax && (
-            <div className="rounded-md border bg-background overflow-hidden">
-              <div className="px-4 py-3 border-b bg-muted/30">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-violet-100 dark:bg-violet-900/30">
-                    <Calculator className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Update based on Pax Type</div>
-                    <div className="text-xs text-muted-foreground">Enter final unit price per pax type to recalculate Total Amount Payable</div>
-                  </div>
-                </div>
-              </div>
-              <div className="p-3 space-y-3">
-                <div className="grid grid-cols-2 gap-3 text-xs mb-2">
-                  <div className="rounded-md border p-2 bg-blue-50 dark:bg-blue-900/20">
-                    <span className="text-muted-foreground">SP Net Total:</span>{" "}
-                    <span className="font-mono font-semibold text-blue-700 dark:text-blue-300">{formatNumber(spTotal)} {currency}</span>
-                  </div>
-                  <div className="rounded-md border p-2 bg-green-50 dark:bg-green-900/20">
-                    <span className="text-muted-foreground">HO Net Total:</span>{" "}
-                    <span className="font-mono font-semibold text-green-700 dark:text-green-300">{formatNumber(hoTotal)} {currency}</span>
-                  </div>
-                </div>
-                {paymentBasis && (
-                  <div className="text-xs text-muted-foreground mb-1">
-                    Grouped by: <span className="font-medium text-foreground">{dateField === "experienceDate" ? "Experience Date" : "Booking Creation Date"}</span>
-                    <span className="ml-1">(Payment Basis: {paymentBasis})</span>
-                  </div>
-                )}
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Pax Type</TableHead>
-                        <TableHead className="text-xs">{dateField === "experienceDate" ? "Experience Date" : "Booking Date"}</TableHead>
-                        <TableHead className="text-xs text-right">Count</TableHead>
-                        <TableHead className="text-xs text-right">SP Unit ({currency})</TableHead>
-                        <TableHead className="text-xs text-right">HO Unit ({currency})</TableHead>
-                        <TableHead className="text-xs text-right">Final Price ({currency})</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {paxDateRows.map((row) => (
-                        <TableRow key={row.rowKey}>
-                          <TableCell className="text-xs font-medium">{formatDisplayName(row.paxType)}</TableCell>
-                          <TableCell className="text-xs font-mono text-muted-foreground">{row.dateRange}</TableCell>
-                          <TableCell className="text-xs text-right font-mono">{row.count}</TableCell>
-                          <TableCell className="text-xs text-right font-mono text-muted-foreground">
-                            {formatNumber(row.spUnitPrice)}
-                          </TableCell>
-                          <TableCell className="text-xs text-right font-mono text-muted-foreground">
-                            {formatNumber(row.hoUnitPrice)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Input
-                              type="number"
-                              step="0.01"
-                              placeholder="Enter price"
-                              value={newPrices[row.rowKey] ?? ""}
-                              onChange={(e) => setNewPrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                              className="w-28 text-xs font-mono text-right ml-auto"
-                              data-testid={`input-pax-price-${row.rowKey}`}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <p className="text-xs text-muted-foreground">
-                    New FNP = Sum of (Count x Final Price) per pax type
-                  </p>
-                  <Button
-                    size="sm"
-                    onClick={handleApplyPax}
-                    disabled={!allPaxFilled}
-                    data-testid="button-apply-pax-update"
-                  >
-                    <Check className="h-3.5 w-3.5 mr-1.5" />
-                    Apply Pax Prices
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {vendorCorrectionBookings.length > 0 && (
-            <div className="rounded-md border bg-background overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-violet-100 dark:bg-violet-900/30">
-                    <AlertTriangle className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Final Vendor ID</div>
-                    <div className="text-xs text-muted-foreground">
-                      {vendorCorrectionBookings.length} booking{vendorCorrectionBookings.length !== 1 ? "s" : ""} need vendor correction (secondary/mismatch)
-                    </div>
-                  </div>
-                </div>
-                <Input
-                  type="text"
-                  placeholder="Enter Vendor ID"
-                  value={vendorId}
-                  onChange={(e) => setVendorId(e.target.value)}
-                  className="w-40 text-xs font-mono"
-                  data-testid={`input-modal-vendor-id-${tid}`}
-                />
-              </div>
-            </div>
-          )}
-
-          {runId && (
-            <>
-              <div
-                className={`rounded-md border-2 overflow-hidden transition-colors ${disputeChecked ? "border-amber-500 dark:border-amber-400 bg-amber-50/50 dark:bg-amber-900/15" : "border-border bg-background"}`}
-                data-testid={`manage-tid-dispute-card-${tid}`}
-              >
-                <div className="flex items-center justify-between px-4 py-3 gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-8 w-8 rounded-md flex-shrink-0 ${disputeChecked ? "bg-amber-100 dark:bg-amber-900/40" : "bg-muted"}`}>
-                      <FileWarning className={`h-4 w-4 ${disputeChecked ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">Raise Dispute</div>
-                      <div className="text-xs text-muted-foreground">
-                        Raise disputes for all {bookings.length} bookings in this TID
-                      </div>
-                    </div>
-                  </div>
-                  <Checkbox
-                    checked={disputeChecked}
-                    onCheckedChange={(checked) => setDisputeChecked(checked === true)}
-                    data-testid={`checkbox-manage-tid-dispute-${tid}`}
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-md border bg-background overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-8 w-8 rounded-md ${issueChecked ? "bg-orange-100 dark:bg-orange-900/30" : "bg-muted"}`}>
-                      <AlertTriangle className={`h-4 w-4 ${issueChecked ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`} />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">Flag Issue</div>
-                      <div className="text-xs text-muted-foreground">
-                        Log this TID as an issue for the {reason} team to review
-                      </div>
-                    </div>
-                  </div>
-                  <Checkbox
-                    checked={issueChecked}
-                    onCheckedChange={(checked) => setIssueChecked(checked === true)}
-                    data-testid={`checkbox-manage-tid-issue-${tid}`}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className="rounded-md border p-3 bg-muted/50 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Applies to <span className="font-semibold">{bookings.length}</span> bookings in TID <span className="font-mono font-medium">{tid}</span>
-            </p>
-            {(disputeChecked || issueChecked) && (
-              <Button
-                size="sm"
-                onClick={handleDisputeIssueOnly}
-                data-testid={`button-submit-dispute-issue-${tid}`}
-              >
-                <Check className="h-3.5 w-3.5 mr-1.5" />
-                {disputeChecked && issueChecked ? "Raise Dispute & Flag Issue" : disputeChecked ? "Raise Dispute" : "Flag Issue"}
-              </Button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}));
-
-interface ManageReasonModalHandle {
-  open: (reason: string, allBookingsForReason: PurchaseBooking[]) => void;
-}
-
-const ManageReasonModal = memo(forwardRef<ManageReasonModalHandle, {
-  currency: string;
-  runId?: string | null;
-  onApplySpNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  onApplyHoNet: (bookings: { bookingId: string; spNet: number; hoNet: number }[]) => void;
-  onRaiseDispute: (tidBookings: PurchaseBooking[], reason: string) => void;
-  onLogIssue: (tidBookings: PurchaseBooking[], reason: string, tid: string) => void;
-}>(function ManageReasonModal({ currency, runId, onApplySpNet, onApplyHoNet, onRaiseDispute, onLogIssue }, ref) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [reason, setReason] = useState("");
-  const [bookings, setBookings] = useState<PurchaseBooking[]>([]);
-  const [disputeChecked, setDisputeChecked] = useState(false);
-  const [issueChecked, setIssueChecked] = useState(false);
-  const [showAllTids, setShowAllTids] = useState(false);
-
-  useImperativeHandle(ref, () => ({
-    open: (r: string, allBookingsForReason: PurchaseBooking[]) => {
-      setReason(r);
-      setBookings(allBookingsForReason);
-      setDisputeChecked(false);
-      setIssueChecked(false);
-      setShowAllTids(false);
-      setIsOpen(true);
-    },
-  }));
-
-  const tidAggregates = useMemo(() => {
-    const tidMap = new Map<string, PurchaseBooking[]>();
-    for (const b of bookings) {
-      const tid = b.tid || "UNKNOWN";
-      if (!tidMap.has(tid)) tidMap.set(tid, []);
-      tidMap.get(tid)!.push(b);
-    }
-    const result: { tid: string; bookings: PurchaseBooking[]; totalSpNet: number; totalHoNet: number; discrepancy: number }[] = [];
-    Array.from(tidMap.entries()).forEach(([tid, tidBookings]) => {
-      const totalSpNet = Math.round(tidBookings.reduce((s: number, b: PurchaseBooking) => s + b.spNet, 0) * 100) / 100;
-      const totalHoNet = Math.round(tidBookings.reduce((s: number, b: PurchaseBooking) => s + b.hoNet, 0) * 100) / 100;
-      result.push({ tid, bookings: tidBookings, totalSpNet, totalHoNet, discrepancy: Math.round((totalHoNet - totalSpNet) * 100) / 100 });
-    });
-    return result.sort((a, b) => Math.abs(b.discrepancy) - Math.abs(a.discrepancy));
-  }, [bookings]);
-
-  const totalSpNet = useMemo(() => Math.round(bookings.reduce((s, b) => s + b.spNet, 0) * 100) / 100, [bookings]);
-  const totalHoNet = useMemo(() => Math.round(bookings.reduce((s, b) => s + b.hoNet, 0) * 100) / 100, [bookings]);
-  const totalDiscrepancy = useMemo(() => Math.round((totalHoNet - totalSpNet) * 100) / 100, [totalHoNet, totalSpNet]);
-
-  const pinnedTids = useMemo(() => tidAggregates.slice(0, 2), [tidAggregates]);
-  const collapsedTids = useMemo(() => tidAggregates.slice(2), [tidAggregates]);
-  const visibleCollapsed = showAllTids ? collapsedTids : collapsedTids.slice(0, 3);
-
-  const discColor = (v: number) => v > 0 ? "text-green-700 dark:text-green-300" : v < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
-  const formatSigned = (v: number) => {
-    const f = formatNumber(Math.abs(v));
-    return v > 0 ? `+${f}` : v < 0 ? `-${f}` : f;
-  };
-
-  const handleApplySpNetAll = useCallback(() => {
-    onApplySpNet(bookings);
-    if (disputeChecked) {
-      for (const agg of tidAggregates) onRaiseDispute(agg.bookings, reason);
-    }
-    if (issueChecked) {
-      for (const agg of tidAggregates) onLogIssue(agg.bookings, reason, agg.tid);
-    }
-    setIsOpen(false);
-  }, [bookings, onApplySpNet, tidAggregates, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason]);
-
-  const handleApplyHoNetAll = useCallback(() => {
-    onApplyHoNet(bookings);
-    if (disputeChecked) {
-      for (const agg of tidAggregates) onRaiseDispute(agg.bookings, reason);
-    }
-    if (issueChecked) {
-      for (const agg of tidAggregates) onLogIssue(agg.bookings, reason, agg.tid);
-    }
-    setIsOpen(false);
-  }, [bookings, onApplyHoNet, tidAggregates, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason]);
-
-  const handleDisputeIssueOnly = useCallback(() => {
-    if (disputeChecked) {
-      for (const agg of tidAggregates) onRaiseDispute(agg.bookings, reason);
-    }
-    if (issueChecked) {
-      for (const agg of tidAggregates) onLogIssue(agg.bookings, reason, agg.tid);
-    }
-    setIsOpen(false);
-  }, [tidAggregates, disputeChecked, issueChecked, onRaiseDispute, onLogIssue, reason]);
-
-  const renderTidRow = useCallback((agg: { tid: string; bookings: PurchaseBooking[]; totalSpNet: number; totalHoNet: number; discrepancy: number }, isPinned: boolean) => (
-    <TableRow key={agg.tid} className={isPinned ? "bg-muted/20" : ""} data-testid={`row-reason-tid-${agg.tid}`}>
-      <TableCell className="text-xs font-mono font-medium">{agg.tid}</TableCell>
-      <TableCell className="text-xs font-mono text-center">{agg.bookings.length}</TableCell>
-      <TableCell className="text-xs font-mono text-right text-blue-700 dark:text-blue-300">{formatNumber(agg.totalSpNet)}</TableCell>
-      <TableCell className="text-xs font-mono text-right text-green-700 dark:text-green-300">{formatNumber(agg.totalHoNet)}</TableCell>
-      <TableCell className={`text-xs font-mono text-right font-semibold ${discColor(agg.discrepancy)}`}>{formatSigned(agg.discrepancy)}</TableCell>
-    </TableRow>
-  ), []);
-
-  const isCancellation = reason.toLowerCase().includes("cancel");
-  const isNegativeSp = reason.toLowerCase().includes("negative sp");
-
-  return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-sm">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            Manage Reason: {reason}
-          </DialogTitle>
-          <DialogDescription>
-            {tidAggregates.length} TIDs, {bookings.length} bookings
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="reason-manage-modal-scroll">
-          <div className="rounded-md border bg-background overflow-visible">
-            <div className="px-4 py-3 border-b bg-blue-50 dark:bg-blue-900/20">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                  <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div className="text-sm font-medium">Bulk Total Amount Payable Update</div>
-              </div>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-4 gap-2">
-                <div className="rounded-md border p-2 bg-muted/30">
-                  <div className="text-xs text-muted-foreground">TIDs / Bookings</div>
-                  <div className="text-sm font-semibold font-mono" data-testid="reason-stat-tid-count">{tidAggregates.length} / {bookings.length}</div>
-                </div>
-                <div className="rounded-md border p-2 bg-blue-50/50 dark:bg-blue-900/10">
-                  <div className="text-xs text-muted-foreground">Total SP Net</div>
-                  <div className="text-sm font-semibold font-mono text-blue-700 dark:text-blue-300" data-testid="reason-stat-sp-net">{formatNumber(totalSpNet)}</div>
-                </div>
-                <div className="rounded-md border p-2 bg-green-50/50 dark:bg-green-900/10">
-                  <div className="text-xs text-muted-foreground">Total HO Net</div>
-                  <div className="text-sm font-semibold font-mono text-green-700 dark:text-green-300" data-testid="reason-stat-ho-net">{formatNumber(totalHoNet)}</div>
-                </div>
-                <div className="rounded-md border p-2 bg-amber-50/50 dark:bg-amber-900/10">
-                  <div className="text-xs text-muted-foreground">Discrepancy (HO−SP)</div>
-                  <div className={`text-sm font-semibold font-mono ${discColor(totalDiscrepancy)}`} data-testid="reason-stat-discrepancy">{formatSigned(totalDiscrepancy)}</div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div
-                  className="flex items-center justify-between px-4 py-3 rounded-md border cursor-pointer hover-elevate"
-                  onClick={handleApplySpNetAll}
-                  data-testid="btn-reason-use-sp-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                      <TrendingUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">{isCancellation ? "Accept Cancellation (SP Net)" : "Use SP Net for All"}</div>
-                      <div className="text-xs text-muted-foreground">Set Total Amount Payable = SP Net for {bookings.length} bookings (Total: {formatNumber(totalSpNet)} {currency})</div>
-                    </div>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-                {!isNegativeSp && (
-                  <div
-                    className="flex items-center justify-between px-4 py-3 rounded-md border cursor-pointer hover-elevate"
-                    onClick={handleApplyHoNetAll}
-                    data-testid="btn-reason-use-ho-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center h-8 w-8 rounded-md bg-green-100 dark:bg-green-900/30">
-                        <TrendingDown className="h-4 w-4 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">{isCancellation ? "Accept Cancellation (HO Net)" : "Use HO Net for All"}</div>
-                        <div className="text-xs text-muted-foreground">Set Total Amount Payable = HO Net for {bookings.length} bookings (Total: {formatNumber(totalHoNet)} {currency})</div>
-                      </div>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-
-              {pinnedTids.length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground font-medium">Top Discrepancies</div>
-                  <div className="overflow-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs">TID</TableHead>
-                          <TableHead className="text-xs text-center">Bookings</TableHead>
-                          <TableHead className="text-xs text-right">SP Net</TableHead>
-                          <TableHead className="text-xs text-right">HO Net</TableHead>
-                          <TableHead className="text-xs text-right">Discrepancy</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pinnedTids.map(t => renderTidRow(t, true))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
-
-              {collapsedTids.length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-xs text-muted-foreground font-medium">Other TIDs ({collapsedTids.length})</div>
-                  <div className="overflow-auto rounded-md border max-h-40">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs">TID</TableHead>
-                          <TableHead className="text-xs text-center">Bookings</TableHead>
-                          <TableHead className="text-xs text-right">SP Net</TableHead>
-                          <TableHead className="text-xs text-right">HO Net</TableHead>
-                          <TableHead className="text-xs text-right">Discrepancy</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {visibleCollapsed.map(t => renderTidRow(t, false))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  {collapsedTids.length > 3 && !showAllTids && (
-                    <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setShowAllTids(true)} data-testid="btn-show-all-reason-tids">
-                      Show all {collapsedTids.length} TIDs
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-md border bg-background overflow-visible">
-            <div className="px-4 py-3 border-b bg-amber-50 dark:bg-amber-900/20">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-amber-100 dark:bg-amber-900/30">
-                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div className="text-sm font-medium">Dispute & Issue</div>
-              </div>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={disputeChecked}
-                    onCheckedChange={(v) => setDisputeChecked(!!v)}
-                    disabled={!runId}
-                    data-testid="checkbox-reason-dispute"
-                  />
-                  Raise Dispute for all {bookings.length} bookings
-                </label>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={issueChecked}
-                    onCheckedChange={(v) => setIssueChecked(!!v)}
-                    disabled={!runId}
-                    data-testid="checkbox-reason-issue"
-                  />
-                  Flag Issue for all TIDs
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-md border p-3 bg-muted/50 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Applies to <span className="font-semibold">{bookings.length}</span> bookings across <span className="font-semibold">{tidAggregates.length}</span> TIDs for reason <span className="font-mono font-medium">{reason}</span>
-            </p>
-            {(disputeChecked || issueChecked) && (
-              <Button size="sm" onClick={handleDisputeIssueOnly} data-testid="button-submit-reason-dispute-issue">
-                <Check className="h-3.5 w-3.5 mr-1.5" />
-                {disputeChecked && issueChecked ? "Raise Dispute & Flag Issue" : disputeChecked ? "Raise Dispute" : "Flag Issue"}
-              </Button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}));
-
 interface DisputeModalHandle {
   open: (booking: BookingForDispute) => void;
 }
@@ -1344,7 +550,6 @@ interface TidGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
   openIssueModal: (booking: BookingForDispute) => void;
   unmappedResolutions?: Map<string, UnmappedResolution>;
   onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
@@ -1353,7 +558,7 @@ interface TidGroupProps {
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
+  getFinalNetPrice, updateFinalNetPrice,
   openIssueModal, unmappedResolutions, onManageUnmapped,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
@@ -1381,18 +586,6 @@ const TidGroup = memo(function TidGroup({
           )}
         </div>
         <div className="flex items-center gap-1.5 text-xs" onClick={(e) => e.stopPropagation()}>
-          {reasonName !== "Unmapped" && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-5 w-5 p-0 text-muted-foreground hover:text-primary"
-              onClick={() => openManageTidModal(tidBookings, tid, reasonName)}
-              data-testid={`button-manage-tid-${tid}`}
-              title="Manage TID"
-            >
-              <Pencil className="h-2.5 w-2.5" />
-            </Button>
-          )}
           {tidDiffPercent !== null && (
             <span className="font-mono text-xs text-muted-foreground">
               ({tidDiffPercent.toFixed(2)}%)
@@ -1477,8 +670,6 @@ interface ReasonGroupProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
-  openManageReasonModal: (reason: string, allBookings: PurchaseBooking[]) => void;
   openIssueModal: (booking: BookingForDispute) => void;
   unmappedResolutions?: Map<string, UnmappedResolution>;
   onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
@@ -1491,8 +682,8 @@ const ReasonGroup = memo(function ReasonGroup({
   isReasonExpanded, expandedTids, visibleTidCount, grandTotal,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice, openManageTidModal,
-  openManageReasonModal, openIssueModal, unmappedResolutions, onManageUnmapped,
+  getFinalNetPrice, updateFinalNetPrice,
+  openIssueModal, unmappedResolutions, onManageUnmapped,
   negativeSpVerified, onSetNegativeSpVerified,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
@@ -1515,20 +706,6 @@ const ReasonGroup = memo(function ReasonGroup({
             <Badge variant="secondary" className="text-xs">{reasonGroup.count}</Badge>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 p-0 text-muted-foreground hover:text-primary"
-              onClick={(e) => {
-                e.stopPropagation();
-                const allBookings = tidEntries.flatMap(([, b]) => b);
-                openManageReasonModal(reasonGroup.reason, allBookings);
-              }}
-              data-testid={`button-manage-reason-${itemId}-${groupIdx}`}
-              title="Manage reason group"
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
             <Badge variant="outline" className="text-[10px] font-mono">{percentage}%</Badge>
             <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
               {formatNumber(reasonGroup.totalDifference)} {currency}
@@ -1653,7 +830,6 @@ const ReasonGroup = memo(function ReasonGroup({
                 fnpVersion={fnpVersion}
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
-                openManageTidModal={openManageTidModal}
                 openIssueModal={openIssueModal}
                 unmappedResolutions={unmappedResolutions}
                 onManageUnmapped={onManageUnmapped}
@@ -1696,8 +872,6 @@ interface BreakupSectionProps {
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  openManageTidModal: (tidBookings: PurchaseBooking[], tid: string, reason: string) => void;
-  openManageReasonModal: (reason: string, allBookings: PurchaseBooking[]) => void;
   openIssueModal: (booking: BookingForDispute) => void;
   unmappedResolutions?: Map<string, UnmappedResolution>;
   onManageUnmapped?: (bookingId: string, existing?: UnmappedResolution) => void;
@@ -1710,8 +884,7 @@ const BreakupSection = memo(function BreakupSection({
   expandedReasons, expandedTids, getVisibleTidCount,
   toggleReasonExpand, toggleTidExpand, showMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice,
-  openManageTidModal, openManageReasonModal, openIssueModal,
+  getFinalNetPrice, updateFinalNetPrice, openIssueModal,
   unmappedResolutions, onManageUnmapped,
   negativeSpVerified, onSetNegativeSpVerified,
 }: BreakupSectionProps) {
@@ -1811,8 +984,6 @@ const BreakupSection = memo(function BreakupSection({
             fnpVersion={fnpVersion}
             getFinalNetPrice={getFinalNetPrice}
             updateFinalNetPrice={updateFinalNetPrice}
-            openManageTidModal={openManageTidModal}
-            openManageReasonModal={openManageReasonModal}
             openIssueModal={openIssueModal}
             unmappedResolutions={unmappedResolutions}
             onManageUnmapped={onManageUnmapped}
@@ -2577,15 +1748,13 @@ interface LineItemsTableCardProps {
   getVisibleTidCount: (key: string) => number;
   toggleReasonExpand: (key: string) => void;
   toggleTidExpand: (key: string) => void;
-  showMoreTids: (key: string) => void;
+  showMoreTids: (reasonKey: string, totalCount: number) => void;
   activeDisputes: Set<string>;
   disputeAmounts: Map<string, number>;
   loggedIssues: Set<string>;
   fnpVersion: number;
   getFinalNetPrice: (bookingId: string, spNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
-  openManageTidModal: (bookings: PurchaseBooking[], tid: string, itemId: number) => void;
-  openManageReasonModal: (bookings: PurchaseBooking[], reason: string, itemId: number) => void;
   openIssueModal: (booking: BookingForDispute) => void;
   onManageReloads?: () => void;
   runId?: string | null;
@@ -2622,8 +1791,6 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   fnpVersion,
   getFinalNetPrice,
   updateFinalNetPrice,
-  openManageTidModal,
-  openManageReasonModal,
   openIssueModal,
   onManageReloads,
   runId,
@@ -2792,8 +1959,6 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                                   fnpVersion={fnpVersion}
                                   getFinalNetPrice={getFinalNetPrice}
                                   updateFinalNetPrice={updateFinalNetPrice}
-                                  openManageTidModal={openManageTidModal}
-                                  openManageReasonModal={openManageReasonModal}
                                   openIssueModal={openIssueModal}
                                   unmappedResolutions={unmappedResolutions}
                                   onManageUnmapped={onManageUnmapped}
@@ -3211,8 +2376,6 @@ export function PurchaseReconciliationPanel({
   const hasNegativeSpBookings = useMemo(() => primaryRows.some(r => r.spNetInHo < 0 && !r.isSecondaryVendor), [primaryRows]);
   
   // Imperative refs for modals (state lives inside modal components, not here)
-  const manageTidModalRef = useRef<ManageTidModalHandle>(null);
-  const manageReasonModalRef = useRef<ManageReasonModalHandle>(null);
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
   const manageReloadsModalRef = useRef<ManageReloadsModalHandle>(null);
@@ -3390,55 +2553,6 @@ export function PurchaseReconciliationPanel({
     return finalVendorIdsRef.current.has(bookingId) ? finalVendorIdsRef.current.get(bookingId)! : defaultVid;
   }, []);
 
-  const updateFinalVendorId = useCallback((bookingId: string, value: string) => {
-    setFinalVendorIds(prev => {
-      const next = new Map(prev);
-      next.set(bookingId, value);
-      return next;
-    });
-    setFnpVersion(v => v + 1);
-  }, []);
-
-  const openManageTidModal = useCallback((tidBookings: PurchaseBooking[], tid: string, reason: string) => {
-    manageTidModalRef.current?.open(tidBookings, tid, reason);
-  }, []);
-
-  const openManageReasonModal = useCallback((reason: string, allBookings: PurchaseBooking[]) => {
-    manageReasonModalRef.current?.open(reason, allBookings);
-  }, []);
-
-  const handlePaxApply = useCallback((bookings: PurchaseBooking[], newPrices: Record<string, string>, dtRowKeyMap: Map<string, string>, tid: string) => {
-    const paymentBasisVal = bookings.find(b => b.paymentBasis)?.paymentBasis || "";
-    const useDateField: "experienceDate" | "bookingCreationDate" =
-      paymentBasisVal.toUpperCase().includes("EXPERIENCE") ? "experienceDate" : "bookingCreationDate";
-
-    setFinalNetPrices(prev => {
-      const next = new Map(prev);
-      for (const booking of bookings) {
-        if (!booking.paxBreakdown || booking.paxBreakdown.length === 0) continue;
-        const rawDate = (useDateField === "experienceDate" ? booking.experienceDate : booking.bookingCreationDate) || "";
-        const dtObj = normalizeDate(rawDate);
-        const bookingDate = dtObj ? dtObj.toISOString() : "Unknown";
-        let newTotal = 0;
-        for (const pb of booking.paxBreakdown) {
-          const lookupKey = `${pb.paxType}||${bookingDate}`;
-          const rowKey = dtRowKeyMap.get(lookupKey);
-          const priceStr = rowKey ? newPrices[rowKey] : undefined;
-          const parsedPrice = priceStr ? parseFloat(priceStr) : NaN;
-          const finalPrice = !isNaN(parsedPrice) ? parsedPrice : pb.unitPrice;
-          newTotal += pb.count * finalPrice;
-        }
-        next.set(booking.bookingId, Math.round(newTotal * 100) / 100);
-      }
-      return next;
-    });
-    setFnpVersion(v => v + 1);
-    toast({
-      title: "Pax prices updated",
-      description: `Total Amount Payable recalculated for ${bookings.length} bookings in TID ${tid}.`,
-    });
-  }, [toast]);
-
   const applyBulkFinalNetPrice = useCallback((source: "spNet" | "hoNet", bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     setFinalNetPrices(prev => {
       const next = new Map(prev);
@@ -3520,16 +2634,6 @@ export function PurchaseReconciliationPanel({
   const handleApplySpNet = useCallback((bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
     applyBulkFinalNetPrice("spNet", bookings);
   }, [applyBulkFinalNetPrice]);
-
-  const handleApplyHoNet = useCallback((bookings: { bookingId: string; spNet: number; hoNet: number }[]) => {
-    applyBulkFinalNetPrice("hoNet", bookings);
-  }, [applyBulkFinalNetPrice]);
-
-  const handleApplyVendorIdBulk = useCallback((bookingIds: string[], vid: string) => {
-    for (const bookingId of bookingIds) {
-      updateFinalVendorId(bookingId, vid);
-    }
-  }, [updateFinalVendorId]);
 
   const handleTidBulkDispute = useCallback(async (tidBookings: PurchaseBooking[], reason: string) => {
     if (!runId) return;
@@ -4353,8 +3457,6 @@ export function PurchaseReconciliationPanel({
         fnpVersion={fnpVersion}
         getFinalNetPrice={getFinalNetPrice}
         updateFinalNetPrice={updateFinalNetPrice}
-        openManageTidModal={openManageTidModal}
-        openManageReasonModal={openManageReasonModal}
         openIssueModal={openIssueModal}
         onManageReloads={() => manageReloadsModalRef.current?.open()}
         runId={runId}
@@ -4457,26 +3559,6 @@ export function PurchaseReconciliationPanel({
         </DialogContent>
       </Dialog>
 
-      <ManageTidModal
-        ref={manageTidModalRef}
-        currency={currency}
-        runId={runId}
-        onApplySpNet={handleApplySpNet}
-        onApplyHoNet={handleApplyHoNet}
-        onApplyPax={handlePaxApply}
-        onApplyVendorId={handleApplyVendorIdBulk}
-        onRaiseDispute={handleTidBulkDispute}
-        onLogIssue={handleTidBulkIssue}
-      />
-      <ManageReasonModal
-        ref={manageReasonModalRef}
-        currency={currency}
-        runId={runId}
-        onApplySpNet={handleApplySpNet}
-        onApplyHoNet={handleApplyHoNet}
-        onRaiseDispute={handleTidBulkDispute}
-        onLogIssue={handleTidBulkIssue}
-      />
       <DisputeModal ref={disputeModalRef} currency={currency} onSave={handleDisputeSave} />
       <IssueModal ref={issueModalRef} currency={currency} billingEntityName={billingEntityName} effectiveFxRate={effectiveFxRate} onSave={handleIssueSave} />
       <ManageReloadsModal
