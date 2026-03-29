@@ -1519,7 +1519,7 @@ export function DiscrepancySummaryWorkspace({
                                             value={bidTapOverrides[b.bookingId] ?? ""}
                                             placeholder={String(Math.round(finalNet * 100) / 100)}
                                             onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                            className={`w-20 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b focus:outline-none focus:border-violet-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${hasTapOverride && effectiveTap !== finalNet ? 'border-violet-400 text-violet-700 dark:text-violet-300 font-medium' : 'border-transparent hover:border-muted-foreground/30'}`}
+                                            className={`w-20 h-5 text-xs text-right font-mono px-1.5 bg-transparent border-0 border-b focus:outline-none focus:border-violet-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${hasTapOverride && effectiveTap !== finalNet ? 'border-violet-400 text-violet-700 dark:text-violet-300 font-medium' : 'border-transparent'}`}
                                             data-testid={`input-tap-${b.bookingId}`}
                                           />
                                           {hasTapOverride && (
