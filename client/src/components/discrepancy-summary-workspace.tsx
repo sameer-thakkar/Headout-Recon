@@ -1840,15 +1840,23 @@ export function DiscrepancySummaryWorkspace({
 
                   const spTotal = paxTid.bookings.reduce((s, b) => s + (b.spNetInHo || 0), 0);
                   const hoTotal = paxTid.bookings.reduce((s, b) => s + (b.hoNet || 0), 0);
-                  const editedCount = Object.keys(paxPrices).filter(k => paxPrices[k] !== undefined && paxPrices[k] !== "").length;
+                  const editedCount = paxRows.filter(row => {
+                    const val = paxPrices[row.rowKey];
+                    if (val === undefined || val === "") return false;
+                    return Math.abs(parseFloat(val) - row.spUnitPrice) > 0.001;
+                  }).length;
+
+                  const nonPaxTotal = paxTid.bookings
+                    .filter(b => !b.paxBreakdown || b.paxBreakdown.length === 0)
+                    .reduce((s, b) => s + (b.spNetInHo || 0), 0);
 
                   const computeGrandTotal = () => {
-                    if (!hasPaxRows) return spTotal;
-                    return paxRows.reduce((s, row) => {
+                    const paxTotal = paxRows.reduce((s, row) => {
                       const priceStr = paxPrices[row.rowKey];
                       const finalPrice = priceStr !== undefined && priceStr !== "" ? parseFloat(priceStr) || 0 : row.spUnitPrice;
                       return s + finalPrice * row.count;
                     }, 0);
+                    return paxTotal + nonPaxTotal;
                   };
                   const grandTotal = computeGrandTotal();
 
@@ -1912,7 +1920,7 @@ export function DiscrepancySummaryWorkspace({
                               <TableHeader>
                                 <TableRow>
                                   <TableHead className="text-xs">Pax Type</TableHead>
-                                  <TableHead className="text-xs">{dateFieldVal === "experienceDate" ? "Experience Date" : "Booking Date"}</TableHead>
+                                  <TableHead className="text-xs">Date Range</TableHead>
                                   <TableHead className="text-xs text-right">Count</TableHead>
                                   <TableHead className="text-xs text-right">SP Unit</TableHead>
                                   <TableHead className="text-xs text-right">HO Unit</TableHead>
