@@ -1,13 +1,20 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  XCircle, AlertTriangle, ChevronRight,
+  XCircle, AlertTriangle, ChevronRight, ChevronDown,
   CheckCircle2, X as XIcon, Check, Zap,
+  TrendingUp, TrendingDown, Calculator, Gavel, FileWarning,
+  Loader2, Save,
 } from "lucide-react";
 import type { PrimaryRow } from "@shared/schema";
 
@@ -21,6 +28,120 @@ function formatDate(dateStr: string | null | undefined): string {
     if (isNaN(d.getTime())) return dateStr;
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
   } catch { return dateStr; }
+}
+
+function normalizeDate(d: string): Date | null {
+  const num = Number(d);
+  if (!isNaN(num) && num > 10000 && num < 100000) {
+    const epoch = new Date((num - 25569) * 86400000);
+    if (!isNaN(epoch.getTime())) return epoch;
+  }
+  const ts = Date.parse(d);
+  if (!isNaN(ts)) {
+    const dt = new Date(ts);
+    if (dt.getFullYear() > 1900 && dt.getFullYear() < 2200) return dt;
+  }
+  return null;
+}
+
+type PaxDateRow = {
+  paxType: string;
+  dateRange: string;
+  dates: string[];
+  count: number;
+  spUnitPrice: number;
+  hoUnitPrice: number;
+  rowKey: string;
+};
+
+function buildPaxDateRows(bookings: PrimaryRow[]): { paxDateRows: PaxDateRow[]; dateToRowKeyMap: Map<string, string> } {
+  const paymentBasis = bookings.find(b => b.paymentBasis)?.paymentBasis || "";
+  const dateField: "experienceDate" | "bookingCreationDate" =
+    paymentBasis.toUpperCase().includes("EXPERIENCE") ? "experienceDate" : "bookingCreationDate";
+
+  const dateGroupKey = (b: PrimaryRow) => {
+    const raw = dateField === "experienceDate" ? (b.experienceDate || "") : (b.bookingCreationDate || "");
+    if (!raw) return "Unknown";
+    const dt = normalizeDate(raw);
+    return dt ? dt.toISOString() : "Unknown";
+  };
+
+  const byDateAndPax = new Map<string, {
+    paxType: string;
+    date: string;
+    count: number;
+    spTotal: number;
+    hoUnitPrice: number;
+  }>();
+
+  for (const b of bookings) {
+    if (!b.paxBreakdown) continue;
+    const date = dateGroupKey(b);
+    const bookingHoTotal = b.paxBreakdown.reduce((s: number, pb: { priceNet: number }) => s + pb.priceNet, 0);
+    for (const pb of b.paxBreakdown) {
+      const spContribution = bookingHoTotal > 0 ? (pb.priceNet / bookingHoTotal) * (b.spNetInHo || 0) : 0;
+      const key = `${pb.paxType}||${date}`;
+      const existing = byDateAndPax.get(key);
+      if (existing) {
+        existing.count += pb.count;
+        existing.spTotal += spContribution;
+      } else {
+        byDateAndPax.set(key, {
+          paxType: pb.paxType,
+          date,
+          count: pb.count,
+          spTotal: spContribution,
+          hoUnitPrice: pb.priceNet / (pb.count || 1),
+        });
+      }
+    }
+  }
+
+  const entries = Array.from(byDateAndPax.values());
+  entries.sort((a, b) => {
+    if (a.paxType !== b.paxType) return a.paxType.localeCompare(b.paxType);
+    return a.date.localeCompare(b.date);
+  });
+
+  const dateToRowKeyMap = new Map<string, string>();
+  const grouped: PaxDateRow[] = [];
+  let current: PaxDateRow | null = null;
+  let currentSpUnit = 0;
+  let currentHoUnit = 0;
+
+  for (const e of entries) {
+    const spUnit = e.count > 0 ? Math.round((e.spTotal / e.count) * 100) / 100 : 0;
+    const hoUnit = Math.round(e.hoUnitPrice * 100) / 100;
+    if (current && current.paxType === e.paxType && Math.abs(spUnit - currentSpUnit) < 0.01 && Math.abs(hoUnit - currentHoUnit) < 0.01) {
+      current.dates.push(e.date);
+      current.count += e.count;
+      dateToRowKeyMap.set(`${e.paxType}||${e.date}`, current.rowKey);
+    } else {
+      const rowKey = `${e.paxType}__${e.date}`;
+      current = { paxType: e.paxType, dateRange: "", dates: [e.date], count: e.count, spUnitPrice: spUnit, hoUnitPrice: hoUnit, rowKey };
+      currentSpUnit = spUnit;
+      currentHoUnit = hoUnit;
+      grouped.push(current);
+      dateToRowKeyMap.set(`${e.paxType}||${e.date}`, rowKey);
+    }
+  }
+
+  const formatDateShort = (d: string) => {
+    const dt = normalizeDate(d);
+    if (!dt) return d;
+    return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+  };
+
+  for (const row of grouped) {
+    if (row.dates.length === 1) {
+      row.dateRange = formatDateShort(row.dates[0]);
+    } else {
+      const sorted = [...row.dates].sort();
+      row.dateRange = `${formatDateShort(sorted[0])} – ${formatDateShort(sorted[sorted.length - 1])}`;
+    }
+  }
+
+  return { paxDateRows: grouped, dateToRowKeyMap };
 }
 
 const CANCELLATION_SORT_ORDER: Record<string, number> = {
@@ -77,31 +198,16 @@ interface BreakupRow {
   bookings: PrimaryRow[];
 }
 
-interface PaxRow { paxType: string; dateRange: string; count: number; spUnit: number; hoUnit: number; }
-
-interface TidRow {
+interface TidGroup {
   tid: string;
-  bidCount: number;
-  spNetLc: number;
+  bookings: PrimaryRow[];
+  spNet: number;
+  hoNet: number;
   discLc: number;
-  discUsd: number;
-  fulfillment: string;
-  driTeam: string;
+  bidCount: number;
+  fulfillmentMethods: string[];
   hasPax: boolean;
-  paxRows: PaxRow[];
-  bookingIds: string[];
 }
-
-type TakeActionState = {
-  rowKey: string;
-  tidFinalPrices: Record<string, string>;
-  paxPrices: Record<string, string>;
-  expandedPaxTids: Set<string>;
-  disputeTids: Set<string>;
-  disputeAmounts: Record<string, string>;
-  issueTids: Set<string>;
-  expandedBidTids: Set<string>;
-} | null;
 
 function subCategoryBadge(sub: string) {
   const colors: Record<string, string> = {
@@ -121,16 +227,6 @@ function subCategoryBadge(sub: string) {
   );
 }
 
-function computePaxTotal(tid: TidRow, paxPrices: Record<string, string>): number {
-  if (tid.paxRows.length === 0) return Math.abs(tid.spNetLc);
-  return tid.paxRows.reduce((sum, pr) => {
-    const key = `${tid.tid}__${pr.paxType}__${pr.dateRange}`;
-    const entered = parseFloat(paxPrices[key] ?? "");
-    const unitPrice = isNaN(entered) ? pr.spUnit : entered;
-    return sum + unitPrice * pr.count;
-  }, 0);
-}
-
 interface CancellationsWorkspaceProps {
   cancellationBookings: PrimaryRow[];
   allRows: PrimaryRow[];
@@ -139,6 +235,7 @@ interface CancellationsWorkspaceProps {
   supplierName: string;
   onClose: () => void;
   fxData?: { usdToCcy?: Record<string, number> } | null;
+  runId?: string | null;
 }
 
 export function CancellationsWorkspace({
@@ -149,18 +246,119 @@ export function CancellationsWorkspace({
   supplierName,
   onClose,
   fxData,
+  runId,
 }: CancellationsWorkspaceProps) {
-  const [takeAction, setTakeAction] = useState<TakeActionState>(null);
+  const { toast: shadToast } = useToast();
+  const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
+  const BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
+
+  const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
   const [doneRows, setDoneRows] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [committedDisputes, setCommittedDisputes] = useState<Record<string, number>>({});
   const [tapOverrides, setTapOverrides] = useState<Record<string, string>>({});
   const [tapConfirmedRows, setTapConfirmedRows] = useState<Set<string>>(new Set());
 
+  const [expandedTid, setExpandedTid] = useState<string | null>(null);
+  const [selectedTids, setSelectedTids] = useState<Set<string>>(new Set());
+  const [resolvedTids, setResolvedTids] = useState<Set<string>>(new Set());
+  const [bookingSelections, setBookingSelections] = useState<Record<string, "sp" | "ho" | "custom">>({});
+  const [bookingCustomPrices, setBookingCustomPrices] = useState<Record<string, string>>({});
+  const [bookingEditMode, setBookingEditMode] = useState<Record<string, boolean>>({});
+  const [savedBookings, setSavedBookings] = useState<Set<string>>(new Set());
+  const [bidDisputeActive, setBidDisputeActive] = useState<Set<string>>(new Set());
+  const [bidDisputeAmounts, setBidDisputeAmounts] = useState<Record<string, number>>({});
+  const [bidTapOverrides, setBidTapOverrides] = useState<Record<string, string>>({});
+  const [disputedBookings, setDisputedBookings] = useState<Set<string>>(new Set());
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const [paxOpen, setPaxOpen] = useState(false);
+  const [paxTid, setPaxTid] = useState<TidGroup | null>(null);
+  const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (paxOpen && paxTid) {
+      const { paxDateRows } = buildPaxDateRows(paxTid.bookings);
+      if (paxDateRows.length > 0) {
+        const filled: Record<string, string> = {};
+        for (const row of paxDateRows) {
+          filled[row.rowKey] = String(row.spUnitPrice);
+        }
+        setPaxPrices(filled);
+      }
+    }
+  }, [paxOpen, paxTid]);
+
   const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
   }, []);
+
+  const flash = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(null), 2500); };
+  const resolve = (tid: string) => setResolvedTids(prev => new Set(prev).add(tid));
+
+  const priceOverrideMutation = useMutation({
+    mutationFn: async ({ bookingIds, selection, customPrices }: { bookingIds: string[]; selection: "ho" | "sp"; customPrices?: Record<string, number> }) => {
+      if (!runId) throw new Error("No active run");
+      const overrides: Record<string, { totalAmountPayable: number; selection: "ho" | "sp" }> = {};
+      bookingIds.forEach(id => {
+        if (customPrices && customPrices[id] !== undefined) {
+          overrides[id] = { totalAmountPayable: customPrices[id], selection };
+        } else {
+          const row = allRows.find(r => r.bookingId === id);
+          const amt = selection === "ho" ? (row?.hoNet || 0) : (row?.spNetInHo || 0);
+          overrides[id] = { totalAmountPayable: amt, selection };
+        }
+      });
+      await apiRequest("POST", "/api/price-overrides", { runId, overrides });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", runId] });
+    },
+  });
+
+  const disputeMutation = useMutation({
+    mutationFn: async ({ bookingIds }: { bookingIds: string[] }) => {
+      if (!runId) throw new Error("No active run");
+      const disputes = bookingIds.map(bookingId => {
+        const row = allRows.find(r => r.bookingId === bookingId);
+        return {
+          bookingId,
+          ticketId: row?.ticketId || "",
+          tid: row?.tid || bookingId,
+          disputeAmount: Math.abs((row?.spNetInHo || 0) - (row?.hoNet || 0)),
+          reconciledNet: row?.spNetInHo || 0,
+        };
+      });
+      await apiRequest("POST", `/api/disputes/${runId}`, { disputes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/disputes", runId] });
+    },
+  });
+
+  const issueMutation = useMutation({
+    mutationFn: async ({ bookingIds, description, priority, driTeam }: { bookingIds: string[]; description: string; priority: string; driTeam: string }) => {
+      if (!runId) throw new Error("No active run");
+      await apiRequest("POST", "/api/issues", {
+        runId,
+        billingEntityId: beId || "",
+        billingEntityName: supplierName || "",
+        currency: currency || "USD",
+        discrepancyLocal: 0,
+        discrepancyUsd: 0,
+        reason: activeRowKey || "",
+        driTeam,
+        bookingIds,
+        errorBucket: activeRowKey || "",
+        rca: description || "",
+        issueStatus: priority === "high" ? "urgent" : priority === "low" ? "low-priority" : "open",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/issues", runId] });
+    },
+  });
 
   const breakupRows = useMemo((): BreakupRow[] => {
     const byReason: Record<string, PrimaryRow[]> = {};
@@ -293,8 +491,8 @@ export function CancellationsWorkspace({
     return rows;
   }, [cancellationBookings]);
 
-  const tidsByRow = useMemo((): Record<string, TidRow[]> => {
-    const result: Record<string, TidRow[]> = {};
+  const tidGroupsByRow = useMemo((): Record<string, TidGroup[]> => {
+    const result: Record<string, TidGroup[]> = {};
     for (const row of breakupRows) {
       const byTid: Record<string, PrimaryRow[]> = {};
       for (const b of row.bookings) {
@@ -302,54 +500,29 @@ export function CancellationsWorkspace({
         if (!byTid[tid]) byTid[tid] = [];
         byTid[tid].push(b);
       }
-      const tidRows: TidRow[] = [];
+      const groups: TidGroup[] = [];
       for (const [tid, bkgs] of Object.entries(byTid)) {
-        const spNetLc = bkgs.reduce((s, b) => s + b.spNetInHo, 0);
-        const discLc = bkgs.reduce((s, b) => s + (b.hoNet - b.spNetInHo), 0);
-        const discUsd = bkgs.reduce((s, b) => s + b.differenceUsd, 0);
-        const fm = bkgs[0]?.fulfillmentMethod || "Unknown";
-        const driTeam = getCancellationDriTeam(row.subCategory, fm);
-
-        const paxRows: PaxRow[] = [];
+        const spNet = bkgs.reduce((s, b) => s + (b.spNetInHo || 0), 0);
+        const hoNet = bkgs.reduce((s, b) => s + (b.hoNet || 0), 0);
+        const fmSet = new Set<string>();
         let hasPax = false;
-        for (const b of bkgs) {
-          if (b.paxBreakdown && b.paxBreakdown.length > 0) {
-            hasPax = true;
-            for (const p of b.paxBreakdown) {
-              const dateRange = b.experienceDate || b.bookingCreationDate || "—";
-              const existing = paxRows.find(
-                pr => pr.paxType === p.paxType && pr.dateRange === formatDate(dateRange) && pr.spUnit === p.unitPrice
-              );
-              if (existing) {
-                existing.count += p.count;
-              } else {
-                paxRows.push({
-                  paxType: p.paxType,
-                  dateRange: formatDate(dateRange),
-                  count: p.count,
-                  spUnit: p.unitPrice,
-                  hoUnit: 0,
-                });
-              }
-            }
-          }
-        }
-
-        tidRows.push({
+        bkgs.forEach(b => {
+          if (b.fulfillmentMethod) fmSet.add(b.fulfillmentMethod);
+          if (b.paxBreakdown && b.paxBreakdown.length > 0) hasPax = true;
+        });
+        groups.push({
           tid,
+          bookings: bkgs,
+          spNet: Math.round(spNet * 100) / 100,
+          hoNet: Math.round(hoNet * 100) / 100,
+          discLc: Math.round((hoNet - spNet) * 100) / 100,
           bidCount: bkgs.length,
-          spNetLc,
-          discLc,
-          discUsd,
-          fulfillment: fm,
-          driTeam,
+          fulfillmentMethods: Array.from(fmSet),
           hasPax,
-          paxRows,
-          bookingIds: bkgs.map(b => b.bookingId),
         });
       }
-      tidRows.sort((a, b) => Math.abs(b.spNetLc) - Math.abs(a.spNetLc));
-      result[row.rowKey] = tidRows;
+      groups.sort((a, b) => Math.abs(b.discLc) - Math.abs(a.discLc));
+      result[row.rowKey] = groups;
     }
     return result;
   }, [breakupRows]);
@@ -358,80 +531,287 @@ export function CancellationsWorkspace({
   const totalDiscUsd = breakupRows.reduce((s, r) => s + r.discUsd, 0);
   const totalBidCount = breakupRows.reduce((s, r) => s + r.bidCount, 0);
 
-  const selectedRow = takeAction ? breakupRows.find(r => r.rowKey === takeAction.rowKey) ?? null : null;
-  const selectedTids = takeAction ? (tidsByRow[takeAction.rowKey] ?? []) : [];
+  const activeRow = activeRowKey ? breakupRows.find(r => r.rowKey === activeRowKey) ?? null : null;
+  const activeTids = activeRowKey ? (tidGroupsByRow[activeRowKey] ?? []) : [];
+  const totalDisc = activeTids.reduce((s, t) => s + Math.abs(t.discLc), 0);
 
-  const getTidFinalPrice = useCallback((tid: TidRow): number => {
-    if (!takeAction) return 0;
-    if (tid.hasPax) return computePaxTotal(tid, takeAction.paxPrices);
-    const raw = parseFloat(takeAction.tidFinalPrices[tid.tid] ?? "") || 0;
-    return raw;
-  }, [takeAction]);
+  const toggleSelect = (tid: string) => {
+    setSelectedTids(prev => { const next = new Set(prev); if (next.has(tid)) next.delete(tid); else next.add(tid); return next; });
+  };
 
-  const totalPayable = takeAction
-    ? selectedTids.reduce((s, t) => s + getTidFinalPrice(t), 0)
-    : 0;
-  const totalDisputeAmt = takeAction
-    ? [...takeAction.disputeTids].reduce((s, tid) => {
-        const amt = parseFloat(takeAction.disputeAmounts[tid] ?? "0") || 0;
-        return s + amt;
-      }, 0)
-    : 0;
-  const disputeCount = takeAction ? takeAction.disputeTids.size : 0;
-  const issueCount = takeAction ? takeAction.issueTids.size : 0;
+  const toggleSelectAll = () => {
+    const unresolved = activeTids.filter(t => !resolvedTids.has(t.tid));
+    if (selectedTids.size === unresolved.length) setSelectedTids(new Set());
+    else setSelectedTids(new Set(unresolved.map(t => t.tid)));
+  };
 
-  const openTakeAction = useCallback((rowKey: string) => {
-    const tids = tidsByRow[rowKey] ?? [];
-    const tidFinalPrices: Record<string, string> = {};
-    tids.forEach(t => {
-      if (!t.hasPax) tidFinalPrices[t.tid] = String(Math.abs(t.spNetLc));
-    });
-    const disputeTids = new Set(tids.map(t => t.tid));
-    const disputeAmounts: Record<string, string> = {};
-    tids.forEach(t => { disputeAmounts[t.tid] = String(Math.abs(t.spNetLc)); });
-    setTakeAction({
-      rowKey,
-      tidFinalPrices,
-      paxPrices: {},
-      expandedPaxTids: new Set(),
-      disputeTids,
-      disputeAmounts,
-      issueTids: new Set(),
-      expandedBidTids: new Set(),
-    });
-  }, [tidsByRow]);
+  const getBookingFinalPrice = useCallback((b: PrimaryRow): number => {
+    const sel = bookingSelections[b.bookingId];
+    if (sel === "custom") {
+      const v = parseFloat(bookingCustomPrices[b.bookingId] || "0");
+      return isNaN(v) ? (b.spNetInHo || 0) : v;
+    }
+    if (sel === "ho") return b.hoNet || 0;
+    return b.spNetInHo || 0;
+  }, [bookingSelections, bookingCustomPrices]);
 
-  const confirmAction = useCallback(() => {
-    if (!takeAction || !selectedRow) return;
-    const rowKey = takeAction.rowKey;
-    const totalDisp = [...takeAction.disputeTids].reduce((s, tid) => {
-      const amt = parseFloat(takeAction.disputeAmounts[tid] ?? "0") || 0;
-      return s + amt;
-    }, 0);
-    setCommittedDisputes(prev => ({ ...prev, [rowKey]: totalDisp }));
-    setTapConfirmedRows(prev => { const next = new Set(prev); next.delete(rowKey); return next; });
-    setTapOverrides(prev => { const next = { ...prev }; delete next[rowKey]; return next; });
-    const m = selectedRow.bidCount;
-    const d = disputeCount;
-    const i = issueCount;
-    showToast(`Applied — ${m} bookings · ${d} dispute${d !== 1 ? "s" : ""} raised · ${i} issue${i !== 1 ? "s" : ""} logged`);
-    setDoneRows(prev => new Set(prev).add(rowKey));
-    setTakeAction(null);
-  }, [takeAction, selectedRow, disputeCount, issueCount, showToast]);
+  const getBidSelection = useCallback((bookingId: string): "ho" | "sp" | "custom" => {
+    const sel = bookingSelections[bookingId];
+    if (sel === "ho") return "ho";
+    if (sel === "custom") return "custom";
+    return "sp";
+  }, [bookingSelections]);
 
-  const updateTA = useCallback((patch: Partial<NonNullable<TakeActionState>>) => {
-    setTakeAction(prev => prev ? { ...prev, ...patch } : prev);
+  const updateBidSelection = useCallback((bookingId: string, value: "ho" | "sp") => {
+    setBookingSelections(prev => ({ ...prev, [bookingId]: value }));
+    setBookingCustomPrices(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    setBookingEditMode(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    setSavedBookings(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+    if (value === "ho") {
+      setBidDisputeActive(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+      setBidDisputeAmounts(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    }
   }, []);
 
-  const liveDispute = useCallback((rowKey: string): number => {
-    if (takeAction?.rowKey === rowKey) {
-      return [...takeAction.disputeTids].reduce((s, tid) => {
-        const amt = parseFloat(takeAction.disputeAmounts[tid] ?? "0") || 0;
-        return s + amt;
-      }, 0);
+  const getBidFinalNet = useCallback((b: PrimaryRow): number => {
+    const rawSel = bookingSelections[b.bookingId];
+    if (rawSel === "custom") {
+      const v = parseFloat(bookingCustomPrices[b.bookingId] || "0");
+      return isNaN(v) ? (b.spNetInHo || 0) : v;
     }
+    const sel = getBidSelection(b.bookingId);
+    return sel === "ho" ? (b.hoNet || 0) : (b.spNetInHo || 0);
+  }, [getBidSelection, bookingSelections, bookingCustomPrices]);
+
+  const getBidMaxDispute = useCallback((b: PrimaryRow): number => {
+    return Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
+  }, []);
+
+  const getBidDisputeAmount = useCallback((bookingId: string): number => {
+    return bidDisputeAmounts[bookingId] || 0;
+  }, [bidDisputeAmounts]);
+
+  const getEffectiveTap = useCallback((b: PrimaryRow): number => {
+    const base = getBidFinalNet(b);
+    const override = bidTapOverrides[b.bookingId];
+    if (override === undefined || override === "") return base;
+    const val = parseFloat(override);
+    if (isNaN(val)) return base;
+    const minTap = Math.round(base * 0.9 * 100) / 100;
+    const maxTap = Math.round(base * 1.1 * 100) / 100;
+    return Math.round(Math.min(Math.max(val, minTap), maxTap) * 100) / 100;
+  }, [getBidFinalNet, bidTapOverrides]);
+
+  const setBidDisputeAmountForBooking = useCallback((bookingId: string, amount: number, booking?: PrimaryRow) => {
+    const rounded = Math.round(amount * 100) / 100;
+    if (rounded <= 0) {
+      setBidDisputeActive(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+      setBidDisputeAmounts(prev => { const n = { ...prev }; delete n[bookingId]; return n; });
+    } else {
+      let clamped = rounded;
+      if (booking) {
+        const maxD = Math.round(Math.abs((booking.hoNet || 0) - (booking.spNetInHo || 0)) * 100) / 100;
+        if (clamped > maxD) clamped = maxD;
+      }
+      setBidDisputeAmounts(prev => ({ ...prev, [bookingId]: clamped }));
+    }
+  }, []);
+
+  const activateBidDispute = useCallback((bookingId: string, b: PrimaryRow) => {
+    setBidDisputeActive(prev => { const n = new Set(prev); n.add(bookingId); return n; });
+    const maxD = Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
+    setBidDisputeAmounts(prev => ({ ...prev, [bookingId]: maxD }));
+    setBookingSelections(prev => ({ ...prev, [bookingId]: "sp" }));
+    setSavedBookings(prev => { const n = new Set(prev); n.delete(bookingId); return n; });
+  }, []);
+
+  const handleTidBulkDispute = useCallback((tid: TidGroup, action: "all" | "clear") => {
+    tid.bookings.forEach(b => {
+      const sel = getBidSelection(b.bookingId);
+      if (action === "all" && (sel === "sp" || sel === "custom")) {
+        setBidDisputeActive(prev => { const n = new Set(prev); n.add(b.bookingId); return n; });
+        const maxD = Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
+        setBidDisputeAmounts(prev => ({ ...prev, [b.bookingId]: maxD }));
+      } else if (action === "clear") {
+        setBidDisputeActive(prev => { const n = new Set(prev); n.delete(b.bookingId); return n; });
+        setBidDisputeAmounts(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; });
+      }
+    });
+  }, [getBidSelection]);
+
+  const handleBookingSave = useCallback((b: PrimaryRow) => {
+    const sel = bookingSelections[b.bookingId] || "sp";
+    const finalSel = sel === "custom" ? "sp" : sel;
+    const customPrices: Record<string, number> = {};
+    if (sel === "custom") {
+      customPrices[b.bookingId] = getBookingFinalPrice(b);
+    }
+    priceOverrideMutation.mutate({ bookingIds: [b.bookingId], selection: finalSel, customPrices: Object.keys(customPrices).length > 0 ? customPrices : undefined }, {
+      onSuccess: () => {
+        setSavedBookings(prev => { const next = new Set(prev); next.add(b.bookingId); return next; });
+        flash(`${b.bookingId} → price saved`);
+      },
+      onError: (err) => {
+        shadToast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [bookingSelections, getBookingFinalPrice, priceOverrideMutation, shadToast]);
+
+  const handleTidSaveAll = useCallback((tid: TidGroup) => {
+    const customPrices: Record<string, number> = {};
+    const bookingIds = tid.bookings.map(b => b.bookingId);
+    tid.bookings.forEach(b => {
+      customPrices[b.bookingId] = getBookingFinalPrice(b);
+    });
+    priceOverrideMutation.mutate({ bookingIds, selection: "sp", customPrices }, {
+      onSuccess: () => {
+        setSavedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+        resolve(tid.tid);
+        flash(`${tid.tid} → all booking prices saved`);
+      },
+      onError: (err) => {
+        shadToast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [getBookingFinalPrice, priceOverrideMutation, shadToast]);
+
+  const handleTidAction = useCallback((tid: TidGroup, action: "sp" | "ho") => {
+    const bookingIds = tid.bookings.map(b => b.bookingId);
+    setBookingSelections(prev => {
+      const next = { ...prev };
+      bookingIds.forEach(id => { next[id] = action; });
+      return next;
+    });
+    setBookingCustomPrices(prev => {
+      const next = { ...prev };
+      bookingIds.forEach(id => { delete next[id]; });
+      return next;
+    });
+    setBookingEditMode(prev => {
+      const next = { ...prev };
+      bookingIds.forEach(id => { delete next[id]; });
+      return next;
+    });
+    if (action === "ho") {
+      setBidDisputeActive(prev => { const n = new Set(prev); bookingIds.forEach(id => n.delete(id)); return n; });
+      setBidDisputeAmounts(prev => { const n = { ...prev }; bookingIds.forEach(id => { delete n[id]; }); return n; });
+    }
+    priceOverrideMutation.mutate({ bookingIds, selection: action }, {
+      onSuccess: () => {
+        setSavedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+        resolve(tid.tid);
+        setExpandedTid(null);
+        flash(`${tid.tid} → ${action === "sp" ? "SP" : "HO"} Net applied`);
+      },
+      onError: (err) => {
+        shadToast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [priceOverrideMutation, shadToast]);
+
+  const handleTidDispute = useCallback((tid: TidGroup) => {
+    const bookingIds = tid.bookings.map(b => b.bookingId);
+    disputeMutation.mutate({ bookingIds }, {
+      onSuccess: () => {
+        setDisputedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+        flash(`Dispute raised for ${tid.tid} (${bookingIds.length} bookings)`);
+      },
+      onError: (err) => {
+        shadToast({ title: "Dispute failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [disputeMutation, shadToast]);
+
+  const handleTidIssue = useCallback((tid: TidGroup) => {
+    const bookingIds = tid.bookings.map(b => b.bookingId);
+    const driTeam = getCancellationDriTeam(activeRow?.subCategory || "", tid.fulfillmentMethods[0] || "");
+    issueMutation.mutate({ bookingIds, description: "", priority: "medium", driTeam }, {
+      onSuccess: () => {
+        flash(`Issue logged for ${tid.tid}`);
+        shadToast({ title: "Issue created", description: `Issue logged for ${tid.tid}` });
+      },
+      onError: (err) => {
+        shadToast({ title: "Issue creation failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [issueMutation, shadToast, activeRow]);
+
+  const openTakeAction = useCallback((rowKey: string) => {
+    setActiveRowKey(rowKey);
+    setExpandedTid(null);
+    setSelectedTids(new Set());
+    setBookingSelections({});
+    setBookingCustomPrices({});
+    setBookingEditMode({});
+    setSavedBookings(new Set());
+    setBidDisputeActive(new Set());
+    setBidDisputeAmounts({});
+    setBidTapOverrides({});
+    setResolvedTids(new Set());
+    setDisputedBookings(new Set());
+  }, []);
+
+  const confirmAction = useCallback(() => {
+    if (!activeRowKey || !activeRow) return;
+    const savedCount = savedBookings.size;
+    const disputeCount = disputedBookings.size;
+    showToast(`Applied — ${activeRow.bidCount} bookings · ${savedCount} saved · ${disputeCount} disputed`);
+    setDoneRows(prev => new Set(prev).add(activeRowKey));
+    setActiveRowKey(null);
+  }, [activeRowKey, activeRow, savedBookings, disputedBookings, showToast]);
+
+  const liveDispute = useCallback((rowKey: string): number => {
     return committedDisputes[rowKey] ?? 0;
-  }, [takeAction, committedDisputes]);
+  }, [committedDisputes]);
+
+  const handlePaxSave = useCallback(() => {
+    if (!paxTid) return;
+    const { paxDateRows, dateToRowKeyMap } = buildPaxDateRows(paxTid.bookings);
+    const paymentBasisVal = paxTid.bookings.find(b => b.paymentBasis)?.paymentBasis || "";
+    const dateField: "experienceDate" | "bookingCreationDate" =
+      paymentBasisVal.toUpperCase().includes("EXPERIENCE") ? "experienceDate" : "bookingCreationDate";
+
+    const customPrices: Record<string, number> = {};
+    for (const b of paxTid.bookings) {
+      if (!b.paxBreakdown || b.paxBreakdown.length === 0) {
+        customPrices[b.bookingId] = b.spNetInHo || 0;
+        continue;
+      }
+      const raw = dateField === "experienceDate" ? (b.experienceDate || "") : (b.bookingCreationDate || "");
+      const dateKey = raw ? (normalizeDate(raw)?.toISOString() || "Unknown") : "Unknown";
+      let bookingTotal = 0;
+      for (const pb of b.paxBreakdown) {
+        const rowKey = dateToRowKeyMap.get(`${pb.paxType}||${dateKey}`);
+        if (rowKey) {
+          const priceStr = paxPrices[rowKey];
+          const finalPrice = priceStr !== undefined && priceStr !== "" ? parseFloat(priceStr) || 0 : (paxDateRows.find(r => r.rowKey === rowKey)?.spUnitPrice || 0);
+          bookingTotal += finalPrice * pb.count;
+        } else {
+          bookingTotal += pb.priceNet;
+        }
+      }
+      customPrices[b.bookingId] = Math.round(bookingTotal * 100) / 100;
+    }
+
+    const bookingIds = paxTid.bookings.map(b => b.bookingId);
+    bookingIds.forEach(id => {
+      setBookingSelections(prev => ({ ...prev, [id]: "custom" }));
+      setBookingCustomPrices(prev => ({ ...prev, [id]: String(customPrices[id] || 0) }));
+    });
+
+    priceOverrideMutation.mutate({ bookingIds, selection: "sp", customPrices }, {
+      onSuccess: () => {
+        setSavedBookings(prev => { const next = new Set(prev); bookingIds.forEach(id => next.add(id)); return next; });
+        resolve(paxTid.tid);
+        flash(`${paxTid.tid} → pax pricing applied`);
+        setPaxOpen(false);
+        setPaxTid(null);
+      },
+      onError: (err) => {
+        shadToast({ title: "Failed", description: String(err), variant: "destructive" });
+      },
+    });
+  }, [paxTid, paxPrices, priceOverrideMutation, shadToast]);
 
   if (cancellationBookings.length === 0) {
     return (
@@ -447,7 +827,6 @@ export function CancellationsWorkspace({
     <TooltipProvider>
       <div className="flex flex-col h-full text-sm" data-testid="cancellations-workspace">
 
-        {/* Header */}
         <div className="border-b bg-card px-5 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <XCircle className="h-4 w-4 text-red-500" />
@@ -464,13 +843,11 @@ export function CancellationsWorkspace({
           </div>
         </div>
 
-        {/* Body */}
         <div className="flex flex-col flex-1 overflow-hidden">
 
-          {/* SECTION 1: Analysis Breakup Table */}
           <div
             className="border-b overflow-auto shrink-0 transition-all"
-            style={{ maxHeight: takeAction ? "40%" : "55%" }}
+            style={{ maxHeight: activeRowKey ? "40%" : "55%" }}
           >
             <div className="px-5 pt-4 pb-2">
               <div className="flex items-center justify-between mb-3">
@@ -496,7 +873,7 @@ export function CancellationsWorkspace({
                     <TableBody>
                       {breakupRows.map((row) => {
                         const isDone = doneRows.has(row.rowKey);
-                        const isActive = takeAction?.rowKey === row.rowKey;
+                        const isActive = activeRowKey === row.rowKey;
                         return (
                           <TableRow
                             key={row.rowKey}
@@ -558,7 +935,6 @@ export function CancellationsWorkspace({
                     </TableBody>
                   </Table>
                 </div>
-                {/* Pinned total */}
                 <div className="border-t-2 bg-muted/60 px-3 py-1.5 flex items-center text-xs font-semibold">
                   <span className="min-w-[200px] pl-0">Total</span>
                   <span className="flex-1" />
@@ -574,282 +950,356 @@ export function CancellationsWorkspace({
             </div>
           </div>
 
-          {/* SECTION 2: Amount Payable (idle) / Take Action panel (active) */}
           <div className="flex-1 flex flex-col overflow-hidden">
 
-            {/* Active: Take Action panel */}
-            {takeAction && selectedRow && (
+            {activeRowKey && activeRow && (
               <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Panel header */}
                 <div className="px-5 py-2.5 border-b bg-card shrink-0 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2 min-w-0">
-                    {subCategoryBadge(selectedRow.subCategory)}
-                    {selectedRow.actionPoint !== "No action needed" && (
+                    {subCategoryBadge(activeRow.subCategory)}
+                    {activeRow.actionPoint !== "No action needed" && (
                       <div className="hidden sm:flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded px-2 py-1 max-w-[320px]">
                         <AlertTriangle className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{selectedRow.actionPoint}</span>
+                        <span className="truncate">{activeRow.actionPoint}</span>
                       </div>
                     )}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-xs text-muted-foreground">{selectedTids.length} TIDs · {selectedRow.bidCount} bookings</span>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setTakeAction(null)} data-testid="close-take-action">
+                    <span className="text-xs text-muted-foreground">{activeTids.length} TIDs · {activeRow.bidCount} bookings</span>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setActiveRowKey(null)} data-testid="close-take-action">
                       <XIcon className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
 
-                {/* Body: all-in-one */}
                 <div className="flex-1 overflow-auto">
-                  <div className="px-5 py-4 space-y-5">
-                    {/* TIDs · Final Price · Disputes · Issues · BIDs */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">TIDs · Final Price · Disputes · Issues · BIDs</div>
-                        <div className="flex items-center gap-1.5">
-                          <Button size="sm" variant="outline" className="h-6 text-xs"
-                            onClick={() => updateTA({ disputeTids: new Set(selectedTids.map(t => t.tid)), issueTids: new Set(selectedTids.map(t => t.tid)) })}
-                            data-testid="select-all-tids"
-                          >
-                            Select all
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-6 text-xs"
-                            onClick={() => updateTA({ disputeTids: new Set(), issueTids: new Set() })}
-                            data-testid="clear-all-tids"
-                          >
-                            Clear all
-                          </Button>
+                  <div className="px-5 py-4">
+                    <div className="rounded-md border overflow-hidden">
+                      <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-4" style={{ gridTemplateColumns: TID_GRID_COLUMNS }}>
+                        <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
+                          <Checkbox checked={selectedTids.size > 0 && selectedTids.size === activeTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
                         </div>
+                        <div />
+                        <div>TID</div>
+                        <div className="text-center">Fulfillment</div>
+                        <div className="text-center">SP Net</div>
+                        <div className="text-center">HO Net</div>
+                        <div className="text-center">Difference LC</div>
+                        <div className="text-center text-violet-600">Total Amount Payable</div>
+                        <div className="text-center">Amount Paid</div>
+                        <div className="text-center text-violet-600">Dispute</div>
+                        <div className="text-center text-green-600">Balance Amt Payable</div>
+                        <div className="text-center">BIDs</div>
                       </div>
 
-                      <div className="rounded-md border overflow-hidden">
-                        {/* Table header */}
-                        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto] items-center h-8 bg-muted/40 px-3 text-xs font-medium text-muted-foreground border-b gap-2">
-                          <div>TID / Fulfillment</div>
-                          <div className="w-12 text-center">BIDs</div>
-                          <div className="w-20 text-right">SP Net</div>
-                          <div className="w-28 text-right">Final Price</div>
-                          <div className="w-10 text-center">Disp?</div>
-                          <div className="w-24 text-right">Disp. Amt</div>
-                          <div className="w-10 text-center">Issue?</div>
-                          <div className="w-28">DRI</div>
-                        </div>
+                      {activeTids.map(tid => {
+                        const isExpanded = expandedTid === tid.tid;
+                        const isResolved = resolvedTids.has(tid.tid);
+                        const isSelected = selectedTids.has(tid.tid);
+                        const pct = totalDisc > 0 ? ((Math.abs(tid.discLc) / totalDisc) * 100).toFixed(0) : "0";
 
-                        {selectedTids.map(tid => {
-                          const isPaxExpanded = takeAction.expandedPaxTids.has(tid.tid);
-                          const isBidExpanded = takeAction.expandedBidTids.has(tid.tid);
-                          const disputeChecked = takeAction.disputeTids.has(tid.tid);
-                          const issueChecked = takeAction.issueTids.has(tid.tid);
-                          const paxTotal = tid.hasPax ? computePaxTotal(tid, takeAction.paxPrices) : 0;
-                          const rowBg = disputeChecked && issueChecked
-                            ? "bg-orange-50/40 dark:bg-orange-950/20"
-                            : disputeChecked
-                            ? "bg-amber-50/30 dark:bg-amber-950/20"
-                            : issueChecked
-                            ? "bg-orange-50/20 dark:bg-orange-950/10"
-                            : "bg-background";
-                          return (
-                            <div key={tid.tid} className="border-b last:border-0">
-                              {/* Main TID row */}
-                              <div className={`grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto_auto] items-center px-3 h-11 gap-2 transition-colors ${rowBg}`} data-testid={`tid-row-${tid.tid}`}>
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className="font-mono text-sm font-medium text-primary truncate">{tid.tid}</span>
-                                  <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{tid.fulfillment}</Badge>
-                                </div>
-                                {/* BID expand chip */}
-                                <button
-                                  className="w-12 h-6 text-xs font-mono rounded bg-muted/60 hover:bg-muted flex items-center justify-center gap-0.5 shrink-0 transition-colors"
-                                  onClick={() => {
-                                    const next = new Set(takeAction.expandedBidTids);
-                                    isBidExpanded ? next.delete(tid.tid) : next.add(tid.tid);
-                                    updateTA({ expandedBidTids: next });
-                                  }}
-                                  title={isBidExpanded ? "Collapse BIDs" : "Show BIDs"}
-                                  data-testid={`bid-expand-${tid.tid}`}
-                                >
-                                  {tid.bidCount}
-                                  <ChevronRight className={`h-2.5 w-2.5 transition-transform duration-150 ${isBidExpanded ? "rotate-90" : ""}`} />
-                                </button>
-                                {/* SP Net */}
-                                <div className="w-20 text-right font-mono text-xs text-blue-700 dark:text-blue-400">{fmt(Math.abs(tid.spNetLc))}</div>
-                                {/* Final Price */}
-                                <div className="w-28 flex items-center justify-end gap-1">
-                                  {tid.hasPax ? (
-                                    <>
-                                      <span className={`font-mono text-xs font-semibold ${paxTotal > 0 ? "text-violet-700 dark:text-violet-400" : "text-muted-foreground"}`}>
-                                        {paxTotal > 0 ? fmt(paxTotal) : "—"}
-                                      </span>
-                                      <button
-                                        onClick={() => {
-                                          const next = new Set(takeAction.expandedPaxTids);
-                                          isPaxExpanded ? next.delete(tid.tid) : next.add(tid.tid);
-                                          updateTA({ expandedPaxTids: next });
-                                        }}
-                                        className="h-5 px-1.5 text-[10px] font-medium rounded bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900 dark:text-violet-300 dark:hover:bg-violet-800 flex items-center gap-0.5 shrink-0 transition-colors"
-                                        data-testid={`pax-toggle-${tid.tid}`}
-                                      >
-                                        Pax <ChevronRight className={`h-2.5 w-2.5 transition-transform duration-150 ${isPaxExpanded ? "rotate-90" : ""}`} />
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <Input
-                                      className="h-7 w-28 text-xs text-right font-mono border-dashed"
-                                      value={takeAction.tidFinalPrices[tid.tid] ?? ""}
-                                      onChange={e => updateTA({ tidFinalPrices: { ...takeAction.tidFinalPrices, [tid.tid]: e.target.value } })}
-                                      placeholder={fmt(Math.abs(tid.spNetLc))}
-                                      data-testid={`final-price-${tid.tid}`}
-                                    />
-                                  )}
-                                </div>
-                                {/* Dispute checkbox */}
-                                <div className="w-10 flex justify-center">
-                                  <Checkbox
-                                    checked={disputeChecked}
-                                    onCheckedChange={v => {
-                                      const next = new Set(takeAction.disputeTids);
-                                      v ? next.add(tid.tid) : next.delete(tid.tid);
-                                      updateTA({ disputeTids: next });
-                                    }}
-                                    className="h-3.5 w-3.5"
-                                    data-testid={`dispute-check-${tid.tid}`}
-                                  />
-                                </div>
-                                {/* Dispute amount */}
-                                <div className="w-24">
-                                  <Input
-                                    disabled={!disputeChecked}
-                                    className="h-7 text-xs text-right font-mono border-dashed"
-                                    value={takeAction.disputeAmounts[tid.tid] ?? ""}
-                                    onChange={e => updateTA({ disputeAmounts: { ...takeAction.disputeAmounts, [tid.tid]: e.target.value } })}
-                                    placeholder="0.00"
-                                    data-testid={`dispute-amt-${tid.tid}`}
-                                  />
-                                </div>
-                                {/* Issue checkbox */}
-                                <div className="w-10 flex justify-center">
-                                  <Checkbox
-                                    checked={issueChecked}
-                                    onCheckedChange={v => {
-                                      const next = new Set(takeAction.issueTids);
-                                      v ? next.add(tid.tid) : next.delete(tid.tid);
-                                      updateTA({ issueTids: next });
-                                    }}
-                                    className="h-3.5 w-3.5"
-                                    data-testid={`issue-check-${tid.tid}`}
-                                  />
-                                </div>
-                                {/* DRI Team */}
-                                <div className="w-28">
-                                  <Badge variant="outline" className={`text-[10px] ${tid.driTeam !== "N/A" ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800" : "text-muted-foreground"}`}>
-                                    {tid.driTeam}
-                                  </Badge>
-                                </div>
+                        return (
+                          <div key={tid.tid} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
+                            <div
+                              className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-4 ${isExpanded ? "bg-muted/20" : ""}`}
+                              style={{ gridTemplateColumns: TID_GRID_COLUMNS }}
+                              onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
+                            >
+                              <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
+                                {!isResolved && <Checkbox checked={isSelected} className="h-3.5 w-3.5" />}
                               </div>
-                              {/* BID sub-row */}
-                              {isBidExpanded && (
-                                <div className="px-4 py-2.5 bg-muted/20 border-t flex flex-wrap gap-1.5" data-testid={`bid-list-${tid.tid}`}>
-                                  <span className="text-[10px] font-medium text-muted-foreground mr-1 self-center">Booking IDs:</span>
-                                  {tid.bookingIds.map(bid => (
-                                    <span key={bid} className="font-mono text-[10px] bg-background border rounded px-1.5 py-0.5">{bid}</span>
-                                  ))}
+                              <div className="flex items-center">
+                                {isResolved ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-sm font-medium text-primary">{tid.tid}</span>
+                                  {tid.hasPax && <Badge variant="outline" className="text-[10px] px-1 py-0 text-violet-600 border-violet-200">Pax</Badge>}
                                 </div>
-                              )}
-                              {/* Pax pricing sub-panel */}
-                              {isPaxExpanded && (
-                                <div className="px-4 py-3 bg-violet-50/40 dark:bg-violet-950/20 border-t border-violet-100 dark:border-violet-900 space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-medium text-violet-700 dark:text-violet-300">Pax Pricing — {tid.tid}</span>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-muted-foreground">
-                                        Total: <span className="font-mono font-semibold text-violet-700 dark:text-violet-300">{fmt(paxTotal)}</span>
-                                      </span>
-                                      <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => {
-                                        const next = new Set(takeAction.expandedPaxTids);
-                                        next.delete(tid.tid);
-                                        updateTA({ expandedPaxTids: next });
-                                      }}>
-                                        <Check className="h-3 w-3 mr-1" /> Done
-                                      </Button>
+                                {tid.bookings[0]?.experienceName && (
+                                  <div className="text-[10px] text-muted-foreground break-words">{tid.bookings[0]?.experienceName}</div>
+                                )}
+                              </div>
+                              <div className="text-center">
+                                {tid.fulfillmentMethods.length > 0 && (
+                                  <span className="text-[10px] text-muted-foreground">{tid.fulfillmentMethods.length > 1 ? "Mixed" : tid.fulfillmentMethods[0]}</span>
+                                )}
+                              </div>
+                              <div className="text-center font-mono text-sm">{fmt(tid.spNet)}</div>
+                              <div className="text-center font-mono text-sm">{fmt(tid.hoNet)}</div>
+                              <div className="text-center">
+                                <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
+                                <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
+                              </div>
+                              <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                              <div className="text-center font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                              <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(disputedBookings.has(tid.bookings[0]?.bookingId) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                              <div className="text-center font-mono text-sm text-green-600 font-medium">{fmt((() => {
+                                const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
+                                const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
+                                return tidTap - tidAmtPaid;
+                              })())}</div>
+                              <div className="text-center text-sm">{tid.bidCount}</div>
+                            </div>
+
+                            {isExpanded && (
+                              <div className="border-b bg-muted/10 dark:bg-muted/5 px-4 py-3 space-y-3">
+                                <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/10 flex-wrap">
+                                  <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleTidAction(tid, "sp")} disabled={priceOverrideMutation.isPending} data-testid={`tid-sp-net-${tid.tid}`}>
+                                    {priceOverrideMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="h-3.5 w-3.5" />} Set SP Net
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => handleTidAction(tid, "ho")} disabled={priceOverrideMutation.isPending} data-testid={`tid-ho-net-${tid.tid}`}>
+                                    <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50" onClick={() => {
+                                    setPaxTid(tid);
+                                    setPaxOpen(true);
+                                  }} data-testid={`tid-pax-${tid.tid}`}>
+                                    <Calculator className="h-3.5 w-3.5" /> Pax Pricing
+                                  </Button>
+                                  <div className="flex-1" />
+                                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => handleTidDispute(tid)} disabled={disputeMutation.isPending} data-testid={`tid-dispute-${tid.tid}`}>
+                                    <Gavel className="h-3.5 w-3.5" /> Dispute
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
+                                    <FileWarning className="h-3.5 w-3.5" /> Issue
+                                  </Button>
+                                </div>
+
+                                <div className="rounded-md border overflow-hidden bg-background text-[11px]">
+                                  <div className="grid items-center h-7 bg-muted/30 border-b gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                                    <div className="text-left font-medium text-muted-foreground whitespace-nowrap">Booking ID</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Ticket ID</div>
+                                    <div className="text-center font-medium text-blue-600 whitespace-nowrap">SP Net</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">HO Net</div>
+                                    <div className="text-center font-medium text-red-600 whitespace-nowrap">Diff LC</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Selection</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Dispute</div>
+                                    <div className="text-center font-medium text-violet-600 whitespace-nowrap">Total Amount Payable</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap">Amount Paid</div>
+                                    <div className="text-center font-medium text-orange-600 whitespace-nowrap">Dispute Amt</div>
+                                    <div className="text-center font-medium text-green-600 whitespace-nowrap">Balance Amt Payable</div>
+                                    <div className="text-center font-medium text-muted-foreground whitespace-nowrap"></div>
+                                  </div>
+                                  {tid.bookings.map(b => {
+                                    const selection = getBidSelection(b.bookingId);
+                                    const canDispute = selection === "sp" || selection === "custom";
+                                    const finalNet = getBidFinalNet(b);
+                                    const effectiveTap = getEffectiveTap(b);
+                                    const tapBase = finalNet;
+                                    const tapMin = Math.round(tapBase * 0.9 * 100) / 100;
+                                    const tapMax = Math.round(tapBase * 1.1 * 100) / 100;
+                                    const hasTapOverride = bidTapOverrides[b.bookingId] !== undefined && bidTapOverrides[b.bookingId] !== "";
+                                    const maxDispute = getBidMaxDispute(b);
+                                    const currentDispute = canDispute ? getBidDisputeAmount(b.bookingId) : 0;
+                                    const exceedsMax = currentDispute > maxDispute;
+                                    const bookingAmountPaid = b.amountPaid || 0;
+                                    const balanceAmountPayable = effectiveTap - bookingAmountPaid;
+                                    const isSaved = savedBookings.has(b.bookingId);
+                                    const hasOverride = !!bookingSelections[b.bookingId];
+                                    const hasDisp = disputedBookings.has(b.bookingId);
+                                    return (
+                                      <div key={b.bookingId} className={`grid items-center min-h-[2.25rem] border-b last:border-0 hover:bg-muted/20 gap-x-4 px-3 ${hasDisp ? "bg-amber-50/50 dark:bg-amber-950/10" : ""} ${bidDisputeActive.has(b.bookingId) ? "bg-orange-50/30 dark:bg-orange-950/10" : ""}`} style={{ gridTemplateColumns: BID_GRID_COLUMNS }} data-testid={`booking-row-${b.bookingId}`}>
+                                        <div className="text-left py-1 min-w-0">
+                                          <div className="flex items-center gap-1">
+                                            <span className="font-mono text-primary font-medium">{b.bookingId}</span>
+                                            {hasDisp && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
+                                            {isSaved && <CheckCircle2 className="h-3 w-3 text-green-600 flex-shrink-0" />}
+                                          </div>
+                                        </div>
+                                        <div className="text-center py-1 text-muted-foreground truncate" title={b.ticketId || ""} data-testid={`cell-ticketid-${b.bookingId}`}>
+                                          {b.ticketId || "—"}
+                                        </div>
+                                        <div className="text-center py-1 font-mono text-blue-600" data-testid={`booking-sp-${b.bookingId}`}>
+                                          {fmt(b.spNetInHo || 0)}
+                                        </div>
+                                        <div className="text-center py-1 font-mono text-green-600" data-testid={`booking-ho-${b.bookingId}`}>
+                                          {fmt(b.hoNet || 0)}
+                                        </div>
+                                        <div className="text-center py-1 font-mono text-red-600 dark:text-red-400" data-testid={`booking-diff-${b.bookingId}`}>
+                                          {fmt(Math.round(((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100)}
+                                        </div>
+                                        <div className="text-center py-1">
+                                          {selection === "custom" ? (
+                                            <div className="flex items-center justify-center gap-1">
+                                              <Badge variant="outline" className="text-[9px] px-1 py-0 text-violet-600 border-violet-200">Custom</Badge>
+                                              <Button size="sm" variant="ghost" className="h-4 px-0.5 text-[9px] text-muted-foreground" onClick={() => updateBidSelection(b.bookingId, "sp")} data-testid={`clear-custom-${b.bookingId}`}>
+                                                <XIcon className="h-2.5 w-2.5" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <Select value={selection} onValueChange={(v) => updateBidSelection(b.bookingId, v as "ho" | "sp")}>
+                                              <SelectTrigger className="w-[4.5rem] h-5 text-xs mx-auto" data-testid={`select-booking-${b.bookingId}`}>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="ho">HO</SelectItem>
+                                                <SelectItem value="sp">SP</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          )}
+                                        </div>
+                                        <div className="text-center py-1">
+                                          {canDispute ? (
+                                            bidDisputeActive.has(b.bookingId) ? (
+                                              <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => setBidDisputeAmountForBooking(b.bookingId, 0)} data-testid={`button-clear-dispute-${b.bookingId}`}>
+                                                Clear
+                                              </Button>
+                                            ) : (
+                                              <Button size="sm" variant="outline" className="h-5 px-1.5 text-[9px]" onClick={() => activateBidDispute(b.bookingId, b)} data-testid={`button-dispute-${b.bookingId}`}>
+                                                Dispute
+                                              </Button>
+                                            )
+                                          ) : null}
+                                        </div>
+                                        <div className="text-center py-1 font-mono font-medium" data-testid={`booking-final-${b.bookingId}`}>
+                                          <div className="relative flex justify-center items-center gap-1">
+                                            {hasTapOverride ? (
+                                              <>
+                                                <input
+                                                  type="number"
+                                                  step="0.01"
+                                                  value={bidTapOverrides[b.bookingId] ?? ""}
+                                                  onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
+                                                  className="w-28 h-5 text-xs text-center font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
+                                                  data-testid={`input-tap-${b.bookingId}`}
+                                                />
+                                                <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
+                                                  <XIcon className="h-2.5 w-2.5" />
+                                                </button>
+                                              </>
+                                            ) : (
+                                              <input
+                                                type="number"
+                                                step="0.01"
+                                                value={finalNet.toFixed(2)}
+                                                readOnly
+                                                className="w-28 h-5 text-xs text-center font-mono bg-transparent border-0 cursor-default"
+                                                onClick={() => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: String(finalNet) }))}
+                                                data-testid={`input-tap-${b.bookingId}`}
+                                              />
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="text-center py-1 font-mono text-muted-foreground" data-testid={`booking-amtpaid-${b.bookingId}`}>
+                                          {bookingAmountPaid > 0 ? fmt(bookingAmountPaid) : "—"}
+                                        </div>
+                                        <div className="text-center py-1">
+                                          {bidDisputeActive.has(b.bookingId) ? (
+                                            <div className="relative group flex justify-center">
+                                              <Input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={currentDispute || ""}
+                                                onChange={(e) => setBidDisputeAmountForBooking(b.bookingId, parseFloat(e.target.value) || 0, b)}
+                                                className={`w-20 h-5 text-xs text-center font-mono px-1 ${exceedsMax ? 'border-orange-500 bg-orange-50 dark:bg-orange-950/30' : ''}`}
+                                                placeholder="0"
+                                                data-testid={`input-dispute-booking-${b.bookingId}`}
+                                              />
+                                              {exceedsMax && (
+                                                <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block">
+                                                  <div className="bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-orange-300 dark:border-orange-700">
+                                                    Max: {fmt(maxDispute)}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        <div className="text-center py-1 font-mono font-medium text-green-600 dark:text-green-400" data-testid={`booking-balance-${b.bookingId}`}>
+                                          {fmt(balanceAmountPayable)}
+                                        </div>
+                                        <div className="text-center py-1">
+                                          {hasOverride && !isSaved && (
+                                            <button className="p-1 rounded-md bg-violet-100 hover:bg-violet-200 text-violet-700 transition-colors" onClick={() => handleBookingSave(b)} disabled={priceOverrideMutation.isPending} data-testid={`booking-save-${b.bookingId}`}>
+                                              {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  <div className="grid items-center h-8 bg-muted/40 border-t font-semibold gap-x-4 px-3" style={{ gridTemplateColumns: BID_GRID_COLUMNS }}>
+                                    <div className="py-1 text-muted-foreground" style={{ gridColumn: "span 2" }}>Total ({tid.bookings.length})</div>
+                                    <div className="text-center py-1 font-mono text-blue-600">{fmt(tid.spNet)}</div>
+                                    <div className="text-center py-1 font-mono text-green-600">{fmt(tid.hoNet)}</div>
+                                    <div className="text-center py-1 font-mono text-red-600 dark:text-red-400 font-bold">{fmt(Math.round((tid.hoNet - tid.spNet) * 100) / 100)}</div>
+                                    <div className="text-center py-1" style={{ gridColumn: "span 2" }}>
+                                      {(() => {
+                                        const disputed = tid.bookings.filter(b => bidDisputeActive.has(b.bookingId)).length;
+                                        const disputable = tid.bookings.filter(b => { const s = getBidSelection(b.bookingId); return s === "sp" || s === "custom"; }).length;
+                                        if (disputable === 0) return null;
+                                        if (disputed > 0) {
+                                          return (
+                                            <Button size="sm" variant="ghost" className="h-4 px-1 text-[9px] text-muted-foreground hover:text-foreground" onClick={() => handleTidBulkDispute(tid, "clear")} data-testid={`tid-clear-dispute-${tid.tid}`}>
+                                              Clear All
+                                            </Button>
+                                          );
+                                        }
+                                        return (
+                                          <Button size="sm" variant="outline" className="h-5 px-1 text-[9px]" onClick={() => handleTidBulkDispute(tid, "all")} data-testid={`tid-dispute-all-${tid.tid}`}>
+                                            Dispute All
+                                          </Button>
+                                        );
+                                      })()}
+                                    </div>
+                                    <div className="text-center py-1 font-mono text-violet-700 font-bold">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
+                                    <div className="text-center py-1 font-mono text-muted-foreground">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
+                                    <div className="text-center py-1 font-mono text-orange-600">
+                                      {(() => {
+                                        const totalDisp = tid.bookings.reduce((s, b) => { const sel = getBidSelection(b.bookingId); return s + (sel === "sp" || sel === "custom" ? getBidDisputeAmount(b.bookingId) : 0); }, 0);
+                                        return totalDisp > 0 ? fmt(totalDisp) : null;
+                                      })()}
+                                    </div>
+                                    <div className="text-center py-1 font-mono text-green-600 dark:text-green-400 font-bold">
+                                      {fmt(tid.bookings.reduce((s, b) => {
+                                        const tap = getEffectiveTap(b);
+                                        const ap = b.amountPaid || 0;
+                                        return s + tap - ap;
+                                      }, 0))}
+                                    </div>
+                                    <div className="text-center py-1">
+                                      {tid.bookings.some(b => bookingSelections[b.bookingId] && !savedBookings.has(b.bookingId)) && (
+                                        <button className="p-1 rounded-md bg-violet-600 hover:bg-violet-700 text-white transition-colors" onClick={() => handleTidSaveAll(tid)} disabled={priceOverrideMutation.isPending} data-testid={`tid-save-all-${tid.tid}`}>
+                                          {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
-                                  <div className="rounded-md border overflow-hidden bg-background">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow className="h-7 bg-muted/30">
-                                          <TableHead className="py-1 text-xs pl-3">Pax Type</TableHead>
-                                          <TableHead className="py-1 text-xs">Date Range</TableHead>
-                                          <TableHead className="py-1 text-xs text-right">Count</TableHead>
-                                          <TableHead className="py-1 text-xs text-right">SP Unit</TableHead>
-                                          <TableHead className="py-1 text-xs text-right">HO Unit</TableHead>
-                                          <TableHead className="py-1 text-xs text-right pr-3">Final Unit Price</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {tid.paxRows.map(pr => {
-                                          const key = `${tid.tid}__${pr.paxType}__${pr.dateRange}`;
-                                          const unitVal = takeAction.paxPrices[key] ?? "";
-                                          const computed = (parseFloat(unitVal) || pr.spUnit) * pr.count;
-                                          return (
-                                            <TableRow key={key} className="h-8">
-                                              <TableCell className="py-1 pl-3 text-xs font-medium">{pr.paxType}</TableCell>
-                                              <TableCell className="py-1 text-xs text-muted-foreground">{pr.dateRange}</TableCell>
-                                              <TableCell className="py-1 text-right text-xs">{pr.count}</TableCell>
-                                              <TableCell className="py-1 text-right font-mono text-xs text-blue-600">{fmt(pr.spUnit)}</TableCell>
-                                              <TableCell className="py-1 text-right font-mono text-xs text-green-600">{fmt(pr.hoUnit)}</TableCell>
-                                              <TableCell className="py-1 text-right pr-3">
-                                                <div className="flex items-center justify-end gap-1.5">
-                                                  <span className="text-[10px] text-muted-foreground font-mono">= {fmt(computed)}</span>
-                                                  <Input
-                                                    className="h-6 w-20 text-xs text-right font-mono ml-auto border-dashed"
-                                                    value={unitVal}
-                                                    onChange={e => updateTA({ paxPrices: { ...takeAction.paxPrices, [key]: e.target.value } })}
-                                                    placeholder={String(pr.spUnit)}
-                                                    data-testid={`pax-price-${key}`}
-                                                  />
-                                                </div>
-                                              </TableCell>
-                                            </TableRow>
-                                          );
-                                        })}
-                                      </TableBody>
-                                    </Table>
-                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
-                {/* Bottom bar */}
                 <div className="border-t bg-card px-5 py-3 shrink-0 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-4 text-xs">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground">Pay:</span>
-                      <span className="font-mono font-semibold text-blue-700 dark:text-blue-400" data-testid="total-pay">
-                        {fmt(totalPayable)} {currency}
+                      <span className="text-muted-foreground">TIDs:</span>
+                      <span className="font-mono font-semibold">{activeTids.length}</span>
+                    </div>
+                    <div className="h-3 w-px bg-border" />
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">Resolved:</span>
+                      <span className={`font-mono font-semibold ${resolvedTids.size > 0 ? "text-green-600" : "text-muted-foreground"}`}>
+                        {resolvedTids.size} / {activeTids.length}
                       </span>
                     </div>
                     <div className="h-3 w-px bg-border" />
                     <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground">Disputes:</span>
-                      <span className={`font-mono font-semibold ${disputeCount > 0 ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
-                        {disputeCount > 0 ? `${disputeCount} TIDs · ${fmt(totalDisputeAmt)} ${currency}` : "none"}
-                      </span>
-                    </div>
-                    <div className="h-3 w-px bg-border" />
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground">Issues:</span>
-                      <span className={`font-mono font-semibold ${issueCount > 0 ? "text-orange-700 dark:text-orange-400" : "text-muted-foreground"}`}>
-                        {issueCount > 0 ? `${issueCount} TIDs` : "none"}
+                      <span className="text-muted-foreground">Saved:</span>
+                      <span className={`font-mono font-semibold ${savedBookings.size > 0 ? "text-blue-600" : "text-muted-foreground"}`}>
+                        {savedBookings.size} bookings
                       </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setTakeAction(null)} data-testid="cancel-action">Cancel</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setActiveRowKey(null)} data-testid="cancel-action">Cancel</Button>
                     <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={confirmAction} data-testid="confirm-action">
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" /> Confirm & Apply
                     </Button>
@@ -858,8 +1308,7 @@ export function CancellationsWorkspace({
               </div>
             )}
 
-            {/* Idle: Amount Payable Summary Table */}
-            {!takeAction && (
+            {!activeRowKey && (
               <div className="flex-1 overflow-auto">
                 <div className="px-5 pt-2.5 pb-1.5 flex items-center gap-2 sticky top-0 bg-background z-10 border-b">
                   <span className="text-xs font-semibold uppercase tracking-wide">Amount Payable</span>
@@ -949,7 +1398,6 @@ export function CancellationsWorkspace({
                               </Button>
                             </div>
                           </TableCell>
-                          {/* Action cell */}
                           <TableCell className="py-1 pr-3 text-center">
                             {isDone ? (
                               <Badge className="gap-1 bg-green-50 text-green-700 border-green-200 hover:bg-green-50 dark:bg-green-950 dark:text-green-300 dark:border-green-800 text-[11px] font-medium px-2 py-0.5" data-testid={`done-badge-${row.rowKey}`}>
@@ -971,7 +1419,6 @@ export function CancellationsWorkspace({
                     })}
                   </TableBody>
 
-                  {/* Totals footer */}
                   <tfoot>
                     <tr className="border-t-2 bg-muted/40 text-xs font-semibold">
                       <td className="py-2 pl-3">Totals</td>
@@ -1010,12 +1457,105 @@ export function CancellationsWorkspace({
           </div>
         </div>
 
-        {/* Toast */}
-        {toast && (
+        <Dialog open={paxOpen && !!paxTid} onOpenChange={open => { if (!open) { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); } }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Calculator className="h-4 w-4 text-violet-600" />
+                Pax Pricing — {paxTid?.tid}
+              </DialogTitle>
+            </DialogHeader>
+            {paxTid && (() => {
+              const { paxDateRows: paxRows } = buildPaxDateRows(paxTid.bookings);
+              const hasPaxRows = paxRows.length > 0;
+              const spTotal = paxTid.bookings.reduce((s, b) => s + (b.spNetInHo || 0), 0);
+              const hoTotal = paxTid.bookings.reduce((s, b) => s + (b.hoNet || 0), 0);
+              const computeGrandTotal = () => {
+                return paxRows.reduce((s, row) => {
+                  const priceStr = paxPrices[row.rowKey];
+                  const finalPrice = priceStr !== undefined && priceStr !== "" ? parseFloat(priceStr) || 0 : row.spUnitPrice;
+                  return s + finalPrice * row.count;
+                }, 0);
+              };
+              const grandTotal = computeGrandTotal();
+
+              return (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 text-sm">
+                    <div>SP Total: <span className="font-mono font-semibold text-blue-600">{fmt(spTotal)}</span></div>
+                    <div>HO Total: <span className="font-mono font-semibold text-green-600">{fmt(hoTotal)}</span></div>
+                    <div className="ml-auto">New Total: <span className="font-mono font-semibold text-violet-600">{fmt(grandTotal)}</span></div>
+                  </div>
+                  {hasPaxRows ? (
+                    <div className="rounded-md border overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="h-7 bg-muted/30">
+                            <TableHead className="py-1 text-xs pl-3">Pax Type</TableHead>
+                            <TableHead className="py-1 text-xs">Date Range</TableHead>
+                            <TableHead className="py-1 text-xs text-right">Count</TableHead>
+                            <TableHead className="py-1 text-xs text-right">SP Unit</TableHead>
+                            <TableHead className="py-1 text-xs text-right">HO Unit</TableHead>
+                            <TableHead className="py-1 text-xs text-right pr-3">Final Unit Price</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {paxRows.map(pr => {
+                            const unitVal = paxPrices[pr.rowKey] ?? "";
+                            const computed = (parseFloat(unitVal) || pr.spUnitPrice) * pr.count;
+                            return (
+                              <TableRow key={pr.rowKey} className="h-8">
+                                <TableCell className="py-1 pl-3 text-xs font-medium">{pr.paxType}</TableCell>
+                                <TableCell className="py-1 text-xs text-muted-foreground">{pr.dateRange}</TableCell>
+                                <TableCell className="py-1 text-right text-xs">{pr.count}</TableCell>
+                                <TableCell className="py-1 text-right font-mono text-xs text-blue-600">{fmt(pr.spUnitPrice)}</TableCell>
+                                <TableCell className="py-1 text-right font-mono text-xs text-green-600">{fmt(pr.hoUnitPrice)}</TableCell>
+                                <TableCell className="py-1 text-right pr-3">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <span className="text-[10px] text-muted-foreground font-mono">= {fmt(computed)}</span>
+                                    <Input
+                                      className="h-6 w-20 text-xs text-right font-mono ml-auto border-dashed"
+                                      value={unitVal}
+                                      onChange={e => setPaxPrices(prev => ({ ...prev, [pr.rowKey]: e.target.value }))}
+                                      placeholder={String(pr.spUnitPrice)}
+                                      data-testid={`pax-price-${pr.rowKey}`}
+                                    />
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-muted-foreground text-sm">No pax breakdown available for this TID</div>
+                  )}
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => { setPaxOpen(false); setPaxTid(null); }}>Cancel</Button>
+                    <Button onClick={handlePaxSave} disabled={priceOverrideMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white">
+                      {priceOverrideMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
+                      Apply Pax Pricing
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
+
+        {feedback && (
+          <div className="fixed bottom-14 right-4 flex items-center gap-2 bg-violet-600 text-white text-xs px-3 py-2 rounded shadow-lg z-50">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {feedback}
+          </div>
+        )}
+
+        {toastMsg && (
           <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-foreground text-background text-xs px-3 py-2 rounded shadow-lg z-50" data-testid="toast-notification">
             <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
-            {toast}
-            <button onClick={() => setToast(null)} className="ml-1 opacity-60 hover:opacity-100">
+            {toastMsg}
+            <button onClick={() => setToastMsg(null)} className="ml-1 opacity-60 hover:opacity-100">
               <XIcon className="h-3 w-3" />
             </button>
           </div>

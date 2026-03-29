@@ -1499,6 +1499,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
               supplierName={spDetails?.billingEntityName || ""}
               onClose={() => setIsCancellationsModalOpen(false)}
               fxData={fxData}
+              runId={currentRunId}
             />
           </Suspense>
         </DialogContent>
