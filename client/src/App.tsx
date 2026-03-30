@@ -18,7 +18,7 @@ import { DiscrepancyAnalysisPage } from "@/pages/discrepancy-analysis";
 import { DraftsPage } from "@/pages/drafts";
 import { DriPage } from "@/pages/dri";
 import { ExportPage } from "@/pages/export";
-import { DisputeTrackerPage } from "@/pages/dispute-tracker";
+
 import { ReconTrackerPage } from "@/pages/recon-tracker";
 import { IssueTrackerPage } from "@/pages/issue-tracker";
 import { LoginPage } from "@/pages/login";
@@ -590,9 +590,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
                   currentRunId={currentRunId}
                 />
               </Route>
-              <Route path="/dispute-tracker">
-                <DisputeTrackerPage runId={currentRunId} />
-              </Route>
+
               <Route path="/recon-tracker">
                 <ReconTrackerPage runId={currentRunId} />
               </Route>

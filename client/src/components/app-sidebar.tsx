@@ -3,7 +3,6 @@ import {
   Home,
   Upload,
   LayoutDashboard,
-  FileWarning,
   AlertTriangle,
   ClipboardCheck,
   MonitorDot,
@@ -24,7 +23,6 @@ import {
 const navItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Reconciliation", url: "/upload", icon: Upload },
-  { title: "Dispute Tracker", url: "/dispute-tracker", icon: FileWarning },
   { title: "Recon Tracker", url: "/recon-tracker", icon: ClipboardCheck },
   { title: "Issue Tracker", url: "/issue-tracker", icon: AlertTriangle },
   { title: "Retool", url: "/retool", icon: MonitorDot },
