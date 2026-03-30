@@ -586,13 +586,15 @@ export function AmountPayablePanel({
   }, [dominantPaymentMethod]);
 
   const allVendorIdsComplete = useMemo(() => {
-    if (secondaryVendorBookings.length > 0 && !secondaryVendorFinalId.trim()) return false;
-    for (const b of bookings) {
-      if (b.isSecondaryVendor) continue;
-      if (hasPaymentMismatch(b) && !finalVendorIds.has(b.bookingId)) return false;
+    const allBookings = [...bookings, ...secondaryVendorBookings];
+    for (const b of allBookings) {
+      if (b.isSecondaryVendor || hasPaymentMismatch(b)) {
+        const vid = finalVendorIds.get(b.bookingId);
+        if (!vid || !vid.trim()) return false;
+      }
     }
     return true;
-  }, [secondaryVendorBookings, secondaryVendorFinalId, bookings, hasPaymentMismatch, finalVendorIds]);
+  }, [bookings, secondaryVendorBookings, hasPaymentMismatch, finalVendorIds]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
     if (amountPaidTotals[booking.bookingId] !== undefined) {

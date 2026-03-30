@@ -109,6 +109,8 @@ interface BookingRowProps {
   showVendorId?: boolean;
   vendorIdValue?: string;
   onVendorIdChange?: (bookingId: string, value: string) => void;
+  onVendorIdSave?: (bookingId: string, value: string) => void;
+  dominantPaymentMethod?: string;
 }
 
 const BookingRow = memo(function BookingRow({
@@ -129,6 +131,8 @@ const BookingRow = memo(function BookingRow({
   showVendorId,
   vendorIdValue,
   onVendorIdChange,
+  onVendorIdSave,
+  dominantPaymentMethod: domPm,
 }: BookingRowProps) {
   const [localFnp, setLocalFnp] = useState(fnpValue.toFixed(2));
   const [fnpFocused, setFnpFocused] = useState(false);
@@ -242,6 +246,11 @@ const BookingRow = memo(function BookingRow({
         <TableRow className="h-7 bg-violet-50/40 dark:bg-violet-950/20">
           <TableCell colSpan={runId ? 6 : 5} className="py-0.5 pl-6">
             <div className="flex items-center gap-2">
+              {domPm && booking.paymentMethod && (
+                <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                  {booking.paymentMethod} → {domPm}
+                </Badge>
+              )}
               <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium whitespace-nowrap">Final Vendor ID:</span>
               <Input
                 type="text"
@@ -249,6 +258,8 @@ const BookingRow = memo(function BookingRow({
                 placeholder="Enter Vendor ID"
                 value={vendorIdValue || ""}
                 onChange={(e) => onVendorIdChange(booking.bookingId, e.target.value)}
+                onBlur={() => onVendorIdSave?.(booking.bookingId, vendorIdValue || "")}
+                onKeyDown={(e) => { if (e.key === "Enter") onVendorIdSave?.(booking.bookingId, vendorIdValue || ""); }}
                 onClick={(e) => e.stopPropagation()}
                 data-testid={`input-vendor-id-${booking.bookingId}`}
               />
@@ -563,13 +574,15 @@ interface TidGroupProps {
   hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
   finalVendorIds?: Map<string, string>;
   onVendorIdChange?: (bookingId: string, value: string) => void;
+  onVendorIdSave?: (bookingId: string, value: string) => void;
+  dominantPaymentMethod?: string;
 }
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
-  hasPaymentMismatch, finalVendorIds, onVendorIdChange,
+  hasPaymentMismatch, finalVendorIds, onVendorIdChange, onVendorIdSave, dominantPaymentMethod,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
   const expName = useMemo(() => tidBookings.find(b => b.experienceName)?.experienceName, [tidBookings]);
@@ -647,6 +660,8 @@ const TidGroup = memo(function TidGroup({
                     showVendorId={isMismatch}
                     vendorIdValue={finalVendorIds?.get(booking.bookingId)}
                     onVendorIdChange={onVendorIdChange}
+                    onVendorIdSave={onVendorIdSave}
+                    dominantPaymentMethod={dominantPaymentMethod}
                   />
                 );
               })}
@@ -688,6 +703,8 @@ interface ReasonGroupProps {
   hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
   finalVendorIds?: Map<string, string>;
   onVendorIdChange?: (bookingId: string, value: string) => void;
+  onVendorIdSave?: (bookingId: string, value: string) => void;
+  dominantPaymentMethod?: string;
 }
 
 const ReasonGroup = memo(function ReasonGroup({
@@ -697,7 +714,7 @@ const ReasonGroup = memo(function ReasonGroup({
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
   negativeSpVerified, onSetNegativeSpVerified,
-  hasPaymentMismatch, finalVendorIds, onVendorIdChange,
+  hasPaymentMismatch, finalVendorIds, onVendorIdChange, onVendorIdSave, dominantPaymentMethod,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
   const tidEntries = reasonGroup.tidEntries;
@@ -847,6 +864,8 @@ const ReasonGroup = memo(function ReasonGroup({
                 hasPaymentMismatch={hasPaymentMismatch}
                 finalVendorIds={finalVendorIds}
                 onVendorIdChange={onVendorIdChange}
+                onVendorIdSave={onVendorIdSave}
+                dominantPaymentMethod={dominantPaymentMethod}
               />
             );
           })}
@@ -892,6 +911,8 @@ interface BreakupSectionProps {
   hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
   finalVendorIds?: Map<string, string>;
   onVendorIdChange?: (bookingId: string, value: string) => void;
+  onVendorIdSave?: (bookingId: string, value: string) => void;
+  dominantPaymentMethod?: string;
 }
 
 const BreakupSection = memo(function BreakupSection({
@@ -901,7 +922,7 @@ const BreakupSection = memo(function BreakupSection({
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openIssueModal,
   negativeSpVerified, onSetNegativeSpVerified,
-  hasPaymentMismatch, finalVendorIds, onVendorIdChange,
+  hasPaymentMismatch, finalVendorIds, onVendorIdChange, onVendorIdSave, dominantPaymentMethod,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
   const [showAllReasons, setShowAllReasons] = useState(false);
@@ -1005,6 +1026,8 @@ const BreakupSection = memo(function BreakupSection({
             hasPaymentMismatch={hasPaymentMismatch}
             finalVendorIds={finalVendorIds}
             onVendorIdChange={onVendorIdChange}
+            onVendorIdSave={onVendorIdSave}
+            dominantPaymentMethod={dominantPaymentMethod}
           />
         );
       })}
@@ -1448,6 +1471,8 @@ interface LineItemsTableCardProps {
   hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
   finalVendorIds?: Map<string, string>;
   onVendorIdChange?: (bookingId: string, value: string) => void;
+  onVendorIdSave?: (bookingId: string, value: string) => void;
+  dominantPaymentMethod?: string;
 }
 
 const LineItemsTableCard = memo(function LineItemsTableCard({
@@ -1485,6 +1510,8 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   hasPaymentMismatch,
   finalVendorIds,
   onVendorIdChange,
+  onVendorIdSave,
+  dominantPaymentMethod,
 }: LineItemsTableCardProps) {
   return (
     <Card>
@@ -1649,6 +1676,8 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                                   hasPaymentMismatch={hasPaymentMismatch}
                                   finalVendorIds={finalVendorIds}
                                   onVendorIdChange={onVendorIdChange}
+                                  onVendorIdSave={onVendorIdSave}
+                                  dominantPaymentMethod={dominantPaymentMethod}
                                 />
                               </TableCell>
                             </TableRow>
@@ -1956,6 +1985,32 @@ export function PurchaseReconciliationPanel({
   const finalVendorIdsRef = useRef(finalVendorIds);
   finalVendorIdsRef.current = finalVendorIds;
   const [secondaryVendorFinalId, setSecondaryVendorFinalId] = useState("");
+  const [vendorCorrectionsLoaded, setVendorCorrectionsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (runId && !vendorCorrectionsLoaded) {
+      authFetch(`/api/vendor-corrections/${runId}`)
+        .then(res => res.json())
+        .then(data => {
+          const corrections = data.corrections || [];
+          const newMap = new Map<string, string>();
+          for (const vc of corrections) {
+            newMap.set(vc.bookingId, vc.finalVendorId);
+          }
+          setFinalVendorIds(newMap);
+          const svIds = new Set<string>();
+          for (const row of secondaryVendorRows) {
+            const vid = newMap.get(row.bookingId);
+            if (vid) svIds.add(vid);
+          }
+          if (svIds.size === 1) {
+            setSecondaryVendorFinalId([...svIds][0]);
+          }
+          setVendorCorrectionsLoaded(true);
+        })
+        .catch(() => setVendorCorrectionsLoaded(true));
+    }
+  }, [runId, vendorCorrectionsLoaded, secondaryVendorRows]);
 
   const dominantPaymentMethod = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1983,11 +2038,19 @@ export function PurchaseReconciliationPanel({
       next.set(bookingId, value);
       return next;
     });
-    if (runId && value.trim()) {
-      authFetch(`/api/vendor-corrections/${runId}`, {
+  }, []);
+
+  const saveVendorCorrection = useCallback(async (bookingId: string, value: string) => {
+    if (!runId) return;
+    if (value.trim()) {
+      await authFetch(`/api/vendor-corrections/${runId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId, finalVendorId: value.trim() }),
+      }).catch(() => {});
+    } else {
+      await authFetch(`/api/vendor-corrections/${runId}/${bookingId}`, {
+        method: "DELETE",
       }).catch(() => {});
     }
   }, [runId]);
@@ -1995,15 +2058,13 @@ export function PurchaseReconciliationPanel({
   const allVendorIdsComplete = useMemo(() => {
     const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
     for (const row of allRows) {
-      if (row.isSecondaryVendor) {
-        if (!secondaryVendorFinalId.trim()) return false;
-      } else if (hasPaymentMismatch(row)) {
+      if (row.isSecondaryVendor || hasPaymentMismatch(row)) {
         const vid = finalVendorIds.get(row.bookingId);
         if (!vid || !vid.trim()) return false;
       }
     }
     return true;
-  }, [primaryRows, secondaryVendorRows, unmappedRows, secondaryVendorFinalId, finalVendorIds, hasPaymentMismatch]);
+  }, [primaryRows, secondaryVendorRows, unmappedRows, finalVendorIds, hasPaymentMismatch]);
 
   const saveSecondaryVendorId = useCallback(async () => {
     if (!secondaryVendorFinalId.trim() || !runId) return;
@@ -3012,6 +3073,8 @@ export function PurchaseReconciliationPanel({
         hasPaymentMismatch={hasPaymentMismatch}
         finalVendorIds={finalVendorIds}
         onVendorIdChange={updateVendorId}
+        onVendorIdSave={saveVendorCorrection}
+        dominantPaymentMethod={dominantPaymentMethod}
       />
 
       <InsightsCard
