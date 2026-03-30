@@ -2228,25 +2228,40 @@ export async function registerRoutes(
         details: { count: unexpectedNegatives.length, bookingIds: unexpectedNegatives.slice(0, 5).map((r: any) => r.bookingId) },
       });
       
-      // CHECK 5: Payment method mismatches resolved (vendor corrections exist)
-      const paymentMismatchRows = allRows.filter((r: any) => r.reason === "Payment Method Mismatch");
+      // CHECK 5: Vendor corrections resolved (secondary vendor + payment method mismatches)
       const vendorCorrectionMap = new Map<string, string>();
       for (const vc of vendorCorrections) {
         vendorCorrectionMap.set(vc.bookingId, vc.finalVendorId);
       }
-      const unresolvedMismatches = paymentMismatchRows.filter((r: any) => !vendorCorrectionMap.has(r.bookingId));
+      const pmCounts = new Map<string, number>();
+      for (const r of allRows) {
+        const pm = ((r as any).paymentMethod || "").trim().toLowerCase();
+        if (pm) pmCounts.set(pm, (pmCounts.get(pm) || 0) + 1);
+      }
+      let dominantPm = "";
+      let maxPmCount = 0;
+      for (const [pm, cnt] of pmCounts) {
+        if (cnt > maxPmCount) { dominantPm = pm; maxPmCount = cnt; }
+      }
+      const needsVendorId = allRows.filter((r: any) => {
+        if (r.isSecondaryVendor) return true;
+        if (!dominantPm) return false;
+        const pm = (r.paymentMethod || "").trim().toLowerCase();
+        return !!(pm && pm !== dominantPm);
+      });
+      const unresolvedMismatches = needsVendorId.filter((r: any) => !vendorCorrectionMap.has(r.bookingId));
       checks.push({
         id: "payment_mismatches_resolved",
-        name: "Payment method mismatches resolved",
+        name: "Vendor ID corrections resolved",
         category: "Data Completeness",
-        severity: paymentMismatchRows.length > 0 ? "warning" : "critical",
-        status: unresolvedMismatches.length === 0 ? "pass" : (paymentMismatchRows.length > 0 ? "warning" : "pass"),
-        message: paymentMismatchRows.length === 0 
-          ? "No payment method mismatches found"
+        severity: unresolvedMismatches.length > 0 ? "critical" : "warning",
+        status: unresolvedMismatches.length === 0 ? "pass" : "fail",
+        message: needsVendorId.length === 0 
+          ? "No vendor corrections needed"
           : unresolvedMismatches.length === 0 
-            ? `All ${paymentMismatchRows.length} mismatches have Final Vendor ID assigned`
-            : `${unresolvedMismatches.length} of ${paymentMismatchRows.length} mismatches missing Final Vendor ID`,
-        details: { total: paymentMismatchRows.length, unresolved: unresolvedMismatches.length },
+            ? `All ${needsVendorId.length} bookings have Final Vendor ID assigned`
+            : `${unresolvedMismatches.length} of ${needsVendorId.length} bookings missing Final Vendor ID`,
+        details: { total: needsVendorId.length, unresolved: unresolvedMismatches.length },
       });
       
       // CHECK 6: FX rate validation

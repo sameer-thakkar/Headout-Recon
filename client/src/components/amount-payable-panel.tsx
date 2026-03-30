@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef, Fragment } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, CheckCircle2, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, authFetch } from "@/lib/queryClient";
@@ -163,7 +163,7 @@ export function AmountPayablePanel({
   const [bulkActionsExpanded, setBulkActionsExpanded] = useState(false);
   // Vendor ID correction: final vendor ID per booking and bulk vendor ID
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
-  const [bulkVendorId, setBulkVendorId] = useState<string>("");
+  const [secondaryVendorFinalId, setSecondaryVendorFinalId] = useState<string>("");
   const [vendorCorrectionsLoaded, setVendorCorrectionsLoaded] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
@@ -229,7 +229,6 @@ export function AmountPayablePanel({
     }
   }, [runId, disputesLoaded]);
 
-  // Load vendor corrections on mount
   useEffect(() => {
     if (runId && !vendorCorrectionsLoaded) {
       fetch(`/api/vendor-corrections/${runId}`)
@@ -241,6 +240,14 @@ export function AmountPayablePanel({
             newMap.set(vc.bookingId, vc.finalVendorId);
           }
           setFinalVendorIds(newMap);
+          const svIds = new Set<string>();
+          for (const b of secondaryVendorBookings) {
+            const vid = newMap.get(b.bookingId);
+            if (vid) svIds.add(vid);
+          }
+          if (svIds.size === 1) {
+            setSecondaryVendorFinalId(Array.from(svIds)[0]);
+          }
           setVendorCorrectionsLoaded(true);
         })
         .catch(err => {
@@ -248,7 +255,7 @@ export function AmountPayablePanel({
           setVendorCorrectionsLoaded(true);
         });
     }
-  }, [runId, vendorCorrectionsLoaded]);
+  }, [runId, vendorCorrectionsLoaded, secondaryVendorBookings]);
 
   // Save or delete a single vendor correction
   const saveVendorCorrection = useCallback(async (bookingId: string, finalVendorId: string) => {
@@ -271,6 +278,29 @@ export function AmountPayablePanel({
       console.error("Failed to save/delete vendor correction:", err);
     }
   }, [runId]);
+
+  const saveSecondaryVendorId = useCallback(async () => {
+    if (!runId || !secondaryVendorFinalId.trim()) return;
+    const vid = secondaryVendorFinalId.trim();
+    try {
+      for (const b of secondaryVendorBookings) {
+        await authFetch(`/api/vendor-corrections/${runId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId: b.bookingId, finalVendorId: vid }),
+        });
+        setFinalVendorIds(prev => {
+          const next = new Map(prev);
+          next.set(b.bookingId, vid);
+          return next;
+        });
+      }
+      toast({ title: "Saved", description: `Final Vendor ID "${vid}" applied to ${secondaryVendorBookings.length} booking(s)` });
+    } catch (err) {
+      console.error("Failed to save secondary vendor ID:", err);
+      toast({ title: "Error", description: "Failed to save vendor ID", variant: "destructive" });
+    }
+  }, [runId, secondaryVendorFinalId, secondaryVendorBookings, toast]);
 
   // Save bulk vendor corrections
   useEffect(() => {
@@ -549,37 +579,20 @@ export function AmountPayablePanel({
     return result;
   }, [secondaryVendorBookings]);
 
-  // Payment Method Mismatch: bookings where payment method differs from dominant payment method
-  const paymentMismatchBookings = useMemo(() => {
-    if (!dominantPaymentMethod) return [];
-    const normalizedDominant = dominantPaymentMethod.toLowerCase().trim();
-    return bookings.filter(b => {
-      // Only include if payment method is present and differs from dominant
-      if (!b.paymentMethod) return false;
-      return b.paymentMethod.toLowerCase().trim() !== normalizedDominant;
-    });
-  }, [bookings, dominantPaymentMethod]);
+  const hasPaymentMismatch = useCallback((booking: BookingForPayable): boolean => {
+    if (!dominantPaymentMethod) return false;
+    if (!booking.paymentMethod) return false;
+    return booking.paymentMethod.toLowerCase().trim() !== dominantPaymentMethod.toLowerCase().trim();
+  }, [dominantPaymentMethod]);
 
-  // Combined list: Payment Mismatch + Secondary Vendor bookings (for Vendor ID correction section)
-  const vendorCorrectionBookings = useMemo(() => {
-    const seen = new Set<string>();
-    const combined: BookingForPayable[] = [];
-    // Add payment mismatch bookings
-    for (const b of paymentMismatchBookings) {
-      if (!seen.has(b.bookingId)) {
-        seen.add(b.bookingId);
-        combined.push(b);
-      }
+  const allVendorIdsComplete = useMemo(() => {
+    if (secondaryVendorBookings.length > 0 && !secondaryVendorFinalId.trim()) return false;
+    for (const b of bookings) {
+      if (b.isSecondaryVendor) continue;
+      if (hasPaymentMismatch(b) && !finalVendorIds.has(b.bookingId)) return false;
     }
-    // Add secondary vendor bookings
-    for (const b of secondaryVendorBookings) {
-      if (!seen.has(b.bookingId)) {
-        seen.add(b.bookingId);
-        combined.push(b);
-      }
-    }
-    return combined;
-  }, [paymentMismatchBookings, secondaryVendorBookings]);
+    return true;
+  }, [secondaryVendorBookings, secondaryVendorFinalId, bookings, hasPaymentMismatch, finalVendorIds]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
     if (amountPaidTotals[booking.bookingId] !== undefined) {
@@ -1182,6 +1195,11 @@ export function AmountPayablePanel({
   const handleApply = useCallback(async () => {
     setValidationError("");
     
+    if (!allVendorIdsComplete) {
+      setValidationError("All Final Vendor IDs must be set before applying. Check Secondary Vendor section and any payment method mismatch bookings.");
+      return;
+    }
+
     const manualAdjustments = localAdjustments.filter(a => !a.isPreset);
     for (const adj of manualAdjustments) {
       if (!adj.nature.trim() || !adj.reference.trim() || adj.amount === 0) {
@@ -1233,7 +1251,7 @@ export function AmountPayablePanel({
       amount: finalAmount,
     });
     setShowApplyConfirmation(true);
-  }, [localAdjustments, localSelections, finalAmount, alreadyReconciledDecisions, alreadyReconciledBookings]);
+  }, [localAdjustments, localSelections, finalAmount, alreadyReconciledDecisions, alreadyReconciledBookings, allVendorIdsComplete]);
 
   const handleConfirmApply = useCallback(async () => {
     if (!pendingApplyData) return;
@@ -1387,8 +1405,8 @@ export function AmountPayablePanel({
                       const isCustomReason = decision?.reason && !reasonOptions.includes(decision.reason);
                       
                       return (
+                        <Fragment key={booking.bookingId}>
                         <div 
-                          key={booking.bookingId} 
                           className={`grid grid-cols-[110px_90px_60px_90px_90px_85px_140px_90px_100px_70px] gap-2 px-3 py-1.5 border-t items-center text-xs ${isDontPay ? "opacity-50 bg-muted/20" : ""}`}
                           data-testid={`already-reconciled-row-${booking.bookingId}`}
                         >
@@ -1574,6 +1592,30 @@ export function AmountPayablePanel({
                             </Badge>
                           </div>
                         </div>
+                        {hasPaymentMismatch(booking) && (
+                          <div className="flex items-center gap-2 px-3 py-1 border-t bg-violet-50/50 dark:bg-violet-950/20">
+                            <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                              {booking.paymentMethod} → {dominantPaymentMethod}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">Final Vendor ID:</span>
+                            <Input
+                              className="h-5 text-[10px] font-mono w-28 px-1"
+                              placeholder="Vendor ID"
+                              value={finalVendorIds.get(booking.bookingId) || ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setFinalVendorIds(prev => { const n = new Map(prev); n.set(booking.bookingId, val); return n; });
+                              }}
+                              onBlur={() => { const val = finalVendorIds.get(booking.bookingId) || ""; saveVendorCorrection(booking.bookingId, val); }}
+                              onKeyDown={e => { if (e.key === "Enter") { const val = finalVendorIds.get(booking.bookingId) || ""; saveVendorCorrection(booking.bookingId, val); } }}
+                              data-testid={`input-vendor-id-ar-${booking.bookingId}`}
+                            />
+                            {finalVendorIds.has(booking.bookingId) && finalVendorIds.get(booking.bookingId)!.trim() && (
+                              <CheckCircle2 className="h-3 w-3 text-green-600" />
+                            )}
+                          </div>
+                        )}
+                      </Fragment>
                       );
                     })}
                   </div>
@@ -1886,6 +1928,33 @@ export function AmountPayablePanel({
                                                   {formatCurrency(getFinalNetPrice(booking))}
                                                 </TableCell>
                                               </TableRow>
+                                              {hasPaymentMismatch(booking) && (
+                                                <TableRow className="h-7 bg-violet-50/50 dark:bg-violet-950/20">
+                                                  <TableCell colSpan={8} className="py-1">
+                                                    <div className="flex items-center gap-2">
+                                                      <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                                                        {booking.paymentMethod} → {dominantPaymentMethod}
+                                                      </Badge>
+                                                      <span className="text-[10px] text-muted-foreground">Final Vendor ID:</span>
+                                                      <Input
+                                                        className="h-5 text-[10px] font-mono w-28 px-1"
+                                                        placeholder="Vendor ID"
+                                                        value={finalVendorIds.get(booking.bookingId) || ""}
+                                                        onChange={e => {
+                                                          const val = e.target.value;
+                                                          setFinalVendorIds(prev => { const n = new Map(prev); n.set(booking.bookingId, val); return n; });
+                                                        }}
+                                                        onBlur={() => { const val = finalVendorIds.get(booking.bookingId) || ""; saveVendorCorrection(booking.bookingId, val); }}
+                                                        onKeyDown={e => { if (e.key === "Enter") { const val = finalVendorIds.get(booking.bookingId) || ""; saveVendorCorrection(booking.bookingId, val); } }}
+                                                        data-testid={`input-vendor-id-${booking.bookingId}`}
+                                                      />
+                                                      {finalVendorIds.has(booking.bookingId) && finalVendorIds.get(booking.bookingId)!.trim() && (
+                                                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                                      )}
+                                                    </div>
+                                                  </TableCell>
+                                                </TableRow>
+                                              )}
                                             </Fragment>
                                           );
                                         })}
@@ -1951,6 +2020,26 @@ export function AmountPayablePanel({
                 <p className="text-lg font-bold font-mono" data-testid="text-secondary-vendor-total">
                   {formatCurrency(secondaryVendorTotal)} {currency}
                 </p>
+              </div>
+              <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/30 mb-3" data-testid="secondary-vendor-id-input">
+                <span className="text-xs font-medium whitespace-nowrap">Final Vendor ID:</span>
+                <Input
+                  className="h-7 text-xs font-mono max-w-[200px]"
+                  placeholder="Enter vendor ID"
+                  value={secondaryVendorFinalId}
+                  onChange={e => setSecondaryVendorFinalId(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveSecondaryVendorId(); }}
+                  data-testid="input-secondary-vendor-id"
+                />
+                <Button size="sm" className="h-7 text-xs" onClick={saveSecondaryVendorId} disabled={!secondaryVendorFinalId.trim()} data-testid="btn-save-secondary-vendor-id">
+                  Apply to All
+                </Button>
+                {secondaryVendorFinalId.trim() && secondaryVendorBookings.every(b => finalVendorIds.get(b.bookingId) === secondaryVendorFinalId.trim()) && (
+                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Applied
+                  </Badge>
+                )}
               </div>
 
               {Object.entries(secondaryVendorByReasonAndTid).map(([reason, tidGroups]) => {
@@ -2318,6 +2407,13 @@ export function AmountPayablePanel({
                 Add Row
               </Button>
             </div>
+
+            {!allVendorIdsComplete && (secondaryVendorBookings.length > 0 || bookings.some(b => hasPaymentMismatch(b))) && (
+              <div className="mb-3 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md flex items-center gap-2" data-testid="vendor-id-warning">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <p className="text-xs text-amber-800 dark:text-amber-200">Final Vendor IDs must be set for all Secondary Vendor bookings and payment method mismatch bookings before applying.</p>
+              </div>
+            )}
 
             {validationError && (
               <div className="mb-3 p-2 bg-destructive/10 border border-destructive/20 rounded-md flex items-center gap-2">

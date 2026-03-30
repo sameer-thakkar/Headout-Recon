@@ -106,6 +106,9 @@ interface BookingRowProps {
   reasonName: string;
   onUpdateFnp: (bookingId: string, value: number) => void;
   onOpenIssueModal: (booking: BookingForDispute) => void;
+  showVendorId?: boolean;
+  vendorIdValue?: string;
+  onVendorIdChange?: (bookingId: string, value: string) => void;
 }
 
 const BookingRow = memo(function BookingRow({
@@ -123,6 +126,9 @@ const BookingRow = memo(function BookingRow({
   reasonName,
   onUpdateFnp,
   onOpenIssueModal,
+  showVendorId,
+  vendorIdValue,
+  onVendorIdChange,
 }: BookingRowProps) {
   const [localFnp, setLocalFnp] = useState(fnpValue.toFixed(2));
   const [fnpFocused, setFnpFocused] = useState(false);
@@ -232,6 +238,29 @@ const BookingRow = memo(function BookingRow({
           </TableCell>
         )}
       </TableRow>
+      {showVendorId && onVendorIdChange && (
+        <TableRow className="h-7 bg-violet-50/40 dark:bg-violet-950/20">
+          <TableCell colSpan={runId ? 6 : 5} className="py-0.5 pl-6">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium whitespace-nowrap">Final Vendor ID:</span>
+              <Input
+                type="text"
+                className="h-5 text-[10px] w-32 font-mono border-violet-200 dark:border-violet-800 bg-white dark:bg-background"
+                placeholder="Enter Vendor ID"
+                value={vendorIdValue || ""}
+                onChange={(e) => onVendorIdChange(booking.bookingId, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                data-testid={`input-vendor-id-${booking.bookingId}`}
+              />
+              {vendorIdValue ? (
+                <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+              ) : (
+                <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
     </Fragment>
   );
 });
@@ -531,12 +560,16 @@ interface TidGroupProps {
   getFinalNetPrice: (bookingId: string, defaultSpNet: number) => number;
   updateFinalNetPrice: (bookingId: string, value: number) => void;
   openIssueModal: (booking: BookingForDispute) => void;
+  hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
+  finalVendorIds?: Map<string, string>;
+  onVendorIdChange?: (bookingId: string, value: string) => void;
 }
 
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
+  hasPaymentMismatch, finalVendorIds, onVendorIdChange,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
   const expName = useMemo(() => tidBookings.find(b => b.experienceName)?.experienceName, [tidBookings]);
@@ -593,6 +626,7 @@ const TidGroup = memo(function TidGroup({
                 const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                 const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                 const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
+                const isMismatch = hasPaymentMismatch?.(booking) || booking.isSecondaryVendor;
                 return (
                   <BookingRow
                     key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}
@@ -610,6 +644,9 @@ const TidGroup = memo(function TidGroup({
                     reasonName={reasonName}
                     onUpdateFnp={updateFinalNetPrice}
                     onOpenIssueModal={openIssueModal}
+                    showVendorId={isMismatch}
+                    vendorIdValue={finalVendorIds?.get(booking.bookingId)}
+                    onVendorIdChange={onVendorIdChange}
                   />
                 );
               })}
@@ -648,6 +685,9 @@ interface ReasonGroupProps {
   openIssueModal: (booking: BookingForDispute) => void;
   negativeSpVerified?: boolean;
   onSetNegativeSpVerified?: (val: boolean) => void;
+  hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
+  finalVendorIds?: Map<string, string>;
+  onVendorIdChange?: (bookingId: string, value: string) => void;
 }
 
 const ReasonGroup = memo(function ReasonGroup({
@@ -657,6 +697,7 @@ const ReasonGroup = memo(function ReasonGroup({
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice,
   negativeSpVerified, onSetNegativeSpVerified,
+  hasPaymentMismatch, finalVendorIds, onVendorIdChange,
 }: ReasonGroupProps) {
   const reasonKey = `${itemId}-${reasonGroup.reason}`;
   const tidEntries = reasonGroup.tidEntries;
@@ -803,6 +844,9 @@ const ReasonGroup = memo(function ReasonGroup({
                 getFinalNetPrice={getFinalNetPrice}
                 updateFinalNetPrice={updateFinalNetPrice}
                 openIssueModal={openIssueModal}
+                hasPaymentMismatch={hasPaymentMismatch}
+                finalVendorIds={finalVendorIds}
+                onVendorIdChange={onVendorIdChange}
               />
             );
           })}
@@ -845,6 +889,9 @@ interface BreakupSectionProps {
   openIssueModal: (booking: BookingForDispute) => void;
   negativeSpVerified?: boolean;
   onSetNegativeSpVerified?: (val: boolean) => void;
+  hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
+  finalVendorIds?: Map<string, string>;
+  onVendorIdChange?: (bookingId: string, value: string) => void;
 }
 
 const BreakupSection = memo(function BreakupSection({
@@ -854,6 +901,7 @@ const BreakupSection = memo(function BreakupSection({
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
   getFinalNetPrice, updateFinalNetPrice, openIssueModal,
   negativeSpVerified, onSetNegativeSpVerified,
+  hasPaymentMismatch, finalVendorIds, onVendorIdChange,
 }: BreakupSectionProps) {
   const [searchFilter, setSearchFilter] = useState("");
   const [showAllReasons, setShowAllReasons] = useState(false);
@@ -954,6 +1002,9 @@ const BreakupSection = memo(function BreakupSection({
             openIssueModal={openIssueModal}
             negativeSpVerified={negativeSpVerified}
             onSetNegativeSpVerified={onSetNegativeSpVerified}
+            hasPaymentMismatch={hasPaymentMismatch}
+            finalVendorIds={finalVendorIds}
+            onVendorIdChange={onVendorIdChange}
           />
         );
       })}
@@ -1394,6 +1445,9 @@ interface LineItemsTableCardProps {
   summaryCurrency?: string;
   summaryFxRateToUsd?: number | null;
   isCrossCurrency?: boolean;
+  hasPaymentMismatch?: (booking: PurchaseBooking) => boolean;
+  finalVendorIds?: Map<string, string>;
+  onVendorIdChange?: (bookingId: string, value: string) => void;
 }
 
 const LineItemsTableCard = memo(function LineItemsTableCard({
@@ -1428,6 +1482,9 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
   summaryCurrency: sumCcy,
   summaryFxRateToUsd: sumFxRate,
   isCrossCurrency: crossCcy,
+  hasPaymentMismatch,
+  finalVendorIds,
+  onVendorIdChange,
 }: LineItemsTableCardProps) {
   return (
     <Card>
@@ -1589,6 +1646,9 @@ const LineItemsTableCard = memo(function LineItemsTableCard({
                                   openIssueModal={openIssueModal}
                                   negativeSpVerified={negativeSpVerified}
                                   onSetNegativeSpVerified={onSetNegativeSpVerified}
+                                  hasPaymentMismatch={hasPaymentMismatch}
+                                  finalVendorIds={finalVendorIds}
+                                  onVendorIdChange={onVendorIdChange}
                                 />
                               </TableCell>
                             </TableRow>
@@ -1617,12 +1677,6 @@ interface InsightsCardProps {
     totalBookings: number;
     totalAmount: number;
   };
-  paymentMismatchData: {
-    hasData: boolean;
-    tidEntries: [string, (PrimaryRow & { mismatchLabel: string })[]][];
-    totalBookings: number;
-    totalAmount: number;
-  };
   cancellationData: {
     hasData: boolean;
     breakdown: { reason: string; bookings: PrimaryRow[]; total: number; count: number }[];
@@ -1633,8 +1687,6 @@ interface InsightsCardProps {
   effectiveFxRate: number | null;
   expandedAlreadyRecon: "same_be" | "different_be" | null;
   setExpandedAlreadyRecon: (fn: (prev: "same_be" | "different_be" | null) => "same_be" | "different_be" | null) => void;
-  expandedPaymentMismatch: boolean;
-  setExpandedPaymentMismatch: (fn: (prev: boolean) => boolean) => void;
   expandedCancellations: boolean;
   setExpandedCancellations: (fn: (prev: boolean) => boolean) => void;
   expandedCancType: string | null;
@@ -1645,14 +1697,11 @@ const InsightsCard = memo(function InsightsCard({
   insightTabsCount,
   defaultInsightTab,
   alreadyReconciledData,
-  paymentMismatchData,
   cancellationData,
   currency,
   effectiveFxRate,
   expandedAlreadyRecon,
   setExpandedAlreadyRecon,
-  expandedPaymentMismatch,
-  setExpandedPaymentMismatch,
   expandedCancellations,
   setExpandedCancellations,
   expandedCancType,
@@ -1677,13 +1726,6 @@ const InsightsCard = memo(function InsightsCard({
                 <Check className="h-3 w-3 text-green-600" />
                 Reconciled
                 <Badge variant="secondary" className="text-[10px] ml-0.5">{alreadyReconciledData.totalBookings}</Badge>
-              </TabsTrigger>
-            )}
-            {paymentMismatchData.hasData && (
-              <TabsTrigger value="mismatch" className="text-xs gap-1.5" data-testid="tab-mismatch">
-                <AlertTriangle className="h-3 w-3 text-violet-600" />
-                Payment Mismatch
-                <Badge variant="secondary" className="text-[10px] ml-0.5">{paymentMismatchData.totalBookings}</Badge>
               </TabsTrigger>
             )}
             {cancellationData.hasData && (
@@ -1799,72 +1841,6 @@ const InsightsCard = memo(function InsightsCard({
             </TabsContent>
           )}
 
-          {paymentMismatchData.hasData && (
-            <TabsContent value="mismatch" data-testid="section-payment-mismatch">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs px-1">
-                  <span className="text-muted-foreground">{paymentMismatchData.totalBookings} bookings with different HO/SP payment methods</span>
-                  <span className="font-mono">{formatNumber(paymentMismatchData.totalAmount)} {currency}</span>
-                </div>
-                <div className="rounded-md border bg-background overflow-hidden">
-                  <div
-                    className="flex items-center justify-between px-3 py-2 bg-muted/40 cursor-pointer hover-elevate"
-                    onClick={() => setExpandedPaymentMismatch(prev => !prev)}
-                    data-testid="payment-mismatch-header"
-                  >
-                    <div className="flex items-center gap-2">
-                      {expandedPaymentMismatch ? <ChevronDown className="h-4 w-4 text-primary" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                      <span className="text-sm font-medium">Mismatched Bookings</span>
-                      <Badge variant="outline" className="text-xs">{paymentMismatchData.tidEntries.length} TIDs</Badge>
-                    </div>
-                  </div>
-                  {expandedPaymentMismatch && (
-                    <div className="p-2 space-y-1">
-                      {paymentMismatchData.tidEntries.map(([tid, bookings]) => (
-                        <div key={`pm-tid-${tid}`} className="rounded-md border overflow-hidden">
-                          <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs font-medium">TID: {tid}</span>
-                              <Badge variant="secondary" className="text-[10px]">{bookings.length}</Badge>
-                            </div>
-                          </div>
-                          <Table className="text-xs">
-                            <TableHeader>
-                              <TableRow className="h-7">
-                                <TableHead className="py-1 text-xs">Booking ID</TableHead>
-                                <TableHead className="py-1 text-xs text-right">SP Net</TableHead>
-                                <TableHead className="py-1 text-xs text-right">HO Net</TableHead>
-                                <TableHead className="py-1 text-xs">HO Payment</TableHead>
-                                <TableHead className="py-1 text-xs">SP Payment</TableHead>
-                                <TableHead className="py-1 text-xs">Reason</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {bookings.map((b, i) => (
-                                <TableRow key={`pm-${tid}-${i}`} className="h-8">
-                                  <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                                  <TableCell className="py-1">
-                                    <Badge variant="outline" className="text-[10px]">{b.paymentMethod || "-"}</Badge>
-                                  </TableCell>
-                                  <TableCell className="py-1">
-                                    <Badge variant="outline" className="text-[10px]">{b.spPaymentMethod || "-"}</Badge>
-                                  </TableCell>
-                                  <TableCell className="py-1 text-muted-foreground">{b.reason}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </TabsContent>
-          )}
-
           {cancellationData.hasData && (
             <TabsContent value="cancellations" data-testid="section-cancellations">
               <div className="space-y-2">
@@ -1976,10 +1952,81 @@ export function PurchaseReconciliationPanel({
   const [fnpVersion, setFnpVersion] = useState(0);
   const finalNetPricesRef = useRef(finalNetPrices);
   finalNetPricesRef.current = finalNetPrices;
-  // Final Vendor ID state: bookingId → corrected vendor ID (for secondary vendor rows)
   const [finalVendorIds, setFinalVendorIds] = useState<Map<string, string>>(new Map());
   const finalVendorIdsRef = useRef(finalVendorIds);
   finalVendorIdsRef.current = finalVendorIds;
+  const [secondaryVendorFinalId, setSecondaryVendorFinalId] = useState("");
+
+  const dominantPaymentMethod = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of primaryRows) {
+      const pm = (row.paymentMethod || "").trim().toLowerCase();
+      if (pm) counts.set(pm, (counts.get(pm) || 0) + 1);
+    }
+    let maxPm = "";
+    let maxCount = 0;
+    for (const [pm, count] of counts) {
+      if (count > maxCount) { maxPm = pm; maxCount = count; }
+    }
+    return maxPm;
+  }, [primaryRows]);
+
+  const hasPaymentMismatch = useCallback((booking: { paymentMethod?: string }) => {
+    if (!dominantPaymentMethod) return false;
+    const pm = (booking.paymentMethod || "").trim().toLowerCase();
+    return !!(pm && pm !== dominantPaymentMethod);
+  }, [dominantPaymentMethod]);
+
+  const updateVendorId = useCallback((bookingId: string, value: string) => {
+    setFinalVendorIds(prev => {
+      const next = new Map(prev);
+      next.set(bookingId, value);
+      return next;
+    });
+    if (runId && value.trim()) {
+      authFetch(`/api/vendor-corrections/${runId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId, finalVendorId: value.trim() }),
+      }).catch(() => {});
+    }
+  }, [runId]);
+
+  const allVendorIdsComplete = useMemo(() => {
+    const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
+    for (const row of allRows) {
+      if (row.isSecondaryVendor) {
+        if (!secondaryVendorFinalId.trim()) return false;
+      } else if (hasPaymentMismatch(row)) {
+        const vid = finalVendorIds.get(row.bookingId);
+        if (!vid || !vid.trim()) return false;
+      }
+    }
+    return true;
+  }, [primaryRows, secondaryVendorRows, unmappedRows, secondaryVendorFinalId, finalVendorIds, hasPaymentMismatch]);
+
+  const saveSecondaryVendorId = useCallback(async () => {
+    if (!secondaryVendorFinalId.trim() || !runId) return;
+    const bookingIds = secondaryVendorRows.map(r => r.bookingId);
+    if (bookingIds.length === 0) return;
+    try {
+      for (const bookingId of bookingIds) {
+        await authFetch(`/api/vendor-corrections/${runId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId, finalVendorId: secondaryVendorFinalId.trim() }),
+        });
+        setFinalVendorIds(prev => {
+          const next = new Map(prev);
+          next.set(bookingId, secondaryVendorFinalId.trim());
+          return next;
+        });
+      }
+      toast({ title: "Saved", description: `Final Vendor ID applied to ${bookingIds.length} secondary vendor bookings` });
+    } catch {
+      toast({ title: "Error", description: "Failed to save vendor corrections", variant: "destructive" });
+    }
+  }, [secondaryVendorFinalId, runId, secondaryVendorRows, toast]);
   const [isPriceUpdatePending, startPriceTransition] = useTransition();
   
   // Dispute tracking state
@@ -2738,33 +2785,6 @@ export function PurchaseReconciliationPanel({
     };
   }, [primaryRows, secondaryVendorRows]);
 
-  const paymentMismatchData = useMemo(() => {
-    const mismatches: Array<PrimaryRow & { mismatchLabel: string }> = [];
-    const seen = new Set<string>();
-    for (const row of [...primaryRows, ...secondaryVendorRows, ...unmappedRows]) {
-      if (seen.has(row.bookingId)) continue;
-      const ho = (row.paymentMethod || "").trim();
-      const sp = (row.spPaymentMethod || "").trim();
-      if (ho && sp && ho.toLowerCase() !== sp.toLowerCase()) {
-        seen.add(row.bookingId);
-        mismatches.push({ ...row, mismatchLabel: `${ho} vs ${sp}` });
-      }
-    }
-    const byTid = new Map<string, typeof mismatches>();
-    for (const m of mismatches) {
-      const tid = m.tid || "Unknown";
-      if (!byTid.has(tid)) byTid.set(tid, []);
-      byTid.get(tid)!.push(m);
-    }
-    const tidEntries = Array.from(byTid.entries()).sort((a, b) => b[1].length - a[1].length);
-    return {
-      hasData: mismatches.length > 0,
-      mismatches,
-      tidEntries,
-      totalBookings: mismatches.length,
-      totalAmount: mismatches.reduce((s, m) => s + m.spNetInHo, 0),
-    };
-  }, [primaryRows, secondaryVendorRows, unmappedRows]);
 
   const cancellationData = useMemo(() => {
     const seenCanc = new Set<string>();
@@ -2798,7 +2818,6 @@ export function PurchaseReconciliationPanel({
   }, [primaryRows, secondaryVendorRows, cancellationReasons]);
 
   const [expandedAlreadyRecon, setExpandedAlreadyRecon] = useState<"same_be" | "different_be" | null>(null);
-  const [expandedPaymentMismatch, setExpandedPaymentMismatch] = useState(false);
   const [expandedCancellations, setExpandedCancellations] = useState(false);
   const [expandedCancType, setExpandedCancType] = useState<string | null>(null);
 
@@ -2821,17 +2840,15 @@ export function PurchaseReconciliationPanel({
   const insightTabsCount = useMemo(() => {
     let count = 0;
     if (alreadyReconciledData.hasData) count++;
-    if (paymentMismatchData.hasData) count++;
     if (cancellationData.hasData) count++;
     return count;
-  }, [alreadyReconciledData.hasData, paymentMismatchData.hasData, cancellationData.hasData]);
+  }, [alreadyReconciledData.hasData, cancellationData.hasData]);
 
   const defaultInsightTab = useMemo(() => {
     if (alreadyReconciledData.hasData) return "reconciled";
-    if (paymentMismatchData.hasData) return "mismatch";
     if (cancellationData.hasData) return "cancellations";
     return "reconciled";
-  }, [alreadyReconciledData.hasData, paymentMismatchData.hasData, cancellationData.hasData]);
+  }, [alreadyReconciledData.hasData, cancellationData.hasData]);
 
   if (!beId) {
     return (
@@ -2888,7 +2905,13 @@ export function PurchaseReconciliationPanel({
           <Button
             size="sm"
             variant={isConfirmed ? "outline" : "default"}
-            onClick={() => setShowApplyConfirmation(true)}
+            onClick={() => {
+              if (!allVendorIdsComplete) {
+                toast({ title: "Incomplete Vendor IDs", description: "Please set Final Vendor ID for all Secondary Vendor and payment mismatch bookings", variant: "destructive" });
+                return;
+              }
+              setShowApplyConfirmation(true);
+            }}
             data-testid="button-apply-confirm-purchase-reco"
             className={isConfirmed ? "text-green-600 border-green-500 hover:bg-green-50 dark:hover:bg-green-950/20" : ""}
           >
@@ -2904,6 +2927,53 @@ export function PurchaseReconciliationPanel({
           <span className="text-sm text-amber-800 dark:text-amber-200">
             No balances configured for this BE ID. Upload balances from the home page to enable accurate calculations.
           </span>
+        </div>
+      )}
+
+      {secondaryVendorRows.length > 0 && (
+        <Card data-testid="section-secondary-vendor-id">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                <span className="text-xs font-medium">Secondary Vendor ({secondaryVendorRows.length} bookings)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Final Vendor ID:</span>
+                <Input
+                  type="text"
+                  className="h-7 text-xs w-40 font-mono"
+                  placeholder="Enter Vendor ID"
+                  value={secondaryVendorFinalId}
+                  onChange={(e) => setSecondaryVendorFinalId(e.target.value)}
+                  data-testid="input-secondary-vendor-id-purchase"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={saveSecondaryVendorId}
+                  disabled={!secondaryVendorFinalId.trim()}
+                  data-testid="button-apply-secondary-vendor-id-purchase"
+                >
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Apply to All
+                </Button>
+              </div>
+              {secondaryVendorFinalId.trim() && (
+                <Badge variant="outline" className="text-[10px] text-green-600 border-green-300">
+                  <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" /> Set
+                </Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!allVendorIdsComplete && (secondaryVendorRows.length > 0 || [...primaryRows, ...unmappedRows].some(b => hasPaymentMismatch(b))) && (
+        <div className="p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md flex items-center gap-2" data-testid="vendor-id-warning-purchase">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <p className="text-xs text-amber-800 dark:text-amber-200">Final Vendor IDs must be set for all Secondary Vendor bookings and payment method mismatch bookings before applying.</p>
         </div>
       )}
 
@@ -2939,20 +3009,20 @@ export function PurchaseReconciliationPanel({
         summaryCurrency={summaryCurrency}
         summaryFxRateToUsd={summaryFxRateToUsd}
         isCrossCurrency={isCrossCurrency}
+        hasPaymentMismatch={hasPaymentMismatch}
+        finalVendorIds={finalVendorIds}
+        onVendorIdChange={updateVendorId}
       />
 
       <InsightsCard
         insightTabsCount={insightTabsCount}
         defaultInsightTab={defaultInsightTab}
         alreadyReconciledData={alreadyReconciledData}
-        paymentMismatchData={paymentMismatchData}
         cancellationData={cancellationData}
         currency={currency}
         effectiveFxRate={effectiveFxRate}
         expandedAlreadyRecon={expandedAlreadyRecon}
         setExpandedAlreadyRecon={setExpandedAlreadyRecon}
-        expandedPaymentMismatch={expandedPaymentMismatch}
-        setExpandedPaymentMismatch={setExpandedPaymentMismatch}
         expandedCancellations={expandedCancellations}
         setExpandedCancellations={setExpandedCancellations}
         expandedCancType={expandedCancType}
