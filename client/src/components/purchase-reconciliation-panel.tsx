@@ -639,7 +639,7 @@ const TidGroup = memo(function TidGroup({
                 const fnp = getFinalNetPrice(booking.bookingId, booking.spNet);
                 const fnpDiffersFromSp = Math.abs(fnp - booking.spNet) > 0.01;
                 const needsDisputeWarning = fnpDiffersFromSp && !loggedIssues.has(booking.bookingId);
-                const isMismatch = hasPaymentMismatch?.(booking) || booking.isSecondaryVendor;
+                const isMismatch = !booking.isSecondaryVendor && (hasPaymentMismatch?.(booking) || false);
                 return (
                   <BookingRow
                     key={`${itemId}-booking-${groupIdx}-${tid}-${bookingIdx}`}
@@ -2056,15 +2056,20 @@ export function PurchaseReconciliationPanel({
   }, [runId]);
 
   const allVendorIdsComplete = useMemo(() => {
-    const allRows = [...primaryRows, ...secondaryVendorRows, ...unmappedRows];
-    for (const row of allRows) {
-      if (row.isSecondaryVendor || hasPaymentMismatch(row)) {
+    if (secondaryVendorRows.length > 0 && !secondaryVendorFinalId.trim()) return false;
+    for (const row of secondaryVendorRows) {
+      const vid = finalVendorIds.get(row.bookingId);
+      if (!vid || !vid.trim()) return false;
+    }
+    const nonSvRows = [...primaryRows, ...unmappedRows];
+    for (const row of nonSvRows) {
+      if (hasPaymentMismatch(row)) {
         const vid = finalVendorIds.get(row.bookingId);
         if (!vid || !vid.trim()) return false;
       }
     }
     return true;
-  }, [primaryRows, secondaryVendorRows, unmappedRows, finalVendorIds, hasPaymentMismatch]);
+  }, [primaryRows, secondaryVendorRows, unmappedRows, secondaryVendorFinalId, finalVendorIds, hasPaymentMismatch]);
 
   const saveSecondaryVendorId = useCallback(async () => {
     if (!secondaryVendorFinalId.trim() || !runId) return;

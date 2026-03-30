@@ -587,15 +587,19 @@ export function AmountPayablePanel({
   }, [dominantPaymentMethod]);
 
   const allVendorIdsComplete = useMemo(() => {
-    const allBookings = [...bookings, ...secondaryVendorBookings];
-    for (const b of allBookings) {
-      if (b.isSecondaryVendor || hasPaymentMismatch(b)) {
+    if (secondaryVendorBookings.length > 0 && !secondaryVendorFinalId.trim()) return false;
+    for (const b of secondaryVendorBookings) {
+      const vid = finalVendorIds.get(b.bookingId);
+      if (!vid || !vid.trim()) return false;
+    }
+    for (const b of bookings) {
+      if (!b.isSecondaryVendor && hasPaymentMismatch(b)) {
         const vid = finalVendorIds.get(b.bookingId);
         if (!vid || !vid.trim()) return false;
       }
     }
     return true;
-  }, [bookings, secondaryVendorBookings, hasPaymentMismatch, finalVendorIds]);
+  }, [bookings, secondaryVendorBookings, secondaryVendorFinalId, hasPaymentMismatch, finalVendorIds]);
 
   const getFinalNetPrice = useCallback((booking: BookingForPayable): number => {
     if (amountPaidTotals[booking.bookingId] !== undefined) {
@@ -1279,6 +1283,14 @@ export function AmountPayablePanel({
       });
       return;
     }
+    if (!allVendorIdsComplete) {
+      toast({
+        title: "Vendor IDs incomplete",
+        description: "All secondary vendor and payment mismatch bookings must have a Final Vendor ID before exporting.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       toast({
@@ -1291,7 +1303,8 @@ export function AmountPayablePanel({
         fetch(`/api/runs/${runId}/export/financial`),
       ]);
       if (!analysisResponse.ok || !financialResponse.ok) {
-        throw new Error("Failed to generate export");
+        const errData = !financialResponse.ok ? await financialResponse.json().catch(() => null) : null;
+        throw new Error(errData?.error || "Failed to generate export");
       }
 
       const timestamp = new Date().toISOString().slice(0, 10);
@@ -1320,15 +1333,15 @@ export function AmountPayablePanel({
         title: "Export complete",
         description: "Your reconciliation report has been downloaded",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Export error:", error);
       toast({
         title: "Export failed",
-        description: "Failed to generate export file",
+        description: error?.message || "Failed to generate export file",
         variant: "destructive",
       });
     }
-  }, [runId, toast]);
+  }, [runId, toast, allVendorIdsComplete]);
 
   const formatCurrency = (value: number) => {
     return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
