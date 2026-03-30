@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Info, ChevronRight, ChevronDown, CheckCircle2, Gavel, Zap,
-  X as XIcon, FileWarning,
+  Info, ChevronRight, ChevronDown, CheckCircle2, Gavel,
+  X as XIcon, FileWarning, TrendingUp, TrendingDown,
 } from "lucide-react";
 
 const fmt = (n: number) =>
@@ -216,25 +216,30 @@ export function AlreadyReconciledWorkspace({
     onDecisionChange(newDecisions);
   }, [decisions, getDecision, onDecisionChange]);
 
-  const zeroAllInTid = useCallback((tidGroup: ArTidGroup) => {
+  const setSpNetAllInTid = useCallback((tidGroup: ArTidGroup) => {
     const newDecisions = new Map(decisions);
     for (const b of tidGroup.bookings) {
       const current = newDecisions.get(b.bookingId) ?? { decision: "pay" as const, reason: "", customReason: "", finalAmount: 0 };
-      newDecisions.set(b.bookingId, { ...current, decision: "pay", finalAmount: 0 });
+      newDecisions.set(b.bookingId, { ...current, decision: "pay", finalAmount: Math.round(Math.abs(b.spNet) * 100) / 100 });
     }
     onDecisionChange(newDecisions);
-    setFeedback(`TAP set to 0 for TID ${tidGroup.tid} (${tidGroup.bookings.length} booking${tidGroup.bookings.length > 1 ? "s" : ""})`);
+    setFeedback(`Final Amt set to SP Net for TID ${tidGroup.tid} (${tidGroup.bookings.length} booking${tidGroup.bookings.length > 1 ? "s" : ""})`);
   }, [decisions, onDecisionChange]);
 
-  const dontPayAllInTid = useCallback((tidGroup: ArTidGroup) => {
+  const setHoNetAllInTid = useCallback((tidGroup: ArTidGroup) => {
     const newDecisions = new Map(decisions);
     for (const b of tidGroup.bookings) {
-      const current = newDecisions.get(b.bookingId) ?? { decision: "dont_pay" as const, reason: "", customReason: "", finalAmount: 0 };
-      newDecisions.set(b.bookingId, { ...current, decision: "dont_pay" });
+      const current = newDecisions.get(b.bookingId) ?? { decision: "pay" as const, reason: "", customReason: "", finalAmount: 0 };
+      newDecisions.set(b.bookingId, { ...current, decision: "pay", finalAmount: Math.round(Math.abs(b.hoNet) * 100) / 100 });
     }
     onDecisionChange(newDecisions);
-    setFeedback(`All ${tidGroup.bookings.length} booking${tidGroup.bookings.length > 1 ? "s" : ""} in TID ${tidGroup.tid} set to Don't Pay`);
+    setFeedback(`Final Amt set to HO Net for TID ${tidGroup.tid} (${tidGroup.bookings.length} booking${tidGroup.bookings.length > 1 ? "s" : ""})`);
   }, [decisions, onDecisionChange]);
+
+  const issueForTid = useCallback((tidGroup: ArTidGroup, sectionLabel: string) => {
+    if (!runId) { setFeedback("No active run — cannot log issue"); return; }
+    issueMutation.mutate({ bookingIds: tidGroup.bookings.map(b => b.bookingId), sectionLabel });
+  }, [runId, issueMutation]);
 
   const disputeAllInTid = useCallback((tidGroup: ArTidGroup) => {
     const newActive = new Set(activeDisputes);
@@ -333,26 +338,6 @@ export function AlreadyReconciledWorkspace({
                 <span className="ml-auto text-xs text-muted-foreground shrink-0">
                   TAP: <span className="font-mono font-semibold">{fmt(sectionTap)} {currency}</span>
                 </span>
-                {/* Issue action */}
-                <div onClick={e => e.stopPropagation()}>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          disabled={issueMutation.isPending || !runId}
-                          onClick={() => issueMutation.mutate({ bookingIds: section.bookings.map(b => b.bookingId), sectionLabel: section.label })}
-                          data-testid={`ar-ws-issue-section-${section.id}`}
-                        >
-                          <FileWarning className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Log issue for this group</p></TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
               </div>
 
               {isExpanded && (
@@ -415,7 +400,7 @@ export function AlreadyReconciledWorkspace({
                           <div className={`text-right text-xs font-mono ${tidGroup.discLc < 0 ? "text-red-600 dark:text-red-400" : tidGroup.discLc > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
                             {fmt(tidGroup.discLc)}
                           </div>
-                          {/* TID action strip */}
+                          {/* TID action strip (NPD-style) */}
                           <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
                             <TooltipProvider>
                               <Tooltip>
@@ -424,14 +409,14 @@ export function AlreadyReconciledWorkspace({
                                     variant="ghost"
                                     size="sm"
                                     className="h-6 px-2 text-[10px] gap-1"
-                                    onClick={() => zeroAllInTid(tidGroup)}
-                                    data-testid={`ar-ws-zero-tid-${tidKey}`}
+                                    onClick={() => setSpNetAllInTid(tidGroup)}
+                                    data-testid={`ar-ws-set-spnet-tid-${tidKey}`}
                                   >
-                                    <Zap className="h-3 w-3" />
-                                    Zero
+                                    <TrendingUp className="h-3 w-3" />
+                                    Set SP Net
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent><p>Set TAP=0 for all bookings in this TID</p></TooltipContent>
+                                <TooltipContent><p>Set Final Amt to SP Net for all bookings in this TID</p></TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                             <TooltipProvider>
@@ -441,14 +426,14 @@ export function AlreadyReconciledWorkspace({
                                     variant="ghost"
                                     size="sm"
                                     className="h-6 px-2 text-[10px] gap-1"
-                                    onClick={() => dontPayAllInTid(tidGroup)}
-                                    data-testid={`ar-ws-dontpay-tid-${tidKey}`}
+                                    onClick={() => setHoNetAllInTid(tidGroup)}
+                                    data-testid={`ar-ws-set-honet-tid-${tidKey}`}
                                   >
-                                    <XIcon className="h-3 w-3" />
-                                    Skip
+                                    <TrendingDown className="h-3 w-3" />
+                                    Set HO Net
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent><p>Set Don't Pay for all bookings in this TID</p></TooltipContent>
+                                <TooltipContent><p>Set Final Amt to HO Net for all bookings in this TID</p></TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                             <TooltipProvider>
@@ -466,6 +451,24 @@ export function AlreadyReconciledWorkspace({
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent><p>Open dispute for all bookings in this TID</p></TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] gap-1"
+                                    disabled={issueMutation.isPending || !runId}
+                                    onClick={() => issueForTid(tidGroup, section.label)}
+                                    data-testid={`ar-ws-issue-tid-${tidKey}`}
+                                  >
+                                    <FileWarning className="h-3 w-3" />
+                                    Issue
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent><p>Log issue for this TID</p></TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </div>
@@ -536,8 +539,16 @@ export function AlreadyReconciledWorkspace({
                                     {/* Reason */}
                                     <div className="flex gap-0.5">
                                       <Select
-                                        value={isCustomReason ? "" : (d.reason || "")}
-                                        onValueChange={(v) => setDecision(booking.bookingId, { reason: v === "none" ? "" : v, customReason: "" })}
+                                        value={isCustomReason ? "__other__" : (d.reason || "none")}
+                                        onValueChange={(v) => {
+                                          if (v === "none") {
+                                            setDecision(booking.bookingId, { reason: "", customReason: "" });
+                                          } else if (v === "__other__") {
+                                            setDecision(booking.bookingId, { reason: "", customReason: "__other__" });
+                                          } else {
+                                            setDecision(booking.bookingId, { reason: v, customReason: "" });
+                                          }
+                                        }}
                                       >
                                         <SelectTrigger className="h-6 text-[10px] px-1 flex-1" data-testid={`ar-ws-reason-${booking.bookingId}`}>
                                           <SelectValue placeholder="—" />
@@ -547,15 +558,17 @@ export function AlreadyReconciledWorkspace({
                                           {REASON_OPTIONS.map(o => (
                                             <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                                           ))}
+                                          <SelectItem value="__other__">Other…</SelectItem>
                                         </SelectContent>
                                       </Select>
-                                      {isCustomReason && (
+                                      {(isCustomReason || d.customReason === "__other__") && (
                                         <Input
                                           className="h-6 text-[10px] px-1 w-16"
                                           placeholder="Other..."
-                                          value={d.reason}
+                                          value={isCustomReason ? d.reason : ""}
                                           onChange={e => setDecision(booking.bookingId, { reason: e.target.value, customReason: e.target.value })}
                                           data-testid={`ar-ws-custom-reason-${booking.bookingId}`}
+                                          autoFocus={d.customReason === "__other__" && !d.reason}
                                         />
                                       )}
                                     </div>

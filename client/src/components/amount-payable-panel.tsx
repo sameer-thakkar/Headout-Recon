@@ -1376,41 +1376,85 @@ export function AmountPayablePanel({
 
           {/* Already Reconciled Bookings Section - Collapsible */}
           {alreadyReconciledBookings.length > 0 && (
-            <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center">
-                <div className="col-span-7 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm font-medium">Already Reconciled</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {alreadyReconciledBookings.length}
-                  </Badge>
-                  {(() => {
-                    const sameBECount = alreadyReconciledBookings.filter(b => b.reason.includes("Same")).length;
-                    const diffBECount = alreadyReconciledBookings.length - sameBECount;
-                    return (
-                      <>
-                        {sameBECount > 0 && <Badge className="text-[10px] bg-green-100 text-green-700 border-green-200">Same BE: {sameBECount}</Badge>}
-                        {diffBECount > 0 && <Badge className="text-[10px] bg-orange-100 text-orange-700 border-orange-200">Diff BE: {diffBECount}</Badge>}
-                      </>
-                    );
-                  })()}
-                </div>
-                <div className="col-span-3 text-right font-mono text-sm">
-                  {formatCurrency(alreadyReconciledTotal)} {currency}
-                </div>
-                <div className="col-span-2 flex justify-end">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs px-3 gap-1"
-                    onClick={() => setIsArWorkspaceOpen(true)}
-                    data-testid="button-ar-take-action"
-                  >
-                    Take Action
-                  </Button>
-                </div>
+            <Collapsible
+              open={isAlreadyReconciledExpanded}
+              onOpenChange={setIsAlreadyReconciledExpanded}
+            >
+              <div className="border rounded-lg overflow-hidden">
+                <CollapsibleTrigger asChild>
+                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center cursor-pointer hover-elevate">
+                    <div className="col-span-6 flex items-center gap-2">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" tabIndex={-1}>
+                        {isAlreadyReconciledExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm font-medium">Already Reconciled</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {alreadyReconciledBookings.length}
+                      </Badge>
+                      {(() => {
+                        const sameBECount = alreadyReconciledBookings.filter(b => b.reason.includes("Same")).length;
+                        const diffBECount = alreadyReconciledBookings.length - sameBECount;
+                        return (
+                          <>
+                            {sameBECount > 0 && <Badge className="text-[10px] bg-green-100 text-green-700 border-green-200">Same BE: {sameBECount}</Badge>}
+                            {diffBECount > 0 && <Badge className="text-[10px] bg-orange-100 text-orange-700 border-orange-200">Diff BE: {diffBECount}</Badge>}
+                          </>
+                        );
+                      })()}
+                    </div>
+                    <div className="col-span-3 text-right font-mono text-sm">
+                      {formatCurrency(alreadyReconciledTotal)} {currency}
+                    </div>
+                    <div className="col-span-3 flex justify-end" onClick={e => e.stopPropagation()}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs px-3 gap-1"
+                        onClick={() => setIsArWorkspaceOpen(true)}
+                        data-testid="button-ar-take-action"
+                      >
+                        Take Action
+                      </Button>
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="border-t px-4 py-3">
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>
+                        <span className="font-semibold text-foreground">
+                          {alreadyReconciledBookings.filter(b => {
+                            const d = alreadyReconciledDecisions.get(b.bookingId);
+                            return !d || (d.decision === "pay" && d.finalAmount === 0);
+                          }).length}
+                        </span>{" "}zeroed out
+                      </span>
+                      <span>
+                        <span className="font-semibold text-foreground">
+                          {alreadyReconciledBookings.filter(b => {
+                            const d = alreadyReconciledDecisions.get(b.bookingId);
+                            return d?.decision === "pay" && d.finalAmount > 0;
+                          }).length}
+                        </span>{" "}kept payable
+                      </span>
+                      <span>
+                        <span className="font-semibold text-foreground">
+                          {alreadyReconciledBookings.filter(b => alreadyReconciledDecisions.get(b.bookingId)?.decision === "dont_pay").length}
+                        </span>{" "}don't pay
+                      </span>
+                      <span className="ml-auto text-xs">
+                        Open workspace to review and action individual bookings.
+                      </span>
+                    </div>
+                  </div>
+                </CollapsibleContent>
               </div>
-            </div>
+            </Collapsible>
           )}
 
           {/* Cancellations Section - Collapsible */}
