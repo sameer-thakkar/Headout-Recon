@@ -581,7 +581,7 @@ interface TidGroupProps {
 const TidGroup = memo(function TidGroup({
   tidKey, tid, tidBookings, itemId, groupIdx, currency, runId, reasonName,
   isExpanded, onToggle, activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice,
+  getFinalNetPrice, updateFinalNetPrice, openIssueModal,
   hasPaymentMismatch, finalVendorIds, onVendorIdChange, onVendorIdSave, dominantPaymentMethod,
 }: TidGroupProps) {
   const tidTotal = useMemo(() => tidBookings.reduce((s, b) => s + b.difference, 0), [tidBookings]);
@@ -712,7 +712,7 @@ const ReasonGroup = memo(function ReasonGroup({
   isReasonExpanded, expandedTids, visibleTidCount, grandTotal,
   onToggleReason, onToggleTid, onShowMoreTids,
   activeDisputes, disputeAmounts, loggedIssues, fnpVersion,
-  getFinalNetPrice, updateFinalNetPrice,
+  getFinalNetPrice, updateFinalNetPrice, openIssueModal,
   negativeSpVerified, onSetNegativeSpVerified,
   hasPaymentMismatch, finalVendorIds, onVendorIdChange, onVendorIdSave, dominantPaymentMethod,
 }: ReasonGroupProps) {
@@ -1720,6 +1720,11 @@ interface InsightsCardProps {
   setExpandedCancellations: (fn: (prev: boolean) => boolean) => void;
   expandedCancType: string | null;
   setExpandedCancType: (fn: (prev: string | null) => string | null) => void;
+  hasPaymentMismatch?: (booking: PurchaseBooking | PrimaryRow) => boolean;
+  finalVendorIds?: Map<string, string>;
+  onVendorIdChange?: (bookingId: string, value: string) => void;
+  onVendorIdSave?: (bookingId: string, value: string) => void;
+  dominantPaymentMethod?: string;
 }
 
 const InsightsCard = memo(function InsightsCard({
@@ -1735,6 +1740,11 @@ const InsightsCard = memo(function InsightsCard({
   setExpandedCancellations,
   expandedCancType,
   setExpandedCancType,
+  hasPaymentMismatch: insightHasPm,
+  finalVendorIds: insightVendorIds,
+  onVendorIdChange: insightOnVidChange,
+  onVendorIdSave: insightOnVidSave,
+  dominantPaymentMethod: insightDomPm,
 }: InsightsCardProps) {
   if (insightTabsCount <= 0) return null;
 
@@ -1803,20 +1813,53 @@ const InsightsCard = memo(function InsightsCard({
                             const hoP = (b.paymentMethod || "").trim();
                             const spP = (b.spPaymentMethod || "").trim();
                             const mismatch = hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
+                            const needsVid = insightHasPm ? insightHasPm(b as any) : false;
                             return (
-                              <TableRow key={`ar-same-${i}`} className="h-8">
-                                <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
-                                <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                                <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                                <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                                <TableCell className="py-1">
-                                  {mismatch ? (
-                                    <Badge variant="destructive" className="text-[10px]">{hoP} vs {spP}</Badge>
-                                  ) : (
-                                    <span className="text-muted-foreground">{hoP || spP || "-"}</span>
-                                  )}
-                                </TableCell>
-                              </TableRow>
+                              <Fragment key={`ar-same-${i}`}>
+                                <TableRow className="h-8">
+                                  <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                                  <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                  <TableCell className="py-1">
+                                    {mismatch ? (
+                                      <Badge variant="destructive" className="text-[10px]">{hoP} vs {spP}</Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground">{hoP || spP || "-"}</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                                {needsVid && insightOnVidChange && (
+                                  <TableRow className="h-7 bg-violet-50/40 dark:bg-violet-950/20">
+                                    <TableCell colSpan={5} className="py-0.5 pl-6">
+                                      <div className="flex items-center gap-2">
+                                        {insightDomPm && b.paymentMethod && (
+                                          <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                                            {b.paymentMethod} → {insightDomPm}
+                                          </Badge>
+                                        )}
+                                        <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium whitespace-nowrap">Final Vendor ID:</span>
+                                        <Input
+                                          type="text"
+                                          className="h-5 text-[10px] w-32 font-mono border-violet-200 dark:border-violet-800 bg-white dark:bg-background"
+                                          placeholder="Enter Vendor ID"
+                                          value={insightVendorIds?.get(b.bookingId) || ""}
+                                          onChange={(e) => insightOnVidChange(b.bookingId, e.target.value)}
+                                          onBlur={() => insightOnVidSave?.(b.bookingId, insightVendorIds?.get(b.bookingId) || "")}
+                                          onKeyDown={(e) => { if (e.key === "Enter") insightOnVidSave?.(b.bookingId, insightVendorIds?.get(b.bookingId) || ""); }}
+                                          onClick={(e) => e.stopPropagation()}
+                                          data-testid={`input-vendor-id-ar-same-${b.bookingId}`}
+                                        />
+                                        {insightVendorIds?.get(b.bookingId)?.trim() ? (
+                                          <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                                        ) : (
+                                          <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </Fragment>
                             );
                           })}
                         </TableBody>
@@ -1851,16 +1894,51 @@ const InsightsCard = memo(function InsightsCard({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {alreadyReconciledData.differentBE.bookings.map((b, i) => (
-                            <TableRow key={`ar-diff-${i}`} className="h-8">
-                              <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
-                              <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                              <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                              <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                              <TableCell className="py-1 font-mono">{b.hoBeId || "-"}</TableCell>
-                              <TableCell className="py-1 font-mono">{b.spBeId || b.beId || "-"}</TableCell>
-                            </TableRow>
-                          ))}
+                          {alreadyReconciledData.differentBE.bookings.map((b, i) => {
+                            const needsVid = insightHasPm ? insightHasPm(b as any) : false;
+                            return (
+                              <Fragment key={`ar-diff-${i}`}>
+                                <TableRow className="h-8">
+                                  <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                                  <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                  <TableCell className="py-1 font-mono">{b.hoBeId || "-"}</TableCell>
+                                  <TableCell className="py-1 font-mono">{b.spBeId || b.beId || "-"}</TableCell>
+                                </TableRow>
+                                {needsVid && insightOnVidChange && (
+                                  <TableRow className="h-7 bg-violet-50/40 dark:bg-violet-950/20">
+                                    <TableCell colSpan={6} className="py-0.5 pl-6">
+                                      <div className="flex items-center gap-2">
+                                        {insightDomPm && b.paymentMethod && (
+                                          <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                                            {b.paymentMethod} → {insightDomPm}
+                                          </Badge>
+                                        )}
+                                        <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium whitespace-nowrap">Final Vendor ID:</span>
+                                        <Input
+                                          type="text"
+                                          className="h-5 text-[10px] w-32 font-mono border-violet-200 dark:border-violet-800 bg-white dark:bg-background"
+                                          placeholder="Enter Vendor ID"
+                                          value={insightVendorIds?.get(b.bookingId) || ""}
+                                          onChange={(e) => insightOnVidChange(b.bookingId, e.target.value)}
+                                          onBlur={() => insightOnVidSave?.(b.bookingId, insightVendorIds?.get(b.bookingId) || "")}
+                                          onKeyDown={(e) => { if (e.key === "Enter") insightOnVidSave?.(b.bookingId, insightVendorIds?.get(b.bookingId) || ""); }}
+                                          onClick={(e) => e.stopPropagation()}
+                                          data-testid={`input-vendor-id-ar-diff-${b.bookingId}`}
+                                        />
+                                        {insightVendorIds?.get(b.bookingId)?.trim() ? (
+                                          <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                                        ) : (
+                                          <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </Fragment>
+                            );
+                          })}
                         </TableBody>
                       </Table>
                     )}
@@ -1917,19 +1995,54 @@ const InsightsCard = memo(function InsightsCard({
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {group.bookings.map((b, i) => (
-                                  <TableRow key={`canc-${group.reason}-${i}`} className="h-8">
-                                    <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
-                                    <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
-                                    <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
-                                    <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
-                                    <TableCell className="py-1">
-                                      <Badge variant={b.chargedLoss === "TRUE" ? "destructive" : "outline"} className="text-[10px]">
-                                        {b.chargedLoss || "FALSE"}
-                                      </Badge>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
+                                {group.bookings.map((b, i) => {
+                                  const needsVid = insightHasPm ? insightHasPm(b as any) : false;
+                                  return (
+                                    <Fragment key={`canc-${group.reason}-${i}`}>
+                                      <TableRow className="h-8">
+                                        <TableCell className="py-1 font-mono">{b.tid || "-"}</TableCell>
+                                        <TableCell className="py-1 font-mono">{b.bookingId}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono">{formatNumber(b.spNetInHo)}</TableCell>
+                                        <TableCell className="py-1 text-right font-mono">{formatNumber(b.hoNet)}</TableCell>
+                                        <TableCell className="py-1">
+                                          <Badge variant={b.chargedLoss === "TRUE" ? "destructive" : "outline"} className="text-[10px]">
+                                            {b.chargedLoss || "FALSE"}
+                                          </Badge>
+                                        </TableCell>
+                                      </TableRow>
+                                      {needsVid && insightOnVidChange && (
+                                        <TableRow className="h-7 bg-violet-50/40 dark:bg-violet-950/20">
+                                          <TableCell colSpan={5} className="py-0.5 pl-6">
+                                            <div className="flex items-center gap-2">
+                                              {insightDomPm && b.paymentMethod && (
+                                                <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                                                  {b.paymentMethod} → {insightDomPm}
+                                                </Badge>
+                                              )}
+                                              <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium whitespace-nowrap">Final Vendor ID:</span>
+                                              <Input
+                                                type="text"
+                                                className="h-5 text-[10px] w-32 font-mono border-violet-200 dark:border-violet-800 bg-white dark:bg-background"
+                                                placeholder="Enter Vendor ID"
+                                                value={insightVendorIds?.get(b.bookingId) || ""}
+                                                onChange={(e) => insightOnVidChange(b.bookingId, e.target.value)}
+                                                onBlur={() => insightOnVidSave?.(b.bookingId, insightVendorIds?.get(b.bookingId) || "")}
+                                                onKeyDown={(e) => { if (e.key === "Enter") insightOnVidSave?.(b.bookingId, insightVendorIds?.get(b.bookingId) || ""); }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                data-testid={`input-vendor-id-canc-${b.bookingId}`}
+                                              />
+                                              {insightVendorIds?.get(b.bookingId)?.trim() ? (
+                                                <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                                              ) : (
+                                                <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                                              )}
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      )}
+                                    </Fragment>
+                                  );
+                                })}
                               </TableBody>
                             </Table>
                           )}
@@ -3109,6 +3222,11 @@ export function PurchaseReconciliationPanel({
         setExpandedCancellations={setExpandedCancellations}
         expandedCancType={expandedCancType}
         setExpandedCancType={setExpandedCancType}
+        hasPaymentMismatch={hasPaymentMismatch}
+        finalVendorIds={finalVendorIds}
+        onVendorIdChange={updateVendorId}
+        onVendorIdSave={saveVendorCorrection}
+        dominantPaymentMethod={dominantPaymentMethod}
       />
 
       {openDisputeData.bookingCount > 0 && (

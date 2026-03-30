@@ -283,8 +283,10 @@ export function AmountPayablePanel({
   const saveSecondaryVendorId = useCallback(async () => {
     if (!runId || !secondaryVendorFinalId.trim()) return;
     const vid = secondaryVendorFinalId.trim();
+    const svBookings = bookings.filter(b => b.isSecondaryVendor);
+    if (svBookings.length === 0) return;
     try {
-      for (const b of secondaryVendorBookings) {
+      for (const b of svBookings) {
         await authFetch(`/api/vendor-corrections/${runId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -296,12 +298,12 @@ export function AmountPayablePanel({
           return next;
         });
       }
-      toast({ title: "Saved", description: `Final Vendor ID "${vid}" applied to ${secondaryVendorBookings.length} booking(s)` });
+      toast({ title: "Saved", description: `Final Vendor ID "${vid}" applied to ${svBookings.length} booking(s)` });
     } catch (err) {
       console.error("Failed to save secondary vendor ID:", err);
       toast({ title: "Error", description: "Failed to save vendor ID", variant: "destructive" });
     }
-  }, [runId, secondaryVendorFinalId, secondaryVendorBookings, toast]);
+  }, [runId, secondaryVendorFinalId, bookings, toast]);
 
   // Save bulk vendor corrections
   useEffect(() => {
