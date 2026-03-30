@@ -2001,7 +2001,7 @@ export function PurchaseReconciliationPanel({
   const hasNegativeSpBookings = useMemo(() => primaryRows.some(r => r.spNetInHo < 0 && !r.isSecondaryVendor), [primaryRows]);
 
   const openDisputeData = useMemo(() => {
-    const openRows = primaryRows.filter(r => r.disputeStatus?.toUpperCase() === "OPEN" && (r.disputedAmount ?? 0) !== 0);
+    const openRows = primaryRows.filter(r => r.disputeStatus?.toUpperCase() === "OPEN");
     if (openRows.length === 0) return { total: 0, groups: [], bookingCount: 0 };
 
     const byBe = new Map<string, { beName: string; beId: string; rows: typeof openRows; total: number }>();
@@ -2967,7 +2967,7 @@ export function PurchaseReconciliationPanel({
                 <div className="flex items-center gap-2">
                   {isOpenDisputeExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <p className="text-sm font-medium">Open Dispute Bookings</p>
+                  <p className="text-sm font-medium">Open Dispute Adjustments</p>
                   <Badge variant="secondary" className="text-xs">{openDisputeData.bookingCount}</Badge>
                 </div>
                 <span className="font-mono font-medium text-amber-700 dark:text-amber-300 text-sm">
@@ -2983,13 +2983,17 @@ export function PurchaseReconciliationPanel({
                       <span className="text-xs font-medium text-muted-foreground">{group.beName}</span>
                       <span className="text-xs font-mono">{formatCurrency(group.total)} {currency} · {group.rows.length} booking(s)</span>
                     </div>
-                    <div className="border rounded overflow-hidden">
+                    <div className="border rounded overflow-hidden overflow-x-auto">
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-muted/30">
                             <TableHead className="text-xs py-1">Booking ID</TableHead>
                             <TableHead className="text-xs py-1">TID</TableHead>
+                            <TableHead className="text-xs py-1">Adj In TID</TableHead>
                             <TableHead className="text-xs py-1 text-right">Disputed Amt</TableHead>
+                            <TableHead className="text-xs py-1 text-right">Dispute Adj</TableHead>
+                            <TableHead className="text-xs py-1 text-right">Adj Total</TableHead>
+                            <TableHead className="text-xs py-1 text-right">Final Disc</TableHead>
                             <TableHead className="text-xs py-1 text-right">SP Net</TableHead>
                             <TableHead className="text-xs py-1 text-right">HO Net</TableHead>
                           </TableRow>
@@ -2999,8 +3003,18 @@ export function PurchaseReconciliationPanel({
                             <TableRow key={row.bookingId} data-testid={`open-dispute-purchase-row-${row.bookingId}`}>
                               <TableCell className="text-xs font-mono py-1">{row.bookingId}</TableCell>
                               <TableCell className="text-xs font-mono py-1">{row.tid || "-"}</TableCell>
+                              <TableCell className="text-xs font-mono py-1">{row.adjustedInTicketId || "-"}</TableCell>
                               <TableCell className="text-xs font-mono py-1 text-right text-amber-700 dark:text-amber-300">
                                 {formatCurrency(row.disputedAmount ?? 0)}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono py-1 text-right">
+                                {formatCurrency(row.disputeAdjustment ?? 0)}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono py-1 text-right">
+                                {formatCurrency(row.disputeAdjustedTotal ?? 0)}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono py-1 text-right">
+                                {formatCurrency(row.finalDiscrepancyTotal ?? 0)}
                               </TableCell>
                               <TableCell className="text-xs font-mono py-1 text-right">{formatCurrency(row.spNet)}</TableCell>
                               <TableCell className="text-xs font-mono py-1 text-right">{formatCurrency(row.hoNet)}</TableCell>
