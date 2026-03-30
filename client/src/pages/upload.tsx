@@ -46,6 +46,8 @@ const PurchaseReconciliationPanel = lazy(() =>
 const CancellationsWorkspace = lazy(() =>
   import("@/components/cancellations-workspace").then(m => ({ default: m.CancellationsWorkspace }))
 );
+import { AlreadyReconciledWorkspace } from "@/components/already-reconciled-workspace";
+import type { ArWorkspaceBooking } from "@/components/already-reconciled-workspace";
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow, FxData } from "@shared/schema";
 
 interface UploadPageProps {
@@ -317,9 +319,14 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     const totalCount = sameBESummary.count + differentBESummary.count;
     const hasAlreadyReconciled = totalCount > 0;
     
+    const allBks = [...sameBEBookings, ...differentBEBookings];
+    const allCurrencies = Array.from(new Set(allBks.map(b => b.hoCurrency).filter(Boolean)));
+    const currency = allCurrencies.length > 1 ? "Multiple currencies" : (allCurrencies[0] || "USD");
+    
     return {
       hasAlreadyReconciled,
       totalCount,
+      currency,
       sameBE: { ...sameBESummary, bookings: sameBEBookings },
       differentBE: { ...differentBESummary, bookings: differentBEBookings },
     };
@@ -1265,191 +1272,37 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             </Table>
           </div>
 
-          {/* Booking detail panel — shown when a row is selected */}
-          {selectedArAnalysisRow && (
-            <div className="flex flex-col flex-1 overflow-hidden border-t mx-6 mt-1 mb-0">
-              {/* Section header */}
-              <div className="flex items-center gap-2 py-2.5 shrink-0">
-                <span className="text-xs font-semibold text-foreground">Booking Detail</span>
-                {selectedArAnalysisRow.type === "same_be" ? (
-                  <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px]">Same BE</Badge>
-                ) : (
-                  <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 text-[10px]">Diff BE · {selectedArAnalysisRow.previousBe || "—"}</Badge>
-                )}
-                <Badge variant="outline" className="text-[10px]">{selectedAlreadyReconciledBookings.length} bookings</Badge>
-              </div>
-
-              {/* TAP=0 info banner */}
-              <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-800 dark:text-blue-300 mb-2 shrink-0">
-                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
-                <span>
-                  {selectedArAnalysisRow.type === "same_be"
-                    ? <>Already paid under <span className="font-mono font-semibold">{selectedAlreadyReconciledBookings[0]?.hoBeId || selectedAlreadyReconciledBookings[0]?.beId || "—"}</span>. TAP defaults to <span className="font-semibold">0</span>. Override per-booking in the <span className="font-semibold">Final Amt</span> column if needed.</>
-                    : <>Previously reconciled under BE <span className="font-mono font-semibold">{selectedArAnalysisRow.previousBe || "—"}</span>. TAP defaults to <span className="font-semibold">0</span>. Override per-booking in the <span className="font-semibold">Final Amt</span> column if needed.</>
-                  }
-                </span>
-              </div>
-
-              {/* Booking table */}
-              <div className="flex-1 overflow-auto">
-                <Table className="min-w-max">
-                  <TableHeader>
-                    <TableRow className="text-xs">
-                      <TableHead className="py-1.5">TID</TableHead>
-                      <TableHead className="py-1.5">Booking ID</TableHead>
-                      <TableHead className="py-1.5 text-right">Reconciled Net</TableHead>
-                      <TableHead className="py-1.5 text-right">SP Net</TableHead>
-                      {selectedArAnalysisRow.type === "same_be" && <TableHead className="py-1.5">Pay Method Mismatch</TableHead>}
-                      {selectedArAnalysisRow.type === "different_be" && <TableHead className="py-1.5">Payment Method</TableHead>}
-                      <TableHead className="py-1.5">Date of Payment</TableHead>
-                      {selectedArAnalysisRow.type === "different_be" && (
-                        <>
-                          <TableHead className="py-1.5">HO BE ID</TableHead>
-                          <TableHead className="py-1.5">SP BE ID</TableHead>
-                        </>
-                      )}
-                      <TableHead className="py-1.5 w-[85px]">Decision</TableHead>
-                      <TableHead className="py-1.5 w-[150px]">Reason</TableHead>
-                      <TableHead className="py-1.5 w-[110px]">Dispute</TableHead>
-                      <TableHead className="py-1.5 w-[100px] text-right">Final Amt</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedAlreadyReconciledBookings.map((booking, index) => {
-                      const hoPaymentMethod = booking.paymentMethod || "";
-                      const spPaymentMethod = booking.spPaymentMethod || "";
-                      const paymentMethodMismatch = hoPaymentMethod && spPaymentMethod && hoPaymentMethod !== spPaymentMethod;
-                      const decision = arDecisions.get(booking.bookingId);
-                      const isPay = !decision || decision.decision === "pay";
-                      const isDontPay = decision?.decision === "dont_pay";
-                      const isDisputeActive = arActiveDisputes.has(booking.bookingId);
-                      const disputeAmount = arDisputeAmounts.get(booking.bookingId) || 0;
-                      const currentFinalAmount = decision?.finalAmount ?? 0;
-                      const reasonOptions = ["", "Cancellations", "Multiple tickets booked", "Manual Error", "Partial Fulfillment"];
-                      const isCustomReason = decision?.reason && !reasonOptions.includes(decision.reason);
-                      return (
-                        <TableRow key={`${booking.bookingId}-${index}`} className={isDontPay ? "opacity-50" : ""} data-testid={`already-reconciled-row-${booking.bookingId}`}>
-                          <TableCell className="font-mono text-xs py-1">{booking.tid || "-"}</TableCell>
-                          <TableCell className="font-mono text-xs py-1">{booking.bookingId}</TableCell>
-                          <TableCell className="text-right font-mono text-xs py-1">{formatNumber(booking.hoNet)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs py-1">{formatNumber(booking.spNetInHo)}</TableCell>
-                          {selectedArAnalysisRow.type === "same_be" && (
-                            <TableCell className="py-1">
-                              {paymentMethodMismatch ? (
-                                <Badge variant="destructive" className="text-[10px]">{hoPaymentMethod} vs {spPaymentMethod}</Badge>
-                              ) : <span className="text-muted-foreground text-xs">-</span>}
-                            </TableCell>
-                          )}
-                          {selectedArAnalysisRow.type === "different_be" && (
-                            <TableCell className="text-xs py-1">{hoPaymentMethod || spPaymentMethod || "-"}</TableCell>
-                          )}
-                          <TableCell className="text-xs py-1">{formatDateDDMMYYYY(booking.dateOfPayment || booking.spDateOfPayment) || "-"}</TableCell>
-                          {selectedArAnalysisRow.type === "different_be" && (
-                            <>
-                              <TableCell className="font-mono text-xs py-1">{booking.hoBeId || "-"}</TableCell>
-                              <TableCell className="font-mono text-xs py-1">{booking.beId || "-"}</TableCell>
-                            </>
-                          )}
-                          <TableCell className="py-1">
-                            <Select value={decision?.decision || "pay"} onValueChange={(v: "pay" | "dont_pay") => {
-                              const newDecisions = new Map(arDecisions);
-                              newDecisions.set(booking.bookingId, { decision: v, reason: decision?.reason || "", customReason: decision?.customReason || "", finalAmount: decision?.finalAmount ?? 0 });
-                              setArDecisions(newDecisions);
-                            }}>
-                              <SelectTrigger className="h-6 text-[11px] px-1.5" data-testid={`ar-select-decision-${booking.bookingId}`}><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pay">Pay</SelectItem>
-                                <SelectItem value="dont_pay">Don't Pay</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="py-1">
-                            <div className="flex gap-0.5">
-                              <Select value={isCustomReason ? "" : (decision?.reason || "")} onValueChange={(v) => {
-                                const newDecisions = new Map(arDecisions);
-                                newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: v === "none" ? "" : v, customReason: "", finalAmount: decision?.finalAmount ?? 0 });
-                                setArDecisions(newDecisions);
-                              }}>
-                                <SelectTrigger className="h-6 text-[11px] px-1 flex-1" data-testid={`ar-select-reason-${booking.bookingId}`}><SelectValue placeholder="-" /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">-</SelectItem>
-                                  <SelectItem value="Cancellations">Cancellations</SelectItem>
-                                  <SelectItem value="Multiple tickets booked">Multiple tickets</SelectItem>
-                                  <SelectItem value="Manual Error">Manual Error</SelectItem>
-                                  <SelectItem value="Partial Fulfillment">Partial Fulfillment</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              {(isCustomReason || decision?.reason === "") && decision && (
-                                <Input className="h-6 text-[11px] px-1 w-14" placeholder="Other..." value={isCustomReason ? decision?.reason : ""} onChange={(e) => {
-                                  const newDecisions = new Map(arDecisions);
-                                  newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: e.target.value, customReason: e.target.value, finalAmount: decision?.finalAmount ?? 0 });
-                                  setArDecisions(newDecisions);
-                                }} data-testid={`ar-input-custom-reason-${booking.bookingId}`} />
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="py-1">
-                            {isDisputeActive ? (
-                              <div className="flex items-center gap-0.5">
-                                <Input type="number" step="0.01" className="h-6 text-[11px] px-1 w-14 text-right font-mono" value={disputeAmount || ""} onChange={(e) => {
-                                  const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
-                                  setArDisputeAmounts(prev => { const m = new Map(prev); m.set(booking.bookingId, val); return m; });
-                                }} data-testid={`ar-input-dispute-amount-${booking.bookingId}`} />
-                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => {
-                                  setArActiveDisputes(prev => { const s = new Set(prev); s.delete(booking.bookingId); return s; });
-                                  setArDisputeAmounts(prev => { const m = new Map(prev); m.delete(booking.bookingId); return m; });
-                                }} data-testid={`ar-button-cancel-dispute-${booking.bookingId}`}><X className="h-3 w-3" /></Button>
-                              </div>
-                            ) : (
-                              <Button variant="outline" size="sm" className="h-6 text-[10px] px-1.5" onClick={() => {
-                                setArActiveDisputes(prev => new Set(prev).add(booking.bookingId));
-                                setArDisputeAmounts(prev => { const m = new Map(prev); m.set(booking.bookingId, Math.abs(booking.spNetInHo - booking.hoNet)); return m; });
-                              }} data-testid={`ar-button-dispute-${booking.bookingId}`}>Dispute</Button>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right py-1">
-                            {isPay ? (
-                              <Input type="number" step="0.01" className="h-6 text-[11px] px-1 text-right font-mono" value={currentFinalAmount} onChange={(e) => {
-                                const newDecisions = new Map(arDecisions);
-                                newDecisions.set(booking.bookingId, { decision: decision?.decision || "pay", reason: decision?.reason || "", customReason: decision?.customReason || "", finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 });
-                                setArDecisions(newDecisions);
-                              }} data-testid={`ar-input-final-amount-${booking.bookingId}`} />
-                            ) : <span className="text-muted-foreground text-xs">-</span>}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Summary strip */}
-              {(() => {
-                const bks = selectedAlreadyReconciledBookings;
-                const zeroed = bks.filter(b => {
-                  const d = arDecisions.get(b.bookingId);
-                  return !d || (d.decision === "pay" && d.finalAmount === 0);
-                }).length;
-                const kept = bks.filter(b => {
-                  const d = arDecisions.get(b.bookingId);
-                  return d?.decision === "pay" && d.finalAmount > 0;
-                }).length;
-                const netTap = bks.reduce((s, b) => {
-                  const d = arDecisions.get(b.bookingId);
-                  return s + (d?.decision === "pay" ? (d.finalAmount ?? 0) : 0);
-                }, 0);
-                return (
-                  <div className="flex items-center gap-4 px-3 py-2 mt-2 mb-3 rounded-md bg-muted/50 text-xs shrink-0">
-                    <span className="text-muted-foreground">Summary:</span>
-                    <span><span className="font-semibold text-green-600 dark:text-green-400">{zeroed}</span> zeroed out</span>
-                    <span><span className="font-semibold text-amber-600 dark:text-amber-400">{kept}</span> kept payable</span>
-                    <span className="ml-auto">Net TAP impact: <span className="font-mono font-semibold">{formatNumber(netTap)}</span></span>
-                    <Button size="sm" className="h-7 text-xs px-3" onClick={() => setIsAlreadyReconciledDetailModalOpen(false)} data-testid="ar-apply-confirm-btn">
-                      Apply &amp; Confirm
-                    </Button>
-                  </div>
-                );
-              })()}
+          {/* Already Reconciled Workspace — replaces flat booking table */}
+          {alreadyReconciledData.totalCount > 0 && (
+            <div className="flex flex-col flex-1 overflow-hidden border-t mt-1">
+              <AlreadyReconciledWorkspace
+                bookings={[
+                  ...alreadyReconciledData.sameBE.bookings,
+                  ...alreadyReconciledData.differentBE.bookings,
+                ].map<ArWorkspaceBooking>(b => ({
+                  bookingId: b.bookingId,
+                  tid: b.tid,
+                  reason: b.reason,
+                  hoNet: b.hoNet,
+                  spNet: b.spNetInHo,
+                  paymentMethod: b.paymentMethod,
+                  spPaymentMethod: b.spPaymentMethod,
+                  hoBeId: b.hoBeId,
+                  beId: b.beId,
+                  ticketId: b.ticketId,
+                }))}
+                currency={alreadyReconciledData.currency}
+                decisions={arDecisions}
+                onDecisionChange={setArDecisions}
+                activeDisputes={arActiveDisputes}
+                disputeAmounts={arDisputeAmounts}
+                onDisputeChange={(newActive, newAmounts) => {
+                  setArActiveDisputes(newActive);
+                  setArDisputeAmounts(newAmounts);
+                }}
+                onClose={() => setIsAlreadyReconciledDetailModalOpen(false)}
+                showApplyConfirm
+              />
             </div>
           )}
         </DialogContent>
