@@ -2309,6 +2309,10 @@ export function PurchaseReconciliationPanel({
       toast({ title: "No data to export", description: "Please run a reconciliation first", variant: "destructive" });
       return;
     }
+    if (!allVendorIdsComplete) {
+      toast({ title: "Vendor IDs incomplete", description: "All secondary vendor and payment mismatch bookings must have a Final Vendor ID before exporting.", variant: "destructive" });
+      return;
+    }
     try {
       setIsExporting(true);
       toast({ title: "Generating export...", description: "Please wait while the export files are being prepared" });
@@ -2316,7 +2320,10 @@ export function PurchaseReconciliationPanel({
         fetch(`/api/runs/${runId}/export/analysis`),
         fetch(`/api/runs/${runId}/export/financial`),
       ]);
-      if (!analysisResponse.ok || !financialResponse.ok) throw new Error("Failed to generate export");
+      if (!analysisResponse.ok || !financialResponse.ok) {
+        const errData = !financialResponse.ok ? await financialResponse.json().catch(() => null) : null;
+        throw new Error(errData?.error || "Failed to generate export");
+      }
       const timestamp = new Date().toISOString().slice(0, 10);
       const analysisBlob = await analysisResponse.blob();
       const analysisUrl = window.URL.createObjectURL(analysisBlob);
@@ -2331,32 +2338,39 @@ export function PurchaseReconciliationPanel({
       a2.download = `financial_report_${timestamp}.xlsx`;
       document.body.appendChild(a2); a2.click(); window.URL.revokeObjectURL(financialUrl); document.body.removeChild(a2);
       toast({ title: "Export complete", description: "Your reconciliation reports have been downloaded" });
-    } catch (error) {
-      toast({ title: "Export failed", description: "Failed to generate export file", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Export failed", description: error?.message || "Failed to generate export file", variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
-  }, [runId, toast]);
+  }, [runId, toast, allVendorIdsComplete]);
 
   const handleExportGSheet = useCallback(async () => {
     if (!runId) {
       toast({ title: "No data to export", description: "Please run a reconciliation first", variant: "destructive" });
       return;
     }
+    if (!allVendorIdsComplete) {
+      toast({ title: "Vendor IDs incomplete", description: "All secondary vendor and payment mismatch bookings must have a Final Vendor ID before exporting.", variant: "destructive" });
+      return;
+    }
     try {
       setIsExporting(true);
       toast({ title: "Creating Google Sheets...", description: "Please wait while the spreadsheet is being created" });
       const response = await authFetch(`/api/runs/${runId}/export-gsheet/financial`, { method: "POST" });
-      if (!response.ok) throw new Error("Failed to create Google Sheet");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        throw new Error(errData?.error || "Failed to create Google Sheet");
+      }
       const data = await response.json();
       if (data.spreadsheetUrl) setGSheetUrl(data.spreadsheetUrl);
       toast({ title: "Google Sheet ready", description: "Click the link below to open it" });
-    } catch (error) {
-      toast({ title: "Export failed", description: "Failed to create Google Sheet", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Export failed", description: error?.message || "Failed to create Google Sheet", variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
-  }, [runId, toast]);
+  }, [runId, toast, allVendorIdsComplete]);
 
   const openDisputeModal = useCallback((booking: BookingForDispute) => {
     disputeModalRef.current?.open(booking);

@@ -240,8 +240,9 @@ export function AmountPayablePanel({
             newMap.set(vc.bookingId, vc.finalVendorId);
           }
           setFinalVendorIds(newMap);
+          const svBookings = bookings.filter(b => b.isSecondaryVendor);
           const svIds = new Set<string>();
-          for (const b of secondaryVendorBookings) {
+          for (const b of svBookings) {
             const vid = newMap.get(b.bookingId);
             if (vid) svIds.add(vid);
           }
@@ -255,7 +256,7 @@ export function AmountPayablePanel({
           setVendorCorrectionsLoaded(true);
         });
     }
-  }, [runId, vendorCorrectionsLoaded, secondaryVendorBookings]);
+  }, [runId, vendorCorrectionsLoaded, bookings]);
 
   // Save or delete a single vendor correction
   const saveVendorCorrection = useCallback(async (bookingId: string, finalVendorId: string) => {
