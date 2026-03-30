@@ -1596,7 +1596,6 @@ export function registerExportRoutes(app: Express) {
         let hasErrorBucketCol = false;
         let hasCommentsCol = false;
         let hasChargedLossCol = false;
-        let hasAnyReconCol = false;
         
         const isTotalAmountPayableCol = (k: string) => {
           const kLower = k.toLowerCase().replace(/[\s_]+/g, "");
@@ -1620,7 +1619,7 @@ export function registerExportRoutes(app: Express) {
           : totalAmountPayable;
         
         for (const key of originalKeys) {
-          const keyLower = key.toLowerCase();
+          const keyLower = key.toLowerCase().replace(/[\s_]+/g, "");
           
           if (isTotalAmountPayableCol(key)) {
             newRow[key] = totalAmountPayable;
@@ -1628,52 +1627,57 @@ export function registerExportRoutes(app: Express) {
             newRow[key] = netPricePayable;
           } else if (isFinalNetCol(key)) {
             newRow[key] = totalAmountPayable;
-          } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
+          } else if (keyLower === "errorteamattribution") {
             newRow[key] = errorTeamAttribution;
             hasErrorTeamCol = true;
-          } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
+          } else if (keyLower === "errorbucket") {
             newRow[key] = errorBucket;
             hasErrorBucketCol = true;
           } else if (keyLower === "comments" || keyLower === "comment") {
             newRow[key] = comments;
             hasCommentsCol = true;
-          } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
+          } else if (keyLower === "chargedloss") {
             newRow[key] = chargedLoss;
             hasChargedLossCol = true;
-          } else if (keyLower === "finalvendorid" || keyLower === "final vendor id" || keyLower === "final_vendor_id") {
+          } else if (keyLower === "finalvendorid") {
             newRow[key] = finalVendorIdValue;
-            hasAnyReconCol = true;
-          } else if (keyLower === "ticketid" || keyLower === "ticket id" || keyLower === "ticket_id") {
+          } else if (keyLower === "spnet") {
+            newRow[key] = spNet;
+          } else if (keyLower === "invoiceid") {
             newRow[key] = ticketIdValue;
-            hasAnyReconCol = true;
-          } else if (keyLower === "disputeadjustment" || keyLower === "dispute adjustment" || keyLower === "dispute_adjustment") {
-            newRow[key] = disputeAdjAmount;
-            hasAnyReconCol = true;
-          } else if (keyLower === "discrepancyamount" || keyLower === "discrepancy amount" || keyLower === "discrepancy_amount") {
-            newRow[key] = discrepancyAdjAmount;
-            hasAnyReconCol = true;
-          } else if (keyLower === "disputedamount" || keyLower === "disputed amount" || keyLower === "disputed_amount") {
+          } else if (keyLower === "reconcilemanually") {
+            newRow[key] = "TRUE";
+          } else if (keyLower === "totaldisputeamount") {
             newRow[key] = disputedAmount;
-            hasAnyReconCol = true;
-          } else if (keyLower === "adjustedinticketid" || keyLower === "adjusted in ticket id" || keyLower === "adjusted_in_ticket_id") {
+          } else if (keyLower === "entereddisputeadjustment") {
+            newRow[key] = disputeAdjAmount;
+          } else if (keyLower === "entereddisputeamountadjustedinvoiceid") {
             newRow[key] = adjustedInTicketId;
-            hasAnyReconCol = true;
-          } else if (keyLower === "finaldisputeamount" || keyLower === "final dispute amount" || keyLower === "final_dispute_amount") {
-            hasAnyReconCol = true;
-          } else if (keyLower === "disputestatus" || keyLower === "dispute status" || keyLower === "dispute_status") {
+          } else if (keyLower === "entereddiscrepancyamount") {
+            newRow[key] = discrepancyAdjAmount;
+          } else if (keyLower === "ticketid") {
+            newRow[key] = ticketIdValue;
+          } else if (keyLower === "disputeadjustment") {
+            newRow[key] = disputeAdjAmount;
+          } else if (keyLower === "discrepancyamount") {
+            newRow[key] = discrepancyAdjAmount;
+          } else if (keyLower === "disputedamount") {
+            newRow[key] = disputedAmount;
+          } else if (keyLower === "adjustedinticketid") {
+            newRow[key] = adjustedInTicketId;
+          } else if (keyLower === "finaldisputeamount") {
+            newRow[key] = row[key];
+          } else if (keyLower === "disputestatus") {
             newRow[key] = disputeStatus;
-            hasAnyReconCol = true;
-          } else if (keyLower === "reconcilednetprice" || keyLower === "reconciled net price" || keyLower === "reconciled_net_price") {
+          } else if (keyLower === "reconcilednetprice") {
             newRow[key] = reconciledNetPrice;
-            hasAnyReconCol = true;
-          } else if (keyLower === "utrnumber" || keyLower === "utr number" || keyLower === "utr_number" || keyLower === "utr") {
-            hasAnyReconCol = true;
+          } else if (keyLower === "utrnumber" || keyLower === "utr") {
+            newRow[key] = row[key];
           } else {
             newRow[key] = row[key];
           }
         }
         
-        newRow["SP Net"] = spNet;
         newRow["Difference"] = difference;
         newRow["Difference %"] = differencePercent;
         
@@ -1688,17 +1692,6 @@ export function registerExportRoutes(app: Express) {
         }
         if (!hasChargedLossCol) {
           newRow["chargedLoss"] = chargedLoss;
-        }
-        
-        if (!hasAnyReconCol) {
-          newRow["finalVendorId"] = finalVendorIdValue;
-          newRow["Ticket ID"] = ticketIdValue;
-          newRow["Dispute adjustment"] = disputeAdjAmount;
-          newRow["Discrepancy amount"] = discrepancyAdjAmount;
-          newRow["Disputed amount"] = disputedAmount;
-          newRow["Adjusted in Ticket ID"] = adjustedInTicketId;
-          newRow["Dispute status"] = disputeStatus;
-          newRow["Reconciled Net price"] = reconciledNetPrice;
         }
         
         return newRow;
@@ -1723,7 +1716,7 @@ export function registerExportRoutes(app: Express) {
                kl === "chargedloss" || kl === "charged_loss" || kl === "charged loss";
       };
       
-      const insertCols = ["SP Net", "Difference", "Difference %"];
+      const insertCols = ["Difference", "Difference %"];
       const colsToInsert = insertCols.filter(c => !headerExistsIn(c, canonicalHeaders));
       
       const firstErrorAttrIdx = canonicalHeaders.findIndex(h => isErrorAttrCol(h));
@@ -1731,17 +1724,6 @@ export function registerExportRoutes(app: Express) {
         canonicalHeaders.splice(firstErrorAttrIdx, 0, ...colsToInsert);
       } else if (colsToInsert.length > 0) {
         canonicalHeaders.push(...colsToInsert);
-      }
-      
-      const disputeAppendCols = [
-        "Ticket ID", "Dispute adjustment", "Discrepancy amount",
-        "Disputed amount", "Adjusted in Ticket ID",
-        "Dispute status", "Reconciled Net price"
-      ];
-      for (const col of disputeAppendCols) {
-        if (!headerExistsIn(col, canonicalHeaders)) {
-          canonicalHeaders.push(col);
-        }
       }
       
       const hoReportSheet = XLSX.utils.json_to_sheet(hoReportData, { header: canonicalHeaders });
@@ -3100,62 +3082,66 @@ export function registerExportRoutes(app: Express) {
         let hasErrorBucketCol = false;
         let hasCommentsCol = false;
         let hasChargedLossCol = false;
-        let hasAnyReconCol = false;
 
         for (const key of gsOriginalKeys) {
-          const keyLower = key.toLowerCase();
+          const keyLower = key.toLowerCase().replace(/[\s_]+/g, "");
           if (gsIsTotalAmountPayableCol(key)) {
             newRow[key] = totalAmountPayable;
           } else if (gsIsNetPricePayableCol(key)) {
             newRow[key] = netPricePayable;
           } else if (gsIsFinalNetCol(key)) {
             newRow[key] = totalAmountPayable;
-          } else if (keyLower === "errorteamattribution" || keyLower === "error team attribution") {
+          } else if (keyLower === "errorteamattribution") {
             newRow[key] = errorTeamAttribution;
             hasErrorTeamCol = true;
-          } else if (keyLower === "errorbucket" || keyLower === "error bucket") {
+          } else if (keyLower === "errorbucket") {
             newRow[key] = errorBucket;
             hasErrorBucketCol = true;
           } else if (keyLower === "comments" || keyLower === "comment") {
             newRow[key] = comments;
             hasCommentsCol = true;
-          } else if (keyLower === "chargedloss" || keyLower === "charged_loss" || keyLower === "charged loss") {
+          } else if (keyLower === "chargedloss") {
             newRow[key] = chargedLoss;
             hasChargedLossCol = true;
-          } else if (keyLower === "finalvendorid" || keyLower === "final vendor id" || keyLower === "final_vendor_id") {
+          } else if (keyLower === "finalvendorid") {
             newRow[key] = finalVendorIdValue;
-            hasAnyReconCol = true;
-          } else if (keyLower === "ticketid" || keyLower === "ticket id" || keyLower === "ticket_id") {
+          } else if (keyLower === "spnet") {
+            newRow[key] = spNet;
+          } else if (keyLower === "invoiceid") {
             newRow[key] = ticketIdValue;
-            hasAnyReconCol = true;
-          } else if (keyLower === "disputeadjustment" || keyLower === "dispute adjustment" || keyLower === "dispute_adjustment") {
-            newRow[key] = disputeAdjAmount;
-            hasAnyReconCol = true;
-          } else if (keyLower === "discrepancyamount" || keyLower === "discrepancy amount" || keyLower === "discrepancy_amount") {
-            newRow[key] = discrepancyAdjAmount;
-            hasAnyReconCol = true;
-          } else if (keyLower === "disputedamount" || keyLower === "disputed amount" || keyLower === "disputed_amount") {
+          } else if (keyLower === "reconcilemanually") {
+            newRow[key] = "TRUE";
+          } else if (keyLower === "totaldisputeamount") {
             newRow[key] = disputedAmount;
-            hasAnyReconCol = true;
-          } else if (keyLower === "adjustedinticketid" || keyLower === "adjusted in ticket id" || keyLower === "adjusted_in_ticket_id") {
+          } else if (keyLower === "entereddisputeadjustment") {
+            newRow[key] = disputeAdjAmount;
+          } else if (keyLower === "entereddisputeamountadjustedinvoiceid") {
             newRow[key] = adjustedInTicketId;
-            hasAnyReconCol = true;
-          } else if (keyLower === "finaldisputeamount" || keyLower === "final dispute amount" || keyLower === "final_dispute_amount") {
-            hasAnyReconCol = true;
-          } else if (keyLower === "disputestatus" || keyLower === "dispute status" || keyLower === "dispute_status") {
+          } else if (keyLower === "entereddiscrepancyamount") {
+            newRow[key] = discrepancyAdjAmount;
+          } else if (keyLower === "ticketid") {
+            newRow[key] = ticketIdValue;
+          } else if (keyLower === "disputeadjustment") {
+            newRow[key] = disputeAdjAmount;
+          } else if (keyLower === "discrepancyamount") {
+            newRow[key] = discrepancyAdjAmount;
+          } else if (keyLower === "disputedamount") {
+            newRow[key] = disputedAmount;
+          } else if (keyLower === "adjustedinticketid") {
+            newRow[key] = adjustedInTicketId;
+          } else if (keyLower === "finaldisputeamount") {
+            newRow[key] = row[key];
+          } else if (keyLower === "disputestatus") {
             newRow[key] = disputeStatus;
-            hasAnyReconCol = true;
-          } else if (keyLower === "reconcilednetprice" || keyLower === "reconciled net price" || keyLower === "reconciled_net_price") {
+          } else if (keyLower === "reconcilednetprice") {
             newRow[key] = reconciledNetPrice;
-            hasAnyReconCol = true;
-          } else if (keyLower === "utrnumber" || keyLower === "utr number" || keyLower === "utr_number" || keyLower === "utr") {
-            hasAnyReconCol = true;
+          } else if (keyLower === "utrnumber" || keyLower === "utr") {
+            newRow[key] = row[key];
           } else {
             newRow[key] = row[key];
           }
         }
 
-        newRow["SP Net"] = spNet;
         newRow["Difference"] = difference;
         newRow["Difference %"] = differencePercent;
 
@@ -3163,17 +3149,6 @@ export function registerExportRoutes(app: Express) {
         if (!hasErrorBucketCol) newRow["errorBucket"] = errorBucket;
         if (!hasCommentsCol) newRow["comments"] = comments;
         if (!hasChargedLossCol) newRow["chargedLoss"] = chargedLoss;
-
-        if (!hasAnyReconCol) {
-          newRow["finalVendorId"] = finalVendorIdValue;
-          newRow["Ticket ID"] = ticketIdValue;
-          newRow["Dispute adjustment"] = disputeAdjAmount;
-          newRow["Discrepancy amount"] = discrepancyAdjAmount;
-          newRow["Disputed amount"] = disputedAmount;
-          newRow["Adjusted in Ticket ID"] = adjustedInTicketId;
-          newRow["Dispute status"] = disputeStatus;
-          newRow["Reconciled Net price"] = reconciledNetPrice;
-        }
 
         return newRow;
       });
@@ -3189,7 +3164,7 @@ export function registerExportRoutes(app: Express) {
         return headers.some(h => h.toLowerCase() === nameLower);
       };
 
-      const gsInsertCols = ["SP Net", "Difference", "Difference %"];
+      const gsInsertCols = ["Difference", "Difference %"];
       const gsColsToInsert = gsInsertCols.filter(c => !gsHeaderExistsIn(c, gsCanonicalHeaders));
 
       const gsFirstErrorAttrIdx = gsCanonicalHeaders.findIndex(h => gsIsErrorAttrCol(h));
@@ -3197,17 +3172,6 @@ export function registerExportRoutes(app: Express) {
         gsCanonicalHeaders.splice(gsFirstErrorAttrIdx, 0, ...gsColsToInsert);
       } else if (gsColsToInsert.length > 0) {
         gsCanonicalHeaders.push(...gsColsToInsert);
-      }
-
-      const gsDisputeAppendCols = [
-        "Ticket ID", "Dispute adjustment", "Discrepancy amount",
-        "Disputed amount", "Adjusted in Ticket ID",
-        "Dispute status", "Reconciled Net price"
-      ];
-      for (const col of gsDisputeAppendCols) {
-        if (!gsHeaderExistsIn(col, gsCanonicalHeaders)) {
-          gsCanonicalHeaders.push(col);
-        }
       }
 
       const hoReportData: (string | number | null)[][] = [gsCanonicalHeaders];
