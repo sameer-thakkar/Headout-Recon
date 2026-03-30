@@ -3016,7 +3016,7 @@ export function PurchaseReconciliationPanel({
                               <TableCell className="text-xs font-mono py-1 text-right">
                                 {formatCurrency(row.finalDiscrepancyTotal ?? 0)}
                               </TableCell>
-                              <TableCell className="text-xs font-mono py-1 text-right">{formatCurrency(row.spNet)}</TableCell>
+                              <TableCell className="text-xs font-mono py-1 text-right">{formatCurrency(row.spNetInHo)}</TableCell>
                               <TableCell className="text-xs font-mono py-1 text-right">{formatCurrency(row.hoNet)}</TableCell>
                             </TableRow>
                           ))}
