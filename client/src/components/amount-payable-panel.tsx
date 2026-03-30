@@ -1771,6 +1771,47 @@ export function AmountPayablePanel({
                       </TableBody>
                     </Table>
                   </div>
+                  {(() => {
+                    const cancMismatchBookings = cancellationBookings.filter(b => hasPaymentMismatch(b));
+                    if (cancMismatchBookings.length === 0) return null;
+                    return (
+                      <div className="border-t p-2 space-y-1">
+                        <div className="flex items-center gap-2 px-1 py-0.5">
+                          <AlertTriangle className="h-3 w-3 text-amber-500" />
+                          <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                            {cancMismatchBookings.length} booking(s) with payment method mismatch — assign Final Vendor ID
+                          </span>
+                        </div>
+                        {cancMismatchBookings.map(b => (
+                          <div key={`canc-vid-${b.bookingId}`} className="flex items-center gap-2 px-2 py-1 rounded bg-violet-50/40 dark:bg-violet-950/20">
+                            <span className="text-[10px] font-mono text-muted-foreground w-24 truncate" title={b.bookingId}>{b.bookingId}</span>
+                            {dominantPaymentMethod && b.paymentMethod && (
+                              <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                                {b.paymentMethod} → {dominantPaymentMethod}
+                              </Badge>
+                            )}
+                            <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium whitespace-nowrap">Final Vendor ID:</span>
+                            <Input
+                              type="text"
+                              className="h-5 text-[10px] w-32 font-mono border-violet-200 dark:border-violet-800 bg-white dark:bg-background"
+                              placeholder="Enter Vendor ID"
+                              value={finalVendorIds.get(b.bookingId) || ""}
+                              onChange={(e) => updateVendorId(b.bookingId, e.target.value)}
+                              onBlur={() => saveVendorCorrection(b.bookingId, finalVendorIds.get(b.bookingId) || "")}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveVendorCorrection(b.bookingId, finalVendorIds.get(b.bookingId) || ""); }}
+                              onClick={(e) => e.stopPropagation()}
+                              data-testid={`input-vendor-id-canc-${b.bookingId}`}
+                            />
+                            {finalVendorIds.get(b.bookingId)?.trim() ? (
+                              <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                            ) : (
+                              <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </CollapsibleContent>
               </div>
             </Collapsible>
@@ -2305,9 +2346,10 @@ export function AmountPayablePanel({
                           const totalPayable = getAmountPaidTotal(booking);
                           const netType = localSelections[booking.bookingId] || "sp";
                           const statusVal = disputeStatusEdits[booking.bookingId] ?? booking.disputeStatus ?? "";
+                          const needsVid = hasPaymentMismatch(booking);
                           return (
+                            <Fragment key={booking.bookingId}>
                             <div 
-                              key={booking.bookingId}
                               className="grid grid-cols-[minmax(100px,1fr)_minmax(80px,1fr)_80px_80px_70px_100px_90px_90px_100px] gap-2 px-3 py-1.5 text-xs border-t items-center"
                               data-testid={`amount-paid-row-${booking.bookingId}`}
                             >
@@ -2368,6 +2410,33 @@ export function AmountPayablePanel({
                                 {formatCurrency(totalPayable - (booking.amountPaid || 0))}
                               </div>
                             </div>
+                            {needsVid && (
+                              <div className="flex items-center gap-2 px-3 py-1 bg-violet-50/40 dark:bg-violet-950/20 border-t">
+                                {dominantPaymentMethod && booking.paymentMethod && (
+                                  <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700 dark:text-violet-300">
+                                    {booking.paymentMethod} → {dominantPaymentMethod}
+                                  </Badge>
+                                )}
+                                <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium whitespace-nowrap">Final Vendor ID:</span>
+                                <Input
+                                  type="text"
+                                  className="h-5 text-[10px] w-32 font-mono border-violet-200 dark:border-violet-800 bg-white dark:bg-background"
+                                  placeholder="Enter Vendor ID"
+                                  value={finalVendorIds.get(booking.bookingId) || ""}
+                                  onChange={(e) => updateVendorId(booking.bookingId, e.target.value)}
+                                  onBlur={() => saveVendorCorrection(booking.bookingId, finalVendorIds.get(booking.bookingId) || "")}
+                                  onKeyDown={(e) => { if (e.key === "Enter") saveVendorCorrection(booking.bookingId, finalVendorIds.get(booking.bookingId) || ""); }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`input-vendor-id-amtpaid-${booking.bookingId}`}
+                                />
+                                {finalVendorIds.get(booking.bookingId)?.trim() ? (
+                                  <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                                ) : (
+                                  <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                                )}
+                              </div>
+                            )}
+                            </Fragment>
                           );
                         })}
                       </div>
