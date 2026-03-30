@@ -258,7 +258,10 @@ export function AmountPayablePanel({
     }
   }, [runId, vendorCorrectionsLoaded, bookings]);
 
-  // Save or delete a single vendor correction
+  const updateVendorId = useCallback((bookingId: string, value: string) => {
+    setFinalVendorIds(prev => { const n = new Map(prev); n.set(bookingId, value); return n; });
+  }, []);
+
   const saveVendorCorrection = useCallback(async (bookingId: string, finalVendorId: string) => {
     if (!runId) return;
     try {
