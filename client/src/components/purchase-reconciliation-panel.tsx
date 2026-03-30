@@ -5,6 +5,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Table,
   TableBody,
   TableCell,
@@ -1994,12 +1999,41 @@ export function PurchaseReconciliationPanel({
   // Negative SP Net verification state
   const [negativeSpVerified, setNegativeSpVerified] = useState(false);
   const hasNegativeSpBookings = useMemo(() => primaryRows.some(r => r.spNetInHo < 0 && !r.isSecondaryVendor), [primaryRows]);
+
+  const openDisputeData = useMemo(() => {
+    const openRows = primaryRows.filter(r => r.disputeStatus?.toUpperCase() === "OPEN" && (r.disputedAmount ?? 0) !== 0);
+    if (openRows.length === 0) return { total: 0, groups: [], bookingCount: 0 };
+
+    const byBe = new Map<string, { beName: string; beId: string; rows: typeof openRows; total: number }>();
+    for (const row of openRows) {
+      const key = row.beId || "unknown";
+      if (!byBe.has(key)) {
+        byBe.set(key, { beName: row.billingEntityName || key, beId: key, rows: [], total: 0 });
+      }
+      const g = byBe.get(key)!;
+      g.rows.push(row);
+      g.total += row.disputedAmount ?? 0;
+    }
+
+    const groups = Array.from(byBe.values()).map(g => ({
+      ...g,
+      total: Math.round(g.total * 100) / 100,
+    }));
+    const total = Math.round(groups.reduce((s, g) => s + g.total, 0) * 100) / 100;
+    return { total, groups, bookingCount: openRows.length };
+  }, [primaryRows]);
+
+  const [isOpenDisputeExpanded, setIsOpenDisputeExpanded] = useState(false);
   
   // Imperative refs for modals (state lives inside modal components, not here)
   const disputeModalRef = useRef<DisputeModalHandle>(null);
   const issueModalRef = useRef<IssueModalHandle>(null);
   const manageReloadsModalRef = useRef<ManageReloadsModalHandle>(null);
   
+  const formatCurrency = useCallback((value: number) => {
+    return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, []);
+
   const effectiveFxRate = useMemo(() => {
     if (fxRateToUsd) return fxRateToUsd;
     if (currency === "USD") return 1;
@@ -2924,6 +2958,64 @@ export function PurchaseReconciliationPanel({
         expandedCancType={expandedCancType}
         setExpandedCancType={setExpandedCancType}
       />
+
+      {openDisputeData.bookingCount > 0 && (
+        <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50/50 dark:bg-amber-950/20">
+          <Collapsible open={isOpenDisputeExpanded} onOpenChange={setIsOpenDisputeExpanded}>
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center justify-between cursor-pointer" data-testid="toggle-open-disputes-purchase">
+                <div className="flex items-center gap-2">
+                  {isOpenDisputeExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <p className="text-sm font-medium">Open Dispute Bookings</p>
+                  <Badge variant="secondary" className="text-xs">{openDisputeData.bookingCount}</Badge>
+                </div>
+                <span className="font-mono font-medium text-amber-700 dark:text-amber-300 text-sm">
+                  {formatCurrency(openDisputeData.total)} {currency}
+                </span>
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-3 space-y-3">
+                {openDisputeData.groups.map(group => (
+                  <div key={group.beId} className="space-y-1">
+                    <div className="flex items-center justify-between px-2">
+                      <span className="text-xs font-medium text-muted-foreground">{group.beName}</span>
+                      <span className="text-xs font-mono">{formatCurrency(group.total)} {currency} · {group.rows.length} booking(s)</span>
+                    </div>
+                    <div className="border rounded overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30">
+                            <TableHead className="text-xs py-1">Booking ID</TableHead>
+                            <TableHead className="text-xs py-1">TID</TableHead>
+                            <TableHead className="text-xs py-1 text-right">Disputed Amt</TableHead>
+                            <TableHead className="text-xs py-1 text-right">SP Net</TableHead>
+                            <TableHead className="text-xs py-1 text-right">HO Net</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {group.rows.map(row => (
+                            <TableRow key={row.bookingId} data-testid={`open-dispute-purchase-row-${row.bookingId}`}>
+                              <TableCell className="text-xs font-mono py-1">{row.bookingId}</TableCell>
+                              <TableCell className="text-xs font-mono py-1">{row.tid || "-"}</TableCell>
+                              <TableCell className="text-xs font-mono py-1 text-right text-amber-700 dark:text-amber-300">
+                                {formatCurrency(row.disputedAmount ?? 0)}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono py-1 text-right">{formatCurrency(row.spNet)}</TableCell>
+                              <TableCell className="text-xs font-mono py-1 text-right">{formatCurrency(row.hoNet)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
 
       <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={onClose} data-testid="button-close-purchase-reco">
