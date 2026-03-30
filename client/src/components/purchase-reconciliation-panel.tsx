@@ -2125,11 +2125,11 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId, vendorCorrectionsLoaded, secondaryVendorRows]);
 
-  const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows], [primaryRows, secondaryVendorRows]);
+  const vendorIdRows = useMemo(() => [...primaryRows, ...secondaryVendorRows], [primaryRows, secondaryVendorRows]);
 
   const dominantPaymentMethod = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const row of allRows) {
+    for (const row of vendorIdRows) {
       const pm = (row.paymentMethod || "").trim().toLowerCase();
       if (pm) counts.set(pm, (counts.get(pm) || 0) + 1);
     }
@@ -2139,7 +2139,7 @@ export function PurchaseReconciliationPanel({
       if (count > maxCount) { maxPm = pm; maxCount = count; }
     }
     return maxPm;
-  }, [allRows]);
+  }, [vendorIdRows]);
 
   const hasPaymentMismatch = useCallback((booking: { paymentMethod?: string }) => {
     if (!dominantPaymentMethod) return false;
@@ -2605,8 +2605,7 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId, toast]);
   
-  // Combine all rows for complete SP Invoice calculations (primary + secondary + unmapped)
-  const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows], [primaryRows, secondaryVendorRows]);
+  const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows, ...unmappedRows], [primaryRows, secondaryVendorRows, unmappedRows]);
   const { data: balanceData, isLoading: isLoadingBalance } = useQuery<{ balance: VendorBalance | null }>({
     queryKey: ['/api/vendor-balances', beId],
     enabled: !!beId,
