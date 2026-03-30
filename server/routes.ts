@@ -2233,9 +2233,11 @@ export async function registerRoutes(
       for (const vc of vendorCorrections) {
         vendorCorrectionMap.set(vc.bookingId, vc.finalVendorId);
       }
+      type ValidationRow = Record<string, unknown> & { paymentMethod?: string; isSecondaryVendor?: boolean; bookingId: string };
+      const typedRows = allRows as ValidationRow[];
       const pmCounts = new Map<string, number>();
-      for (const r of allRows) {
-        const pm = ((r as any).paymentMethod || "").trim().toLowerCase();
+      for (const r of typedRows) {
+        const pm = (r.paymentMethod || "").trim().toLowerCase();
         if (pm) pmCounts.set(pm, (pmCounts.get(pm) || 0) + 1);
       }
       let dominantPm = "";
@@ -2243,13 +2245,13 @@ export async function registerRoutes(
       for (const [pm, cnt] of pmCounts) {
         if (cnt > maxPmCount) { dominantPm = pm; maxPmCount = cnt; }
       }
-      const needsVendorId = allRows.filter((r: any) => {
+      const needsVendorId = typedRows.filter((r) => {
         if (r.isSecondaryVendor) return true;
         if (!dominantPm) return false;
         const pm = (r.paymentMethod || "").trim().toLowerCase();
         return !!(pm && pm !== dominantPm);
       });
-      const unresolvedMismatches = needsVendorId.filter((r: any) => !vendorCorrectionMap.has(r.bookingId));
+      const unresolvedMismatches = needsVendorId.filter((r) => !vendorCorrectionMap.has(r.bookingId));
       checks.push({
         id: "payment_mismatches_resolved",
         name: "Vendor ID corrections resolved",

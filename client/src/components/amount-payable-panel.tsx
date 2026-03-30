@@ -1335,11 +1335,12 @@ export function AmountPayablePanel({
         title: "Export complete",
         description: "Your reconciliation report has been downloaded",
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Export error:", error);
+      const msg = error instanceof Error ? error.message : "Failed to generate export file";
       toast({
         title: "Export failed",
-        description: error?.message || "Failed to generate export file",
+        description: msg,
         variant: "destructive",
       });
     }

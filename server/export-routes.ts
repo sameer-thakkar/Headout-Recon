@@ -1019,10 +1019,11 @@ export function registerExportRoutes(app: Express) {
 
       const { result, upload, originalHoData, originalSpData, allRowsMap, spFxMap, disputesByBooking, disputeOverrides, priceOverrides, vendorCorrectionsByBooking, spTicketIdByBooking } = data;
 
-      const allExportRows = [...result.primaryRows, ...result.secondaryVendorRows, ...(result.unmappedRows || [])];
+      type ReconciliationRow = Record<string, unknown> & { paymentMethod?: string; isSecondaryVendor?: boolean; bookingId?: string };
+      const allExportRows: ReconciliationRow[] = [...result.primaryRows, ...result.secondaryVendorRows];
       const exportPmCounts = new Map<string, number>();
       for (const r of allExportRows) {
-        const pm = ((r as any).paymentMethod || "").trim().toLowerCase();
+        const pm = (r.paymentMethod || "").trim().toLowerCase();
         if (pm) exportPmCounts.set(pm, (exportPmCounts.get(pm) || 0) + 1);
       }
       let exportDominantPm = "";
@@ -1030,13 +1031,13 @@ export function registerExportRoutes(app: Express) {
       for (const [pm, cnt] of exportPmCounts) {
         if (cnt > exportMaxCount) { exportDominantPm = pm; exportMaxCount = cnt; }
       }
-      const exportNeedsVid = allExportRows.filter((r: any) => {
+      const exportNeedsVid = allExportRows.filter((r) => {
         if (r.isSecondaryVendor) return true;
         if (!exportDominantPm) return false;
         const pm = (r.paymentMethod || "").trim().toLowerCase();
         return !!(pm && pm !== exportDominantPm);
       });
-      const exportUnresolved = exportNeedsVid.filter((r: any) => !vendorCorrectionsByBooking[(r as any).bookingId]);
+      const exportUnresolved = exportNeedsVid.filter((r) => !vendorCorrectionsByBooking[r.bookingId || ""]);
       if (exportUnresolved.length > 0) {
         return res.status(400).json({ error: `${exportUnresolved.length} booking(s) missing Final Vendor ID. Please complete all vendor ID assignments before exporting.` });
       }
@@ -2694,10 +2695,11 @@ export function registerExportRoutes(app: Express) {
         gsVendorCorrectionsByBooking.set(vc.bookingId, vc.finalVendorId);
       }
 
-      const gsAllRows = [...result.primaryRows, ...result.secondaryVendorRows, ...(result.unmappedRows || [])];
+      type GsReconciliationRow = Record<string, unknown> & { paymentMethod?: string; isSecondaryVendor?: boolean; bookingId?: string };
+      const gsAllRows: GsReconciliationRow[] = [...result.primaryRows, ...result.secondaryVendorRows];
       const gsPmCounts = new Map<string, number>();
       for (const r of gsAllRows) {
-        const pm = ((r as any).paymentMethod || "").trim().toLowerCase();
+        const pm = (r.paymentMethod || "").trim().toLowerCase();
         if (pm) gsPmCounts.set(pm, (gsPmCounts.get(pm) || 0) + 1);
       }
       let gsDominantPm = "";
@@ -2705,13 +2707,13 @@ export function registerExportRoutes(app: Express) {
       for (const [pm, cnt] of gsPmCounts) {
         if (cnt > gsMaxPm) { gsDominantPm = pm; gsMaxPm = cnt; }
       }
-      const gsNeedsVid = gsAllRows.filter((r: any) => {
+      const gsNeedsVid = gsAllRows.filter((r) => {
         if (r.isSecondaryVendor) return true;
         if (!gsDominantPm) return false;
         const pm = (r.paymentMethod || "").trim().toLowerCase();
         return !!(pm && pm !== gsDominantPm);
       });
-      const gsUnresolved = gsNeedsVid.filter((r: any) => !gsVendorCorrectionsByBooking.has((r as any).bookingId));
+      const gsUnresolved = gsNeedsVid.filter((r) => !gsVendorCorrectionsByBooking.has(r.bookingId || ""));
       if (gsUnresolved.length > 0) {
         return res.status(400).json({ error: `${gsUnresolved.length} booking(s) missing Final Vendor ID. Please complete all vendor ID assignments before exporting.` });
       }

@@ -1720,7 +1720,7 @@ interface InsightsCardProps {
   setExpandedCancellations: (fn: (prev: boolean) => boolean) => void;
   expandedCancType: string | null;
   setExpandedCancType: (fn: (prev: string | null) => string | null) => void;
-  hasPaymentMismatch?: (booking: PurchaseBooking | PrimaryRow) => boolean;
+  hasPaymentMismatch?: (booking: { paymentMethod?: string; isSecondaryVendor?: boolean }) => boolean;
   finalVendorIds?: Map<string, string>;
   onVendorIdChange?: (bookingId: string, value: string) => void;
   onVendorIdSave?: (bookingId: string, value: string) => void;
@@ -1813,7 +1813,7 @@ const InsightsCard = memo(function InsightsCard({
                             const hoP = (b.paymentMethod || "").trim();
                             const spP = (b.spPaymentMethod || "").trim();
                             const mismatch = hoP && spP && hoP.toLowerCase() !== spP.toLowerCase();
-                            const needsVid = insightHasPm ? insightHasPm(b as any) : false;
+                            const needsVid = insightHasPm ? insightHasPm(b) : false;
                             return (
                               <Fragment key={`ar-same-${i}`}>
                                 <TableRow className="h-8">
@@ -1895,7 +1895,7 @@ const InsightsCard = memo(function InsightsCard({
                         </TableHeader>
                         <TableBody>
                           {alreadyReconciledData.differentBE.bookings.map((b, i) => {
-                            const needsVid = insightHasPm ? insightHasPm(b as any) : false;
+                            const needsVid = insightHasPm ? insightHasPm(b) : false;
                             return (
                               <Fragment key={`ar-diff-${i}`}>
                                 <TableRow className="h-8">
@@ -1996,7 +1996,7 @@ const InsightsCard = memo(function InsightsCard({
                               </TableHeader>
                               <TableBody>
                                 {group.bookings.map((b, i) => {
-                                  const needsVid = insightHasPm ? insightHasPm(b as any) : false;
+                                  const needsVid = insightHasPm ? insightHasPm(b) : false;
                                   return (
                                     <Fragment key={`canc-${group.reason}-${i}`}>
                                       <TableRow className="h-8">
@@ -2125,9 +2125,11 @@ export function PurchaseReconciliationPanel({
     }
   }, [runId, vendorCorrectionsLoaded, secondaryVendorRows]);
 
+  const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows], [primaryRows, secondaryVendorRows]);
+
   const dominantPaymentMethod = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const row of primaryRows) {
+    for (const row of allRows) {
       const pm = (row.paymentMethod || "").trim().toLowerCase();
       if (pm) counts.set(pm, (counts.get(pm) || 0) + 1);
     }
@@ -2137,7 +2139,7 @@ export function PurchaseReconciliationPanel({
       if (count > maxCount) { maxPm = pm; maxCount = count; }
     }
     return maxPm;
-  }, [primaryRows]);
+  }, [allRows]);
 
   const hasPaymentMismatch = useCallback((booking: { paymentMethod?: string }) => {
     if (!dominantPaymentMethod) return false;
@@ -2456,8 +2458,9 @@ export function PurchaseReconciliationPanel({
       a2.download = `financial_report_${timestamp}.xlsx`;
       document.body.appendChild(a2); a2.click(); window.URL.revokeObjectURL(financialUrl); document.body.removeChild(a2);
       toast({ title: "Export complete", description: "Your reconciliation reports have been downloaded" });
-    } catch (error: any) {
-      toast({ title: "Export failed", description: error?.message || "Failed to generate export file", variant: "destructive" });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to generate export file";
+      toast({ title: "Export failed", description: msg, variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
@@ -2483,8 +2486,9 @@ export function PurchaseReconciliationPanel({
       const data = await response.json();
       if (data.spreadsheetUrl) setGSheetUrl(data.spreadsheetUrl);
       toast({ title: "Google Sheet ready", description: "Click the link below to open it" });
-    } catch (error: any) {
-      toast({ title: "Export failed", description: error?.message || "Failed to create Google Sheet", variant: "destructive" });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Failed to create Google Sheet";
+      toast({ title: "Export failed", description: msg, variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
@@ -2602,7 +2606,7 @@ export function PurchaseReconciliationPanel({
   }, [runId, toast]);
   
   // Combine all rows for complete SP Invoice calculations (primary + secondary + unmapped)
-  const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows, ...unmappedRows], [primaryRows, secondaryVendorRows, unmappedRows]);
+  const allRows = useMemo(() => [...primaryRows, ...secondaryVendorRows], [primaryRows, secondaryVendorRows]);
   const { data: balanceData, isLoading: isLoadingBalance } = useQuery<{ balance: VendorBalance | null }>({
     queryKey: ['/api/vendor-balances', beId],
     enabled: !!beId,
