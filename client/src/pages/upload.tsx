@@ -1229,7 +1229,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
           {/* Analysis table */}
           <div className="px-6 pt-4 pb-2 shrink-0">
-            <p className="text-xs text-muted-foreground mb-2">Select a row to review and action its bookings.</p>
+            <p className="text-xs text-muted-foreground mb-2">Summary of already reconciled bookings. Use the workspace below to review and action each booking.</p>
             <Table>
               <TableHeader>
                 <TableRow className="text-xs">

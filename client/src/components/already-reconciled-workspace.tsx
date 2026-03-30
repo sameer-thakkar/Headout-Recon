@@ -181,6 +181,9 @@ export function AlreadyReconciledWorkspace({
         const b = bookings.find(bk => bk.bookingId === id);
         return s + (b ? Math.abs(b.spNet - b.hoNet) : 0);
       }, 0);
+      const errorBucket = sectionLabel.toLowerCase().includes("different") || sectionLabel.toLowerCase().includes("diff")
+        ? "Already Reconciled-Different BE"
+        : "Already Reconciled-Same BE";
       await apiRequest("POST", "/api/issues", {
         runId,
         billingEntityId,
@@ -191,7 +194,7 @@ export function AlreadyReconciledWorkspace({
         reason: sectionLabel,
         driTeam: "Finance",
         bookingIds,
-        errorBucket: "Already Reconciled-Same BE",
+        errorBucket,
         rca: "",
         issueStatus: "open",
       });
