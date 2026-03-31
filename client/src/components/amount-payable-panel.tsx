@@ -387,7 +387,7 @@ export function AmountPayablePanel({
 
   // Regular discrepancy bookings (excludes cancellations)
   const hasAmountPaidOrSettled = (b: BookingForPayable) =>
-    (b.amountPaid != null && b.amountPaid > 0) || (b.disputeSettled != null && b.disputeSettled > 0);
+    b.disputeStatus === "OPEN";
 
   const discrepancyBookings = useMemo(() => 
     (bookings || []).filter(b => 
