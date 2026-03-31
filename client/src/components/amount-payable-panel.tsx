@@ -2253,28 +2253,28 @@ export function AmountPayablePanel({
 
           {/* Already Reconciled Summary */}
           {alreadyReconciledBookings.length > 0 && (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 pt-3 mt-3 border-t">
-              <div className="flex items-center gap-2 min-w-0">
+            <div className="grid grid-cols-12 items-center gap-2 pt-3 mt-3 border-t">
+              <div className="col-span-8 flex items-center gap-2 min-w-0">
                 <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
-                <p className="text-sm font-medium">Already Reconciled ({alreadyReconciledBookings.length} bookings)</p>
+                <p className="text-sm font-medium truncate">Already Reconciled ({alreadyReconciledBookings.length} bookings)</p>
               </div>
-              <p className="text-lg font-bold font-mono text-right" data-testid="text-already-reconciled-total">
+              <p className="col-span-4 text-lg font-bold font-mono text-right" data-testid="text-already-reconciled-total">
                 {formatCurrency(alreadyReconciledTotal)} {currency}
               </p>
             </div>
           )}
 
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 pt-3 mt-3 border-t">
+          <div className="grid grid-cols-12 items-center gap-2 pt-3 mt-3 border-t">
             <button 
               type="button"
-              className="text-sm font-medium text-foreground hover:text-primary underline-offset-2 hover:underline cursor-pointer flex items-center gap-1 min-w-0"
+              className="col-span-8 text-sm font-medium text-foreground hover:text-primary underline-offset-2 hover:underline cursor-pointer flex items-center gap-1 min-w-0 text-left"
               onClick={() => setShowSummaryModal(true)}
               data-testid="button-show-summary"
             >
-              Payable for bookings reconciled
+              <span className="truncate">Payable for bookings reconciled</span>
               <Calculator className="h-3 w-3 opacity-60 shrink-0" />
             </button>
-            <p className="text-lg font-bold font-mono text-right" data-testid="text-base-amount">
+            <p className="col-span-4 text-lg font-bold font-mono text-right" data-testid="text-base-amount">
               {formatCurrency(baseAmount)} {currency}
             </p>
           </div>
