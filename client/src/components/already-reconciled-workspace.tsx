@@ -250,7 +250,7 @@ export function AlreadyReconciledWorkspace({
     for (const b of tidGroup.bookings) {
       newActive.add(b.bookingId);
       if (!newAmounts.has(b.bookingId)) {
-        newAmounts.set(b.bookingId, Math.abs(b.spNet - b.hoNet));
+        newAmounts.set(b.bookingId, Math.round(Math.abs(b.spNet - b.hoNet) * 100) / 100);
       }
     }
     onDisputeChange(newActive, newAmounts);
@@ -634,7 +634,7 @@ export function AlreadyReconciledWorkspace({
                                                   const newActive = new Set(activeDisputes);
                                                   newActive.add(booking.bookingId);
                                                   const newAmounts = new Map(disputeAmounts);
-                                                  newAmounts.set(booking.bookingId, Math.abs(booking.spNet - booking.hoNet));
+                                                  newAmounts.set(booking.bookingId, Math.round(Math.abs(booking.spNet - booking.hoNet) * 100) / 100);
                                                   onDisputeChange(newActive, newAmounts);
                                                 }}
                                                 data-testid={`ar-ws-dispute-btn-${booking.bookingId}`}
