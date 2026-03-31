@@ -1285,6 +1285,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                   reason: b.reason,
                   hoNet: b.hoNet,
                   spNet: b.spNetInHo,
+                  amountPaid: b.amountPaid || 0,
                   paymentMethod: b.paymentMethod,
                   spPaymentMethod: b.spPaymentMethod,
                   hoBeId: b.hoBeId,

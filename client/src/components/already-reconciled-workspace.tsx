@@ -20,6 +20,7 @@ export interface ArWorkspaceBooking {
   reason: string;
   hoNet: number;
   spNet: number;
+  amountPaid?: number;
   paymentMethod?: string;
   spPaymentMethod?: string;
   hoBeId?: string;
@@ -296,8 +297,8 @@ export function AlreadyReconciledWorkspace({
     }).length,
   [bookings, decisions]);
 
-  const BID_GRID = "2fr minmax(5rem,0.8fr) minmax(5.5rem,0.9fr) minmax(5.5rem,0.9fr) minmax(5rem,0.7fr) minmax(9rem,1.4fr) minmax(7.5rem,1.2fr) minmax(6.5rem,1fr)";
-  const TID_GRID = "1.5rem 2fr minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(3.5rem,0.5fr)";
+  const BID_GRID = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
+  const TID_GRID = "1.75rem 2fr minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
 
   if (bookings.length === 0) {
     return (
@@ -364,7 +365,11 @@ export function AlreadyReconciledWorkspace({
                     <div>TID</div>
                     <div className="text-center">SP Net</div>
                     <div className="text-center">HO Net</div>
-                    <div className="text-center">Disc LC</div>
+                    <div className="text-center">Difference LC</div>
+                    <div className="text-center text-violet-600">Total Amount Payable</div>
+                    <div className="text-center">Amount Paid</div>
+                    <div className="text-center text-violet-600">Dispute</div>
+                    <div className="text-center text-green-600">Balance Amt Payable</div>
                     <div className="text-center">BIDs</div>
                   </div>
 
@@ -400,6 +405,27 @@ export function AlreadyReconciledWorkspace({
                           <div className={`text-center text-sm font-mono ${tidGroup.discLc < 0 ? "text-red-600 dark:text-red-400" : tidGroup.discLc > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
                             {fmt(tidGroup.discLc)}
                           </div>
+                          {(() => {
+                            const tidTap = tidGroup.bookings.reduce((s, b) => {
+                              const dec = decisions.get(b.bookingId);
+                              if (dec?.decision === "dont_pay") return s;
+                              return s + (dec?.finalAmount ?? 0);
+                            }, 0);
+                            const tidAmtPaid = tidGroup.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
+                            const tidDispute = tidGroup.bookings.reduce((s, b) => {
+                              if (activeDisputes.has(b.bookingId)) return s + (disputeAmounts.get(b.bookingId) || 0);
+                              return s;
+                            }, 0);
+                            const tidBalance = tidTap - tidAmtPaid;
+                            return (
+                              <>
+                                <div className="text-center text-sm font-mono font-semibold text-violet-600">{fmt(tidTap)}</div>
+                                <div className="text-center text-sm font-mono text-muted-foreground">{fmt(tidAmtPaid)}</div>
+                                <div className={`text-center text-sm font-mono ${tidDispute > 0 ? "text-amber-600" : "text-muted-foreground"}`}>{fmt(tidDispute)}</div>
+                                <div className={`text-center text-sm font-mono font-semibold ${tidBalance > 0 ? "text-green-600" : tidBalance < 0 ? "text-red-600" : ""}`}>{fmt(tidBalance)}</div>
+                              </>
+                            );
+                          })()}
                           <div className="text-center text-sm font-mono">{tidGroup.bookings.length}</div>
                         </div>
 
@@ -434,10 +460,14 @@ export function AlreadyReconciledWorkspace({
                               <div className="text-center">Ticket ID</div>
                               <div className="text-center text-blue-600">SP Net</div>
                               <div className="text-center text-green-600">HO Net</div>
+                              <div className="text-center text-red-600">Diff LC</div>
                               <div className="text-center">Decision</div>
                               <div className="text-center">Reason</div>
-                              <div className="text-center">Dispute</div>
-                              <div className="text-center">Final Amt</div>
+                              <div className="text-center text-violet-600">Total Amount Payable</div>
+                              <div className="text-center">Amount Paid</div>
+                              <div className="text-center text-amber-600">Dispute Amt</div>
+                              <div className="text-center text-green-600">Balance Amt Payable</div>
+                              <div />
                             </div>
 
                             {/* BID rows */}
@@ -469,17 +499,21 @@ export function AlreadyReconciledWorkspace({
                                       {booking.ticketId || "—"}
                                     </div>
                                     {/* SP Net */}
-                                    <div className="text-center font-mono text-blue-600">{fmt(booking.spNet)}</div>
+                                    <div className="text-center font-mono text-blue-600" data-testid={`booking-sp-${booking.bookingId}`}>{fmt(booking.spNet)}</div>
                                     {/* HO Net */}
-                                    <div className="text-center font-mono text-green-600">{fmt(booking.hoNet)}</div>
+                                    <div className="text-center font-mono text-green-600" data-testid={`booking-ho-${booking.bookingId}`}>{fmt(booking.hoNet)}</div>
+                                    {/* Diff LC */}
+                                    <div className="text-center font-mono text-red-600 dark:text-red-400" data-testid={`booking-diff-${booking.bookingId}`}>
+                                      {fmt(Math.round((booking.spNet - booking.hoNet) * 100) / 100)}
+                                    </div>
                                     {/* Decision */}
-                                    <div className="flex justify-center">
+                                    <div className="text-center">
                                       <Select
                                         value={d.decision}
                                         onValueChange={(v: "pay" | "dont_pay") => setDecision(booking.bookingId, { decision: v })}
                                       >
                                         <SelectTrigger
-                                          className={`h-7 text-[11px] px-2 w-full max-w-[7rem] font-medium ${
+                                          className={`h-7 text-[10px] px-1 w-full font-medium ${
                                             isDontPay
                                               ? "border-red-200 bg-red-50/60 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
                                               : "border-green-200 bg-green-50/60 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400"
@@ -495,7 +529,7 @@ export function AlreadyReconciledWorkspace({
                                       </Select>
                                     </div>
                                     {/* Reason */}
-                                    <div className="flex gap-1 justify-center">
+                                    <div>
                                       <Select
                                         value={isCustomReason ? "__other__" : (d.reason || "none")}
                                         onValueChange={(v) => {
@@ -508,8 +542,8 @@ export function AlreadyReconciledWorkspace({
                                           }
                                         }}
                                       >
-                                        <SelectTrigger className="h-7 text-[11px] px-2 flex-1 border-violet-200 dark:border-violet-800" data-testid={`ar-ws-reason-${booking.bookingId}`}>
-                                          <SelectValue placeholder="Select reason..." />
+                                        <SelectTrigger className="h-7 text-[10px] px-1 w-full" data-testid={`ar-ws-reason-${booking.bookingId}`}>
+                                          <SelectValue placeholder="—" />
                                         </SelectTrigger>
                                         <SelectContent>
                                           <SelectItem value="none">—</SelectItem>
@@ -521,7 +555,7 @@ export function AlreadyReconciledWorkspace({
                                       </Select>
                                       {(isCustomReason || d.customReason === "__other__") && (
                                         <Input
-                                          className="h-7 text-[11px] px-2 w-20 border-violet-200 dark:border-violet-800"
+                                          className="h-6 text-[10px] px-1 w-full mt-0.5"
                                           placeholder="Specify..."
                                           value={isCustomReason ? d.reason : ""}
                                           onChange={e => setDecision(booking.bookingId, { reason: e.target.value, customReason: e.target.value })}
@@ -530,76 +564,104 @@ export function AlreadyReconciledWorkspace({
                                         />
                                       )}
                                     </div>
-                                    {/* Dispute */}
-                                    <div className="flex justify-center">
-                                      {isDisputeActive ? (
-                                        <div className="flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5">
-                                          <Input
-                                            type="number"
-                                            step="0.01"
-                                            className="h-6 text-[11px] px-1.5 w-20 text-right font-mono border-amber-300 dark:border-amber-700"
-                                            value={disputeAmt || ""}
-                                            onChange={e => {
-                                              const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
-                                              const newAmounts = new Map(disputeAmounts);
-                                              newAmounts.set(booking.bookingId, val);
-                                              onDisputeChange(new Set(activeDisputes), newAmounts);
-                                            }}
-                                            data-testid={`ar-ws-dispute-amount-${booking.bookingId}`}
-                                          />
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-5 w-5 text-amber-600 hover:text-amber-800 hover:bg-amber-100"
-                                            onClick={() => {
-                                              const newActive = new Set(activeDisputes);
-                                              newActive.delete(booking.bookingId);
-                                              const newAmounts = new Map(disputeAmounts);
-                                              newAmounts.delete(booking.bookingId);
-                                              onDisputeChange(newActive, newAmounts);
-                                            }}
-                                          >
-                                            <XIcon className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      ) : (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-7 text-[11px] px-3 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950/30"
-                                          onClick={() => {
-                                            const newActive = new Set(activeDisputes);
-                                            newActive.add(booking.bookingId);
-                                            const newAmounts = new Map(disputeAmounts);
-                                            newAmounts.set(booking.bookingId, Math.abs(booking.spNet - booking.hoNet));
-                                            onDisputeChange(newActive, newAmounts);
-                                          }}
-                                          data-testid={`ar-ws-dispute-btn-${booking.bookingId}`}
-                                        >
-                                          <Gavel className="h-3 w-3 mr-1" />
-                                          Dispute
-                                        </Button>
-                                      )}
-                                    </div>
-                                    {/* Final Amount */}
-                                    <div className="flex justify-center">
-                                      {isPay ? (
-                                        <Input
-                                          type="number"
-                                          step="0.01"
-                                          className={`h-7 text-[11px] px-2 text-right font-mono w-full max-w-[7rem] ${
-                                            d.finalAmount > 0
-                                              ? "border-green-300 bg-green-50/40 font-semibold text-green-700 dark:border-green-700 dark:bg-green-950/20 dark:text-green-400"
-                                              : "border-muted"
-                                          }`}
-                                          value={d.finalAmount}
-                                          onChange={e => setDecision(booking.bookingId, { finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 })}
-                                          data-testid={`ar-ws-final-amount-${booking.bookingId}`}
-                                        />
-                                      ) : (
-                                        <span className="text-muted-foreground text-xs italic">—</span>
-                                      )}
-                                    </div>
+                                    {/* Total Amount Payable */}
+                                    {(() => {
+                                      const tap = isPay ? d.finalAmount : 0;
+                                      const bookingAmountPaid = booking.amountPaid || 0;
+                                      const balanceAmountPayable = tap - bookingAmountPaid;
+                                      return (
+                                        <>
+                                          <div className="text-center">
+                                            {isPay ? (
+                                              <Input
+                                                type="number"
+                                                step="0.01"
+                                                className={`h-7 text-[10px] px-1 text-right font-mono w-full ${
+                                                  d.finalAmount > 0
+                                                    ? "border-violet-300 bg-violet-50/40 font-semibold text-violet-700 dark:border-violet-700 dark:bg-violet-950/20 dark:text-violet-400"
+                                                    : "border-muted"
+                                                }`}
+                                                value={d.finalAmount}
+                                                onChange={e => setDecision(booking.bookingId, { finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 })}
+                                                data-testid={`ar-ws-final-amount-${booking.bookingId}`}
+                                              />
+                                            ) : (
+                                              <span className="text-muted-foreground text-xs italic">—</span>
+                                            )}
+                                          </div>
+                                          {/* Amount Paid */}
+                                          <div className="text-center font-mono text-muted-foreground" data-testid={`ar-ws-amtpaid-${booking.bookingId}`}>
+                                            {fmt(bookingAmountPaid)}
+                                          </div>
+                                          {/* Dispute Amt */}
+                                          <div className="text-center">
+                                            {isDisputeActive ? (
+                                              <div className="flex items-center gap-0.5">
+                                                <Input
+                                                  type="number"
+                                                  step="0.01"
+                                                  className="h-7 text-[10px] px-1 w-full text-right font-mono border-amber-300 dark:border-amber-700"
+                                                  value={disputeAmt || ""}
+                                                  onChange={e => {
+                                                    const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
+                                                    const newAmounts = new Map(disputeAmounts);
+                                                    newAmounts.set(booking.bookingId, val);
+                                                    onDisputeChange(new Set(activeDisputes), newAmounts);
+                                                  }}
+                                                  data-testid={`ar-ws-dispute-amount-${booking.bookingId}`}
+                                                />
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-5 w-5 text-amber-600 hover:text-amber-800 hover:bg-amber-100 shrink-0"
+                                                  onClick={() => {
+                                                    const newActive = new Set(activeDisputes);
+                                                    newActive.delete(booking.bookingId);
+                                                    const newAmounts = new Map(disputeAmounts);
+                                                    newAmounts.delete(booking.bookingId);
+                                                    onDisputeChange(newActive, newAmounts);
+                                                  }}
+                                                >
+                                                  <XIcon className="h-3 w-3" />
+                                                </Button>
+                                              </div>
+                                            ) : (
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-7 text-[10px] px-1 text-amber-700 hover:bg-amber-50 dark:text-amber-400"
+                                                onClick={() => {
+                                                  const newActive = new Set(activeDisputes);
+                                                  newActive.add(booking.bookingId);
+                                                  const newAmounts = new Map(disputeAmounts);
+                                                  newAmounts.set(booking.bookingId, Math.abs(booking.spNet - booking.hoNet));
+                                                  onDisputeChange(newActive, newAmounts);
+                                                }}
+                                                data-testid={`ar-ws-dispute-btn-${booking.bookingId}`}
+                                              >
+                                                <Gavel className="h-3 w-3" /> Dispute
+                                              </Button>
+                                            )}
+                                          </div>
+                                          {/* Balance Amt Payable */}
+                                          <div className={`text-center font-mono font-semibold ${balanceAmountPayable > 0 ? "text-green-600" : balanceAmountPayable < 0 ? "text-red-600" : "text-muted-foreground"}`} data-testid={`ar-ws-balance-${booking.bookingId}`}>
+                                            {fmt(balanceAmountPayable)}
+                                          </div>
+                                          {/* Save */}
+                                          <div className="text-center">
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              className="h-6 w-6 text-green-600 hover:text-green-800 hover:bg-green-50"
+                                              onClick={() => setFeedback(`Saved booking ${booking.bookingId}`)}
+                                              data-testid={`ar-ws-save-${booking.bookingId}`}
+                                            >
+                                              <CheckCircle2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
                                   </div>
 
                                   {/* Vendor ID mismatch row */}
@@ -647,36 +709,44 @@ export function AlreadyReconciledWorkspace({
       </div>
 
       {/* Summary bar */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-t bg-muted/20 text-xs shrink-0">
-        <span className="text-muted-foreground">Summary:</span>
-        <span>
-          <span className="font-semibold text-green-600 dark:text-green-400">{totalZeroed}</span>{" "}
-          zeroed out
-        </span>
-        <span>
-          <span className="font-semibold text-amber-600 dark:text-amber-400">{totalKept}</span>{" "}
-          kept payable
-        </span>
-        {feedback && (
-          <span className="text-blue-600 dark:text-blue-400 truncate">{feedback}</span>
-        )}
-        <span className="ml-auto shrink-0">
-          Net TAP:{" "}
-          <span className="font-mono font-semibold">
-            {fmt(totalTap)} {currency}
-          </span>
-        </span>
-        {showApplyConfirm && onClose && (
-          <Button
-            size="sm"
-            className="h-7 text-xs px-3 shrink-0"
-            onClick={onClose}
-            data-testid="ar-ws-apply-confirm"
-          >
-            Apply &amp; Confirm
-          </Button>
-        )}
-      </div>
+      {(() => {
+        const totalAmtPaid = bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
+        const totalDisputeAmt = bookings.reduce((s, b) => {
+          if (activeDisputes.has(b.bookingId)) return s + (disputeAmounts.get(b.bookingId) || 0);
+          return s;
+        }, 0);
+        const totalBalance = totalTap - totalAmtPaid;
+        return (
+          <div className="flex items-center gap-4 px-4 py-2.5 border-t bg-muted/20 text-xs shrink-0 flex-wrap">
+            <span className="text-muted-foreground">Summary:</span>
+            <span>
+              <span className="font-semibold text-green-600 dark:text-green-400">{totalZeroed}</span>{" "}zeroed out
+            </span>
+            <span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">{totalKept}</span>{" "}kept payable
+            </span>
+            {feedback && (
+              <span className="text-blue-600 dark:text-blue-400 truncate">{feedback}</span>
+            )}
+            <div className="ml-auto flex items-center gap-4 shrink-0">
+              <span>TAP: <span className="font-mono font-semibold text-violet-600">{fmt(totalTap)}</span></span>
+              <span>Paid: <span className="font-mono font-semibold">{fmt(totalAmtPaid)}</span></span>
+              <span>Dispute: <span className="font-mono font-semibold text-amber-600">{fmt(totalDisputeAmt)}</span></span>
+              <span>Balance: <span className={`font-mono font-semibold ${totalBalance > 0 ? "text-green-600" : totalBalance < 0 ? "text-red-600" : ""}`}>{fmt(totalBalance)} {currency}</span></span>
+            </div>
+            {showApplyConfirm && onClose && (
+              <Button
+                size="sm"
+                className="h-7 text-xs px-3 shrink-0"
+                onClick={onClose}
+                data-testid="ar-ws-apply-confirm"
+              >
+                Apply &amp; Confirm
+              </Button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

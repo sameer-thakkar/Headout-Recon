@@ -3190,6 +3190,7 @@ export function AmountPayablePanel({
               reason: b.reason,
               hoNet: b.hoNet,
               spNet: b.spNet,
+              amountPaid: b.amountPaid || 0,
               paymentMethod: b.paymentMethod,
               spPaymentMethod: b.spPaymentMethod,
               hoBeId: b.hoBeId,
