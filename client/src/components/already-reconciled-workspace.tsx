@@ -93,7 +93,7 @@ function buildTidGroups(bks: ArWorkspaceBooking[]): ArTidGroup[] {
     bookings: tBks,
     spNet: tBks.reduce((s, b) => s + b.spNet, 0),
     hoNet: tBks.reduce((s, b) => s + b.hoNet, 0),
-    discLc: tBks.reduce((s, b) => s + (b.spNet - b.hoNet), 0),
+    discLc: tBks.reduce((s, b) => s + (b.hoNet - b.spNet), 0),
   }));
 }
 
@@ -504,7 +504,7 @@ export function AlreadyReconciledWorkspace({
                                     <div className="text-center font-mono text-green-600" data-testid={`booking-ho-${booking.bookingId}`}>{fmt(booking.hoNet)}</div>
                                     {/* Diff LC */}
                                     <div className="text-center font-mono text-red-600 dark:text-red-400" data-testid={`booking-diff-${booking.bookingId}`}>
-                                      {fmt(Math.round((booking.spNet - booking.hoNet) * 100) / 100)}
+                                      {fmt(Math.round((booking.hoNet - booking.spNet) * 100) / 100)}
                                     </div>
                                     {/* Decision */}
                                     <div className="text-center">
