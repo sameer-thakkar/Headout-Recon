@@ -349,8 +349,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     };
     if (alreadyReconciledData.sameBE.count > 0) {
       const bks = alreadyReconciledData.sameBE.bookings;
-      const discLc = bks.reduce((s, b) => s + (b.spNetInHo - b.hoNet), 0);
-      const discUsd = bks.reduce((s, b) => s + toUsd(b.spNetInHo - b.hoNet, b.hoCurrency || "USD"), 0);
+      const discLc = bks.reduce((s, b) => s + (b.hoNet - b.spNetInHo), 0);
+      const discUsd = bks.reduce((s, b) => s + toUsd(b.hoNet - b.spNetInHo, b.hoCurrency || "USD"), 0);
       rows.push({
         type: "same_be",
         discrepancyLc: discLc,
@@ -369,8 +369,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         byPrevBe.get(key)!.push(b);
       }
       for (const [prevBe, bks] of byPrevBe) {
-        const discLc = bks.reduce((s, b) => s + (b.spNetInHo - b.hoNet), 0);
-        const discUsd = bks.reduce((s, b) => s + toUsd(b.spNetInHo - b.hoNet, b.hoCurrency || "USD"), 0);
+        const discLc = bks.reduce((s, b) => s + (b.hoNet - b.spNetInHo), 0);
+        const discUsd = bks.reduce((s, b) => s + toUsd(b.hoNet - b.spNetInHo, b.hoCurrency || "USD"), 0);
         rows.push({
           type: "different_be",
           discrepancyLc: discLc,
