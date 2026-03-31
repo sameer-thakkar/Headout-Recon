@@ -239,6 +239,7 @@ interface DiscrepancySummaryWorkspaceProps {
   billingEntityId?: string;
   billingEntityName?: string;
   currency?: string;
+  isPortalDeposit?: boolean;
 }
 
 function analyzeTakeRateInsight(bookings: PrimaryRow[]): string | null {
@@ -277,6 +278,7 @@ export function DiscrepancySummaryWorkspace({
   billingEntityId,
   billingEntityName,
   currency,
+  isPortalDeposit = false,
 }: DiscrepancySummaryWorkspaceProps) {
   const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
   const BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
@@ -1212,7 +1214,7 @@ export function DiscrepancySummaryWorkspace({
                       <div className="rounded border p-2 bg-muted/30"><span className="text-muted-foreground">Difference</span><div className="font-mono font-semibold text-amber-600">{fmt(totalDiff)}</div></div>
                       <div className={`rounded border-2 p-2 ${isSp ? "border-blue-300 bg-blue-50/50" : "border-green-300 bg-green-50/50"}`}><span className="text-muted-foreground">Payable</span><div className={`font-mono font-bold ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(totalPayable)}</div></div>
                     </div>
-                    {!isSp && (
+                    {!isSp && isPortalDeposit && (
                       <div className="flex items-start gap-2.5 rounded-md border-2 border-amber-400 bg-amber-50/60 px-3 py-2.5">
                         <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
                         <p className="text-xs text-amber-800 leading-relaxed">

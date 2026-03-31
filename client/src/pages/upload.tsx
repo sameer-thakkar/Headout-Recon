@@ -1223,6 +1223,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         billingEntityId={spDetails?.beId || ""}
         billingEntityName={spDetails?.billingEntityName || ""}
         currency={spDetails?.currency || "USD"}
+        isPortalDeposit={spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT"}
       />
 
       {/* Already Reconciled — Analysis Workspace (single dialog, analysis-first) */}
