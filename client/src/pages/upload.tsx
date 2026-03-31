@@ -1193,6 +1193,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       onCurrencyChange={setSelectedPayableCurrency}
                       availableCurrencies={actualCurrencies}
                       dominantPaymentMethod={spDetails?.paymentMethod || ""}
+                      arDecisions={arDecisions}
+                      onArDecisionChange={setArDecisions}
                     />
                   )}
                 </Suspense>

@@ -115,6 +115,13 @@ interface CancellationSummaryRow {
   bookings: BookingForPayable[];
 }
 
+type ARDecision = {
+  decision: "pay" | "dont_pay";
+  reason: string;
+  customReason: string;
+  finalAmount: number;
+};
+
 interface AmountPayablePanelProps {
   bookings: BookingForPayable[];
   currency: string;
@@ -127,6 +134,8 @@ interface AmountPayablePanelProps {
   onCurrencyChange?: (currency: string) => void;
   availableCurrencies?: string[];
   dominantPaymentMethod?: string;
+  arDecisions?: Map<string, ARDecision>;
+  onArDecisionChange?: (decisions: Map<string, ARDecision>) => void;
 }
 
 export function AmountPayablePanel({
@@ -141,6 +150,8 @@ export function AmountPayablePanel({
   onCurrencyChange,
   availableCurrencies = [],
   dominantPaymentMethod = "",
+  arDecisions: externalArDecisions,
+  onArDecisionChange: externalOnArDecisionChange,
 }: AmountPayablePanelProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
@@ -412,13 +423,9 @@ export function AmountPayablePanel({
     [bookings]
   );
 
-  // Already Reconciled decision state: { bookingId: { decision, reason, customReason, finalAmount, dispute } }
-  const [alreadyReconciledDecisions, setAlreadyReconciledDecisions] = useState<Map<string, {
-    decision: "pay" | "dont_pay";
-    reason: string; // "Cancellations" | "Multiple tickets booked" | "Manual Error" | "Partial Fulfillment" | ""
-    customReason: string; // Free text for "other" reasons
-    finalAmount: number; // Editable, defaults to SP Net
-  }>>(new Map());
+  const [internalArDecisions, setInternalArDecisions] = useState<Map<string, ARDecision>>(new Map());
+  const alreadyReconciledDecisions = externalArDecisions ?? internalArDecisions;
+  const setAlreadyReconciledDecisions = externalOnArDecisionChange ?? setInternalArDecisions;
 
   const reconciledTotal = useMemo(() => 
     reconciledBookings.reduce((sum, b) => sum + b.spNet, 0), 
