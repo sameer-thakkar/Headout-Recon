@@ -1356,17 +1356,15 @@ export function AmountPayablePanel({
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-3">
           <div className="border rounded-lg overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 items-center">
-              <div className="col-span-6 flex items-center gap-2">
+            <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+              <div className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
                 <span className="text-sm font-medium">Reconciled</span>
                 <Badge variant="secondary" className="text-xs">{reconciledBookings.length}</Badge>
               </div>
-              <div className="col-span-6 text-right">
-                <span className="text-sm font-mono font-semibold" data-testid="text-reconciled-total">
-                  {formatCurrency(reconciledTotal)} {currency}
-                </span>
-              </div>
+              <span className="text-sm font-mono font-semibold" data-testid="text-reconciled-total">
+                {formatCurrency(reconciledTotal)} {currency}
+              </span>
             </div>
           </div>
 
@@ -1378,8 +1376,8 @@ export function AmountPayablePanel({
             >
               <div className="border rounded-lg overflow-hidden">
                 <CollapsibleTrigger asChild>
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center cursor-pointer hover-elevate">
-                    <div className="col-span-6 flex items-center gap-2">
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/30 cursor-pointer hover-elevate">
+                    <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon" className="h-6 w-6" tabIndex={-1}>
                         {isAlreadyReconciledExpanded ? (
                           <ChevronDown className="h-4 w-4" />
@@ -1403,10 +1401,9 @@ export function AmountPayablePanel({
                         );
                       })()}
                     </div>
-                    <div className="col-span-3 text-right font-mono text-sm">
+                    <span className="font-mono text-sm">
                       {formatCurrency(alreadyReconciledTotal)} {currency}
-                    </div>
-                    <div className="col-span-3" />
+                    </span>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1451,8 +1448,8 @@ export function AmountPayablePanel({
             >
               <div className="border rounded-lg overflow-hidden">
                 <CollapsibleTrigger asChild>
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center cursor-pointer hover-elevate">
-                    <div className="col-span-6 flex items-center gap-2">
+                  <div className="flex items-center justify-between px-3 py-2 bg-muted/30 cursor-pointer hover-elevate">
+                    <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon" className="h-6 w-6">
                         {isCancellationsExpanded ? (
                           <ChevronDown className="h-4 w-4" />
@@ -1466,9 +1463,9 @@ export function AmountPayablePanel({
                         {cancellationBookings.length}
                       </Badge>
                     </div>
-                    <div className="col-span-6 text-right font-mono text-sm">
+                    <span className="font-mono text-sm">
                       {formatCurrency(Math.abs(cancellationsTotal))} {currency}
-                    </div>
+                    </span>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1631,8 +1628,8 @@ export function AmountPayablePanel({
                       onOpenChange={() => toggleReason(reason)}
                     >
                       <div className="border rounded-lg overflow-hidden">
-                        <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/50 items-center">
-                          <div className="col-span-4 flex items-center gap-2">
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
+                          <div className="flex items-center gap-2">
                             <CollapsibleTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-6 w-6">
                                 {expandedReasons.has(reason) ? (
@@ -1658,9 +1655,9 @@ export function AmountPayablePanel({
                               {reasonBookings.length}
                             </Badge>
                           </div>
-                          <div className="col-span-8 text-right font-mono text-sm font-semibold">
+                          <span className="font-mono text-sm font-semibold">
                             {formatCurrency(reasonTotal)} {currency}
-                          </div>
+                          </span>
                         </div>
 
                         <CollapsibleContent>
@@ -1914,8 +1911,8 @@ export function AmountPayablePanel({
                     onOpenChange={() => toggleReason(`sv-${reason}`)}
                   >
                     <div className="border rounded-lg overflow-hidden">
-                      <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-muted/30 items-center">
-                        <div className="col-span-4 flex items-center gap-2">
+                      <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
+                        <div className="flex items-center gap-2">
                           <CollapsibleTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-6 w-6">
                               {expandedReasons.has(`sv-${reason}`) ? (
@@ -1930,9 +1927,9 @@ export function AmountPayablePanel({
                             {reasonBookings.length}
                           </Badge>
                         </div>
-                        <div className="col-span-8 text-right font-mono text-sm font-semibold">
+                        <span className="font-mono text-sm font-semibold">
                           {formatCurrency(reasonTotal)} {currency}
-                        </div>
+                        </span>
                       </div>
 
                       <CollapsibleContent>
@@ -2082,8 +2079,8 @@ export function AmountPayablePanel({
               >
                 <div className="border rounded-lg">
                   <CollapsibleTrigger asChild>
-                    <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 rounded-t-lg items-center cursor-pointer hover-elevate" data-testid="trigger-amount-paid-section">
-                      <div className="col-span-6 flex items-center gap-2">
+                    <div className="flex items-center justify-between px-3 py-2 bg-blue-50 dark:bg-blue-950/30 rounded-t-lg cursor-pointer hover-elevate" data-testid="trigger-amount-paid-section">
+                      <div className="flex items-center gap-2">
                         <Button variant="ghost" size="icon" className="h-6 w-6">
                           {isAmountPaidExpanded ? (
                             <ChevronDown className="h-4 w-4" />
@@ -2097,11 +2094,13 @@ export function AmountPayablePanel({
                           {amountPaidBookings.length}
                         </Badge>
                       </div>
-                      <div className="col-span-3 text-right font-mono text-xs text-muted-foreground">
-                        Paid: {formatCurrency(amountPaidBookings.reduce((s, b) => s + (b.amountPaid || 0), 0))} {currency}
-                      </div>
-                      <div className="col-span-3 text-right font-mono text-xs text-muted-foreground">
-                        Settled: {formatCurrency(amountPaidBookings.reduce((s, b) => s + (b.disputeSettled || 0), 0))} {currency}
+                      <div className="flex items-center gap-4">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          Paid: {formatCurrency(amountPaidBookings.reduce((s, b) => s + (b.amountPaid || 0), 0))} {currency}
+                        </span>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          Settled: {formatCurrency(amountPaidBookings.reduce((s, b) => s + (b.disputeSettled || 0), 0))} {currency}
+                        </span>
                       </div>
                     </div>
                   </CollapsibleTrigger>

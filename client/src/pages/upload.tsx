@@ -815,7 +815,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         <div className="p-4 space-y-4">
 
           {spDetails && hasResults && (
-            <div className="grid grid-cols-8 gap-4 text-sm border-b pb-4" data-testid="sp-details-section">
+            <div className="grid grid-cols-6 gap-4 text-sm border-b pb-4" data-testid="sp-details-section">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Billing Entity ID</p>
                 <p className="font-mono font-medium" data-testid="text-sp-be-id">{spDetails.beId || "—"}</p>
@@ -930,7 +930,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 <CardContent className="pt-0">
                   {hasResults ? (
                     <>
-                    <Table className="text-sm">
+                    <Table className="text-sm table-fixed">
+                      <colgroup>
+                        <col className="w-[40%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[15%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[12%]" />
+                      </colgroup>
                       <TableHeader>
                         <TableRow className="h-8">
                           <TableHead className="py-1.5 text-xs pl-4">Reason</TableHead>
@@ -938,7 +946,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                           <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Count</TableHead>
-                          <TableHead className="py-1.5 text-xs text-right pr-4 w-24">Action</TableHead>
+                          <TableHead className="py-1.5 text-xs text-right pr-4">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1059,17 +1067,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                             {secondaryVendorSummary.reduce((sum, r) => sum + r.countBid, 0)} bookings
                           </Badge>
                         </div>
-                        <Table className="text-sm">
-                          <TableHeader>
-                            <TableRow className="h-8">
-                              <TableHead className="py-1.5 text-xs pl-4">Reason</TableHead>
-                              <TableHead className="py-1.5 text-xs">Currency</TableHead>
-                              <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
-                              <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
-                              <TableHead className="py-1.5 text-xs text-right">Count</TableHead>
-                              <TableHead className="py-1.5 text-xs text-right pr-4 w-24">Action</TableHead>
-                            </TableRow>
-                          </TableHeader>
+                        <Table className="text-sm table-fixed">
+                          <colgroup>
+                            <col className="w-[40%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[12%]" />
+                          </colgroup>
                           <TableBody>
                             {secondaryVendorSummary.map((row, index) => {
                               const isClickable = row.reason !== "Reconciled";
