@@ -314,7 +314,7 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
         return Number(rawVal) || undefined;
       })(),
       disputeSettled: Number(getRowValue(row, "disputeSettled", "Dispute Settled", "dispute_settled", "DisputeSettled", "Dispute Amount Settled", "dispute_amount_settled")) || undefined,
-      disputedAmount: Number(getRowValue(row, "disputedAmount", "Disputed amount", "Disputed Amount", "disputed_amount", "DisputedAmount", "Dispute Amount", "Dispute amount", "dispute_amount", "DisputeAmount")) || undefined,
+      disputedAmount: Number(getRowValue(row, "disputedAmount", "Disputed amount", "Disputed Amount", "disputed_amount", "DisputedAmount", "Dispute Amount", "Dispute amount", "dispute_amount", "DisputeAmount", "Total Dispute Amount", "total_dispute_amount", "TotalDisputeAmount", "totalDisputeAmount")) || undefined,
       disputeAdjustedTotal: Number(getRowValue(row, "disputeAdjustedTotal", "Dispute adjusted total", "Dispute Adjusted Total", "dispute_adjusted_total", "DisputeAdjustedTotal")) || undefined,
       discrepancyAmount: Number(getRowValue(row, "discrepancyAmount", "Discrepancy amount", "Discrepancy Amount", "discrepancy_amount", "DiscrepancyAmount")) || undefined,
       disputeAdjustment: Number(getRowValue(row, "disputeAdjustment", "Dispute adjustment", "Dispute Adjustment", "dispute_adjustment", "DisputeAdjustment")) || undefined,
