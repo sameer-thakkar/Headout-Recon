@@ -1848,9 +1848,8 @@ export function AmountPayablePanel({
                   );
                 })}
 
-              {(selectedIssues.size > 0 || activeDisputes.size > 0) && (
+              {selectedIssues.size > 0 && (
                 <div className="flex justify-end items-center pt-3 mt-3 border-t gap-2">
-                  {selectedIssues.size > 0 && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1862,19 +1861,6 @@ export function AmountPayablePanel({
                       <FileWarning className="h-3 w-3 mr-1" />
                       {isLoggingIssues ? "Logging..." : `Log Issues (${selectedIssues.size})`}
                     </Button>
-                  )}
-                  {activeDisputes.size > 0 && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleLogDisputes}
-                      disabled={isLoggingDisputes}
-                      className="h-7 text-xs"
-                      data-testid="button-log-disputes"
-                    >
-                      {isLoggingDisputes ? "Logging..." : `Log Disputes (${activeDisputes.size})`}
-                    </Button>
-                  )}
                 </div>
               )}
             </div>
