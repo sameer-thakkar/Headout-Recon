@@ -136,6 +136,9 @@ interface AmountPayablePanelProps {
   dominantPaymentMethod?: string;
   arDecisions?: Map<string, ARDecision>;
   onArDecisionChange?: (decisions: Map<string, ARDecision>) => void;
+  arActiveDisputes?: Set<string>;
+  arDisputeAmounts?: Map<string, number>;
+  onArDisputeChange?: (newActive: Set<string>, newAmounts: Map<string, number>) => void;
 }
 
 export function AmountPayablePanel({
@@ -152,6 +155,9 @@ export function AmountPayablePanel({
   dominantPaymentMethod = "",
   arDecisions: externalArDecisions,
   onArDecisionChange: externalOnArDecisionChange,
+  arActiveDisputes: externalArActiveDisputes,
+  arDisputeAmounts: externalArDisputeAmounts,
+  onArDisputeChange: externalOnArDisputeChange,
 }: AmountPayablePanelProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
@@ -180,8 +186,12 @@ export function AmountPayablePanel({
   const [secondaryVendorFinalId, setSecondaryVendorFinalId] = useState<string>("");
   const [vendorCorrectionsLoaded, setVendorCorrectionsLoaded] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
-  const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(new Map());
-  const [activeDisputes, setActiveDisputes] = useState<Set<string>>(new Set());
+  const [disputeAmounts, setDisputeAmounts] = useState<Map<string, number>>(() => {
+    return externalArDisputeAmounts ? new Map(externalArDisputeAmounts) : new Map();
+  });
+  const [activeDisputes, setActiveDisputes] = useState<Set<string>>(() => {
+    return externalArActiveDisputes ? new Set(externalArActiveDisputes) : new Set();
+  });
   const [originalDisputes, setOriginalDisputes] = useState<Map<string, number>>(new Map());
   const [disputesLoaded, setDisputesLoaded] = useState(false);
   const [validationError, setValidationError] = useState<string>("");
@@ -3188,6 +3198,9 @@ export function AmountPayablePanel({
             onDisputeChange={(newActive, newAmounts) => {
               setActiveDisputes(newActive);
               setDisputeAmounts(newAmounts);
+              if (externalOnArDisputeChange) {
+                externalOnArDisputeChange(newActive, newAmounts);
+              }
             }}
             billingEntityId={alreadyReconciledBookings[0]?.beId || ""}
             billingEntityName={alreadyReconciledBookings[0]?.billingEntityName || ""}

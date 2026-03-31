@@ -1195,6 +1195,12 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       dominantPaymentMethod={spDetails?.paymentMethod || ""}
                       arDecisions={arDecisions}
                       onArDecisionChange={setArDecisions}
+                      arActiveDisputes={arActiveDisputes}
+                      arDisputeAmounts={arDisputeAmounts}
+                      onArDisputeChange={(newActive, newAmounts) => {
+                        setArActiveDisputes(newActive);
+                        setArDisputeAmounts(newAmounts);
+                      }}
                     />
                   )}
                 </Suspense>
