@@ -1612,7 +1612,7 @@ export function DiscrepancySummaryWorkspace({
                         </div>
                         <div className={`text-right w-24 px-2 font-mono ${isSp ? "font-semibold text-blue-700 dark:text-blue-400" : "text-muted-foreground"}`}>{fmt(t.spNet)}</div>
                         <div className={`text-right w-24 px-2 font-mono ${!isSp ? "font-semibold text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>{fmt(t.hoNet)}</div>
-                        <div className="text-right w-24 px-2 font-mono text-red-500">{fmt(Math.abs(t.discLc))}</div>
+                        <div className="text-right w-24 px-2 font-mono text-red-500">{fmt(t.discLc)}</div>
                         <div className={`text-right w-28 px-2 font-mono font-semibold ${isSp ? "text-blue-700 dark:text-blue-400" : "text-green-700 dark:text-green-400"}`}>{fmt(isSp ? t.spNet : t.hoNet)}</div>
                       </div>
                     ))}
@@ -1620,7 +1620,7 @@ export function DiscrepancySummaryWorkspace({
                       <div className="text-muted-foreground">Total ({selData.length} TIDs)</div>
                       <div className="text-right w-24 px-2 font-mono text-blue-600">{fmt(totalSp)}</div>
                       <div className="text-right w-24 px-2 font-mono text-green-600">{fmt(totalHo)}</div>
-                      <div className="text-right w-24 px-2 font-mono text-red-500">{fmt(selData.reduce((s, t) => s + Math.abs(t.discLc), 0))}</div>
+                      <div className="text-right w-24 px-2 font-mono text-red-500">{fmt(selData.reduce((s, t) => s + t.discLc, 0))}</div>
                       <div className={`text-right w-28 px-2 font-mono text-sm ${isSp ? "text-blue-700" : "text-green-700"}`}>{fmt(totalPayable)}</div>
                     </div>
                   </div>
@@ -1687,7 +1687,7 @@ export function DiscrepancySummaryWorkspace({
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{filteredTids.reduce((s, t) => s + t.bidCount, 0)} bookings</Badge>
                     </div>
                     <div />
-                    <div className="text-right font-mono text-muted-foreground text-xs">{fmt(filteredTids.reduce((s, t) => s + Math.abs(t.discLc), 0))}</div>
+                    <div className="text-right font-mono text-muted-foreground text-xs">{fmt(filteredTids.reduce((s, t) => s + t.discLc, 0))}</div>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1778,7 +1778,7 @@ export function DiscrepancySummaryWorkspace({
                             <div className="text-center font-mono text-sm">{fmt(tid.spNet)}</div>
                             <div className="text-center font-mono text-sm">{fmt(tid.hoNet)}</div>
                             <div className="text-center">
-                              <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(Math.abs(tid.discLc))}</span>
+                              <span className="font-mono text-sm text-red-600 dark:text-red-400 whitespace-nowrap">{fmt(tid.discLc)}</span>
                               <span className="text-[10px] text-muted-foreground ml-1">({pct}%)</span>
                             </div>
                             <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
@@ -2441,7 +2441,7 @@ export function DiscrepancySummaryWorkspace({
                 </DialogHeader>
                 {issueModalTid && (() => {
                   const t = issueModalTid;
-                  const discLc = Math.abs(t.discLc);
+                  const discLc = t.discLc;
                   const discUsdTotal = t.bookings.reduce((s, b) => s + Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)), 0);
                   const discPcts = t.bookings.map(b => {
                     const sp = Math.abs(b.spNetInHo || 0);
@@ -2544,7 +2544,7 @@ export function DiscrepancySummaryWorkspace({
             {!isUnmapped && (
               <>
                 <span><span className="text-muted-foreground mr-1">HO</span><span className="font-mono font-medium text-green-700 dark:text-green-400">{fmt(tidGroups.reduce((s, t) => s + t.hoNet, 0))}</span></span>
-                <span><span className="text-muted-foreground mr-1">Disc.</span><span className="font-mono font-semibold text-red-600 dark:text-red-400">{fmt(tidGroups.reduce((s, t) => s + Math.abs(t.discLc), 0))}</span></span>
+                <span><span className="text-muted-foreground mr-1">Disc.</span><span className="font-mono font-semibold text-red-600 dark:text-red-400">{fmt(tidGroups.reduce((s, t) => s + t.discLc, 0))}</span></span>
               </>
             )}
           </div>

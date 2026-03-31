@@ -752,11 +752,9 @@ export function AmountPayablePanel({
       }
     }, baseAmount);
     
-    // Apply Already Reconciled adjustments (dispute amounts are informational only, not deducted)
-    // Add net payable from Amount Paid & Dispute Settled section
-    const result = adjustmentsResult + alreadyReconciledAdjustment + amountPaidNetPayableTotal;
+    const result = adjustmentsResult + amountPaidNetPayableTotal;
     return Math.round(result * 100) / 100;
-  }, [baseAmount, localAdjustments, alreadyReconciledAdjustment, amountPaidNetPayableTotal]);
+  }, [baseAmount, localAdjustments, amountPaidNetPayableTotal]);
 
   const updateSelection = useCallback((bookingId: string, value: "ho" | "sp", booking?: BookingForPayable) => {
     setLocalSelections(prev => ({ ...prev, [bookingId]: value }));
@@ -1408,17 +1406,7 @@ export function AmountPayablePanel({
                     <div className="col-span-3 text-right font-mono text-sm">
                       {formatCurrency(alreadyReconciledTotal)} {currency}
                     </div>
-                    <div className="col-span-3 flex justify-end" onClick={e => e.stopPropagation()}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs px-3 gap-1"
-                        onClick={() => setIsArWorkspaceOpen(true)}
-                        data-testid="button-ar-take-action"
-                      >
-                        Take Action
-                      </Button>
-                    </div>
+                    <div className="col-span-3" />
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -2270,11 +2258,6 @@ export function AmountPayablePanel({
                 <p className="text-lg font-bold font-mono" data-testid="text-already-reconciled-total">
                   {formatCurrency(alreadyReconciledTotal)} {currency}
                 </p>
-                {alreadyReconciledAdjustment !== 0 && (
-                  <span className="text-sm font-mono text-muted-foreground">
-                    ({alreadyReconciledAdjustment > 0 ? "+" : ""}{formatCurrency(alreadyReconciledAdjustment)})
-                  </span>
-                )}
               </div>
             </div>
           )}
@@ -2524,11 +2507,6 @@ export function AmountPayablePanel({
                   {formatCurrency(adj.amount)}
                 </span>
               ))}
-              {alreadyReconciledAdjustment !== 0 && (
-                <span className="text-muted-foreground">
-                  {alreadyReconciledAdjustment > 0 ? " + " : " - "}Already Reconciled Adj ({formatCurrency(Math.abs(alreadyReconciledAdjustment))})
-                </span>
-              )}
               {amountPaidNetPayableTotal !== 0 && (
                 <span className="text-muted-foreground">
                   {amountPaidNetPayableTotal > 0 ? " + " : " - "}Amt Paid Net Payable ({formatCurrency(Math.abs(amountPaidNetPayableTotal))})
