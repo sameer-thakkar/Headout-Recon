@@ -1216,7 +1216,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         setIsAlreadyReconciledDetailModalOpen(open);
         if (!open) setSelectedArAnalysisRow(null);
       }}>
-        <DialogContent className="max-w-[95vw] max-h-[90vh] flex flex-col gap-0 p-0">
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col gap-0 p-0 overflow-hidden [&>button.absolute]:hidden">
           <DialogHeader className="px-6 pt-5 pb-3 border-b">
             <DialogTitle className="flex items-center gap-2 text-base">
               <AlertTriangle className="h-4 w-4 text-amber-500" />

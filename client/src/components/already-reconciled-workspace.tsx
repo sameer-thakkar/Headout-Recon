@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Info, ChevronRight, ChevronDown, CheckCircle2, Gavel,
   X as XIcon, FileWarning, TrendingUp, TrendingDown,
@@ -298,7 +297,7 @@ export function AlreadyReconciledWorkspace({
   [bookings, decisions]);
 
   const BID_GRID = "2fr minmax(5rem,0.8fr) minmax(5.5rem,0.9fr) minmax(5.5rem,0.9fr) minmax(5rem,0.7fr) minmax(9rem,1.4fr) minmax(7.5rem,1.2fr) minmax(6.5rem,1fr)";
-  const TID_GRID = "1.5rem 1fr minmax(3.5rem,0.5fr) minmax(5.5rem,0.9fr) minmax(5.5rem,0.9fr) minmax(5.5rem,0.9fr) minmax(8rem,auto)";
+  const TID_GRID = "1.5rem 2fr minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(3.5rem,0.5fr)";
 
   if (bookings.length === 0) {
     return (
@@ -358,16 +357,15 @@ export function AlreadyReconciledWorkspace({
 
                   {/* TID column headers */}
                   <div
-                    className="grid gap-2 px-3 py-1.5 bg-muted/30 border-t text-[10px] font-medium text-muted-foreground"
+                    className="grid gap-x-4 px-3 py-1.5 bg-muted/30 border-t text-[10px] font-medium text-muted-foreground"
                     style={{ gridTemplateColumns: TID_GRID }}
                   >
                     <div />
                     <div>TID</div>
-                    <div className="text-right">BIDs</div>
-                    <div className="text-right">SP Net</div>
-                    <div className="text-right">HO Net</div>
-                    <div className="text-right">Disc LC</div>
-                    <div className="text-right">Actions</div>
+                    <div className="text-center">SP Net</div>
+                    <div className="text-center">HO Net</div>
+                    <div className="text-center">Disc LC</div>
+                    <div className="text-center">BIDs</div>
                   </div>
 
                   {/* TID rows */}
@@ -384,115 +382,62 @@ export function AlreadyReconciledWorkspace({
                       <div key={tidKey} className="border-t">
                         {/* TID header row */}
                         <div
-                          className="grid gap-2 px-3 py-1.5 items-center hover:bg-muted/20 cursor-pointer"
+                          className={`grid gap-x-4 px-3 min-h-[2.75rem] items-center cursor-pointer transition-colors hover:bg-muted/30 ${isTidExpanded ? "bg-muted/20" : ""}`}
                           style={{ gridTemplateColumns: TID_GRID }}
                           onClick={() => toggleTid(tidKey)}
                           data-testid={`ar-ws-tid-${tidKey}`}
                         >
-                          <Button variant="ghost" size="icon" className="h-5 w-5 p-0" tabIndex={-1}>
-                            {isTidExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                          </Button>
+                          <div className="flex items-center">
+                            {isTidExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                          </div>
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-mono text-xs font-medium truncate" title={tidGroup.tid}>{tidGroup.tid}</span>
+                            <span className="font-mono text-sm font-medium text-primary truncate" title={tidGroup.tid}>{tidGroup.tid}</span>
                             {allZeroed && <Badge className="text-[9px] bg-green-100 text-green-700 border-green-200 shrink-0 px-1 py-0">TAP=0</Badge>}
                             {allDontPay && <Badge variant="secondary" className="text-[9px] shrink-0 px-1 py-0">Don't Pay</Badge>}
                           </div>
-                          <div className="text-right text-xs font-mono">{tidGroup.bookings.length}</div>
-                          <div className="text-right text-xs font-mono">{fmt(tidGroup.spNet)}</div>
-                          <div className="text-right text-xs font-mono">{fmt(tidGroup.hoNet)}</div>
-                          <div className={`text-right text-xs font-mono ${tidGroup.discLc < 0 ? "text-red-600 dark:text-red-400" : tidGroup.discLc > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
+                          <div className="text-center text-sm font-mono">{fmt(tidGroup.spNet)}</div>
+                          <div className="text-center text-sm font-mono">{fmt(tidGroup.hoNet)}</div>
+                          <div className={`text-center text-sm font-mono ${tidGroup.discLc < 0 ? "text-red-600 dark:text-red-400" : tidGroup.discLc > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}>
                             {fmt(tidGroup.discLc)}
                           </div>
-                          {/* TID action strip (NPD-style) */}
-                          <div className="flex items-center gap-1 justify-end" onClick={e => e.stopPropagation()}>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px] gap-1"
-                                    onClick={() => setSpNetAllInTid(tidGroup)}
-                                    data-testid={`ar-ws-set-spnet-tid-${tidKey}`}
-                                  >
-                                    <TrendingUp className="h-3 w-3" />
-                                    Set SP Net
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>Set Final Amt to SP Net for all bookings in this TID</p></TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px] gap-1"
-                                    onClick={() => setHoNetAllInTid(tidGroup)}
-                                    data-testid={`ar-ws-set-honet-tid-${tidKey}`}
-                                  >
-                                    <TrendingDown className="h-3 w-3" />
-                                    Set HO Net
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>Set Final Amt to HO Net for all bookings in this TID</p></TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px] gap-1"
-                                    onClick={() => disputeAllInTid(tidGroup)}
-                                    data-testid={`ar-ws-dispute-tid-${tidKey}`}
-                                  >
-                                    <Gavel className="h-3 w-3" />
-                                    Dispute
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>Open dispute for all bookings in this TID</p></TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-[10px] gap-1"
-                                    disabled={issueMutation.isPending || !runId}
-                                    onClick={() => issueForTid(tidGroup, section.label)}
-                                    data-testid={`ar-ws-issue-tid-${tidKey}`}
-                                  >
-                                    <FileWarning className="h-3 w-3" />
-                                    Issue
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent><p>Log issue for this TID</p></TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
+                          <div className="text-center text-sm font-mono">{tidGroup.bookings.length}</div>
                         </div>
+
+                        {/* TID action strip (NPD-style) */}
+                        {isTidExpanded && (
+                          <div className="flex items-center gap-2 p-2 mx-3 mb-2 mt-1 rounded-md bg-primary/5 border border-primary/10 flex-wrap">
+                            <Button size="sm" className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setSpNetAllInTid(tidGroup)} data-testid={`ar-ws-set-spnet-tid-${tidKey}`}>
+                              <TrendingUp className="h-3.5 w-3.5" /> Set SP Net
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50" onClick={() => setHoNetAllInTid(tidGroup)} data-testid={`ar-ws-set-honet-tid-${tidKey}`}>
+                              <TrendingDown className="h-3.5 w-3.5" /> Set HO Net
+                            </Button>
+                            <div className="flex-1" />
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => disputeAllInTid(tidGroup)} data-testid={`ar-ws-dispute-tid-${tidKey}`}>
+                              <Gavel className="h-3.5 w-3.5" /> Dispute
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" disabled={issueMutation.isPending || !runId} onClick={() => issueForTid(tidGroup, section.label)} data-testid={`ar-ws-issue-tid-${tidKey}`}>
+                              <FileWarning className="h-3.5 w-3.5" /> Issue
+                            </Button>
+                          </div>
+                        )}
 
                         {/* BID detail rows */}
                         {isTidExpanded && (
                           <div className="border-t bg-muted/5">
                             {/* BID header */}
                             <div
-                              className="grid gap-2 pl-8 pr-3 py-1 bg-muted/20 text-[10px] font-medium text-muted-foreground"
+                              className="grid gap-x-4 pl-8 pr-3 py-1 bg-muted/20 text-[10px] font-medium text-muted-foreground"
                               style={{ gridTemplateColumns: BID_GRID }}
                             >
                               <div>Booking ID</div>
-                              <div>Ticket ID</div>
-                              <div className="text-right">SP Net</div>
-                              <div className="text-right">HO Net</div>
-                              <div>Decision</div>
-                              <div>Reason</div>
-                              <div>Dispute</div>
-                              <div className="text-right">Final Amt</div>
+                              <div className="text-center">Ticket ID</div>
+                              <div className="text-center text-blue-600">SP Net</div>
+                              <div className="text-center text-green-600">HO Net</div>
+                              <div className="text-center">Decision</div>
+                              <div className="text-center">Reason</div>
+                              <div className="text-center">Dispute</div>
+                              <div className="text-center">Final Amt</div>
                             </div>
 
                             {/* BID rows */}
@@ -508,22 +453,25 @@ export function AlreadyReconciledWorkspace({
                               return (
                                 <div key={booking.bookingId} className={isDontPay ? "opacity-50" : ""}>
                                   <div
-                                    className="grid gap-2 pl-8 pr-3 py-1 border-t items-center text-xs"
+                                    className={`grid gap-x-4 pl-8 pr-3 min-h-[2.25rem] border-t items-center text-xs ${isDisputeActive ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}`}
                                     style={{ gridTemplateColumns: BID_GRID }}
                                     data-testid={`ar-ws-bid-${booking.bookingId}`}
                                   >
                                     {/* Booking ID */}
-                                    <div className="font-mono text-[11px] truncate" title={booking.bookingId}>
-                                      {booking.bookingId}
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1">
+                                        <span className="font-mono text-primary font-medium truncate" title={booking.bookingId}>{booking.bookingId}</span>
+                                        {isDisputeActive && <Badge className="text-[9px] px-1 py-0 bg-amber-100 text-amber-700 border-amber-200">Disputed</Badge>}
+                                      </div>
                                     </div>
                                     {/* Ticket ID */}
-                                    <div className="font-mono text-[10px] text-muted-foreground truncate" title={booking.ticketId || ""}>
+                                    <div className="text-center font-mono text-muted-foreground truncate" title={booking.ticketId || ""}>
                                       {booking.ticketId || "—"}
                                     </div>
                                     {/* SP Net */}
-                                    <div className="text-right font-mono">{fmt(booking.spNet)}</div>
+                                    <div className="text-center font-mono text-blue-600">{fmt(booking.spNet)}</div>
                                     {/* HO Net */}
-                                    <div className="text-right font-mono">{fmt(booking.hoNet)}</div>
+                                    <div className="text-center font-mono text-green-600">{fmt(booking.hoNet)}</div>
                                     {/* Decision */}
                                     <div>
                                       <Select
