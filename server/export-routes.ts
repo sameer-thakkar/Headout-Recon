@@ -1037,7 +1037,7 @@ export function registerExportRoutes(app: Express) {
         const pm = (r.paymentMethod || "").trim().toLowerCase();
         return !!(pm && pm !== exportDominantPm);
       });
-      const exportUnresolved = exportNeedsVid.filter((r) => !vendorCorrectionsByBooking[r.bookingId || ""]);
+      const exportUnresolved = exportNeedsVid.filter((r) => !vendorCorrectionsByBooking.get(r.bookingId || ""));
       if (exportUnresolved.length > 0) {
         return res.status(400).json({ error: `${exportUnresolved.length} booking(s) missing Final Vendor ID. Please complete all vendor ID assignments before exporting.` });
       }
