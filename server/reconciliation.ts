@@ -308,13 +308,13 @@ function parseHOData(sheet: SheetData, paxTypeNames: string[] = []): HORow[] {
       experienceDate: convertedExpDate,
       paxBreakdown: detectedPaxColumns.length > 0 ? extractPaxBreakdown(row, detectedPaxColumns) : undefined,
       amountPaid: (() => {
-        const rawVal = getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid", "Amount Paid Till Date", "Amount paid till date", "amount_paid_till_date", "AmountPaidTillDate", "Amount paid tll date");
+        const rawVal = getRowValue(row, "amountPaid", "Amount Paid", "amount_paid", "AmountPaid", "Amt Paid", "amt_paid", "Amount Paid Till Date", "Amount paid till date", "amount_paid_till_date", "AmountPaidTillDate", "Amount paid tll date", "Total Amount Paid", "total_amount_paid", "TotalAmountPaid", "Total Amt Paid", "total_amt_paid");
         const bookingIdVal = getRowValue(row, "bookingId", "Booking ID", "booking_id", "BookingID", "bookingID", "booking id", "BID", "bid");
         if (rawVal) console.log(`[DEBUG] Booking ${bookingIdVal}: amountPaid raw="${rawVal}" parsed=${Number(rawVal)}`);
         return Number(rawVal) || undefined;
       })(),
       disputeSettled: Number(getRowValue(row, "disputeSettled", "Dispute Settled", "dispute_settled", "DisputeSettled", "Dispute Amount Settled", "dispute_amount_settled")) || undefined,
-      disputedAmount: Number(getRowValue(row, "disputedAmount", "Disputed amount", "Disputed Amount", "disputed_amount", "DisputedAmount")) || undefined,
+      disputedAmount: Number(getRowValue(row, "disputedAmount", "Disputed amount", "Disputed Amount", "disputed_amount", "DisputedAmount", "Dispute Amount", "Dispute amount", "dispute_amount", "DisputeAmount")) || undefined,
       disputeAdjustedTotal: Number(getRowValue(row, "disputeAdjustedTotal", "Dispute adjusted total", "Dispute Adjusted Total", "dispute_adjusted_total", "DisputeAdjustedTotal")) || undefined,
       discrepancyAmount: Number(getRowValue(row, "discrepancyAmount", "Discrepancy amount", "Discrepancy Amount", "discrepancy_amount", "DiscrepancyAmount")) || undefined,
       disputeAdjustment: Number(getRowValue(row, "disputeAdjustment", "Dispute adjustment", "Dispute Adjustment", "dispute_adjustment", "DisputeAdjustment")) || undefined,
