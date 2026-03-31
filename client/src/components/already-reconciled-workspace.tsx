@@ -530,38 +530,49 @@ export function AlreadyReconciledWorkspace({
                                     </div>
                                     {/* Reason */}
                                     <div>
-                                      <Select
-                                        value={isCustomReason ? "__other__" : (d.reason || "none")}
-                                        onValueChange={(v) => {
-                                          if (v === "none") {
-                                            setDecision(booking.bookingId, { reason: "", customReason: "" });
-                                          } else if (v === "__other__") {
-                                            setDecision(booking.bookingId, { reason: "", customReason: "__other__" });
-                                          } else {
-                                            setDecision(booking.bookingId, { reason: v, customReason: "" });
-                                          }
-                                        }}
-                                      >
-                                        <SelectTrigger className="h-7 text-[10px] px-1 w-full" data-testid={`ar-ws-reason-${booking.bookingId}`}>
-                                          <SelectValue placeholder="—" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="none">—</SelectItem>
-                                          {REASON_OPTIONS.map(o => (
-                                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                          ))}
-                                          <SelectItem value="__other__">Other…</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      {(isCustomReason || d.customReason === "__other__") && (
-                                        <Input
-                                          className="h-6 text-[10px] px-1 w-full mt-0.5"
-                                          placeholder="Specify..."
-                                          value={isCustomReason ? d.reason : ""}
-                                          onChange={e => setDecision(booking.bookingId, { reason: e.target.value, customReason: e.target.value })}
-                                          data-testid={`ar-ws-custom-reason-${booking.bookingId}`}
-                                          autoFocus={d.customReason === "__other__" && !d.reason}
-                                        />
+                                      {(isCustomReason || d.customReason === "__other__") ? (
+                                        <div className="flex items-center gap-0.5">
+                                          <Input
+                                            className="h-7 text-[10px] px-1 flex-1"
+                                            placeholder="Type reason..."
+                                            value={isCustomReason ? d.reason : ""}
+                                            onChange={e => setDecision(booking.bookingId, { reason: e.target.value, customReason: e.target.value })}
+                                            data-testid={`ar-ws-custom-reason-${booking.bookingId}`}
+                                            autoFocus={d.customReason === "__other__" && !d.reason}
+                                          />
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+                                            onClick={() => setDecision(booking.bookingId, { reason: "", customReason: "" })}
+                                          >
+                                            <XIcon className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <Select
+                                          value={d.reason || "none"}
+                                          onValueChange={(v) => {
+                                            if (v === "none") {
+                                              setDecision(booking.bookingId, { reason: "", customReason: "" });
+                                            } else if (v === "__other__") {
+                                              setDecision(booking.bookingId, { reason: "", customReason: "__other__" });
+                                            } else {
+                                              setDecision(booking.bookingId, { reason: v, customReason: "" });
+                                            }
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-7 text-[10px] px-1 w-full" data-testid={`ar-ws-reason-${booking.bookingId}`}>
+                                            <SelectValue placeholder="—" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="none">—</SelectItem>
+                                            {REASON_OPTIONS.map(o => (
+                                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                            ))}
+                                            <SelectItem value="__other__">Other…</SelectItem>
+                                          </SelectContent>
+                                        </Select>
                                       )}
                                     </div>
                                     {/* Total Amount Payable */}
