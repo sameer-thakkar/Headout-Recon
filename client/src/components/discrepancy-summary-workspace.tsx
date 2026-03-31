@@ -1783,7 +1783,11 @@ export function DiscrepancySummaryWorkspace({
                             </div>
                             <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0))}</div>
                             <div className="text-center font-mono text-sm">{fmt(tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0))}</div>
-                            <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt(takeActionDisputes.has(tid.tid) ? Math.abs(tid.spNet - tid.hoNet) : 0)}</div>
+                            <div className="text-center font-mono text-sm text-violet-600 font-medium">{fmt((() => {
+                              if (takeActionDisputes.has(tid.tid)) return Math.abs(tid.spNet - tid.hoNet);
+                              const bidSum = tid.bookings.reduce((s, b) => s + (bidDisputeActive.has(b.bookingId) ? (getBidDisputeAmount(b.bookingId) || getBidMaxDispute(b)) : 0), 0);
+                              return bidSum;
+                            })())}</div>
                             <div className="text-center font-mono text-sm text-green-600 font-medium">{fmt((() => {
                               const tidTap = tid.bookings.reduce((s, b) => s + getEffectiveTap(b), 0);
                               const tidAmtPaid = tid.bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
