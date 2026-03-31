@@ -229,8 +229,8 @@ export function AmountPayablePanel({
         .then(res => res.json())
         .then(data => {
           const disputes = data.disputes || [];
-          const newDisputeAmounts = new Map<string, number>();
-          const newActiveDisputes = new Set<string>();
+          const newDisputeAmounts = new Map<string, number>(externalArDisputeAmounts || []);
+          const newActiveDisputes = new Set<string>(externalArActiveDisputes || []);
           
           const openOnlyDisputes = disputes.filter((d: { closureStatus?: string }) => d.closureStatus === "open");
           for (const dispute of openOnlyDisputes) {
@@ -245,8 +245,10 @@ export function AmountPayablePanel({
         })
         .catch(err => {
           console.error("Failed to load existing disputes:", err);
-          setDisputeAmounts(new Map());
-          setActiveDisputes(new Set());
+          const fallbackAmounts = new Map<string, number>(externalArDisputeAmounts || []);
+          const fallbackActive = new Set<string>(externalArActiveDisputes || []);
+          setDisputeAmounts(fallbackAmounts);
+          setActiveDisputes(fallbackActive);
           setOriginalDisputes(new Map());
           setDisputesLoaded(true);
         });
