@@ -1767,7 +1767,27 @@ export function registerExportRoutes(app: Express) {
               }
             }
             if (col.includes("date")) {
-              hoReportSheet[cellRef].v = formatDateValue(hoReportSheet[cellRef].v);
+              const rawDate = hoReportSheet[cellRef].v;
+              if (rawDate !== null && rawDate !== undefined && rawDate !== "") {
+                const strVal = String(rawDate).trim();
+                const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (isoMatch) {
+                  hoReportSheet[cellRef].v = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]} 00.00.00`;
+                } else if (typeof rawDate === "number" || (!isNaN(Number(rawDate)) && strVal.match(/^[\d.]+$/))) {
+                  const numValue = Number(rawDate);
+                  if (numValue > 40000 && numValue < 60000) {
+                    const excelEpochMs = Date.UTC(1899, 11, 30);
+                    const msPerDay = 24 * 60 * 60 * 1000;
+                    const d = new Date(excelEpochMs + numValue * msPerDay);
+                    hoReportSheet[cellRef].v = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} 00.00.00`;
+                  }
+                } else {
+                  const dmyMatch = strVal.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                  if (dmyMatch) {
+                    hoReportSheet[cellRef].v = `${dmyMatch[3]}-${dmyMatch[2].padStart(2, "0")}-${dmyMatch[1].padStart(2, "0")} 00.00.00`;
+                  }
+                }
+              }
               hoReportSheet[cellRef].t = "s";
             }
           }
@@ -1782,7 +1802,8 @@ export function registerExportRoutes(app: Express) {
           return { wch: Math.min(Math.max(maxLen + 2, 10), 50) };
         });
         hoReportSheet["!cols"] = hoColWidths;
-              XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName("HO Report Updated", usedSheetNames));
+              const originalHoSheetName = upload?.hoData?.name || "RECONCILIATION_REPORT";
+              XLSX.utils.book_append_sheet(workbook, hoReportSheet, getUniqueSheetName(originalHoSheetName, usedSheetNames));
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
@@ -3187,7 +3208,19 @@ export function registerExportRoutes(app: Express) {
             return formatIndianNumber(value);
           }
           if (hLower.includes("date") && value) {
-            return formatDateValue(value as string | number);
+            const strV = String(value).trim();
+            const isoM = strV.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (isoM) return `${isoM[1]}-${isoM[2]}-${isoM[3]} 00.00.00`;
+            if (typeof value === "number" || (!isNaN(Number(value)) && strV.match(/^[\d.]+$/))) {
+              const nv = Number(value);
+              if (nv > 40000 && nv < 60000) {
+                const d = new Date(Date.UTC(1899, 11, 30) + nv * 86400000);
+                return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} 00.00.00`;
+              }
+            }
+            const dmyM = strV.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (dmyM) return `${dmyM[3]}-${dmyM[2].padStart(2, "0")}-${dmyM[1].padStart(2, "0")} 00.00.00`;
+            return value;
           }
           if (hLower === "difference %" || hLower === "charged loss" || hLower === "chargedloss" || hLower === "charged_loss") {
             return value != null ? String(value) : "";
@@ -3201,7 +3234,7 @@ export function registerExportRoutes(app: Express) {
       const sheetDefs: { properties: { title: string } }[] = [
         { properties: { title: "Payable Summary" } },
         { properties: { title: "SP_INVOICE_REPORT" } },
-        { properties: { title: "HO Report Updated" } },
+        { properties: { title: exportData.upload?.hoData?.name || "RECONCILIATION_REPORT" } },
       ];
 
       const spreadsheetTitle = `Reconciliation Report - ${new Date().toISOString().split("T")[0]}`;
@@ -3233,7 +3266,7 @@ export function registerExportRoutes(app: Express) {
       const batchData = [
         { range: "Payable Summary!A1", values: payableSummaryData },
         { range: "SP_INVOICE_REPORT!A1", values: spReportData },
-        { range: "HO Report Updated!A1", values: hoReportData },
+        { range: `'${exportData.upload?.hoData?.name || "RECONCILIATION_REPORT"}'!A1`, values: hoReportData },
       ];
 
       await sheets.spreadsheets.values.batchUpdate({
@@ -3314,8 +3347,8 @@ export function registerExportRoutes(app: Express) {
         addFinancialSheetFormatting(spSheetId, spReportData.length, spCols, spReportData[0]);
       }
 
-      // HO Report Updated
-      const hoSheetId = sheetIdMap.get("HO Report Updated");
+      const gsHoSheetName = exportData.upload?.hoData?.name || "RECONCILIATION_REPORT";
+      const hoSheetId = sheetIdMap.get(gsHoSheetName);
       if (hoSheetId !== undefined) {
         const hoCols = hoReportData.length > 0 && Array.isArray(hoReportData[0]) ? hoReportData[0].length : 11;
         addFinancialSheetFormatting(hoSheetId, hoReportData.length, hoCols, hoReportData[0]);
