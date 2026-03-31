@@ -1783,7 +1783,8 @@ export function registerExportRoutes(app: Express) {
                 }
               }
             }
-            if (col.includes("date")) {
+            const isDateCol = col.includes("date") || col.endsWith("_at") || col === "created at" || col === "updated at" || col === "createdat" || col === "updatedat";
+            if (isDateCol) {
               const rawDate = hoReportSheet[cellRef].v;
               if (rawDate !== null && rawDate !== undefined && rawDate !== "") {
                 let jsDate: Date | null = null;
@@ -3251,7 +3252,8 @@ export function registerExportRoutes(app: Express) {
             }
             return value;
           }
-          if (hLower.includes("date") && value) {
+          const isGsDateCol = hLower.includes("date") || hLower.endsWith("_at") || hLower === "created at" || hLower === "updated at" || hLower === "createdat" || hLower === "updatedat";
+          if (isGsDateCol && value) {
             const strV = String(value).trim();
             const isoM = strV.match(/^(\d{4})-(\d{2})-(\d{2})/);
             if (isoM) return `${isoM[1]}/${isoM[2]}/${isoM[3]}`;
