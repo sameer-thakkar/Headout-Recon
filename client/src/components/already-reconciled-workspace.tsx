@@ -473,12 +473,19 @@ export function AlreadyReconciledWorkspace({
                                     {/* HO Net */}
                                     <div className="text-center font-mono text-green-600">{fmt(booking.hoNet)}</div>
                                     {/* Decision */}
-                                    <div>
+                                    <div className="flex justify-center">
                                       <Select
                                         value={d.decision}
                                         onValueChange={(v: "pay" | "dont_pay") => setDecision(booking.bookingId, { decision: v })}
                                       >
-                                        <SelectTrigger className="h-6 text-[10px] px-1" data-testid={`ar-ws-decision-${booking.bookingId}`}>
+                                        <SelectTrigger
+                                          className={`h-7 text-[11px] px-2 w-full max-w-[7rem] font-medium ${
+                                            isDontPay
+                                              ? "border-red-200 bg-red-50/60 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+                                              : "border-green-200 bg-green-50/60 text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400"
+                                          }`}
+                                          data-testid={`ar-ws-decision-${booking.bookingId}`}
+                                        >
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -488,7 +495,7 @@ export function AlreadyReconciledWorkspace({
                                       </Select>
                                     </div>
                                     {/* Reason */}
-                                    <div className="flex gap-0.5">
+                                    <div className="flex gap-1 justify-center">
                                       <Select
                                         value={isCustomReason ? "__other__" : (d.reason || "none")}
                                         onValueChange={(v) => {
@@ -501,8 +508,8 @@ export function AlreadyReconciledWorkspace({
                                           }
                                         }}
                                       >
-                                        <SelectTrigger className="h-6 text-[10px] px-1 flex-1" data-testid={`ar-ws-reason-${booking.bookingId}`}>
-                                          <SelectValue placeholder="—" />
+                                        <SelectTrigger className="h-7 text-[11px] px-2 flex-1 border-violet-200 dark:border-violet-800" data-testid={`ar-ws-reason-${booking.bookingId}`}>
+                                          <SelectValue placeholder="Select reason..." />
                                         </SelectTrigger>
                                         <SelectContent>
                                           <SelectItem value="none">—</SelectItem>
@@ -514,8 +521,8 @@ export function AlreadyReconciledWorkspace({
                                       </Select>
                                       {(isCustomReason || d.customReason === "__other__") && (
                                         <Input
-                                          className="h-6 text-[10px] px-1 w-16"
-                                          placeholder="Other..."
+                                          className="h-7 text-[11px] px-2 w-20 border-violet-200 dark:border-violet-800"
+                                          placeholder="Specify..."
                                           value={isCustomReason ? d.reason : ""}
                                           onChange={e => setDecision(booking.bookingId, { reason: e.target.value, customReason: e.target.value })}
                                           data-testid={`ar-ws-custom-reason-${booking.bookingId}`}
@@ -524,13 +531,13 @@ export function AlreadyReconciledWorkspace({
                                       )}
                                     </div>
                                     {/* Dispute */}
-                                    <div>
+                                    <div className="flex justify-center">
                                       {isDisputeActive ? (
-                                        <div className="flex items-center gap-0.5">
+                                        <div className="flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5">
                                           <Input
                                             type="number"
                                             step="0.01"
-                                            className="h-6 text-[10px] px-1 w-16 text-right font-mono"
+                                            className="h-6 text-[11px] px-1.5 w-20 text-right font-mono border-amber-300 dark:border-amber-700"
                                             value={disputeAmt || ""}
                                             onChange={e => {
                                               const val = Math.round((parseFloat(e.target.value) || 0) * 100) / 100;
@@ -543,7 +550,7 @@ export function AlreadyReconciledWorkspace({
                                           <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-5 w-5"
+                                            className="h-5 w-5 text-amber-600 hover:text-amber-800 hover:bg-amber-100"
                                             onClick={() => {
                                               const newActive = new Set(activeDisputes);
                                               newActive.delete(booking.bookingId);
@@ -559,7 +566,7 @@ export function AlreadyReconciledWorkspace({
                                         <Button
                                           variant="outline"
                                           size="sm"
-                                          className="h-6 text-[10px] px-2"
+                                          className="h-7 text-[11px] px-3 text-amber-700 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:hover:bg-amber-950/30"
                                           onClick={() => {
                                             const newActive = new Set(activeDisputes);
                                             newActive.add(booking.bookingId);
@@ -569,23 +576,28 @@ export function AlreadyReconciledWorkspace({
                                           }}
                                           data-testid={`ar-ws-dispute-btn-${booking.bookingId}`}
                                         >
+                                          <Gavel className="h-3 w-3 mr-1" />
                                           Dispute
                                         </Button>
                                       )}
                                     </div>
                                     {/* Final Amount */}
-                                    <div>
+                                    <div className="flex justify-center">
                                       {isPay ? (
                                         <Input
                                           type="number"
                                           step="0.01"
-                                          className="h-6 text-[10px] px-1 text-right font-mono"
+                                          className={`h-7 text-[11px] px-2 text-right font-mono w-full max-w-[7rem] ${
+                                            d.finalAmount > 0
+                                              ? "border-green-300 bg-green-50/40 font-semibold text-green-700 dark:border-green-700 dark:bg-green-950/20 dark:text-green-400"
+                                              : "border-muted"
+                                          }`}
                                           value={d.finalAmount}
                                           onChange={e => setDecision(booking.bookingId, { finalAmount: Math.round((parseFloat(e.target.value) || 0) * 100) / 100 })}
                                           data-testid={`ar-ws-final-amount-${booking.bookingId}`}
                                         />
                                       ) : (
-                                        <span className="text-muted-foreground text-[10px]">—</span>
+                                        <span className="text-muted-foreground text-xs italic">—</span>
                                       )}
                                     </div>
                                   </div>
