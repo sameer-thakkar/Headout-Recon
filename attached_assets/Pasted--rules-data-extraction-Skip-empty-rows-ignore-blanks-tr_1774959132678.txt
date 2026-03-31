@@ -1,0 +1,47 @@
+[rules.data_extraction]
+# Skip empty rows
+ignore_blanks = true
+
+# Primary ID Mappings (String)
+"id" = "setField(ID, getCellStringValue(cell))"
+"booking_id" = "setField(BOOKING_ID, getCellStringValue(cell))"
+"tgid" = "setField(TGID, getCellStringValue(cell))"
+"tid" = "setField(TID, getCellStringValue(cell))"
+"be_id" = "setField(BE_ID, getCellStringValue(cell))"
+"vid" = "setField(VID, getCellStringValue(cell))"
+"invoice_id" = "setField(INVOICE_ID, getCellStringValue(cell))"
+"version" = "setField(VERSION, getCellStringValue(cell))"
+
+# Financial Mappings (Double/Plain String)
+"net_price" = "setField(NET_PRICE, getCellDoublePlainStringValue(cell))"
+"sp_net" = "setField(SP_NET, getCellDoublePlainStringValue(cell))"
+"total_amount_payable" = "setField(TOTAL_AMOUNT_PAYABLE, getCellDoublePlainStringValue(cell))"
+"balance_amount_payable" = "setField(BALANCE_AMOUNT_PAYABLE, getCellDoublePlainStringValue(cell))"
+"entered_amount_paid" = "setField(ENTERED_AMOUNT_PAID, getCellDoublePlainStringValue(cell))"
+"total_dispute_amount" = "setField(TOTAL_DISPUTE_AMOUNT, getCellDoublePlainStringValue(cell))"
+"balance_dispute_amount" = "setField(BALANCE_DISPUTE_AMOUNT, getCellDoublePlainStringValue(cell))"
+"entered_discrepancy_amount" = "setField(ENTERED_DISCREPANCY_AMOUNT, getCellDoublePlainStringValue(cell))"
+
+# Date/Timestamp Mappings (Epoch Seconds)
+"booking_creation_date" = "Timestamp.setSeconds(cell.dateCellValue.toInstant().epochSecond)"
+"experience_date" = "Timestamp.setSeconds(cell.dateCellValue.toInstant().epochSecond)"
+"created_at" = "Timestamp.setSeconds(cell.dateCellValue.toInstant().epochSecond)"
+"updated_at" = "Timestamp.setSeconds(cell.dateCellValue.toInstant().epochSecond)"
+"entered_date_of_payment" = "Timestamp.setSeconds(cell.dateCellValue.toInstant().epochSecond)"
+
+# Boolean Mappings
+"charged_loss" = "setField(CHARGED_LOSS, cell.booleanCellValue)"
+"reconcile_manually" = "reconcileManually = cell.booleanCellValue"
+"bnpl" = "setField(BNPL, cell.booleanCellValue)"
+"insurance" = "setField(INSURANCE, cell.booleanCellValue)"
+"partially_fulfilled" = "setField(PARTIALLY_FULFILLED, cell.booleanCellValue)"
+
+# Complex/JSON Parser Mappings
+"persons" = "JsonFormat.parser().merge(cell.stringCellValue, Persons.newBuilder())"
+"extra_charges" = "JsonFormat.parser().merge(cell.stringCellValue, ExtraCharges.newBuilder())"
+"internal_payment_ref_number" = "InternalPaymentRefNumber.setAllotmentId(cell.stringCellValue)"
+"actor" = "Actor.setServiceAccount(cell.stringCellValue)"
+
+# Enum/Status Mappings
+"reconciliation_status" = "ReconciliationStatus.valueOf(cell.stringCellValue)"
+"dispute_status" = "DisputeStatus.valueOf(cell.stringCellValue)"

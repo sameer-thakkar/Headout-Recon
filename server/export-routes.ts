@@ -1646,7 +1646,7 @@ export function registerExportRoutes(app: Express) {
           } else if (keyLower === "invoiceid") {
             newRow[key] = ticketIdValue;
           } else if (keyLower === "reconcilemanually") {
-            newRow[key] = "TRUE";
+            newRow[key] = true;
           } else if (keyLower === "totaldisputeamount") {
             newRow[key] = disputedAmount;
           } else if (keyLower === "entereddisputeadjustment") {
@@ -1692,6 +1692,17 @@ export function registerExportRoutes(app: Express) {
         }
         if (!hasChargedLossCol) {
           newRow["chargedLoss"] = chargedLoss;
+        }
+
+        const booleanKeys = new Set(["chargedloss", "charged_loss", "reconcilemanually", "reconcile_manually", "bnpl", "insurance", "partiallyfulfilled", "partially_fulfilled"]);
+        for (const key of Object.keys(newRow)) {
+          const kl = key.toLowerCase().replace(/[\s]+/g, "");
+          if (booleanKeys.has(kl)) {
+            const val = newRow[key];
+            if (typeof val === "string") {
+              newRow[key] = val.toUpperCase() === "TRUE";
+            }
+          }
         }
         
         return newRow;
@@ -1756,12 +1767,18 @@ export function registerExportRoutes(app: Express) {
           
           if (r > 0 && hoHeaders[c]) {
             const col = hoHeaders[c];
-            if (col.includes("net") || col.includes("amount") || col.includes("price") || 
-                col.includes("difference") || col.includes("sp net") || col.includes("ho net")) {
-              if (!col.includes("%")) {
-                if (typeof hoReportSheet[cellRef].v === "number") {
-                  hoReportSheet[cellRef].v = formatIndianNumber(hoReportSheet[cellRef].v);
-                  hoReportSheet[cellRef].t = "s";
+            const isFinancialCol = (col.includes("net") || col.includes("amount") || col.includes("price") || 
+                col.includes("difference") || col.includes("sp net") || col.includes("ho net") ||
+                col.includes("payable") || col.includes("dispute") || col.includes("fx")) && !col.includes("%");
+            if (isFinancialCol) {
+              if (typeof hoReportSheet[cellRef].v === "number") {
+                hoReportSheet[cellRef].t = "n";
+                hoReportSheet[cellRef].s.alignment = { ...(hoReportSheet[cellRef].s.alignment || {}), horizontal: "right" };
+              } else if (typeof hoReportSheet[cellRef].v === "string") {
+                const parsed = parseFloat(String(hoReportSheet[cellRef].v).replace(/,/g, ""));
+                if (!isNaN(parsed)) {
+                  hoReportSheet[cellRef].v = parsed;
+                  hoReportSheet[cellRef].t = "n";
                   hoReportSheet[cellRef].s.alignment = { ...(hoReportSheet[cellRef].s.alignment || {}), horizontal: "right" };
                 }
               }
@@ -1769,26 +1786,45 @@ export function registerExportRoutes(app: Express) {
             if (col.includes("date")) {
               const rawDate = hoReportSheet[cellRef].v;
               if (rawDate !== null && rawDate !== undefined && rawDate !== "") {
+                let jsDate: Date | null = null;
                 const strVal = String(rawDate).trim();
                 const isoMatch = strVal.match(/^(\d{4})-(\d{2})-(\d{2})/);
                 if (isoMatch) {
-                  hoReportSheet[cellRef].v = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]} 00.00.00`;
+                  jsDate = new Date(Date.UTC(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3])));
                 } else if (typeof rawDate === "number" || (!isNaN(Number(rawDate)) && strVal.match(/^[\d.]+$/))) {
                   const numValue = Number(rawDate);
                   if (numValue > 40000 && numValue < 60000) {
-                    const excelEpochMs = Date.UTC(1899, 11, 30);
-                    const msPerDay = 24 * 60 * 60 * 1000;
-                    const d = new Date(excelEpochMs + numValue * msPerDay);
-                    hoReportSheet[cellRef].v = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} 00.00.00`;
+                    jsDate = new Date(Date.UTC(1899, 11, 30) + numValue * 86400000);
+                  } else if (numValue > 1000000000000) {
+                    jsDate = new Date(numValue);
+                  } else if (numValue > 1000000000) {
+                    jsDate = new Date(numValue * 1000);
                   }
                 } else {
                   const dmyMatch = strVal.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
                   if (dmyMatch) {
-                    hoReportSheet[cellRef].v = `${dmyMatch[3]}-${dmyMatch[2].padStart(2, "0")}-${dmyMatch[1].padStart(2, "0")} 00.00.00`;
+                    jsDate = new Date(Date.UTC(parseInt(dmyMatch[3]), parseInt(dmyMatch[2]) - 1, parseInt(dmyMatch[1])));
                   }
                 }
+                if (jsDate && !isNaN(jsDate.getTime())) {
+                  const excelEpoch = new Date(Date.UTC(1899, 11, 30)).getTime();
+                  const excelSerial = (jsDate.getTime() - excelEpoch) / 86400000;
+                  hoReportSheet[cellRef].v = excelSerial;
+                  hoReportSheet[cellRef].t = "n";
+                  hoReportSheet[cellRef].z = "yyyy-mm-dd";
+                }
               }
-              hoReportSheet[cellRef].t = "s";
+            }
+            if (col === "charged loss" || col === "chargedloss" || col === "charged_loss" ||
+                col === "reconcile manually" || col === "reconcilemanually" || col === "reconcile_manually" ||
+                col === "bnpl" || col === "insurance" || col === "partially fulfilled" || col === "partiallyfulfilled" || col === "partially_fulfilled") {
+              const boolVal = hoReportSheet[cellRef].v;
+              if (typeof boolVal === "string") {
+                hoReportSheet[cellRef].v = boolVal.toUpperCase() === "TRUE";
+                hoReportSheet[cellRef].t = "b";
+              } else if (typeof boolVal === "boolean") {
+                hoReportSheet[cellRef].t = "b";
+              }
             }
           }
         }
@@ -3131,7 +3167,7 @@ export function registerExportRoutes(app: Express) {
           } else if (keyLower === "invoiceid") {
             newRow[key] = ticketIdValue;
           } else if (keyLower === "reconcilemanually") {
-            newRow[key] = "TRUE";
+            newRow[key] = true;
           } else if (keyLower === "totaldisputeamount") {
             newRow[key] = disputedAmount;
           } else if (keyLower === "entereddisputeadjustment") {
@@ -3195,34 +3231,47 @@ export function registerExportRoutes(app: Express) {
         gsCanonicalHeaders.push(...gsColsToInsert);
       }
 
-      const hoReportData: (string | number | null)[][] = [gsCanonicalHeaders];
+      const gsBooleanKeys = new Set(["chargedloss", "charged_loss", "reconcilemanually", "reconcile_manually", "bnpl", "insurance", "partiallyfulfilled", "partially_fulfilled"]);
+
+      const hoReportData: (string | number | boolean | null)[][] = [gsCanonicalHeaders];
 
       for (const objRow of gsObjRows) {
-        const dataRow: (string | number | null)[] = gsCanonicalHeaders.map(h => {
-          let value = objRow[h] as string | number | null ?? "";
+        const dataRow: (string | number | boolean | null)[] = gsCanonicalHeaders.map(h => {
+          let value = objRow[h] as string | number | boolean | null ?? "";
           const hLower = h.toLowerCase();
+          const hNorm = hLower.replace(/[\s_]+/g, "");
 
           if ((hLower.includes("net") || hLower.includes("amount") || hLower.includes("price") || hLower.includes("fx") ||
                hLower === "difference" || hLower.includes("payable") || hLower.includes("dispute")) &&
-              typeof value === "number") {
-            return formatIndianNumber(value);
+              !hLower.includes("%")) {
+            if (typeof value === "number") return value;
+            if (typeof value === "string") {
+              const parsed = parseFloat(value.replace(/,/g, ""));
+              if (!isNaN(parsed)) return parsed;
+            }
+            return value;
           }
           if (hLower.includes("date") && value) {
             const strV = String(value).trim();
             const isoM = strV.match(/^(\d{4})-(\d{2})-(\d{2})/);
-            if (isoM) return `${isoM[1]}-${isoM[2]}-${isoM[3]} 00.00.00`;
+            if (isoM) return `${isoM[1]}/${isoM[2]}/${isoM[3]}`;
             if (typeof value === "number" || (!isNaN(Number(value)) && strV.match(/^[\d.]+$/))) {
               const nv = Number(value);
               if (nv > 40000 && nv < 60000) {
                 const d = new Date(Date.UTC(1899, 11, 30) + nv * 86400000);
-                return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")} 00.00.00`;
+                return `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${String(d.getUTCDate()).padStart(2, "0")}`;
               }
             }
             const dmyM = strV.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            if (dmyM) return `${dmyM[3]}-${dmyM[2].padStart(2, "0")}-${dmyM[1].padStart(2, "0")} 00.00.00`;
+            if (dmyM) return `${dmyM[3]}/${dmyM[2].padStart(2, "0")}/${dmyM[1].padStart(2, "0")}`;
             return value;
           }
-          if (hLower === "difference %" || hLower === "charged loss" || hLower === "chargedloss" || hLower === "charged_loss") {
+          if (gsBooleanKeys.has(hNorm)) {
+            if (typeof value === "boolean") return value;
+            if (typeof value === "string") return value.toUpperCase() === "TRUE";
+            return false;
+          }
+          if (hLower === "difference %") {
             return value != null ? String(value) : "";
           }
           return value;
