@@ -657,7 +657,7 @@ export function DiscrepancySummaryWorkspace({
   const handleTidBulkDispute = useCallback((tid: TidGroup, action: "all" | "clear") => {
     tid.bookings.forEach(b => {
       const sel = getBidSelection(b.bookingId);
-      if (action === "all" && (sel === "sp" || sel === "custom")) {
+      if (action === "all" && (sel === "sp" || sel === "custom") && (b.spNetInHo || 0) > (b.hoNet || 0)) {
         setBidDisputeActive(prev => { const n = new Set(prev); n.add(b.bookingId); return n; });
         const maxD = Math.round(Math.abs((b.hoNet || 0) - (b.spNetInHo || 0)) * 100) / 100;
         setBidDisputeAmounts(prev => ({ ...prev, [b.bookingId]: maxD }));
@@ -1925,7 +1925,7 @@ export function DiscrepancySummaryWorkspace({
                                 <Calculator className="h-3.5 w-3.5" /> Pax Pricing
                               </Button>
                               <div className="flex-1" />
-                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => handleTidDispute(tid)} disabled={disputeMutation.isPending} data-testid={`tid-dispute-${tid.tid}`}>
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50" onClick={() => handleTidDispute(tid)} disabled={disputeMutation.isPending || !tid.bookings.some(b => (b.spNetInHo || 0) > (b.hoNet || 0))} data-testid={`tid-dispute-${tid.tid}`}>
                                 <Gavel className="h-3.5 w-3.5" /> Dispute
                               </Button>
                               <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => handleTidIssue(tid)} data-testid={`tid-issue-${tid.tid}`}>
@@ -2040,7 +2040,7 @@ export function DiscrepancySummaryWorkspace({
                                 );
                               }
                               const selection = getBidSelection(b.bookingId);
-                              const canDispute = selection === "sp" || selection === "custom";
+                              const canDispute = (selection === "sp" || selection === "custom") && (b.spNetInHo || 0) > (b.hoNet || 0);
                               const finalNet = getBidFinalNet(b);
                               const effectiveTap = getEffectiveTap(b);
                               const tapBase = finalNet;
