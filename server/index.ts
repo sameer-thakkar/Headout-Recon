@@ -15,11 +15,7 @@ declare module "http" {
   }
 }
 
-declare module "express-session" {
-  interface SessionData {
-    authenticated: boolean;
-  }
-}
+// Session type augmentation is in routes.ts
 
 const PgStore = connectPgSimple(session);
 

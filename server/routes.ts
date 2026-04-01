@@ -6,7 +6,11 @@ import multer from "multer";
 import XLSX from "xlsx-js-style";
 import path from "path";
 import fs from "fs";
-import type { UploadedFile, SheetData, FxRate } from "@shared/schema";
+import bcrypt from "bcryptjs";
+import { eq } from "drizzle-orm";
+import { db } from "./db";
+import { users } from "@shared/schema";
+import type { UploadedFile, SheetData, FxRate, SafeUser } from "@shared/schema";
 import { errorBucketRcaMapping, errorBucketOptions } from "@shared/schema";
 import { runReconciliation } from "./reconciliation";
 import { registerExportRoutes, generateIssueWorkingsSheet } from "./export-routes";
@@ -26,8 +30,40 @@ function registerDownloadRoute(app: Express) {
   });
 }
 
-// In-memory token store (persists for the lifetime of the server process)
-const authTokens = new Set<string>();
+// In-memory token store: token → userId
+const authTokens = new Map<string, string>();
+
+// Extend Express session type
+declare module "express-session" {
+  interface SessionData {
+    authenticated?: boolean;
+    userId?: string;
+  }
+}
+
+// Seed first admin user on startup if no users exist
+async function seedInitialAdmin() {
+  try {
+    const existing = await db.select().from(users).limit(1);
+    if (existing.length === 0) {
+      const appPassword = process.env.APP_PASSWORD;
+      const initialPassword = appPassword || "Headout@2025";
+      const hash = await bcrypt.hash(initialPassword, 12);
+      await db.insert(users).values({
+        username: "admin",
+        password: hash,
+        role: "admin",
+      });
+      if (appPassword) {
+        console.log("[auth] Created initial admin user — username: admin, password: (APP_PASSWORD)");
+      } else {
+        console.warn("[auth] Created initial admin user — username: admin, password: Headout@2025 (default — please change immediately)");
+      }
+    }
+  } catch (err) {
+    console.error("[auth] Failed to seed initial admin:", err);
+  }
+}
 
 // Auth middleware — protects all /api/* routes except /api/auth/*
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -37,9 +73,27 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
     const token = authHeader.slice(7);
     if (authTokens.has(token)) return next();
   }
-  // Fallback: legacy cookie-based session
-  if (req.session?.authenticated) return next();
+  // Fallback: cookie-based session
+  if (req.session?.userId) return next();
   res.status(401).json({ error: "Unauthorized" });
+}
+
+// Admin-only middleware
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const userId = getTokenUserId(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  db.select().from(users).where(eq(users.id, userId)).limit(1).then(([user]) => {
+    if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+    next();
+  }).catch(() => res.status(500).json({ error: "Auth check failed" }));
+}
+
+function getTokenUserId(req: Request): string | undefined {
+  const authHeader = req.headers["authorization"];
+  if (authHeader?.startsWith("Bearer ")) {
+    return authTokens.get(authHeader.slice(7));
+  }
+  return req.session?.userId;
 }
 
 // Ensure uploads directory exists
@@ -118,38 +172,48 @@ export async function registerRoutes(
   // Initialize FX rates
   await storage.setFxRates(defaultFxRates);
 
+  // Seed first admin user if DB has no users
+  await seedInitialAdmin();
+
   // ==========================================
   // AUTH ENDPOINTS (no auth required)
   // ==========================================
 
-  app.get("/api/auth/status", (req, res) => {
-    const authHeader = req.headers["authorization"];
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-      if (authTokens.has(token)) {
-        return res.set("Cache-Control", "no-store").json({ authenticated: true });
-      }
+  app.get("/api/auth/status", async (req, res) => {
+    const userId = getTokenUserId(req);
+    if (!userId) {
+      return res.set("Cache-Control", "no-store").json({ authenticated: false });
     }
-    // Fallback: legacy cookie-based session
-    res.set("Cache-Control", "no-store").json({ authenticated: !!req.session?.authenticated });
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) return res.set("Cache-Control", "no-store").json({ authenticated: false });
+      const safeUser: SafeUser = { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+      return res.set("Cache-Control", "no-store").json({ authenticated: true, user: safeUser });
+    } catch {
+      return res.set("Cache-Control", "no-store").json({ authenticated: false });
+    }
   });
 
-  app.post("/api/auth/login", (req, res) => {
-    const { password } = req.body;
-    const appPassword = process.env.APP_PASSWORD;
-    if (!appPassword) {
-      return res.status(500).json({ error: "APP_PASSWORD is not configured" });
+  app.post("/api/auth/login", async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username and password are required" });
     }
-    if (password === appPassword) {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.username, username.trim())).limit(1);
+      if (!user) return res.status(401).json({ error: "Invalid username or password" });
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) return res.status(401).json({ error: "Invalid username or password" });
       const token = randomUUID();
-      authTokens.add(token);
-      // Also set session for any non-header clients
-      req.session.authenticated = true;
+      authTokens.set(token, user.id);
+      req.session.userId = user.id;
       req.session.save(() => {
-        res.json({ success: true, token });
+        const safeUser: SafeUser = { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+        res.json({ success: true, token, user: safeUser });
       });
-    } else {
-      res.status(401).json({ error: "Incorrect password" });
+    } catch (err) {
+      console.error("Login error:", err);
+      res.status(500).json({ error: "Login failed" });
     }
   });
 
@@ -163,8 +227,108 @@ export async function registerRoutes(
     });
   });
 
+  // Change own password
+  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
+    const userId = getTokenUserId(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: "Both fields required" });
+    if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const valid = await bcrypt.compare(currentPassword, user.password);
+      if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
+      const hash = await bcrypt.hash(newPassword, 12);
+      await db.update(users).set({ password: hash }).where(eq(users.id, userId));
+      res.json({ success: true });
+    } catch (err) {
+      console.error("Change password error:", err);
+      res.status(500).json({ error: "Failed to change password" });
+    }
+  });
+
   // Apply auth middleware to all subsequent /api/* routes
   app.use("/api", requireAuth);
+
+  // ==========================================
+  // USER MANAGEMENT (admin only)
+  // ==========================================
+
+  app.get("/api/users", requireAdmin, async (_req, res) => {
+    try {
+      const allUsers = await db.select({
+        id: users.id,
+        username: users.username,
+        role: users.role,
+        createdAt: users.createdAt,
+      }).from(users).orderBy(users.createdAt);
+      res.json({ users: allUsers });
+    } catch {
+      res.status(500).json({ error: "Failed to list users" });
+    }
+  });
+
+  app.post("/api/users", requireAdmin, async (req, res) => {
+    const { username, password, role } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
+    if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    const validRole = role === "admin" ? "admin" : "member";
+    try {
+      const hash = await bcrypt.hash(password, 12);
+      const [newUser] = await db.insert(users).values({
+        username: username.trim(),
+        password: hash,
+        role: validRole,
+      }).returning({ id: users.id, username: users.username, role: users.role, createdAt: users.createdAt });
+      res.json({ success: true, user: newUser });
+    } catch (err: any) {
+      if (err?.code === "23505") return res.status(409).json({ error: "Username already exists" });
+      res.status(500).json({ error: "Failed to create user" });
+    }
+  });
+
+  app.delete("/api/users/:id", requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    const requestingUserId = getTokenUserId(req);
+    if (id === requestingUserId) return res.status(400).json({ error: "Cannot delete your own account" });
+    try {
+      const result = await db.delete(users).where(eq(users.id, id)).returning();
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
+  app.patch("/api/users/:id/password", requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    try {
+      const hash = await bcrypt.hash(newPassword, 12);
+      const result = await db.update(users).set({ password: hash }).where(eq(users.id, id)).returning();
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
+  app.patch("/api/users/:id/role", requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { role } = req.body;
+    const requestingUserId = getTokenUserId(req);
+    if (id === requestingUserId) return res.status(400).json({ error: "Cannot change your own role" });
+    if (role !== "admin" && role !== "member") return res.status(400).json({ error: "Invalid role" });
+    try {
+      const result = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to update role" });
+    }
+  });
 
   // ==========================================
   // NEW API ENDPOINTS (per specification)

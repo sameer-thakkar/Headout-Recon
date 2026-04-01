@@ -38,13 +38,14 @@ import type {
   RunStatus,
   ReconciliationSession,
   RunResult,
+  SafeUser,
 } from "@shared/schema";
 import { requiredFields, optionalFields, headerAliases } from "@shared/schema";
 
 const CURRENT_RUN_ID_KEY = "headout-recon-current-run-id";
 const SAVED_SESSIONS_KEY = "headout-recon-saved-sessions";
 
-function AppContent({ onLogout }: { onLogout?: () => void }) {
+function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentUser?: SafeUser | null }) {
   
   // Global state - initialize currentRunId from localStorage
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -556,6 +557,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
             onLogout={onLogout}
             savedSessionIds={savedSessionIds}
             onToggleSave={toggleSaveSession}
+            currentUser={currentUser}
           />
           <main className="flex-1 overflow-auto bg-background">
             <Switch>
@@ -649,7 +651,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
 function AuthGate() {
   const [, setLocation] = useLocation();
 
-  const { data, isLoading } = useQuery<{ authenticated: boolean }>({
+  const { data, isLoading } = useQuery<{ authenticated: boolean; user?: SafeUser }>({
     queryKey: ["/api/auth/status"],
     retry: false,
     staleTime: 0,
@@ -674,7 +676,7 @@ function AuthGate() {
     return <LoginPage />;
   }
 
-  return <AppContent onLogout={handleLogout} />;
+  return <AppContent onLogout={handleLogout} currentUser={data?.user} />;
 }
 
 function App() {

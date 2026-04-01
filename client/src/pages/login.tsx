@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Lock, Loader2 } from "lucide-react";
+import { Lock, Loader2, User } from "lucide-react";
 
 export function LoginPage() {
   const [, setLocation] = useLocation();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -18,13 +19,17 @@ export function LoginPage() {
     setError("");
     setIsLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/auth/login", { password });
+      const res = await apiRequest("POST", "/api/auth/login", { username: username.trim(), password });
       const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Sign in failed");
+        return;
+      }
       if (data.token) setAuthToken(data.token);
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/status"] });
       setLocation("/");
     } catch {
-      setError("Incorrect password. Please try again.");
+      setError("Sign in failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -45,20 +50,36 @@ export function LoginPage() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-base">Sign in</CardTitle>
-            <CardDescription>Enter the access password to continue</CardDescription>
+            <CardDescription>Enter your username and password to continue</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <Input
+                    id="username"
+                    data-testid="input-username"
+                    type="text"
+                    placeholder="Enter username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="pl-9"
+                    autoFocus
+                    autoComplete="username"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   data-testid="input-password"
                   type="password"
-                  placeholder="Enter access password"
+                  placeholder="Enter password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoFocus
                   autoComplete="current-password"
                 />
               </div>
@@ -71,12 +92,12 @@ export function LoginPage() {
                 data-testid="button-signin"
                 type="submit"
                 className="w-full"
-                disabled={isLoading || !password}
+                disabled={isLoading || !username || !password}
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Signing in...
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true" />
+                    Signing in…
                   </>
                 ) : (
                   "Sign in"
