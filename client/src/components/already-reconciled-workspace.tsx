@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Info, ChevronRight, ChevronDown, CheckCircle2, Gavel,
-  X as XIcon, FileWarning, TrendingUp, TrendingDown,
+  X as XIcon, FileWarning, TrendingUp, TrendingDown, AlertTriangle,
 } from "lucide-react";
 
 const fmt = (n: number) =>
@@ -297,6 +298,13 @@ export function AlreadyReconciledWorkspace({
     }).length,
   [bookings, decisions]);
 
+  const payMissingReason = useMemo(() =>
+    bookings.filter(b => {
+      const d = decisions.get(b.bookingId) ?? { decision: "pay" as const, reason: "", customReason: "", finalAmount: 0 };
+      return d.decision === "pay" && !d.reason;
+    }).length,
+  [bookings, decisions]);
+
   const BID_GRID = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
   const TID_GRID = "1.75rem 2fr minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
 
@@ -533,53 +541,61 @@ export function AlreadyReconciledWorkspace({
                                       </Select>
                                     </div>
                                     {/* Reason */}
-                                    <div>
-                                      {(isCustomReason || d.customReason === "__other__") ? (
-                                        <div className="flex items-center gap-0.5">
-                                          <Input
-                                            className="h-7 text-[10px] px-1 flex-1"
-                                            placeholder="Type reason..."
-                                            value={isCustomReason ? d.reason : ""}
-                                            onChange={e => setDecision(booking.bookingId, { reason: e.target.value, customReason: e.target.value })}
-                                            data-testid={`ar-ws-custom-reason-${booking.bookingId}`}
-                                            autoFocus={d.customReason === "__other__" && !d.reason}
-                                          />
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
-                                            onClick={() => setDecision(booking.bookingId, { reason: "", customReason: "" })}
-                                            aria-label="Clear custom reason"
-                                          >
-                                            <XIcon className="h-3 w-3" />
-                                          </Button>
+                                    {(() => {
+                                      const isReasonMissing = isPay && !d.reason;
+                                      return (
+                                        <div>
+                                          {(isCustomReason || d.customReason === "__other__") ? (
+                                            <div className="flex items-center gap-0.5">
+                                              <Input
+                                                className={`h-7 text-[10px] px-1 flex-1 ${isReasonMissing ? "border-red-400 dark:border-red-600" : ""}`}
+                                                placeholder="Type reason..."
+                                                value={isCustomReason ? d.reason : ""}
+                                                onChange={e => setDecision(booking.bookingId, { reason: e.target.value, customReason: e.target.value })}
+                                                data-testid={`ar-ws-custom-reason-${booking.bookingId}`}
+                                                autoFocus={d.customReason === "__other__" && !d.reason}
+                                              />
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
+                                                onClick={() => setDecision(booking.bookingId, { reason: "", customReason: "" })}
+                                                aria-label="Clear custom reason"
+                                              >
+                                                <XIcon className="h-3 w-3" />
+                                              </Button>
+                                            </div>
+                                          ) : (
+                                            <Select
+                                              value={d.reason || "none"}
+                                              onValueChange={(v) => {
+                                                if (v === "none") {
+                                                  setDecision(booking.bookingId, { reason: "", customReason: "" });
+                                                } else if (v === "__other__") {
+                                                  setDecision(booking.bookingId, { reason: "", customReason: "__other__" });
+                                                } else {
+                                                  setDecision(booking.bookingId, { reason: v, customReason: "" });
+                                                }
+                                              }}
+                                            >
+                                              <SelectTrigger
+                                                className={`h-7 text-[10px] px-1 w-full ${isReasonMissing ? "border-red-400 dark:border-red-600" : ""}`}
+                                                data-testid={`ar-ws-reason-${booking.bookingId}`}
+                                              >
+                                                <SelectValue placeholder="—" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="none">—</SelectItem>
+                                                {REASON_OPTIONS.map(o => (
+                                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                ))}
+                                                <SelectItem value="__other__">Other…</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          )}
                                         </div>
-                                      ) : (
-                                        <Select
-                                          value={d.reason || "none"}
-                                          onValueChange={(v) => {
-                                            if (v === "none") {
-                                              setDecision(booking.bookingId, { reason: "", customReason: "" });
-                                            } else if (v === "__other__") {
-                                              setDecision(booking.bookingId, { reason: "", customReason: "__other__" });
-                                            } else {
-                                              setDecision(booking.bookingId, { reason: v, customReason: "" });
-                                            }
-                                          }}
-                                        >
-                                          <SelectTrigger className="h-7 text-[10px] px-1 w-full" data-testid={`ar-ws-reason-${booking.bookingId}`}>
-                                            <SelectValue placeholder="—" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="none">—</SelectItem>
-                                            {REASON_OPTIONS.map(o => (
-                                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                            ))}
-                                            <SelectItem value="__other__">Other…</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      )}
-                                    </div>
+                                      );
+                                    })()}
                                     {/* Total Amount Payable */}
                                     {(() => {
                                       const tap = isPay ? d.finalAmount : 0;
@@ -665,18 +681,32 @@ export function AlreadyReconciledWorkspace({
                                             {fmt(balanceAmountPayable)}
                                           </div>
                                           {/* Save */}
-                                          <div className="text-center">
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-6 w-6 text-green-600 hover:text-green-800 hover:bg-green-50"
-                                              onClick={() => setFeedback(`Saved booking ${booking.bookingId}`)}
-                                              aria-label={`Save booking ${booking.bookingId}`}
-                                              data-testid={`ar-ws-save-${booking.bookingId}`}
-                                            >
-                                              <CheckCircle2 className="h-3.5 w-3.5" />
-                                            </Button>
-                                          </div>
+                                          {(() => {
+                                            const isReasonMissingForSave = isPay && !d.reason;
+                                            return (
+                                              <div className="text-center">
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="icon"
+                                                      className={`h-6 w-6 ${isReasonMissingForSave ? "text-amber-500 hover:text-amber-700 hover:bg-amber-50" : "text-green-600 hover:text-green-800 hover:bg-green-50"}`}
+                                                      onClick={() => setFeedback(`Saved booking ${booking.bookingId}`)}
+                                                      aria-label={`Save booking ${booking.bookingId}`}
+                                                      data-testid={`ar-ws-save-${booking.bookingId}`}
+                                                    >
+                                                      {isReasonMissingForSave ? <AlertTriangle className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  {isReasonMissingForSave && (
+                                                    <TooltipContent side="left" className="text-xs">
+                                                      Reason required before saving
+                                                    </TooltipContent>
+                                                  )}
+                                                </Tooltip>
+                                              </div>
+                                            );
+                                          })()}
                                         </>
                                       );
                                     })()}
@@ -753,14 +783,26 @@ export function AlreadyReconciledWorkspace({
               <span>Balance: <span className={`font-mono font-semibold ${totalBalance > 0 ? "text-green-600" : totalBalance < 0 ? "text-red-600" : ""}`}>{fmt(totalBalance)} {currency}</span></span>
             </div>
             {showApplyConfirm && onClose && (
-              <Button
-                size="sm"
-                className="h-7 text-xs px-3 shrink-0"
-                onClick={onClose}
-                data-testid="ar-ws-apply-confirm"
-              >
-                Apply &amp; Confirm
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="shrink-0">
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs px-3"
+                      onClick={onClose}
+                      disabled={payMissingReason > 0}
+                      data-testid="ar-ws-apply-confirm"
+                    >
+                      Apply &amp; Confirm
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {payMissingReason > 0 && (
+                  <TooltipContent side="top" className="text-xs">
+                    {payMissingReason} Pay booking{payMissingReason > 1 ? "s" : ""} missing a reason
+                  </TooltipContent>
+                )}
+              </Tooltip>
             )}
           </div>
         );

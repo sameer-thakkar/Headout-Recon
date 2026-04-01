@@ -148,6 +148,12 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [arDecisions, setArDecisions] = useState<Map<string, { decision: "pay" | "dont_pay"; reason: string; customReason: string; finalAmount: number }>>(new Map());
   const [arActiveDisputes, setArActiveDisputes] = useState<Set<string>>(new Set());
   const [arDisputeAmounts, setArDisputeAmounts] = useState<Map<string, number>>(new Map());
+  // Secondary Vendor Already Reconciled workspace state
+  const [isSvArModalOpen, setIsSvArModalOpen] = useState(false);
+  const [svArDecisions, setSvArDecisions] = useState<Map<string, { decision: "pay" | "dont_pay"; reason: string; customReason: string; finalAmount: number }>>(new Map());
+  const [svArActiveDisputes, setSvArActiveDisputes] = useState<Set<string>>(new Set());
+  const [svArDisputeAmounts, setSvArDisputeAmounts] = useState<Map<string, number>>(new Map());
+  const [svArFinalVendorIds, setSvArFinalVendorIds] = useState<Map<string, string>>(new Map());
   // Cancellations modal state
   const [isCancellationsModalOpen, setIsCancellationsModalOpen] = useState(false);
   const { toast } = useToast();
@@ -524,6 +530,87 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
   }, [isAlreadyReconciledDetailModalOpen, selectedAlreadyReconciledBookings]);
 
+  // Secondary Vendor Already Reconciled computed data (from secondaryVendorRows)
+  const svArData = useMemo(() => {
+    const sameBEBookings = secondaryVendorRows.filter(r => r.reason === "Already Reconciled-Same BE");
+    const differentBEBookings = secondaryVendorRows.filter(r => r.reason === "Already Reconciled-Different BE");
+    const totalCount = sameBEBookings.length + differentBEBookings.length;
+    const allBks = [...sameBEBookings, ...differentBEBookings];
+    const allCurrencies = Array.from(new Set(allBks.map(b => b.hoCurrency).filter(Boolean)));
+    const currency = allCurrencies.length > 1 ? "Multiple currencies" : (allCurrencies[0] || "USD");
+    return {
+      hasSvAr: totalCount > 0,
+      totalCount,
+      currency,
+      sameBE: { count: sameBEBookings.length, bookings: sameBEBookings },
+      differentBE: { count: differentBEBookings.length, bookings: differentBEBookings },
+    };
+  }, [secondaryVendorRows]);
+
+  const svArAnalysisRows = useMemo(() => {
+    const rows: Array<{
+      type: "same_be" | "different_be";
+      discrepancyLc: number;
+      discrepancyUsd: number;
+      previousBe: string | null;
+      bidCount: number;
+      ticketIds: string[];
+      paymentMethods: string[];
+    }> = [];
+    const toUsd = (lc: number, currency: string) => {
+      const rate = fxData?.usdToCcy?.[currency] || 1;
+      return lc / rate;
+    };
+    if (svArData.sameBE.count > 0) {
+      const bks = svArData.sameBE.bookings;
+      rows.push({
+        type: "same_be",
+        discrepancyLc: bks.reduce((s, b) => s + (b.hoNet - b.spNetInHo), 0),
+        discrepancyUsd: bks.reduce((s, b) => s + toUsd(b.hoNet - b.spNetInHo, b.hoCurrency || "USD"), 0),
+        previousBe: null,
+        bidCount: bks.length,
+        ticketIds: [...new Set(bks.map(b => b.ticketId).filter(Boolean) as string[])],
+        paymentMethods: [...new Set(bks.map(b => b.paymentMethod || b.spPaymentMethod).filter(Boolean) as string[])],
+      });
+    }
+    if (svArData.differentBE.count > 0) {
+      const byPrevBe = new Map<string, typeof svArData.differentBE.bookings>();
+      for (const b of svArData.differentBE.bookings) {
+        const key = b.hoBeId || "unknown";
+        if (!byPrevBe.has(key)) byPrevBe.set(key, []);
+        byPrevBe.get(key)!.push(b);
+      }
+      for (const [prevBe, bks] of byPrevBe) {
+        rows.push({
+          type: "different_be",
+          discrepancyLc: bks.reduce((s, b) => s + (b.hoNet - b.spNetInHo), 0),
+          discrepancyUsd: bks.reduce((s, b) => s + toUsd(b.hoNet - b.spNetInHo, b.hoCurrency || "USD"), 0),
+          previousBe: prevBe === "unknown" ? null : prevBe,
+          bidCount: bks.length,
+          ticketIds: [...new Set(bks.map(b => b.ticketId).filter(Boolean) as string[])],
+          paymentMethods: [...new Set(bks.map(b => b.paymentMethod || b.spPaymentMethod).filter(Boolean) as string[])],
+        });
+      }
+    }
+    return rows;
+  }, [svArData, fxData]);
+
+  // Pre-populate svArDecisions when the SV-AR modal opens
+  useEffect(() => {
+    if (isSvArModalOpen) {
+      const allBks = [...svArData.sameBE.bookings, ...svArData.differentBE.bookings];
+      setSvArDecisions(prev => {
+        const next = new Map(prev);
+        for (const booking of allBks) {
+          if (!next.has(booking.bookingId)) {
+            next.set(booking.bookingId, { decision: "pay", reason: "", customReason: "", finalAmount: 0 });
+          }
+        }
+        return next;
+      });
+    }
+  }, [isSvArModalOpen]);
+
   // Split summary into Primary Vendor and Secondary Vendor sections
   // Uses separate arrays from API (no prefix needed)
   // Consolidate both by reason to handle multiple currencies
@@ -617,6 +704,14 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const handleReasonClick = (reason: string) => {
     setSelectedReason(reason);
     setIsModalOpen(true);
+  };
+
+  const handleSvReasonClick = (reason: string) => {
+    if (reason === "Already Reconciled" && svArData.hasSvAr) {
+      setIsSvArModalOpen(true);
+    } else {
+      handleReasonClick(reason);
+    }
   };
 
   const handleModalClose = (open: boolean) => {
@@ -1086,7 +1181,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                 <TableRow
                                   key={`sv-${row.reason}-${row.currency}-${index}`}
                                   className={`h-9 bg-amber-50/50 dark:bg-amber-950/20 relative ${isClickable ? "cursor-pointer hover-elevate" : ""}`}
-                                  onClick={() => isClickable && handleReasonClick(row.reason)}
+                                  onClick={() => isClickable && handleSvReasonClick(row.reason)}
                                   data-testid={`summary-row-sv-${row.reason}-${row.currency}`}
                                 >
                                   <TableCell className="py-1.5 pl-4 relative">
@@ -1105,7 +1200,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                   <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
                                   <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
                                     {isClickable && (
-                                      <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => handleReasonClick(row.reason)} data-testid={`manage-btn-sv-${row.reason}`}>
+                                      <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => handleSvReasonClick(row.reason)} data-testid={`manage-btn-sv-${row.reason}`}>
                                         Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
                                       </Button>
                                     )}
@@ -1319,6 +1414,113 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 }}
                 onClose={() => setIsAlreadyReconciledDetailModalOpen(false)}
                 showApplyConfirm
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Secondary Vendor Already Reconciled Workspace */}
+      <Dialog open={isSvArModalOpen} onOpenChange={(open) => setIsSvArModalOpen(open)}>
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col gap-0 p-0 overflow-hidden [&>button.absolute]:hidden">
+          <DialogHeader className="px-6 pt-5 pb-3 border-b">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              Secondary Vendor — Already Reconciled
+              <Badge variant="outline" className="ml-1 text-xs font-normal">
+                {svArData.totalCount} bookings
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Analysis table */}
+          <div className="px-6 pt-4 pb-2 shrink-0">
+            <p className="text-xs text-muted-foreground mb-2">Summary of secondary vendor already reconciled bookings. Review and action each booking below.</p>
+            <Table>
+              <TableHeader>
+                <TableRow className="text-xs">
+                  <TableHead className="py-2">Type</TableHead>
+                  <TableHead className="py-2 text-right">Discrepancy LC</TableHead>
+                  <TableHead className="py-2 text-right">Discrepancy USD</TableHead>
+                  <TableHead className="py-2">Previous BE</TableHead>
+                  <TableHead className="py-2">Payment Methods</TableHead>
+                  <TableHead className="py-2 text-right">BID Count</TableHead>
+                  <TableHead className="py-2">Ticket IDs</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {svArAnalysisRows.map((row, idx) => (
+                  <TableRow key={idx} className="text-xs">
+                    <TableCell className="py-2 font-medium">
+                      {row.type === "same_be" ? (
+                        <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px]">Same BE</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 text-[10px]">Diff BE</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-2 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
+                    <TableCell className="py-2 text-right font-mono">{formatNumber(row.discrepancyUsd)}</TableCell>
+                    <TableCell className="py-2 font-mono text-muted-foreground">{row.previousBe || "—"}</TableCell>
+                    <TableCell className="py-2">{row.paymentMethods.join(", ") || "—"}</TableCell>
+                    <TableCell className="py-2 text-right font-mono">{row.bidCount}</TableCell>
+                    <TableCell className="py-2 font-mono text-[10px] text-muted-foreground max-w-[180px] truncate" title={row.ticketIds.join(", ")}>{row.ticketIds.join(", ") || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Already Reconciled Workspace */}
+          {svArData.totalCount > 0 && (
+            <div className="flex flex-col flex-1 overflow-hidden border-t mt-1">
+              <AlreadyReconciledWorkspace
+                bookings={[
+                  ...svArData.sameBE.bookings,
+                  ...svArData.differentBE.bookings,
+                ].map<ArWorkspaceBooking>(b => ({
+                  bookingId: b.bookingId,
+                  tid: b.tid,
+                  reason: b.reason,
+                  hoNet: b.hoNet,
+                  spNet: b.spNetInHo,
+                  amountPaid: b.amountPaid || 0,
+                  paymentMethod: b.paymentMethod,
+                  spPaymentMethod: b.spPaymentMethod,
+                  hoBeId: b.hoBeId,
+                  beId: b.beId,
+                  ticketId: b.ticketId,
+                }))}
+                currency={svArData.currency}
+                decisions={svArDecisions}
+                onDecisionChange={setSvArDecisions}
+                activeDisputes={svArActiveDisputes}
+                disputeAmounts={svArDisputeAmounts}
+                onDisputeChange={(newActive, newAmounts) => {
+                  setSvArActiveDisputes(newActive);
+                  setSvArDisputeAmounts(newAmounts);
+                }}
+                onClose={() => setIsSvArModalOpen(false)}
+                showApplyConfirm
+                runId={currentRunId}
+                billingEntityId={spDetails?.beId || ""}
+                billingEntityName={spDetails?.billingEntityName || ""}
+                finalVendorIds={svArFinalVendorIds}
+                onVendorIdChange={(bookingId, value) => {
+                  setSvArFinalVendorIds(prev => {
+                    const next = new Map(prev);
+                    next.set(bookingId, value);
+                    return next;
+                  });
+                }}
+                onVendorIdSave={(bookingId, value) => {
+                  setSvArFinalVendorIds(prev => {
+                    const next = new Map(prev);
+                    next.set(bookingId, value);
+                    return next;
+                  });
+                }}
+                hasPaymentMismatchFn={(b) => !!b.paymentMethod && b.paymentMethod !== b.spPaymentMethod}
+                dominantPaymentMethod={spDetails?.paymentMethod || ""}
               />
             </div>
           )}
