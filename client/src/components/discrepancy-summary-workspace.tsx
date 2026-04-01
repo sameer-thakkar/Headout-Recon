@@ -2354,17 +2354,15 @@ export function DiscrepancySummaryWorkspace({
                           <div className="rounded-md border overflow-hidden bg-white dark:bg-card max-h-[400px] overflow-y-auto">
                             <Table>
                               <colgroup>
-                                <col style={{ width: "13%" }} />
-                                <col style={{ width: "13%" }} />
+                                <col style={{ width: "14%" }} />
+                                <col style={{ width: "14%" }} />
                                 <col style={{ width: "5%" }} />
                                 <col style={{ width: "9%" }} />
                                 <col style={{ width: "9%" }} />
-                                <col style={{ width: "10%" }} />
-                                <col style={{ width: "9%" }} />
-                                <col style={{ width: "10%" }} />
-                                <col style={{ width: "7%" }} />
-                                <col style={{ width: "10%" }} />
-                                <col style={{ width: "5%" }} />
+                                <col style={{ width: "11%" }} />
+                                <col style={{ width: "11%" }} />
+                                <col style={{ width: "13%" }} />
+                                <col style={{ width: "14%" }} />
                               </colgroup>
                               <TableHeader>
                                 <TableRow className="border-b-2">
@@ -2379,8 +2377,8 @@ export function DiscrepancySummaryWorkspace({
                                       <span className="text-[10px] font-normal text-violet-500 dark:text-violet-400">Selection of Net Price</span>
                                     </div>
                                   </TableHead>
-                                  <TableHead className="text-xs bg-orange-50/60 dark:bg-orange-900/15" colSpan={2}>
-                                    <div className="flex items-center gap-1">
+                                  <TableHead className="text-xs text-right bg-orange-50/60 dark:bg-orange-900/15">
+                                    <div className="flex items-center justify-end gap-1">
                                       <span className="text-orange-600 dark:text-orange-400 font-semibold">Dispute</span>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -2392,8 +2390,8 @@ export function DiscrepancySummaryWorkspace({
                                       </Tooltip>
                                     </div>
                                   </TableHead>
-                                  <TableHead className="text-xs bg-red-50/60 dark:bg-red-900/15" colSpan={2}>
-                                    <div className="flex items-center gap-1">
+                                  <TableHead className="text-xs text-right bg-red-50/60 dark:bg-red-900/15">
+                                    <div className="flex items-center justify-end gap-1">
                                       <span className="text-red-600 dark:text-red-400 font-semibold">Issue</span>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -2438,17 +2436,6 @@ export function DiscrepancySummaryWorkspace({
                                       />
                                     </TableCell>
                                     <TableCell className="bg-orange-50/30 dark:bg-orange-900/10 px-1">
-                                      <Select onValueChange={(v) => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: v === "sp" ? String(row.spUnitPrice) : String(row.hoUnitPrice) }))} data-testid={`pax-dispute-select-${row.rowKey}`}>
-                                        <SelectTrigger className="h-6 text-xs border-orange-200 dark:border-orange-800 [&>span]:text-xs" data-testid={`pax-dispute-select-trigger-${row.rowKey}`}>
-                                          <SelectValue placeholder="Select" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="sp" className="text-xs">SP Net</SelectItem>
-                                          <SelectItem value="ho" className="text-xs">HO Net</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </TableCell>
-                                    <TableCell className="bg-orange-50/30 dark:bg-orange-900/10 px-1">
                                       <Input
                                         type="number"
                                         step="0.01"
@@ -2458,17 +2445,6 @@ export function DiscrepancySummaryWorkspace({
                                         className="h-6 text-xs font-mono text-right border-orange-200 dark:border-orange-800 focus-visible:ring-orange-400"
                                         data-testid={`pax-dispute-${row.rowKey}`}
                                       />
-                                    </TableCell>
-                                    <TableCell className="bg-red-50/30 dark:bg-red-900/10 px-1">
-                                      <Select onValueChange={(v) => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: v === "sp" ? String(row.spUnitPrice) : String(row.hoUnitPrice) }))} data-testid={`pax-issue-select-${row.rowKey}`}>
-                                        <SelectTrigger className="h-6 text-xs border-red-200 dark:border-red-800 [&>span]:text-xs" data-testid={`pax-issue-select-trigger-${row.rowKey}`}>
-                                          <SelectValue placeholder="Select" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="sp" className="text-xs">SP Net</SelectItem>
-                                          <SelectItem value="ho" className="text-xs">HO Net</SelectItem>
-                                        </SelectContent>
-                                      </Select>
                                     </TableCell>
                                     <TableCell className="bg-red-50/30 dark:bg-red-900/10 px-1">
                                       <Input
