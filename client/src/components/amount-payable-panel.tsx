@@ -1316,7 +1316,7 @@ export function AmountPayablePanel({
 
     try {
       toast({
-        title: "Generating export...",
+        title: "Generating export…",
         description: "Please wait while the export file is being prepared",
       });
 
@@ -1397,7 +1397,7 @@ export function AmountPayablePanel({
                 <CollapsibleTrigger asChild>
                   <div className="flex items-center justify-between px-3 py-2 bg-muted/30 cursor-pointer hover-elevate">
                     <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon" className="h-6 w-6" tabIndex={-1}>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" tabIndex={-1} aria-label={isAlreadyReconciledExpanded ? "Collapse Already Reconciled" : "Expand Already Reconciled"}>
                         {isAlreadyReconciledExpanded ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : (
@@ -1469,7 +1469,7 @@ export function AmountPayablePanel({
                 <CollapsibleTrigger asChild>
                   <div className="flex items-center justify-between px-3 py-2 bg-muted/30 cursor-pointer hover-elevate">
                     <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon" className="h-6 w-6">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={isCancellationsExpanded ? "Collapse Cancellations" : "Expand Cancellations"}>
                         {isCancellationsExpanded ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : (
@@ -1650,7 +1650,7 @@ export function AmountPayablePanel({
                         <div className="flex items-center justify-between px-3 py-2 bg-muted/50">
                           <div className="flex items-center gap-2">
                             <CollapsibleTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-6 w-6">
+                              <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={expandedReasons.has(reason) ? `Collapse ${reason}` : `Expand ${reason}`}>
                                 {expandedReasons.has(reason) ? (
                                   <ChevronDown className="h-4 w-4" />
                                 ) : (
@@ -1859,7 +1859,7 @@ export function AmountPayablePanel({
                       data-testid="button-log-issues"
                     >
                       <FileWarning className="h-3 w-3 mr-1" />
-                      {isLoggingIssues ? "Logging..." : `Log Issues (${selectedIssues.size})`}
+                      {isLoggingIssues ? "Logging…" : `Log Issues (${selectedIssues.size})`}
                     </Button>
                 </div>
               )}
@@ -1919,7 +1919,7 @@ export function AmountPayablePanel({
                       <div className="flex items-center justify-between px-3 py-2 bg-muted/30">
                         <div className="flex items-center gap-2">
                           <CollapsibleTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={expandedReasons.has(`sv-${reason}`) ? `Collapse ${reason}` : `Expand ${reason}`}>
                               {expandedReasons.has(`sv-${reason}`) ? (
                                 <ChevronDown className="h-4 w-4" />
                               ) : (
@@ -2086,7 +2086,7 @@ export function AmountPayablePanel({
                   <CollapsibleTrigger asChild>
                     <div className="flex items-center justify-between px-3 py-2 bg-blue-50 dark:bg-blue-950/30 rounded-t-lg cursor-pointer hover-elevate" data-testid="trigger-amount-paid-section">
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
+                        <Button variant="ghost" size="icon" className="h-6 w-6" aria-label={isAmountPaidExpanded ? "Collapse Amount Paid" : "Expand Amount Paid"}>
                           {isAmountPaidExpanded ? (
                             <ChevronDown className="h-4 w-4" />
                           ) : (
@@ -2407,6 +2407,7 @@ export function AmountPayablePanel({
                           size="icon"
                           onClick={() => removeAdjustment(adj.id)}
                           className="h-8 w-8 text-destructive hover:text-destructive"
+                          aria-label="Remove adjustment"
                           data-testid={`button-remove-${index}`}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -3156,7 +3157,7 @@ export function AmountPayablePanel({
               <AlertTriangle className="h-4 w-4 text-amber-500" />
               Already Reconciled — Workspace
               <Badge variant="outline" className="ml-1 text-xs font-normal">{alreadyReconciledBookings.length} bookings</Badge>
-              <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={() => setIsArWorkspaceOpen(false)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 ml-auto" onClick={() => setIsArWorkspaceOpen(false)} aria-label="Close">
                 <X className="h-4 w-4" />
               </Button>
             </DialogTitle>

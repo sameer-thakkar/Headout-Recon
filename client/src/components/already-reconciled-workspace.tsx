@@ -325,10 +325,14 @@ export function AlreadyReconciledWorkspace({
               {/* Section header */}
               <div
                 className="flex items-center gap-2 px-3 py-2 bg-muted/20 cursor-pointer hover:bg-muted/30 select-none"
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleSection(section.id)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSection(section.id); } }}
+                aria-expanded={isExpanded}
                 data-testid={`ar-ws-section-${section.id}`}
               >
-                <Button variant="ghost" size="icon" className="h-5 w-5 p-0 shrink-0" tabIndex={-1}>
+                <Button variant="ghost" size="icon" className="h-5 w-5 p-0 shrink-0" tabIndex={-1} aria-hidden="true">
                   {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                 </Button>
                 {section.type === "same_be" ? (
@@ -545,6 +549,7 @@ export function AlreadyReconciledWorkspace({
                                             size="icon"
                                             className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
                                             onClick={() => setDecision(booking.bookingId, { reason: "", customReason: "" })}
+                                            aria-label="Clear custom reason"
                                           >
                                             <XIcon className="h-3 w-3" />
                                           </Button>
@@ -625,6 +630,7 @@ export function AlreadyReconciledWorkspace({
                                                   variant="ghost"
                                                   size="icon"
                                                   className="h-5 w-5 text-amber-600 hover:text-amber-800 hover:bg-amber-100 shrink-0"
+                                                  aria-label="Remove dispute"
                                                   onClick={() => {
                                                     const newActive = new Set(activeDisputes);
                                                     newActive.delete(booking.bookingId);
@@ -665,6 +671,7 @@ export function AlreadyReconciledWorkspace({
                                               size="icon"
                                               className="h-6 w-6 text-green-600 hover:text-green-800 hover:bg-green-50"
                                               onClick={() => setFeedback(`Saved booking ${booking.bookingId}`)}
+                                              aria-label={`Save booking ${booking.bookingId}`}
                                               data-testid={`ar-ws-save-${booking.bookingId}`}
                                             >
                                               <CheckCircle2 className="h-3.5 w-3.5" />

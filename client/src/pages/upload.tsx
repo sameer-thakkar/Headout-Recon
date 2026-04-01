@@ -580,7 +580,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const uploadFiles = async (newFiles: File[]) => {
     setIsUploading(true);
     setUploadProgress(0);
-    setUploadStage("Starting...");
+    setUploadStage("Starting…");
     try {
       const handleProgress = (progress: number, stage: string) => {
         setUploadProgress(progress);
@@ -658,7 +658,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
 
     try {
       toast({
-        title: "Generating export...",
+        title: "Generating export…",
         description: "Please wait while the export file is being prepared",
       });
 
@@ -734,6 +734,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     variant="ghost"
                     size="icon"
                     onClick={(e) => { e.stopPropagation(); removeFile(file.id); }}
+                    aria-label={`Remove ${file.name}`}
                     data-testid={`button-remove-${file.id}`}
                   >
                     <X className="h-3 w-3" />
@@ -804,7 +805,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div 
-              className="bg-primary h-full rounded-full transition-all duration-300 ease-out"
+              className="bg-primary h-full rounded-full motion-safe:transition-[width] duration-300 ease-out"
               style={{ width: `${uploadProgress}%` }}
             />
           </div>
@@ -879,7 +880,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm" disabled={isExportingGSheet} data-testid="button-export-dropdown">
-                              {isExportingGSheet ? "Exporting..." : (
+                              {isExportingGSheet ? "Exporting…" : (
                                 <>
                                   <FileDown className="h-4 w-4 mr-1" />
                                   Export
@@ -1121,7 +1122,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     <div className="h-24 flex items-center justify-center text-muted-foreground">
                       <div className="text-center">
                         <div className="h-8 w-8 mx-auto mb-2 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-                        <p className="text-sm">Loading results...</p>
+                        <p className="text-sm">Loading results…</p>
                       </div>
                     </div>
                   ) : (
@@ -1166,7 +1167,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
             </CardHeader>
             {isComputeOpen && hasResults && (
               <CardContent className="pt-0">
-                <Suspense fallback={<div className="flex items-center justify-center py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading panel...</div>}>
+                <Suspense fallback={<div className="flex items-center justify-center py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading panel…</div>}>
                   {spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT" ? (
                     <PurchaseReconciliationPanel
                       primaryRows={primaryRows}

@@ -881,7 +881,7 @@ export function CancellationsWorkspace({
         <div className="flex flex-col flex-1 overflow-hidden">
 
           <div
-            className="border-b overflow-auto shrink-0 transition-all"
+            className="border-b overflow-auto shrink-0 motion-safe:transition-[max-height] motion-safe:duration-300"
             style={{ maxHeight: activeRowKey ? "40%" : "55%" }}
           >
             <div className="px-5 pt-4 pb-2">
@@ -1011,8 +1011,16 @@ export function CancellationsWorkspace({
                   <div className="px-5 py-4">
                     <div className="rounded-md border overflow-hidden">
                       <div className="grid items-center h-8 bg-muted/30 px-3 text-xs font-medium text-muted-foreground border-b gap-x-4" style={{ gridTemplateColumns: TID_GRID_COLUMNS }}>
-                        <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); toggleSelectAll(); }}>
-                          <Checkbox checked={selectedTids.size > 0 && selectedTids.size === activeTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" />
+                        <div
+                          className="flex items-center justify-center cursor-pointer"
+                          role="checkbox"
+                          aria-checked={selectedTids.size > 0 && selectedTids.size === activeTids.filter(t => !resolvedTids.has(t.tid)).length}
+                          aria-label="Select all TIDs"
+                          tabIndex={0}
+                          onClick={e => { e.stopPropagation(); toggleSelectAll(); }}
+                          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSelectAll(); } }}
+                        >
+                          <Checkbox checked={selectedTids.size > 0 && selectedTids.size === activeTids.filter(t => !resolvedTids.has(t.tid)).length} className="h-3.5 w-3.5" tabIndex={-1} />
                         </div>
                         <div />
                         <div>TID</div>
@@ -1037,14 +1045,22 @@ export function CancellationsWorkspace({
                         const pct = totalDisc > 0 ? ((Math.abs(tid.discLc) / totalDisc) * 100).toFixed(0) : "0";
 
                         return (
-                          <div key={tid.tid} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
+                          <div key={tid.tid} className={`motion-safe:transition-[background-color] motion-safe:duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                             <div
                               className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-4 ${isExpanded ? "bg-muted/20" : ""}`}
                               style={{ gridTemplateColumns: TID_GRID_COLUMNS }}
                               onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
                             >
-                              <div className="flex items-center justify-center" onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}>
-                                {!isResolved && <Checkbox checked={isSelected} className="h-3.5 w-3.5" />}
+                              <div
+                                className="flex items-center justify-center cursor-pointer"
+                                role="checkbox"
+                                aria-checked={isSelected}
+                                aria-label={`Select TID ${tid.tid}`}
+                                tabIndex={isResolved ? -1 : 0}
+                                onClick={e => { e.stopPropagation(); if (!isResolved) toggleSelect(tid.tid); }}
+                                onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !isResolved) { e.preventDefault(); e.stopPropagation(); toggleSelect(tid.tid); } }}
+                              >
+                                {!isResolved && <Checkbox checked={isSelected} className="h-3.5 w-3.5" tabIndex={-1} />}
                               </div>
                               <div className="flex items-center">
                                 {isResolved ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
@@ -1223,7 +1239,7 @@ export function CancellationsWorkspace({
                                                   step="0.01"
                                                   value={bidTapOverrides[b.bookingId] ?? ""}
                                                   onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                                  className="w-28 h-5 text-xs text-center font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
+                                                  className="w-28 h-5 text-xs text-center font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus-visible:outline-none focus-visible:border-violet-500"
                                                   data-testid={`input-tap-${b.bookingId}`}
                                                 />
                                                 <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>

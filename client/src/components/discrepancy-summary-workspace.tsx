@@ -973,7 +973,7 @@ export function DiscrepancySummaryWorkspace({
               <div className="max-h-[32vh] overflow-auto">
                 {isLoadingAnalysis ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />Loading analysis...
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />Loading analysis…
                   </div>
                 ) : filteredAnalysis.length === 0 ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">No analysis data available</div>
@@ -1226,7 +1226,7 @@ export function DiscrepancySummaryWorkspace({
 
                   {isSp && (
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 cursor-pointer select-none group" onClick={() => setStep2Collapsed(p => !p)} data-testid="step2-toggle">
+                      <button className="flex items-center gap-2 cursor-pointer select-none group w-full text-left bg-transparent border-0 p-0" onClick={() => setStep2Collapsed(p => !p)} aria-expanded={!step2Collapsed} data-testid="step2-toggle">
                         <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${!step2Collapsed ? "rotate-90" : ""}`} />
                         <span className="text-xs font-medium text-muted-foreground">Step 2: Raise Dispute <span className="text-[10px] font-normal">(optional)</span></span>
                         {step2Collapsed && disputeCount > 0 && (
@@ -1235,7 +1235,7 @@ export function DiscrepancySummaryWorkspace({
                         {step2Collapsed && disputeCount === 0 && (
                           <span className="text-[10px] text-muted-foreground/60 italic">collapsed</span>
                         )}
-                      </div>
+                      </button>
                       {!step2Collapsed && (
                       <div className={`rounded-md border-2 overflow-hidden transition-colors ${disputeCount > 0 ? "border-amber-500 bg-amber-50/50" : "border-border bg-muted/10"}`}>
                         <div className="px-3 py-2.5">
@@ -1275,7 +1275,7 @@ export function DiscrepancySummaryWorkspace({
                             const experience = t.bookings[0]?.experienceName || "";
                             return (
                               <div key={t.tid}>
-                                <div className={`grid grid-cols-[auto_5fr_2.5fr_2.5fr_2.5fr_2.5fr_2.5fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)} data-testid={`dispute-tid-${t.tid}`}>
+                                <div role="button" tabIndex={0} className={`grid grid-cols-[auto_5fr_2.5fr_2.5fr_2.5fr_2.5fr_2.5fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-amber-50/40" : ""}`} onClick={() => toggleDisputeTid(t.tid)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleDisputeTid(t.tid); } }} data-testid={`dispute-tid-${t.tid}`}>
                                   <div className="flex items-center">
                                     <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-1" />
                                     {t.hasPax && (
@@ -1352,10 +1352,10 @@ export function DiscrepancySummaryWorkspace({
                                               <div className="text-right font-mono text-blue-600">{fmt(r.spUnit)}</div>
                                               <div className="text-right font-mono text-green-600">{fmt(r.hoUnit)}</div>
                                               <div className="text-right">
-                                                <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasTapOvr ? "border-violet-400 bg-violet-50" : ""}`} value={tapVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newDisp = val !== "" ? String(parseFloat(val) - r.hoUnit) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: val, dispute: newDisp } } })); } }} data-testid={`pax-tap-${t.tid}-${k}`} />
+                                                <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-400 ${hasTapOvr ? "border-violet-400 bg-violet-50" : ""}`} value={tapVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newDisp = val !== "" ? String(parseFloat(val) - r.hoUnit) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: val, dispute: newDisp } } })); } }} data-testid={`pax-tap-${t.tid}-${k}`} />
                                               </div>
                                               <div className="text-right">
-                                                <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus:outline-none focus:ring-1 focus:ring-violet-400 ${hasDispOvr ? "border-violet-400 bg-violet-50" : ""}`} value={dispVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newTap = val !== "" ? String(r.hoUnit + parseFloat(val)) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: newTap, dispute: val } } })); } }} data-testid={`pax-disp-${t.tid}-${k}`} />
+                                                <input type="number" step="any" className={`h-5 w-20 text-[11px] text-right font-mono border rounded px-1 ml-auto block focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-400 ${hasDispOvr ? "border-violet-400 bg-violet-50" : ""}`} value={dispVal} onClick={e => e.stopPropagation()} onChange={e => { const val = e.target.value; if (val === "" || !isNaN(Number(val))) { const newTap = val !== "" ? String(r.hoUnit + parseFloat(val)) : ""; setDisputePaxPrices(prev => ({ ...prev, [t.tid]: { ...(prev[t.tid] || {}), [k]: { tap: newTap, dispute: val } } })); } }} data-testid={`pax-disp-${t.tid}-${k}`} />
                                               </div>
                                             </div>
                                           );
@@ -1402,7 +1402,7 @@ export function DiscrepancySummaryWorkspace({
                   )}
 
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2 cursor-pointer select-none group" onClick={() => setStep3Collapsed(p => !p)} data-testid="step3-toggle">
+                    <button className="flex items-center gap-2 cursor-pointer select-none group w-full text-left bg-transparent border-0 p-0" onClick={() => setStep3Collapsed(p => !p)} aria-expanded={!step3Collapsed} data-testid="step3-toggle">
                       <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${!step3Collapsed ? "rotate-90" : ""}`} />
                       <span className="text-xs font-medium text-muted-foreground">{isSp ? "Step 3" : "Step 2"}: Raise Issue <span className="text-[10px] font-normal">(optional)</span></span>
                       {step3Collapsed && issueCount > 0 && (
@@ -1411,7 +1411,7 @@ export function DiscrepancySummaryWorkspace({
                       {step3Collapsed && issueCount === 0 && (
                         <span className="text-[10px] text-muted-foreground/60 italic">collapsed</span>
                       )}
-                    </div>
+                    </button>
                     {!step3Collapsed && (
                     <div className={`rounded-md border-2 overflow-hidden transition-colors ${issueCount > 0 ? "border-orange-500 bg-orange-50/50" : "border-border bg-muted/10"}`}>
                       <div className="px-3 py-2.5">
@@ -1447,7 +1447,7 @@ export function DiscrepancySummaryWorkspace({
                           const experience = t.bookings[0]?.experienceName || "";
                           const tidDriTeam = t.bookings[0]?.driTeam || detectedDriTeam;
                           return (
-                            <div key={t.tid} className={`grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)} data-testid={`issue-tid-${t.tid}`}>
+                            <button key={t.tid} className={`grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors w-full text-left bg-transparent ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)} data-testid={`issue-tid-${t.tid}`}>
                               <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-2" />
                               <div className="truncate">
                                 <span className="font-mono font-medium text-primary">{t.tid}</span>
@@ -1457,7 +1457,7 @@ export function DiscrepancySummaryWorkspace({
                               <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
                               <div className="font-mono text-right text-amber-600 font-medium">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
                               <div className="text-right text-violet-600 text-[11px] truncate pl-1">{tidDriTeam}</div>
-                            </div>
+                            </button>
                           );
                         })}
                         {issueCount > 0 && (() => {
@@ -1733,7 +1733,7 @@ export function DiscrepancySummaryWorkspace({
                   const pct = totalDisc > 0 ? ((Math.abs(tid.discLc) / totalDisc) * 100).toFixed(0) : "0";
 
                   return (
-                    <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`transition-all duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
+                    <div key={tid.tid} id={`ws-tid-${tid.tid}`} className={`motion-safe:transition-[background-color,box-shadow] motion-safe:duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isHighlighted ? "ring-2 ring-violet-400 ring-inset bg-violet-50/30 dark:bg-violet-950/20" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                       <div
                         className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-4 ${isExpanded ? "bg-muted/20" : ""}`}
                         style={{ gridTemplateColumns: isUnmapped ? UNMAPPED_TID_GRID_COLUMNS : isSecondaryVendor ? SV_TID_GRID_COLUMNS : TID_GRID_COLUMNS }}
@@ -2118,7 +2118,7 @@ export function DiscrepancySummaryWorkspace({
                                             step="0.01"
                                             value={bidTapOverrides[b.bookingId] ?? ""}
                                             onChange={e => setBidTapOverrides(prev => ({ ...prev, [b.bookingId]: e.target.value }))}
-                                            className="w-28 h-5 text-xs text-center font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus:outline-none focus:border-violet-500"
+                                            className="w-28 h-5 text-xs text-center font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus-visible:outline-none focus-visible:border-violet-500"
                                             data-testid={`input-tap-${b.bookingId}`}
                                           />
                                           <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
