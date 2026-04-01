@@ -1904,6 +1904,9 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         billingEntityName={spDetails?.billingEntityName || ""}
         currency={spDetails?.currency || "USD"}
         isPortalDeposit={spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT"}
+        onPriceOverrideApplied={(overrides) => {
+          setApAmountPaidTotals(prev => ({ ...prev, ...overrides }));
+        }}
       />
 
       {/* Already Reconciled — Analysis Workspace (single dialog, analysis-first) */}

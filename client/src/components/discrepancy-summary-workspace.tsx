@@ -241,6 +241,7 @@ interface DiscrepancySummaryWorkspaceProps {
   billingEntityName?: string;
   currency?: string;
   isPortalDeposit?: boolean;
+  onPriceOverrideApplied?: (overrides: Record<string, number>) => void;
 }
 
 function analyzeTakeRateInsight(bookings: PrimaryRow[]): string | null {
@@ -280,6 +281,7 @@ export function DiscrepancySummaryWorkspace({
   billingEntityName,
   currency,
   isPortalDeposit = false,
+  onPriceOverrideApplied,
 }: DiscrepancySummaryWorkspaceProps) {
   const TID_GRID_COLUMNS = "1.75rem 1.25rem 2fr minmax(4.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(6.5rem,1fr) minmax(2.5rem,0.4fr)";
   const BID_GRID_COLUMNS = "2fr 1.2fr minmax(6rem,1fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(5rem,0.8fr) minmax(4rem,0.7fr) minmax(7rem,1.2fr) minmax(6rem,1fr) minmax(6rem,1fr) minmax(6.5rem,1fr) minmax(2rem,0.3fr)";
@@ -749,12 +751,17 @@ export function DiscrepancySummaryWorkspace({
         resolve(tid.tid);
         setExpandedTid(null);
         flash(`${tid.tid} → ${action === "sp" ? "SP" : "HO"} Net applied`);
+        if (onPriceOverrideApplied) {
+          const overrides: Record<string, number> = {};
+          tid.bookings.forEach(b => { overrides[b.bookingId] = action === "ho" ? (b.hoNet || 0) : (b.spNetInHo || 0); });
+          onPriceOverrideApplied(overrides);
+        }
       },
       onError: (err) => {
         toast({ title: "Failed", description: String(err), variant: "destructive" });
       },
     });
-  }, [priceOverrideMutation, toast, isSecondaryVendor, vendorIdConfirmed]);
+  }, [priceOverrideMutation, toast, isSecondaryVendor, vendorIdConfirmed, onPriceOverrideApplied]);
 
   const handleTidDispute = useCallback((tid: TidGroup) => {
     const bookingIds = tid.bookings.map(b => b.bookingId);
@@ -2571,6 +2578,9 @@ export function DiscrepancySummaryWorkspace({
                                   affectedBookingIds.forEach(id => next.add(id));
                                   return next;
                                 });
+                                if (onPriceOverrideApplied) {
+                                  onPriceOverrideApplied(customPricesNum);
+                                }
                                 applyDisputeAndIssue();
                               },
                             });
