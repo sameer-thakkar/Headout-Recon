@@ -2374,8 +2374,9 @@ export function DiscrepancySummaryWorkspace({
                                   <TableHead className="text-xs text-right text-blue-600 dark:text-blue-400">SP Unit</TableHead>
                                   <TableHead className="text-xs text-right text-green-600 dark:text-green-400">HO Unit</TableHead>
                                   <TableHead className="text-xs bg-violet-50/60 dark:bg-violet-900/15 text-violet-700 dark:text-violet-300 font-semibold" colSpan={2}>
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex flex-col">
                                       <span>Total Amount Payable</span>
+                                      <span className="text-[10px] font-normal text-violet-500 dark:text-violet-400">Selection of Net Price</span>
                                     </div>
                                   </TableHead>
                                   <TableHead className="text-xs bg-orange-50/60 dark:bg-orange-900/15" colSpan={2}>
