@@ -778,6 +778,7 @@ export class DatabaseStorage implements ISessionStorage {
     return sessions.map(s => ({
       id: s.id,
       uploadId: s.id,
+      name: s.name || s.hoFileName || s.spFileName || `Session ${s.id.slice(0, 6)}`,
       status: s.status as "idle" | "processing" | "done" | "error",
       progressStep: s.progressStep,
       createdAt: s.createdAt.toISOString(),
@@ -793,6 +794,7 @@ export class DatabaseStorage implements ISessionStorage {
     return {
       id: session.id,
       uploadId: session.id,
+      name: session.name || session.hoFileName || session.spFileName || `Session ${session.id.slice(0, 6)}`,
       status: session.status as "idle" | "processing" | "done" | "error",
       progressStep: session.progressStep,
       createdAt: session.createdAt.toISOString(),

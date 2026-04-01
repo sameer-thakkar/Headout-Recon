@@ -174,6 +174,7 @@ export type RunResult = z.infer<typeof runResultSchema>;
 export const runRecordSchema = z.object({
   id: z.string(),
   uploadId: z.string(),
+  name: z.string().optional(),
   status: runStatusSchema,
   progressStep: z.string().nullable(),
   createdAt: z.string(),

@@ -11,7 +11,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ClipboardCheck, Search, Calendar, Building2, DollarSign } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ClipboardCheck, Search, Calendar, Building2, DollarSign, Bookmark, BookmarkCheck, BookmarkX } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ReconSession {
   id: string;
@@ -23,32 +29,41 @@ interface ReconSession {
   currency?: string;
   totalDiscrepancy?: number;
   bookingCount?: number;
+  hoFileName?: string;
 }
 
 interface ReconTrackerPageProps {
   runId: string | null;
+  savedSessionIds?: Set<string>;
+  onToggleSave?: (sessionId: string) => void;
 }
 
-export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
+export function ReconTrackerPage({ runId, savedSessionIds, onToggleSave }: ReconTrackerPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: sessionsData, isLoading } = useQuery<{ sessions: ReconSession[] }>({
     queryKey: ["/api/sessions"],
   });
 
-  const sessions = sessionsData?.sessions || [];
+  const allSessions = sessionsData?.sessions || [];
+
+  const savedSessions = useMemo(() => {
+    if (!savedSessionIds || savedSessionIds.size === 0) return [];
+    return allSessions.filter((s) => savedSessionIds.has(s.id));
+  }, [allSessions, savedSessionIds]);
 
   const filteredSessions = useMemo(() => {
-    if (!searchQuery.trim()) return sessions;
+    if (!searchQuery.trim()) return savedSessions;
     const query = searchQuery.toLowerCase();
-    return sessions.filter(
+    return savedSessions.filter(
       (session) =>
         session.id.toLowerCase().includes(query) ||
         session.name?.toLowerCase().includes(query) ||
         session.beId?.toLowerCase().includes(query) ||
-        session.beName?.toLowerCase().includes(query)
+        session.beName?.toLowerCase().includes(query) ||
+        session.hoFileName?.toLowerCase().includes(query)
     );
-  }, [sessions, searchQuery]);
+  }, [savedSessions, searchQuery]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -59,17 +74,11 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
     });
   };
 
-  const formatNumber = (value: number): string => {
-    return value.toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "done":
       case "completed":
-        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Completed</Badge>;
+        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Done</Badge>;
       case "processing":
         return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Processing</Badge>;
       case "error":
@@ -89,7 +98,7 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
           <div>
             <h1 className="text-2xl font-semibold">Recon Tracker</h1>
             <p className="text-sm text-muted-foreground">
-              Track and monitor all reconciliation sessions
+              Your saved reconciliation sessions
             </p>
           </div>
         </div>
@@ -100,18 +109,20 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Reconciliation Sessions
+              Saved Sessions
             </CardTitle>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search sessions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 w-64"
-                data-testid="input-search-sessions"
-              />
-            </div>
+            {savedSessions.length > 0 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search sessions…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 w-64"
+                  data-testid="input-search-sessions"
+                />
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -119,18 +130,29 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
+          ) : savedSessions.length === 0 ? (
+            <div className="text-center py-12 space-y-3">
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
+                <Bookmark className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <p className="font-medium text-muted-foreground">No saved sessions yet</p>
+              <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                Use the bookmark icon in the top bar or on the home page to save a session here.
+              </p>
+            </div>
           ) : filteredSessions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchQuery ? "No sessions match your search" : "No reconciliation sessions found"}
+              No sessions match your search
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Session ID</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Bookings</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -140,13 +162,37 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
                     className={session.id === runId ? "bg-primary/5" : ""}
                     data-testid={`row-session-${session.id}`}
                   >
-                    <TableCell className="font-mono text-sm">
-                      {session.id.slice(0, 8)}...
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-sm">{session.name || session.id.slice(0, 8)}</p>
+                        {session.hoFileName && (
+                          <p className="text-xs text-muted-foreground font-mono">{session.hoFileName}</p>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell>{formatDate(session.createdAt)}</TableCell>
+                    <TableCell className="text-sm">{formatDate(session.createdAt)}</TableCell>
                     <TableCell>{getStatusBadge(session.status)}</TableCell>
-                    <TableCell className="text-right">
-                      {session.bookingCount ?? "-"}
+                    <TableCell className="text-right text-sm">
+                      {session.bookingCount ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {onToggleSave && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => onToggleSave(session.id)}
+                              data-testid={`button-unsave-session-${session.id}`}
+                              aria-label="Remove from tracker"
+                            >
+                              <BookmarkX className="h-4 w-4" aria-hidden="true" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Remove from tracker</TooltipContent>
+                        </Tooltip>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -164,8 +210,8 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
                 <ClipboardCheck className="h-5 w-5 text-blue-600 dark:text-blue-300" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Total Sessions</p>
-                <p className="text-2xl font-semibold">{sessions.length}</p>
+                <p className="text-sm text-muted-foreground">Saved Sessions</p>
+                <p className="text-2xl font-semibold">{savedSessions.length}</p>
               </div>
             </div>
           </CardContent>
@@ -179,7 +225,7 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
               <div>
                 <p className="text-sm text-muted-foreground">Completed</p>
                 <p className="text-2xl font-semibold">
-                  {sessions.filter((s) => s.status === "completed").length}
+                  {savedSessions.filter((s) => s.status === "done" || s.status === "completed").length}
                 </p>
               </div>
             </div>
@@ -192,10 +238,8 @@ export function ReconTrackerPage({ runId }: ReconTrackerPageProps) {
                 <DollarSign className="h-5 w-5 text-amber-600 dark:text-amber-300" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">In Progress</p>
-                <p className="text-2xl font-semibold">
-                  {sessions.filter((s) => s.status === "processing").length}
-                </p>
+                <p className="text-sm text-muted-foreground">All Sessions</p>
+                <p className="text-2xl font-semibold">{allSessions.length}</p>
               </div>
             </div>
           </CardContent>

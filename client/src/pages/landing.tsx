@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Upload, Cog, Download, Clock, ArrowRight, Play, Database, Trash2 } from "lucide-react";
+import { Upload, Cog, Download, Clock, ArrowRight, Play, Database, Trash2, Bookmark, BookmarkCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,11 +9,18 @@ import type { ReconciliationSession } from "@shared/schema";
 import { VendorBalancesSection } from "@/components/vendor-balances-section";
 import { PortalReloadsSection } from "@/components/portal-reloads-section";
 import { PaxTypesSection } from "@/components/pax-types-section";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface LandingPageProps {
   lastFxRefresh: string | null;
   onStartDemo: () => void;
   onLoadSession?: (session: ReconciliationSession) => void;
+  savedSessionIds?: Set<string>;
+  onToggleSave?: (sessionId: string) => void;
 }
 
 const steps = [
@@ -37,17 +44,15 @@ const steps = [
   },
 ];
 
-export function LandingPage({ lastFxRefresh, onStartDemo, onLoadSession }: LandingPageProps) {
+export function LandingPage({ lastFxRefresh, onStartDemo, onLoadSession, savedSessionIds, onToggleSave }: LandingPageProps) {
   const [, setLocation] = useLocation();
 
-  // Fetch saved sessions
   const { data: sessionsData, isLoading: isLoadingSessions } = useQuery<{ sessions: ReconciliationSession[] }>({
     queryKey: ["/api/sessions"],
   });
 
   const sessions = sessionsData?.sessions || [];
 
-  // Delete session mutation
   const deleteSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
       await apiRequest("DELETE", `/api/sessions/${sessionId}`);
@@ -69,6 +74,11 @@ export function LandingPage({ lastFxRefresh, onStartDemo, onLoadSession }: Landi
     if (confirm("Are you sure you want to delete this session?")) {
       deleteSessionMutation.mutate(sessionId);
     }
+  };
+
+  const handleToggleSave = (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    onToggleSave?.(sessionId);
   };
 
   return (
@@ -146,63 +156,95 @@ export function LandingPage({ lastFxRefresh, onStartDemo, onLoadSession }: Landi
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Database className="h-5 w-5" />
-                Saved Sessions
+                Recent Sessions
               </CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingSessions ? (
                 <div className="text-center py-8">
-                  <p className="text-muted-foreground">Loading sessions...</p>
+                  <p className="text-muted-foreground">Loading sessions…</p>
                 </div>
               ) : sessions.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
                     <Database className="h-8 w-8 text-muted-foreground" />
                   </div>
-                  <p className="text-muted-foreground mb-2">No saved sessions</p>
+                  <p className="text-muted-foreground mb-2">No sessions yet</p>
                   <p className="text-sm text-muted-foreground">
-                    Your reconciliation sessions will be saved here automatically
+                    Upload files to start your first reconciliation
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {sessions.slice(0, 10).map((session) => (
-                    <div
-                      key={session.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-background border hover-elevate cursor-pointer"
-                      onClick={() => handleLoadSession(session)}
-                      data-testid={`session-card-${session.id}`}
-                    >
-                      <div>
-                        <p className="font-medium">{session.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(session.createdAt).toLocaleDateString()} · 
-                          {session.hoFileName && ` ${session.hoFileName}`}
-                        </p>
+                  {sessions.slice(0, 10).map((session) => {
+                    const isSaved = savedSessionIds?.has(session.id);
+                    return (
+                      <div
+                        key={session.id}
+                        className="flex items-center justify-between p-4 rounded-lg bg-background border hover-elevate cursor-pointer"
+                        onClick={() => handleLoadSession(session)}
+                        data-testid={`session-card-${session.id}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {isSaved && (
+                            <BookmarkCheck className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{session.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(session.createdAt).toLocaleDateString("en-GB")}
+                              {session.hoFileName && ` · ${session.hoFileName}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Badge
+                            variant={
+                              session.status === "done"
+                                ? "outline"
+                                : session.status === "error"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                          >
+                            {session.status}
+                          </Badge>
+                          {onToggleSave && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className={isSaved ? "text-primary" : "text-muted-foreground"}
+                                  onClick={(e) => handleToggleSave(e, session.id)}
+                                  data-testid={`button-save-session-${session.id}`}
+                                  aria-label={isSaved ? "Remove from Recon Tracker" : "Save to Recon Tracker"}
+                                >
+                                  {isSaved ? (
+                                    <BookmarkCheck className="h-4 w-4" aria-hidden="true" />
+                                  ) : (
+                                    <Bookmark className="h-4 w-4" aria-hidden="true" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {isSaved ? "Remove from Recon Tracker" : "Save to Recon Tracker"}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(e) => handleDeleteSession(e, session.id)}
+                            data-testid={`button-delete-session-${session.id}`}
+                            aria-label="Delete session"
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant={
-                            session.status === "done"
-                              ? "outline"
-                              : session.status === "error"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                        >
-                          {session.status}
-                        </Badge>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={(e) => handleDeleteSession(e, session.id)}
-                          data-testid={`button-delete-session-${session.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

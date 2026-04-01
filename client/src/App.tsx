@@ -42,6 +42,7 @@ import type {
 import { requiredFields, optionalFields, headerAliases } from "@shared/schema";
 
 const CURRENT_RUN_ID_KEY = "headout-recon-current-run-id";
+const SAVED_SESSIONS_KEY = "headout-recon-saved-sessions";
 
 function AppContent({ onLogout }: { onLogout?: () => void }) {
   
@@ -57,6 +58,14 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
   const [status, setStatus] = useState<RunStatus>("idle");
   const [lastFxRefresh, setLastFxRefresh] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [savedSessionIds, setSavedSessionIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(SAVED_SESSIONS_KEY);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
   const [lastExportTimestamp, setLastExportTimestamp] = useState<string | null>(null);
   const [isReconciliationFinalized, setIsReconciliationFinalized] = useState(false);
   const [analysisGSheetUrl, setAnalysisGSheetUrl] = useState<string | null>(null);
@@ -96,6 +105,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
           const sessionRuns: RunRecord[] = data.sessions.map((session: ReconciliationSession) => ({
             id: session.id,
             uploadId: session.id,
+            name: session.name || session.hoFileName || session.spFileName || `Session ${session.id.slice(0, 6)}`,
             status: session.status as RunStatus,
             progressStep: session.progressStep || null,
             createdAt: typeof session.createdAt === 'string' ? session.createdAt : session.createdAt.toISOString(),
@@ -222,6 +232,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
       const newRun: RunRecord = {
         id: runData.runId,
         uploadId: uploadData.uploadId,
+        name: runData.sessionName || uploadedFile.name || `Session ${new Date().toLocaleDateString("en-GB")}`,
         status: "done",
         progressStep: null,
         createdAt: new Date().toISOString(),
@@ -266,6 +277,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
       const newRun: RunRecord = {
         id: data.runId,
         uploadId: data.uploadId,
+        name: data.sessionName || `Demo – ${new Date().toLocaleDateString("en-GB")}`,
         status: "done",
         progressStep: null,
         createdAt: new Date().toISOString(),
@@ -308,6 +320,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
     const sessionRun: RunRecord = {
       id: session.id,
       uploadId: session.id,
+      name: session.name || session.hoFileName || session.spFileName || `Session ${session.id.slice(0, 6)}`,
       status: session.status as RunStatus,
       progressStep: session.progressStep || null,
       createdAt: typeof session.createdAt === 'string' ? session.createdAt : session.createdAt.toISOString(),
@@ -387,6 +400,22 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
       throw error;
     }
   }, [mappings, uploadedFiles, results]);
+
+  // Toggle save session in localStorage
+  const toggleSaveSession = useCallback((runId: string) => {
+    setSavedSessionIds(prev => {
+      const next = new Set(prev);
+      if (next.has(runId)) {
+        next.delete(runId);
+      } else {
+        next.add(runId);
+      }
+      try {
+        localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  }, []);
 
   // FX refresh handler
   const handleFxRefresh = useCallback(async () => {
@@ -524,6 +553,8 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
             onFxRefresh={handleFxRefresh}
             isRefreshing={isRefreshing}
             onLogout={onLogout}
+            savedSessionIds={savedSessionIds}
+            onToggleSave={toggleSaveSession}
           />
           <main className="flex-1 overflow-auto bg-background">
             <Switch>
@@ -532,6 +563,8 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
                   lastFxRefresh={lastFxRefresh}
                   onStartDemo={handleLoadDemo}
                   onLoadSession={handleLoadSession}
+                  savedSessionIds={savedSessionIds}
+                  onToggleSave={toggleSaveSession}
                 />
               </Route>
               <Route path="/upload">
@@ -592,7 +625,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
               </Route>
 
               <Route path="/recon-tracker">
-                <ReconTrackerPage runId={currentRunId} />
+                <ReconTrackerPage runId={currentRunId} savedSessionIds={savedSessionIds} onToggleSave={toggleSaveSession} />
               </Route>
               <Route path="/issue-tracker">
                 <IssueTrackerPage runId={currentRunId} />
