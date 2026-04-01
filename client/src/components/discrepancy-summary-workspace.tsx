@@ -2361,8 +2361,8 @@ export function DiscrepancySummaryWorkspace({
                                   <TableHead className="text-xs text-right">SP Unit</TableHead>
                                   <TableHead className="text-xs text-right">HO Unit</TableHead>
                                   <TableHead className="text-xs text-right">Final Price</TableHead>
-                                  <TableHead className="text-xs text-right px-1.5">
-                                    <div className="flex items-center justify-end gap-0.5">
+                                  <TableHead className="text-xs text-right">
+                                    <div className="flex items-center justify-end gap-1">
                                       <span className="text-orange-600 dark:text-orange-400">Dispute</span>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -2374,8 +2374,8 @@ export function DiscrepancySummaryWorkspace({
                                       </Tooltip>
                                     </div>
                                   </TableHead>
-                                  <TableHead className="text-xs text-right px-1.5">
-                                    <div className="flex items-center justify-end gap-0.5">
+                                  <TableHead className="text-xs text-right">
+                                    <div className="flex items-center justify-end gap-1">
                                       <span className="text-red-600 dark:text-red-400">Issue</span>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
