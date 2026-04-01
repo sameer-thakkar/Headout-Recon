@@ -2100,6 +2100,26 @@ export async function registerRoutes(
     }
   });
 
+  // TEMPORARY: Bulk delete all sessions (protected by APP_PASSWORD)
+  app.delete("/api/admin/clear-all-sessions", async (req, res) => {
+    const secret = req.headers["x-admin-secret"];
+    if (!secret || secret !== process.env.APP_PASSWORD) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const sessions = await sessionStorage.getSessions();
+      let deleted = 0;
+      for (const s of sessions) {
+        const ok = await sessionStorage.deleteSession(s.id);
+        if (ok) deleted++;
+      }
+      res.json({ success: true, deleted });
+    } catch (error) {
+      console.error("Clear all sessions error:", error);
+      res.status(500).json({ error: "Failed to clear sessions" });
+    }
+  });
+
   // =====================================================================
   // FINANCIAL EXPORT VALIDATION
   // GET /api/runs/:runId/validate-financial
