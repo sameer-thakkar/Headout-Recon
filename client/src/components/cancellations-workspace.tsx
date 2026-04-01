@@ -872,8 +872,8 @@ export function CancellationsWorkspace({
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">{totalBidCount} bookings</span>
             <span className="text-xs font-mono font-semibold text-red-600" data-testid="total-disc-usd">{fmt(Math.abs(totalDiscUsd))} USD discrepancy</span>
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose} data-testid="close-workspace">
-              <XIcon className="h-4 w-4" />
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose} data-testid="close-workspace" aria-label="Close workspace">
+              <XIcon className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -1001,8 +1001,8 @@ export function CancellationsWorkspace({
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="text-xs text-muted-foreground">{activeTids.length} TIDs · {activeRow.bidCount} bookings</span>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setActiveRowKey(null)} data-testid="close-take-action">
-                      <XIcon className="h-3.5 w-3.5" />
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setActiveRowKey(null)} data-testid="close-take-action" aria-label="Close take action panel">
+                      <XIcon className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -1047,9 +1047,13 @@ export function CancellationsWorkspace({
                         return (
                           <div key={tid.tid} className={`motion-safe:transition-[background-color] motion-safe:duration-500 ${isResolved ? "bg-green-50/40 dark:bg-green-950/10" : ""} ${isSelected && !isResolved ? "bg-primary/5" : ""}`} data-testid={`action-tid-${tid.tid}`}>
                             <div
+                              role="button"
+                              tabIndex={0}
+                              aria-expanded={isExpanded}
                               className={`grid items-center px-3 min-h-[2.75rem] cursor-pointer transition-colors hover:bg-muted/30 border-b gap-x-4 ${isExpanded ? "bg-muted/20" : ""}`}
                               style={{ gridTemplateColumns: TID_GRID_COLUMNS }}
                               onClick={() => setExpandedTid(isExpanded ? null : tid.tid)}
+                              onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedTid(isExpanded ? null : tid.tid); } }}
                             >
                               <div
                                 className="flex items-center justify-center cursor-pointer"
@@ -1242,8 +1246,8 @@ export function CancellationsWorkspace({
                                                   className="w-28 h-5 text-xs text-center font-mono px-1.5 bg-transparent border-0 border-b border-violet-400 text-violet-700 dark:text-violet-300 font-medium focus-visible:outline-none focus-visible:border-violet-500"
                                                   data-testid={`input-tap-${b.bookingId}`}
                                                 />
-                                                <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`}>
-                                                  <XIcon className="h-2.5 w-2.5" />
+                                                <button className="p-0 text-muted-foreground/50 hover:text-foreground transition-colors flex-shrink-0" onClick={() => setBidTapOverrides(prev => { const n = { ...prev }; delete n[b.bookingId]; return n; })} data-testid={`clear-tap-${b.bookingId}`} aria-label={`Clear TAP override for booking ${b.bookingId}`}>
+                                                  <XIcon className="h-2.5 w-2.5" aria-hidden="true" />
                                                 </button>
                                               </>
                                             ) : (
