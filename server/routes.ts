@@ -30,14 +30,30 @@ function registerDownloadRoute(app: Express) {
   });
 }
 
-// In-memory token store: token → userId
+// In-memory token store: token → username
 const authTokens = new Map<string, string>();
+
+// Allowed users for per-user login
+const ALLOWED_USERS = [
+  "Arun Kumar",
+  "Srivarshini",
+  "Sameer",
+  "Neha",
+  "Rohan",
+  "Ebby",
+  "Divya",
+  "Internal Audit",
+  "Kushagra",
+  "Himanshu",
+  "Tanishi",
+];
 
 // Extend Express session type
 declare module "express-session" {
   interface SessionData {
     authenticated?: boolean;
     userId?: string;
+    username?: string;
   }
 }
 
@@ -65,35 +81,39 @@ async function seedInitialAdmin() {
   }
 }
 
+// Returns the username for new per-user allowlist sessions (token or session.username)
+function getTokenUsername(req: Request): string | undefined {
+  const authHeader = req.headers["authorization"];
+  if (authHeader?.startsWith("Bearer ")) {
+    const val = authTokens.get(authHeader.slice(7));
+    if (val) return val;
+  }
+  return req.session?.username;
+}
+
+// Returns the DB user ID for legacy sessions only (session.userId set by old login flow)
+function getTokenUserId(req: Request): string | undefined {
+  return req.session?.userId;
+}
+
 // Auth middleware — protects all /api/* routes except /api/auth/*
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.path.startsWith("/auth/")) return next();
-  const authHeader = req.headers["authorization"];
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    if (authTokens.has(token)) return next();
-  }
-  // Fallback: cookie-based session
-  if (req.session?.userId) return next();
+  // New per-user allowlist sessions
+  if (getTokenUsername(req)) return next();
+  // Legacy sessions with DB user ID
+  if (getTokenUserId(req)) return next();
   res.status(401).json({ error: "Unauthorized" });
 }
 
-// Admin-only middleware
+// Admin-only middleware — requires an authenticated DB user with role="admin"
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const userId = getTokenUserId(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  if (!userId) return res.status(403).json({ error: "Admin access required" });
   db.select().from(users).where(eq(users.id, userId)).limit(1).then(([user]) => {
     if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin access required" });
     next();
   }).catch(() => res.status(500).json({ error: "Auth check failed" }));
-}
-
-function getTokenUserId(req: Request): string | undefined {
-  const authHeader = req.headers["authorization"];
-  if (authHeader?.startsWith("Bearer ")) {
-    return authTokens.get(authHeader.slice(7));
-  }
-  return req.session?.userId;
 }
 
 // Ensure uploads directory exists
@@ -180,41 +200,59 @@ export async function registerRoutes(
   // ==========================================
 
   app.get("/api/auth/status", async (req, res) => {
+    // New per-user allowlist sessions (token or session.username)
+    const username = getTokenUsername(req);
+    if (username) {
+      return res.set("Cache-Control", "no-store").json({
+        authenticated: true,
+        user: { id: username, username, role: "member", createdAt: "2025-01-01T00:00:00.000Z" },
+      });
+    }
+    // Legacy sessions: cookie-based with a DB user ID
     const userId = getTokenUserId(req);
-    if (!userId) {
-      return res.set("Cache-Control", "no-store").json({ authenticated: false });
+    if (userId) {
+      try {
+        const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        if (!user) return res.set("Cache-Control", "no-store").json({ authenticated: false });
+        const safeUser: SafeUser = { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+        return res.set("Cache-Control", "no-store").json({ authenticated: true, user: safeUser });
+      } catch {
+        return res.set("Cache-Control", "no-store").json({ authenticated: false });
+      }
     }
-    try {
-      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user) return res.set("Cache-Control", "no-store").json({ authenticated: false });
-      const safeUser: SafeUser = { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
-      return res.set("Cache-Control", "no-store").json({ authenticated: true, user: safeUser });
-    } catch {
-      return res.set("Cache-Control", "no-store").json({ authenticated: false });
-    }
+    return res.set("Cache-Control", "no-store").json({ authenticated: false });
   });
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: "Username and password are required" });
     }
-    try {
-      const [user] = await db.select().from(users).where(eq(users.username, username.trim())).limit(1);
-      if (!user) return res.status(401).json({ error: "Invalid username or password" });
-      const valid = await bcrypt.compare(password, user.password);
-      if (!valid) return res.status(401).json({ error: "Invalid username or password" });
-      const token = randomUUID();
-      authTokens.set(token, user.id);
-      req.session.userId = user.id;
-      req.session.save(() => {
-        const safeUser: SafeUser = { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
-        res.json({ success: true, token, user: safeUser });
-      });
-    } catch (err) {
-      console.error("Login error:", err);
-      res.status(500).json({ error: "Login failed" });
+    const trimmedUsername = username.trim();
+    const appPassword = process.env.APP_PASSWORD;
+    if (!appPassword) {
+      console.error("[auth] APP_PASSWORD is not set");
+      return res.status(500).json({ error: "Server configuration error" });
     }
+    const isAllowedUser = ALLOWED_USERS.some(
+      (u) => u.toLowerCase() === trimmedUsername.toLowerCase()
+    );
+    if (!isAllowedUser || password !== appPassword) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+    const canonicalUsername = ALLOWED_USERS.find(
+      (u) => u.toLowerCase() === trimmedUsername.toLowerCase()
+    )!;
+    const token = randomUUID();
+    authTokens.set(token, canonicalUsername);
+    req.session.username = canonicalUsername;
+    req.session.save(() => {
+      res.json({
+        success: true,
+        token,
+        user: { id: canonicalUsername, username: canonicalUsername, role: "member", createdAt: "2025-01-01T00:00:00.000Z" },
+      });
+    });
   });
 
   app.post("/api/auth/logout", (req, res) => {
