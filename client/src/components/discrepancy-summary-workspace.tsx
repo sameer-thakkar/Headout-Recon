@@ -2359,28 +2359,28 @@ export function DiscrepancySummaryWorkspace({
                                   <TableHead className="text-xs text-right">SP Unit</TableHead>
                                   <TableHead className="text-xs text-right">HO Unit</TableHead>
                                   <TableHead className="text-xs text-right">Final Price</TableHead>
-                                  <TableHead className="text-xs text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                      Dispute (per pax)
+                                  <TableHead className="text-xs text-right px-1.5">
+                                    <div className="flex items-center justify-end gap-0.5">
+                                      <span className="text-orange-600 dark:text-orange-400">Dispute</span>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                          Amount you are formally disputing with the vendor for this pax type (unit level). Aggregated into the TID-level dispute total.
+                                          Per-pax dispute amount. Aggregated into the TID-level dispute total.
                                         </TooltipContent>
                                       </Tooltip>
                                     </div>
                                   </TableHead>
-                                  <TableHead className="text-xs text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                      Issue (per pax)
+                                  <TableHead className="text-xs text-right px-1.5">
+                                    <div className="flex items-center justify-end gap-0.5">
+                                      <span className="text-red-600 dark:text-red-400">Issue</span>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                                         </TooltipTrigger>
                                         <TooltipContent side="top" className="max-w-[220px] text-xs">
-                                          Amount being flagged as an internal issue (e.g., system error, data mismatch) for this pax type (unit level). Aggregated into the TID-level issue total.
+                                          Per-pax issue amount. Aggregated into the TID-level issue total.
                                         </TooltipContent>
                                       </Tooltip>
                                     </div>
@@ -2410,32 +2410,32 @@ export function DiscrepancySummaryWorkspace({
                                         />
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-right">
-                                      <div className="flex items-center justify-end gap-1">
-                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-blue-600" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-dispute-sp-${row.rowKey}`}>SP</Button>
-                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-green-600" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-dispute-ho-${row.rowKey}`}>HO</Button>
+                                    <TableCell className="text-right px-1.5">
+                                      <div className="flex items-center justify-end gap-0.5">
+                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-blue-600 hover:bg-blue-50" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-dispute-sp-${row.rowKey}`}>S</Button>
+                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-green-600 hover:bg-green-50" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-dispute-ho-${row.rowKey}`}>H</Button>
                                         <Input
                                           type="number"
                                           step="0.01"
-                                          placeholder="Dispute"
+                                          placeholder="0.00"
                                           value={paxDisputePrices[row.rowKey] ?? ""}
                                           onChange={(e) => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                                          className="w-24 text-xs font-mono text-right ml-auto border-orange-200 focus-visible:ring-orange-400"
+                                          className="w-[72px] h-6 text-xs font-mono text-right px-1 border-orange-300 bg-orange-50/30 focus-visible:ring-orange-400 dark:bg-orange-950/20 dark:border-orange-700"
                                           data-testid={`pax-dispute-${row.rowKey}`}
                                         />
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-right">
-                                      <div className="flex items-center justify-end gap-1">
-                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-blue-600" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-issue-sp-${row.rowKey}`}>SP</Button>
-                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-green-600" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-issue-ho-${row.rowKey}`}>HO</Button>
+                                    <TableCell className="text-right px-1.5">
+                                      <div className="flex items-center justify-end gap-0.5">
+                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-blue-600 hover:bg-blue-50" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-issue-sp-${row.rowKey}`}>S</Button>
+                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-green-600 hover:bg-green-50" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-issue-ho-${row.rowKey}`}>H</Button>
                                         <Input
                                           type="number"
                                           step="0.01"
-                                          placeholder="Issue"
+                                          placeholder="0.00"
                                           value={paxIssuePrices[row.rowKey] ?? ""}
                                           onChange={(e) => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                                          className="w-24 text-xs font-mono text-right ml-auto border-red-200 focus-visible:ring-red-400"
+                                          className="w-[72px] h-6 text-xs font-mono text-right px-1 border-red-300 bg-red-50/30 focus-visible:ring-red-400 dark:bg-red-950/20 dark:border-red-700"
                                           data-testid={`pax-issue-${row.rowKey}`}
                                         />
                                       </div>
