@@ -1425,9 +1425,11 @@ export function DiscrepancySummaryWorkspace({
                             <FileWarning className={`h-3.5 w-3.5 ${issueCount > 0 ? "text-orange-600" : "text-muted-foreground"}`} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-semibold mb-0.5">This is HO error</div>
+                            <div className="text-xs font-semibold mb-0.5">{isSp ? "This is HO error" : "This is SP error"}</div>
                             <p className="text-[11px] text-muted-foreground leading-relaxed">
-                              To be checked with internal teams at Headout. Selected TIDs will be logged to the Issue Tracker for investigation and resolution.
+                              {isSp
+                                ? "To be checked with internal teams at Headout. Selected TIDs will be logged to the Issue Tracker for investigation and resolution."
+                                : "To be checked with internal teams/ raised to SP for clarification. Selected TIDs will be logged to the Issue Tracker for investigation and resolution"}
                             </p>
                           </div>
                         </div>
