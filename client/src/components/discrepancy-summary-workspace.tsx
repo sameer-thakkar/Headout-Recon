@@ -1447,7 +1447,7 @@ export function DiscrepancySummaryWorkspace({
                           const experience = t.bookings[0]?.experienceName || "";
                           const tidDriTeam = t.bookings[0]?.driTeam || detectedDriTeam;
                           return (
-                            <button key={t.tid} className={`grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors w-full text-left bg-transparent ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)} data-testid={`issue-tid-${t.tid}`}>
+                            <div role="button" tabIndex={0} key={t.tid} className={`grid grid-cols-[auto_4fr_2fr_2fr_2fr_3fr] gap-0 items-center px-3 py-1.5 border-t text-xs cursor-pointer hover:bg-muted/20 transition-colors ${isChecked ? "bg-orange-50/40" : ""}`} onClick={() => toggleIssueTid(t.tid)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleIssueTid(t.tid); } }} data-testid={`issue-tid-${t.tid}`}>
                               <Checkbox checked={isChecked} className="h-3.5 w-3.5 mr-2" />
                               <div className="truncate">
                                 <span className="font-mono font-medium text-primary">{t.tid}</span>
@@ -1457,7 +1457,7 @@ export function DiscrepancySummaryWorkspace({
                               <div className="font-mono text-right text-green-600">{fmt(t.hoNet)}</div>
                               <div className="font-mono text-right text-amber-600 font-medium">{fmt(Math.abs(t.spNet - t.hoNet))}</div>
                               <div className="text-right text-violet-600 text-[11px] truncate pl-1">{tidDriTeam}</div>
-                            </button>
+                            </div>
                           );
                         })}
                         {issueCount > 0 && (() => {

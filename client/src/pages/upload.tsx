@@ -805,7 +805,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div 
-              className="bg-primary h-full rounded-full motion-safe:transition-[width] duration-300 ease-out"
+              className="bg-primary h-full rounded-full motion-safe:transition-[width] motion-safe:duration-300 ease-out"
               style={{ width: `${uploadProgress}%` }}
             />
           </div>
