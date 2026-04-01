@@ -385,6 +385,7 @@ function AppContent({ onLogout }: { onLogout?: () => void }) {
       const newRun: RunRecord = {
         id: `run-${Date.now()}`,
         uploadId: uploadedFiles[0]?.id || "unknown",
+        name: uploadedFiles[0]?.name || `Run – ${new Date().toLocaleDateString()}`,
         status: "done",
         progressStep: null,
         createdAt: new Date().toISOString(),
