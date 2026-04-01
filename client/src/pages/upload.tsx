@@ -723,13 +723,28 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     }
 
     const svRows: EnhancedRow[] = [];
+    const svRegularBookings = secondaryVendorRows.filter(
+      r => !arReasons.has(r.reason) && !cancellationReasonSet.has(r.reason)
+    );
     const svByReason = new Map<string, PrimaryRow[]>();
-    for (const b of secondaryVendorRows) {
+    for (const b of svRegularBookings) {
       if (!svByReason.has(b.reason)) svByReason.set(b.reason, []);
       svByReason.get(b.reason)!.push(b);
     }
     for (const [reason, bookings] of svByReason) {
       svRows.push({ reason, ...buildReasonData(bookings) });
+    }
+
+    let svArRow: EnhancedRow | null = null;
+    const svArBookings = secondaryVendorRows.filter(r => arReasons.has(r.reason));
+    if (svArBookings.length > 0) {
+      svArRow = { reason: "Already Reconciled", ...buildReasonData(svArBookings, true) };
+    }
+
+    let svCancRow: EnhancedRow | null = null;
+    const svCancBookings = secondaryVendorRows.filter(r => cancellationReasonSet.has(r.reason));
+    if (svCancBookings.length > 0) {
+      svCancRow = { reason: "Cancellations", ...buildReasonData(svCancBookings) };
     }
 
     const reconciledBookings = primaryRows.filter(r => r.reason === "Reconciled");
@@ -738,11 +753,17 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       reconciledRow = { reason: "Reconciled", ...buildReasonData(reconciledBookings) };
     }
 
-    const allSpNet = (reconciledRow?.spNet || 0) + rows.reduce((s, r) => s + r.spNet, 0) + (arRow?.spNet || 0) + (cancRow?.spNet || 0) + svRows.reduce((s, r) => s + r.spNet, 0);
-    const allHoNet = (reconciledRow?.hoNet || 0) + rows.reduce((s, r) => s + r.hoNet, 0) + (arRow?.hoNet || 0) + (cancRow?.hoNet || 0) + svRows.reduce((s, r) => s + r.hoNet, 0);
-    const allBalance = (reconciledRow?.balancePayable || 0) + rows.reduce((s, r) => s + r.balancePayable, 0) + (arRow?.balancePayable || 0) + (cancRow?.balancePayable || 0) + svRows.reduce((s, r) => s + r.balancePayable, 0);
-    const allDiscLc = (reconciledRow?.discrepancyLc || 0) + rows.reduce((s, r) => s + r.discrepancyLc, 0) + (arRow?.discrepancyLc || 0) + (cancRow?.discrepancyLc || 0) + svRows.reduce((s, r) => s + r.discrepancyLc, 0);
-    const allDiscUsd = (reconciledRow?.discrepancyUsd || 0) + rows.reduce((s, r) => s + r.discrepancyUsd, 0) + (arRow?.discrepancyUsd || 0) + (cancRow?.discrepancyUsd || 0) + svRows.reduce((s, r) => s + r.discrepancyUsd, 0);
+    const svAllSpNet = svRows.reduce((s, r) => s + r.spNet, 0) + (svArRow?.spNet || 0) + (svCancRow?.spNet || 0);
+    const svAllHoNet = svRows.reduce((s, r) => s + r.hoNet, 0) + (svArRow?.hoNet || 0) + (svCancRow?.hoNet || 0);
+    const svAllBalance = svRows.reduce((s, r) => s + r.balancePayable, 0) + (svArRow?.balancePayable || 0) + (svCancRow?.balancePayable || 0);
+    const svAllDiscLc = svRows.reduce((s, r) => s + r.discrepancyLc, 0) + (svArRow?.discrepancyLc || 0) + (svCancRow?.discrepancyLc || 0);
+    const svAllDiscUsd = svRows.reduce((s, r) => s + r.discrepancyUsd, 0) + (svArRow?.discrepancyUsd || 0) + (svCancRow?.discrepancyUsd || 0);
+
+    const allSpNet = (reconciledRow?.spNet || 0) + rows.reduce((s, r) => s + r.spNet, 0) + (arRow?.spNet || 0) + (cancRow?.spNet || 0) + svAllSpNet;
+    const allHoNet = (reconciledRow?.hoNet || 0) + rows.reduce((s, r) => s + r.hoNet, 0) + (arRow?.hoNet || 0) + (cancRow?.hoNet || 0) + svAllHoNet;
+    const allBalance = (reconciledRow?.balancePayable || 0) + rows.reduce((s, r) => s + r.balancePayable, 0) + (arRow?.balancePayable || 0) + (cancRow?.balancePayable || 0) + svAllBalance;
+    const allDiscLc = (reconciledRow?.discrepancyLc || 0) + rows.reduce((s, r) => s + r.discrepancyLc, 0) + (arRow?.discrepancyLc || 0) + (cancRow?.discrepancyLc || 0) + svAllDiscLc;
+    const allDiscUsd = (reconciledRow?.discrepancyUsd || 0) + rows.reduce((s, r) => s + r.discrepancyUsd, 0) + (arRow?.discrepancyUsd || 0) + (cancRow?.discrepancyUsd || 0) + svAllDiscUsd;
 
     return {
       rows,
@@ -750,6 +771,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       cancRow,
       reconciledRow,
       svRows,
+      svArRow,
+      svCancRow,
       grandTotal: { spNet: allSpNet, hoNet: allHoNet, balancePayable: allBalance, discrepancyLc: allDiscLc, discrepancyUsd: allDiscUsd },
     };
   }, [primaryRows, secondaryVendorRows, getBookingTap, arDecisions, cancellationReasons]);
@@ -1506,7 +1529,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         </TableRow>
                       </TableBody>
                     </Table>
-                    {enhancedSummary.svRows.length > 0 && (
+                    {(enhancedSummary.svRows.length > 0 || enhancedSummary.svArRow || enhancedSummary.svCancRow) && (
                       <div className="mt-4 pt-3 border-t border-dashed border-amber-500/50">
                         <div className="flex items-center gap-2 mb-2">
                           <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -1514,7 +1537,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                             Secondary Vendor (BE ID Mismatch)
                           </span>
                           <Badge variant="outline" className="text-xs border-amber-500 text-amber-700 dark:text-amber-400">
-                            {enhancedSummary.svRows.reduce((sum, r) => sum + r.countBid, 0)} bookings
+                            {enhancedSummary.svRows.reduce((sum, r) => sum + r.countBid, 0) + (enhancedSummary.svArRow?.countBid || 0) + (enhancedSummary.svCancRow?.countBid || 0)} bookings
                           </Badge>
                         </div>
                         <Table className="text-sm table-fixed">
@@ -1531,6 +1554,160 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                             <col className="w-[14%]" />
                           </colgroup>
                           <TableBody>
+                            {enhancedSummary.svArRow && (() => {
+                              const row = enhancedSummary.svArRow;
+                              const isExpanded = expandedSummaryReasons.has("sv-ar");
+                              return (
+                                <>
+                                  <TableRow
+                                    className="h-9 cursor-pointer hover-elevate bg-amber-50 dark:bg-amber-950/30 relative"
+                                    onClick={() => setIsSvArModalOpen(true)}
+                                    data-testid="summary-row-sv-already-reconciled"
+                                  >
+                                    <TableCell className="py-1.5 pl-4 relative">
+                                      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l bg-amber-500" />
+                                      <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                        {row.isMultiCurrency && (
+                                          <button className="p-0 hover:text-foreground" onClick={(e) => { e.stopPropagation(); toggleSummaryReason("sv-ar"); }}>
+                                            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                          </button>
+                                        )}
+                                        <AlertTriangle className="h-3 w-3" />
+                                        Already Reconciled
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-xs">{row.currency}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyUsd)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono font-semibold">{formatNumber(row.balancePayable)}</TableCell>
+                                    <TableCell className="py-1.5" onClick={e => e.stopPropagation()}>
+                                      {(row.disputeTotal > 0 || row.issueCount > 0) && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Eye className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-help" />
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="text-xs">
+                                            <p>Dispute: {formatNumber(row.disputeTotal)}</p>
+                                            <p>Issues: {row.issueCount}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                                    <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
+                                      <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setIsSvArModalOpen(true)} data-testid="manage-btn-sv-already-reconciled">
+                                        Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                  {isExpanded && row.currencyBreakdown?.map(sub => (
+                                    <TableRow key={`sv-ar-${sub.currency}`} className="h-8 bg-amber-50/20 dark:bg-amber-950/10">
+                                      <TableCell className="py-1 pl-10 text-xs text-muted-foreground"></TableCell>
+                                      <TableCell className="py-1 text-xs text-muted-foreground">{sub.currency}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.spNet)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.hoNet)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyLc)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyUsd)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.balancePayable)}</TableCell>
+                                      <TableCell className="py-1">
+                                        {(sub.disputeTotal > 0 || sub.issueCount > 0) && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Eye className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-xs">
+                                              <p>Dispute: {formatNumber(sub.disputeTotal)}</p>
+                                              <p>Issues: {sub.issueCount}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="py-1 text-right text-xs">{sub.countBid}</TableCell>
+                                      <TableCell className="py-1 pr-4"></TableCell>
+                                    </TableRow>
+                                  ))}
+                                </>
+                              );
+                            })()}
+                            {enhancedSummary.svCancRow && (() => {
+                              const row = enhancedSummary.svCancRow;
+                              const isExpanded = expandedSummaryReasons.has("sv-canc");
+                              return (
+                                <>
+                                  <TableRow
+                                    className="h-9 cursor-pointer hover-elevate bg-red-50 dark:bg-red-950/30 relative"
+                                    onClick={() => handleSvReasonClick("Cancellations")}
+                                    data-testid="summary-row-sv-cancellations"
+                                  >
+                                    <TableCell className="py-1.5 pl-4 relative">
+                                      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l bg-red-500" />
+                                      <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                                        {row.isMultiCurrency && (
+                                          <button className="p-0 hover:text-foreground" onClick={(e) => { e.stopPropagation(); toggleSummaryReason("sv-canc"); }}>
+                                            {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                          </button>
+                                        )}
+                                        <XCircle className="h-3 w-3" />
+                                        Cancellations
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-xs text-red-600 dark:text-red-400">{row.currency}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.spNet)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.hoNet)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.discrepancyLc)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.discrepancyUsd)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono font-semibold text-red-600 dark:text-red-400">{formatNumber(row.balancePayable)}</TableCell>
+                                    <TableCell className="py-1.5" onClick={e => e.stopPropagation()}>
+                                      {(row.disputeTotal > 0 || row.issueCount > 0) && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Eye className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-help" />
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="text-xs">
+                                            <p>Dispute: {formatNumber(row.disputeTotal)}</p>
+                                            <p>Issues: {row.issueCount}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                                    <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
+                                      <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => handleSvReasonClick("Cancellations")} data-testid="manage-btn-sv-cancellations">
+                                        Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                                      </Button>
+                                    </TableCell>
+                                  </TableRow>
+                                  {isExpanded && row.currencyBreakdown?.map(sub => (
+                                    <TableRow key={`sv-canc-${sub.currency}`} className="h-8 bg-red-50/20 dark:bg-red-950/10">
+                                      <TableCell className="py-1 pl-10 text-xs text-muted-foreground"></TableCell>
+                                      <TableCell className="py-1 text-xs text-muted-foreground">{sub.currency}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.spNet)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.hoNet)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.discrepancyLc)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.discrepancyUsd)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.balancePayable)}</TableCell>
+                                      <TableCell className="py-1">
+                                        {(sub.disputeTotal > 0 || sub.issueCount > 0) && (
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Eye className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-xs">
+                                              <p>Dispute: {formatNumber(sub.disputeTotal)}</p>
+                                              <p>Issues: {sub.issueCount}</p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="py-1 text-right text-xs">{sub.countBid}</TableCell>
+                                      <TableCell className="py-1 pr-4"></TableCell>
+                                    </TableRow>
+                                  ))}
+                                </>
+                              );
+                            })()}
                             {enhancedSummary.svRows.map((row, index) => {
                               const isClickable = row.reason !== "Reconciled";
                               const isExpanded = expandedSummaryReasons.has(`sv-${row.reason}`);
