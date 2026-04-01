@@ -2412,32 +2412,32 @@ export function DiscrepancySummaryWorkspace({
                                         />
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-right px-1.5">
-                                      <div className="flex items-center justify-end gap-0.5">
-                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-blue-600 hover:bg-blue-50" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-dispute-sp-${row.rowKey}`}>S</Button>
-                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-green-600 hover:bg-green-50" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-dispute-ho-${row.rowKey}`}>H</Button>
+                                    <TableCell className="text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-blue-600" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-dispute-sp-${row.rowKey}`}>SP</Button>
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-green-600" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-dispute-ho-${row.rowKey}`}>HO</Button>
                                         <Input
                                           type="number"
                                           step="0.01"
-                                          placeholder="0.00"
+                                          placeholder="Enter price"
                                           value={paxDisputePrices[row.rowKey] ?? ""}
                                           onChange={(e) => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                                          className="w-[72px] h-6 text-xs font-mono text-right px-1 border-orange-300 bg-orange-50/30 focus-visible:ring-orange-400 dark:bg-orange-950/20 dark:border-orange-700"
+                                          className="w-24 text-xs font-mono text-right ml-auto"
                                           data-testid={`pax-dispute-${row.rowKey}`}
                                         />
                                       </div>
                                     </TableCell>
-                                    <TableCell className="text-right px-1.5">
-                                      <div className="flex items-center justify-end gap-0.5">
-                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-blue-600 hover:bg-blue-50" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-issue-sp-${row.rowKey}`}>S</Button>
-                                        <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-[9px] text-green-600 hover:bg-green-50" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-issue-ho-${row.rowKey}`}>H</Button>
+                                    <TableCell className="text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-blue-600" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-issue-sp-${row.rowKey}`}>SP</Button>
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-green-600" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-issue-ho-${row.rowKey}`}>HO</Button>
                                         <Input
                                           type="number"
                                           step="0.01"
-                                          placeholder="0.00"
+                                          placeholder="Enter price"
                                           value={paxIssuePrices[row.rowKey] ?? ""}
                                           onChange={(e) => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
-                                          className="w-[72px] h-6 text-xs font-mono text-right px-1 border-red-300 bg-red-50/30 focus-visible:ring-red-400 dark:bg-red-950/20 dark:border-red-700"
+                                          className="w-24 text-xs font-mono text-right ml-auto"
                                           data-testid={`pax-issue-${row.rowKey}`}
                                         />
                                       </div>
