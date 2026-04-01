@@ -2370,7 +2370,7 @@ export function DiscrepancySummaryWorkspace({
                                   <TableHead className="text-xs text-right">Count</TableHead>
                                   <TableHead className="text-xs text-right text-blue-600 dark:text-blue-400">SP Unit</TableHead>
                                   <TableHead className="text-xs text-right text-green-600 dark:text-green-400">HO Unit</TableHead>
-                                  <TableHead className="text-xs text-right bg-violet-50/60 dark:bg-violet-900/15 text-violet-700 dark:text-violet-300 font-semibold">Final Price</TableHead>
+                                  <TableHead className="text-xs text-right bg-violet-50/60 dark:bg-violet-900/15 text-violet-700 dark:text-violet-300 font-semibold">Total Amount Payable</TableHead>
                                   <TableHead className="text-xs text-right bg-orange-50/60 dark:bg-orange-900/15">
                                     <div className="flex items-center justify-end gap-1">
                                       <span className="text-orange-600 dark:text-orange-400 font-semibold">Dispute</span>
