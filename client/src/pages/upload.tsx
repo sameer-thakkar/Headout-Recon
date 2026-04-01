@@ -646,10 +646,12 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     const arReasons = new Set(["Already Reconciled-Same BE", "Already Reconciled-Different BE"]);
 
     const computeMetrics = (bookings: PrimaryRow[], useArDecisions = false) => {
-      let spNet = 0, hoNet = 0, balancePayable = 0, disputeTotal = 0, issueCount = 0;
+      let spNet = 0, hoNet = 0, balancePayable = 0, disputeTotal = 0, issueCount = 0, discrepancyLc = 0, discrepancyUsd = 0;
       for (const b of bookings) {
         spNet += b.spNetInHo;
         hoNet += b.hoNet;
+        discrepancyLc += b.differenceLc;
+        discrepancyUsd += b.differenceUsd;
         let tap: number;
         if (useArDecisions) {
           const d = arDecisions.get(b.bookingId);
@@ -661,7 +663,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         if (b.disputedAmount) disputeTotal += b.disputedAmount;
         if (b.disputeStatus === "OPEN") issueCount++;
       }
-      return { spNet, hoNet, balancePayable, disputeTotal, issueCount };
+      return { spNet, hoNet, balancePayable, disputeTotal, issueCount, discrepancyLc, discrepancyUsd };
     };
 
     const buildReasonData = (bookings: PrimaryRow[], useArDecisions = false) => {
@@ -739,6 +741,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
     const allSpNet = (reconciledRow?.spNet || 0) + rows.reduce((s, r) => s + r.spNet, 0) + (arRow?.spNet || 0) + (cancRow?.spNet || 0) + svRows.reduce((s, r) => s + r.spNet, 0);
     const allHoNet = (reconciledRow?.hoNet || 0) + rows.reduce((s, r) => s + r.hoNet, 0) + (arRow?.hoNet || 0) + (cancRow?.hoNet || 0) + svRows.reduce((s, r) => s + r.hoNet, 0);
     const allBalance = (reconciledRow?.balancePayable || 0) + rows.reduce((s, r) => s + r.balancePayable, 0) + (arRow?.balancePayable || 0) + (cancRow?.balancePayable || 0) + svRows.reduce((s, r) => s + r.balancePayable, 0);
+    const allDiscLc = (reconciledRow?.discrepancyLc || 0) + rows.reduce((s, r) => s + r.discrepancyLc, 0) + (arRow?.discrepancyLc || 0) + (cancRow?.discrepancyLc || 0) + svRows.reduce((s, r) => s + r.discrepancyLc, 0);
+    const allDiscUsd = (reconciledRow?.discrepancyUsd || 0) + rows.reduce((s, r) => s + r.discrepancyUsd, 0) + (arRow?.discrepancyUsd || 0) + (cancRow?.discrepancyUsd || 0) + svRows.reduce((s, r) => s + r.discrepancyUsd, 0);
 
     return {
       rows,
@@ -746,7 +750,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
       cancRow,
       reconciledRow,
       svRows,
-      grandTotal: { spNet: allSpNet, hoNet: allHoNet, balancePayable: allBalance },
+      grandTotal: { spNet: allSpNet, hoNet: allHoNet, balancePayable: allBalance, discrepancyLc: allDiscLc, discrepancyUsd: allDiscUsd },
     };
   }, [primaryRows, secondaryVendorRows, getBookingTap, arDecisions, cancellationReasons]);
 
@@ -1162,19 +1166,23 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     <>
                     <Table className="text-sm table-fixed">
                       <colgroup>
-                        <col className="w-[30%]" />
-                        <col className="w-[14%]" />
-                        <col className="w-[14%]" />
-                        <col className="w-[14%]" />
-                        <col className="w-[4%]" />
-                        <col className="w-[8%]" />
-                        <col className="w-[16%]" />
+                        <col className="w-[22%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[3%]" />
+                        <col className="w-[6%]" />
+                        <col className="w-[9%]" />
                       </colgroup>
                       <TableHeader>
                         <TableRow className="h-8">
                           <TableHead className="py-1.5 text-xs pl-4">Reason</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">SP Net</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">HO Net</TableHead>
+                          <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
+                          <TableHead className="py-1.5 text-xs text-right">Disc. USD</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Balance Payable</TableHead>
                           <TableHead className="py-1.5 text-xs"></TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Count</TableHead>
@@ -1202,6 +1210,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                 </TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-green-700 dark:text-green-400">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-green-700 dark:text-green-400">{formatNumber(row.hoNet)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono text-green-700 dark:text-green-400">{formatNumber(row.discrepancyLc)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono text-green-700 dark:text-green-400">{formatNumber(row.discrepancyUsd)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono font-semibold text-green-700 dark:text-green-400">{formatNumber(row.balancePayable)}</TableCell>
                                 <TableCell className="py-1.5">
                                   {(row.disputeTotal > 0 || row.issueCount > 0) && (
@@ -1224,6 +1234,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                   <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.hoNet)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.discrepancyLc)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.discrepancyUsd)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.balancePayable)}</TableCell>
                                   <TableCell className="py-1">
                                     {(sub.disputeTotal > 0 || sub.issueCount > 0) && (
@@ -1269,6 +1281,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                 </TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyUsd)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono font-semibold">{formatNumber(row.balancePayable)}</TableCell>
                                 <TableCell className="py-1.5" onClick={e => e.stopPropagation()}>
                                   {(row.disputeTotal > 0 || row.issueCount > 0) && (
@@ -1295,6 +1309,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                   <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.hoNet)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyLc)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyUsd)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.balancePayable)}</TableCell>
                                   <TableCell className="py-1">
                                     {(sub.disputeTotal > 0 || sub.issueCount > 0) && (
@@ -1340,6 +1356,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                 </TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.hoNet)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.discrepancyLc)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.discrepancyUsd)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono font-semibold text-red-600 dark:text-red-400">{formatNumber(row.balancePayable)}</TableCell>
                                 <TableCell className="py-1.5" onClick={e => e.stopPropagation()}>
                                   {(row.disputeTotal > 0 || row.issueCount > 0) && (
@@ -1366,6 +1384,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                   <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.hoNet)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.discrepancyLc)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.discrepancyUsd)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.balancePayable)}</TableCell>
                                   <TableCell className="py-1">
                                     {(sub.disputeTotal > 0 || sub.issueCount > 0) && (
@@ -1411,6 +1431,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                 </TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
+                                <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyUsd)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono font-semibold">{formatNumber(row.balancePayable)}</TableCell>
                                 <TableCell className="py-1.5" onClick={e => e.stopPropagation()}>
                                   {(row.disputeTotal > 0 || row.issueCount > 0) && (
@@ -1437,6 +1459,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                   <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.hoNet)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyLc)}</TableCell>
+                                  <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyUsd)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.balancePayable)}</TableCell>
                                   <TableCell className="py-1">
                                     {(sub.disputeTotal > 0 || sub.issueCount > 0) && (
@@ -1462,6 +1486,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                           <TableCell className="py-2 pl-4 text-xs font-bold">Grand Total</TableCell>
                           <TableCell className="py-2 text-right font-mono text-xs">{formatNumber(enhancedSummary.grandTotal.spNet)}</TableCell>
                           <TableCell className="py-2 text-right font-mono text-xs">{formatNumber(enhancedSummary.grandTotal.hoNet)}</TableCell>
+                          <TableCell className="py-2 text-right font-mono text-xs">{formatNumber(enhancedSummary.grandTotal.discrepancyLc)}</TableCell>
+                          <TableCell className="py-2 text-right font-mono text-xs">{formatNumber(enhancedSummary.grandTotal.discrepancyUsd)}</TableCell>
                           <TableCell className="py-2 text-right font-mono text-sm font-bold">{formatNumber(enhancedSummary.grandTotal.balancePayable)}</TableCell>
                           <TableCell className="py-2"></TableCell>
                           <TableCell className="py-2"></TableCell>
@@ -1482,13 +1508,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         </div>
                         <Table className="text-sm table-fixed">
                           <colgroup>
-                            <col className="w-[30%]" />
-                            <col className="w-[14%]" />
-                            <col className="w-[14%]" />
-                            <col className="w-[14%]" />
-                            <col className="w-[4%]" />
-                            <col className="w-[8%]" />
-                            <col className="w-[16%]" />
+                            <col className="w-[22%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[3%]" />
+                            <col className="w-[6%]" />
+                            <col className="w-[9%]" />
                           </colgroup>
                           <TableBody>
                             {enhancedSummary.svRows.map((row, index) => {
@@ -1516,6 +1544,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     </TableCell>
                                     <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
                                     <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
+                                    <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyUsd)}</TableCell>
                                     <TableCell className="py-1.5 text-right font-mono font-semibold">{formatNumber(row.balancePayable)}</TableCell>
                                     <TableCell className="py-1.5" onClick={e => e.stopPropagation()}>
                                       {(row.disputeTotal > 0 || row.issueCount > 0) && (
@@ -1544,6 +1574,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                       <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                       <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.spNet)}</TableCell>
                                       <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.hoNet)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyLc)}</TableCell>
+                                      <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyUsd)}</TableCell>
                                       <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.balancePayable)}</TableCell>
                                       <TableCell className="py-1">
                                         {(sub.disputeTotal > 0 || sub.issueCount > 0) && (
