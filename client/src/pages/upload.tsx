@@ -158,6 +158,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const [isCancellationsModalOpen, setIsCancellationsModalOpen] = useState(false);
   const [apLocalSelections, setApLocalSelections] = useState<FinalNetSelection>({});
   const [apAmountPaidTotals, setApAmountPaidTotals] = useState<Record<string, number>>({});
+  const [lockedBookingIds, setLockedBookingIds] = useState<Set<string>>(new Set());
   const [expandedSummaryReasons, setExpandedSummaryReasons] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
@@ -1881,6 +1882,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                       onLocalSelectionsChange={setApLocalSelections}
                       externalAmountPaidTotals={apAmountPaidTotals}
                       onAmountPaidTotalsChange={setApAmountPaidTotals}
+                      lockedBookingIds={lockedBookingIds}
                     />
                   )}
                 </Suspense>
@@ -1906,6 +1908,11 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
         isPortalDeposit={spDetails?.paymentMethod?.toUpperCase() === "PORTAL_DEPOSIT"}
         onPriceOverrideApplied={(overrides) => {
           setApAmountPaidTotals(prev => ({ ...prev, ...overrides }));
+          setLockedBookingIds(prev => {
+            const next = new Set(prev);
+            Object.keys(overrides).forEach(id => next.add(id));
+            return next;
+          });
         }}
       />
 

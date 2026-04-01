@@ -143,6 +143,7 @@ interface AmountPayablePanelProps {
   onLocalSelectionsChange?: React.Dispatch<React.SetStateAction<FinalNetSelection>>;
   externalAmountPaidTotals?: Record<string, number>;
   onAmountPaidTotalsChange?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  lockedBookingIds?: Set<string>;
 }
 
 export function AmountPayablePanel({
@@ -166,6 +167,7 @@ export function AmountPayablePanel({
   onLocalSelectionsChange,
   externalAmountPaidTotals,
   onAmountPaidTotalsChange,
+  lockedBookingIds = new Set(),
 }: AmountPayablePanelProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
   const [internalSelections, setInternalSelections] = useState<FinalNetSelection>(finalNetSelections);
@@ -1771,8 +1773,8 @@ export function AmountPayablePanel({
                                                 <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
                                                 <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
                                                 <TableCell className="text-center">
-                                                  {reason === "Unmapped" ? (
-                                                    <span className="text-xs text-muted-foreground">SP</span>
+                                                  {reason === "Unmapped" || lockedBookingIds.has(booking.bookingId) ? (
+                                                    <span className={`text-xs font-medium ${lockedBookingIds.has(booking.bookingId) ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground"}`}>{lockedBookingIds.has(booking.bookingId) ? "Locked" : "SP"}</span>
                                                   ) : (
                                                     <Select
                                                       value={currentSelection}
@@ -1811,7 +1813,8 @@ export function AmountPayablePanel({
                                                       value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
                                                       onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                                       onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                      className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                      disabled={lockedBookingIds.has(booking.bookingId)}
+                                                      className={`w-20 h-6 text-xs font-mono text-right px-1 ${lockedBookingIds.has(booking.bookingId) ? 'cursor-not-allowed opacity-60 border-violet-400 dark:border-violet-600 bg-violet-50/50 dark:bg-violet-950/30' : amountPaidTotals[booking.bookingId] !== undefined ? 'cursor-text border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'cursor-text border-dashed border-muted-foreground/30'}`}
                                                       data-testid={`input-total-payable-${booking.bookingId}`}
                                                     />
                                                   </div>
@@ -2035,8 +2038,8 @@ export function AmountPayablePanel({
                                             <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.hoNet)}</TableCell>
                                             <TableCell className="py-1 text-right font-mono">{formatCurrency(booking.spNet)}</TableCell>
                                             <TableCell className="text-center">
-                                              {reason === "Reconciled" ? (
-                                                <span className="text-xs text-muted-foreground">SP</span>
+                                              {reason === "Reconciled" || lockedBookingIds.has(booking.bookingId) ? (
+                                                <span className={`text-xs font-medium ${lockedBookingIds.has(booking.bookingId) ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground"}`}>{lockedBookingIds.has(booking.bookingId) ? "Locked" : "SP"}</span>
                                               ) : (
                                                 <Select
                                                   value={selection}
@@ -2072,7 +2075,8 @@ export function AmountPayablePanel({
                                                   value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : pricePayable)}
                                                   onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                                   onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                                  className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/30'}`}
+                                                  disabled={lockedBookingIds.has(booking.bookingId)}
+                                                  className={`w-20 h-6 text-xs font-mono text-right px-1 ${lockedBookingIds.has(booking.bookingId) ? 'cursor-not-allowed opacity-60 border-violet-400 dark:border-violet-600 bg-violet-50/50 dark:bg-violet-950/30' : amountPaidTotals[booking.bookingId] !== undefined ? 'cursor-text border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'cursor-text border-dashed border-muted-foreground/30'}`}
                                                   data-testid={`input-total-payable-${booking.bookingId}`}
                                                 />
                                               </div>
@@ -2212,20 +2216,24 @@ export function AmountPayablePanel({
                                 {formatCurrency(booking.spNet)}
                               </div>
                               <div className="flex justify-center">
-                                <Select
-                                  value={netType}
-                                  onValueChange={(v) => {
-                                    updateSelection(booking.bookingId, v as "ho" | "sp", booking);
-                                  }}
-                                >
-                                  <SelectTrigger className="w-[4.5rem] h-7 text-sm" data-testid={`select-net-type-amtpaid-${booking.bookingId}`}>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="ho">HO</SelectItem>
-                                    <SelectItem value="sp">SP</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                {lockedBookingIds.has(booking.bookingId) ? (
+                                  <span className="text-xs font-medium text-violet-600 dark:text-violet-400">Locked</span>
+                                ) : (
+                                  <Select
+                                    value={netType}
+                                    onValueChange={(v) => {
+                                      updateSelection(booking.bookingId, v as "ho" | "sp", booking);
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-[4.5rem] h-7 text-sm" data-testid={`select-net-type-amtpaid-${booking.bookingId}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="ho">HO</SelectItem>
+                                      <SelectItem value="sp">SP</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                )}
                               </div>
                               <div className="flex justify-center">
                                 <Input
@@ -2234,7 +2242,8 @@ export function AmountPayablePanel({
                                   value={rawInputValues[booking.bookingId] !== undefined ? rawInputValues[booking.bookingId] : (amountPaidTotals[booking.bookingId] !== undefined ? amountPaidTotals[booking.bookingId] : totalPayable)}
                                   onChange={(e) => handleAmountPaidTotalChange(booking.bookingId, e.target.value)}
                                   onBlur={() => handleAmountPaidTotalBlur(booking.bookingId, booking.hoNet, booking.spNet)}
-                                  className={`w-20 h-6 text-xs font-mono text-right px-1 cursor-text ${amountPaidTotals[booking.bookingId] !== undefined ? 'border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'border-dashed border-muted-foreground/40'}`}
+                                  disabled={lockedBookingIds.has(booking.bookingId)}
+                                  className={`w-20 h-6 text-xs font-mono text-right px-1 ${lockedBookingIds.has(booking.bookingId) ? 'cursor-not-allowed opacity-60 border-violet-400 dark:border-violet-600 bg-violet-50/50 dark:bg-violet-950/30' : amountPaidTotals[booking.bookingId] !== undefined ? 'cursor-text border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-950/30' : 'cursor-text border-dashed border-muted-foreground/40'}`}
                                   data-testid={`input-total-payable-${booking.bookingId}`}
                                 />
                               </div>
