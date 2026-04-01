@@ -8,5 +8,6 @@ export const modules: ModuleMap = {
   "./components/mockups/recon-workspace/OptionA_ExpandActions.tsx": () => import("../components/mockups/recon-workspace/OptionA_ExpandActions.tsx"),
   "./components/mockups/recon-workspace/OptionB_ContextMenu.tsx": () => import("../components/mockups/recon-workspace/OptionB_ContextMenu.tsx"),
   "./components/mockups/recon-workspace/OptionC_HoverBar.tsx": () => import("../components/mockups/recon-workspace/OptionC_HoverBar.tsx"),
+  "./components/mockups/recon-workspace/PaxPricingModal.tsx": () => import("../components/mockups/recon-workspace/PaxPricingModal.tsx"),
   "./components/mockups/recon-workspace/SummaryWorkspace.tsx": () => import("../components/mockups/recon-workspace/SummaryWorkspace.tsx")
 };

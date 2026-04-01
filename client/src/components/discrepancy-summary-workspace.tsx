@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -302,6 +303,8 @@ export function DiscrepancySummaryWorkspace({
   const [paxOpen, setPaxOpen] = useState(false);
   const [paxTid, setPaxTid] = useState<TidGroup | null>(null);
   const [paxPrices, setPaxPrices] = useState<Record<string, string>>({});
+  const [paxDisputePrices, setPaxDisputePrices] = useState<Record<string, string>>({});
+  const [paxIssuePrices, setPaxIssuePrices] = useState<Record<string, string>>({});
   const [issueModalTid, setIssueModalTid] = useState<TidGroup | null>(null);
 
   useEffect(() => {
@@ -463,7 +466,7 @@ export function DiscrepancySummaryWorkspace({
   });
 
   const disputeMutation = useMutation({
-    mutationFn: async ({ bookingIds }: { bookingIds: string[] }) => {
+    mutationFn: async ({ bookingIds, customAmounts }: { bookingIds: string[]; customAmounts?: Record<string, number> }) => {
       if (!runId) throw new Error("No active run");
       const disputes = bookingIds.map(bookingId => {
         const row = allRows.find(r => r.bookingId === bookingId);
@@ -471,7 +474,7 @@ export function DiscrepancySummaryWorkspace({
           bookingId,
           ticketId: row?.ticketId || "",
           tid: row?.tid || bookingId,
-          disputeAmount: Math.abs((row?.spNetInHo || 0) - (row?.hoNet || 0)),
+          disputeAmount: customAmounts?.[bookingId] ?? Math.abs((row?.spNetInHo || 0) - (row?.hoNet || 0)),
           reconciledNet: row?.spNetInHo || 0,
         };
       });
@@ -483,9 +486,9 @@ export function DiscrepancySummaryWorkspace({
   });
 
   const issueMutation = useMutation({
-    mutationFn: async ({ bookingIds, description, priority, driTeam }: { bookingIds: string[]; description: string; priority: string; driTeam: string }) => {
+    mutationFn: async ({ bookingIds, description, priority, driTeam, discrepancyAmount }: { bookingIds: string[]; description: string; priority: string; driTeam: string; discrepancyAmount?: number }) => {
       if (!runId) throw new Error("No active run");
-      const totalDiscLc = tidGroups.reduce((s, t) => s + Math.abs(t.discLc), 0);
+      const totalDiscLc = discrepancyAmount ?? tidGroups.reduce((s, t) => s + Math.abs(t.discLc), 0);
       await apiRequest("POST", "/api/issues", {
         runId,
         billingEntityId: billingEntityId || "",
@@ -873,6 +876,8 @@ export function DiscrepancySummaryWorkspace({
         setPaxOpen(false);
         setPaxTid(null);
         setPaxPrices({});
+        setPaxDisputePrices({});
+        setPaxIssuePrices({});
         setShowTidBreakdown(false);
         setShowTakeAction(false);
         setTakeActionPrice("sp");
@@ -2241,8 +2246,8 @@ export function DiscrepancySummaryWorkspace({
               </Collapsible>
             )}
 
-            <Dialog open={paxOpen && !!paxTid} onOpenChange={open => { if (!open) { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); } }}>
-              <DialogContent className="max-w-2xl">
+            <Dialog open={paxOpen && !!paxTid} onOpenChange={open => { if (!open) { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); setPaxDisputePrices({}); setPaxIssuePrices({}); } }}>
+              <DialogContent className="max-w-3xl">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-base">
                     <Calculator className="h-4 w-4 text-violet-600" />
@@ -2298,7 +2303,18 @@ export function DiscrepancySummaryWorkspace({
                     return total;
                   };
 
+                  const disputeTotal = paxRows.reduce((s, row) => {
+                    const v = paxDisputePrices[row.rowKey];
+                    return s + (v !== undefined && v !== "" ? (parseFloat(v) || 0) * row.count : 0);
+                  }, 0);
+
+                  const issueTotal = paxRows.reduce((s, row) => {
+                    const v = paxIssuePrices[row.rowKey];
+                    return s + (v !== undefined && v !== "" ? (parseFloat(v) || 0) * row.count : 0);
+                  }, 0);
+
                   return (
+                    <TooltipProvider>
                     <div className="space-y-3">
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div className="rounded-md border p-2 bg-blue-50 dark:bg-blue-900/20">
@@ -2343,6 +2359,32 @@ export function DiscrepancySummaryWorkspace({
                                   <TableHead className="text-xs text-right">SP Unit</TableHead>
                                   <TableHead className="text-xs text-right">HO Unit</TableHead>
                                   <TableHead className="text-xs text-right">Final Price</TableHead>
+                                  <TableHead className="text-xs text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      Dispute (per pax)
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                          Amount you are formally disputing with the vendor for this pax type (unit level). Aggregated into the TID-level dispute total.
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  </TableHead>
+                                  <TableHead className="text-xs text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      Issue (per pax)
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                          Amount being flagged as an internal issue (e.g., system error, data mismatch) for this pax type (unit level). Aggregated into the TID-level issue total.
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  </TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -2368,6 +2410,36 @@ export function DiscrepancySummaryWorkspace({
                                         />
                                       </div>
                                     </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-blue-600" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-dispute-sp-${row.rowKey}`}>SP</Button>
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-green-600" onClick={() => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-dispute-ho-${row.rowKey}`}>HO</Button>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          placeholder="Dispute"
+                                          value={paxDisputePrices[row.rowKey] ?? ""}
+                                          onChange={(e) => setPaxDisputePrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                                          className="w-24 text-xs font-mono text-right ml-auto border-orange-200 focus-visible:ring-orange-400"
+                                          data-testid={`pax-dispute-${row.rowKey}`}
+                                        />
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-blue-600" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.spUnitPrice) }))} data-testid={`pax-issue-sp-${row.rowKey}`}>SP</Button>
+                                        <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-green-600" onClick={() => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: String(row.hoUnitPrice) }))} data-testid={`pax-issue-ho-${row.rowKey}`}>HO</Button>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          placeholder="Issue"
+                                          value={paxIssuePrices[row.rowKey] ?? ""}
+                                          onChange={(e) => setPaxIssuePrices(prev => ({ ...prev, [row.rowKey]: e.target.value }))}
+                                          className="w-24 text-xs font-mono text-right ml-auto border-red-200 focus-visible:ring-red-400"
+                                          data-testid={`pax-issue-${row.rowKey}`}
+                                        />
+                                      </div>
+                                    </TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>
@@ -2377,15 +2449,27 @@ export function DiscrepancySummaryWorkspace({
                       )}
 
                       <div className="flex items-center justify-between gap-3 bg-muted/20 rounded-md px-3 py-2">
-                        <div className="flex items-center gap-3 text-xs">
-                          <span className="font-medium">Recalculated Total:</span>
-                          <span className="font-mono font-bold text-violet-700 dark:text-violet-300 text-sm" data-testid="pax-grand-total">{fmt(grandTotal)}</span>
+                        <div className="flex items-center gap-4 text-xs flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium">Recalculated Total:</span>
+                            <span className="font-mono font-bold text-violet-700 dark:text-violet-300 text-sm" data-testid="pax-grand-total">{fmt(grandTotal)}</span>
+                          </div>
+                          <div className="w-px h-4 bg-border" />
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-orange-600 dark:text-orange-400">Dispute Total:</span>
+                            <span className="font-mono font-bold text-orange-700 dark:text-orange-300 text-sm" data-testid="pax-dispute-total">{fmt(disputeTotal)}</span>
+                          </div>
+                          <div className="w-px h-4 bg-border" />
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-red-600 dark:text-red-400">Issue Total:</span>
+                            <span className="font-mono font-bold text-red-700 dark:text-red-300 text-sm" data-testid="pax-issue-total">{fmt(issueTotal)}</span>
+                          </div>
                         </div>
                         <span className="text-[11px] text-muted-foreground">{editedCount} price{editedCount !== 1 ? "s" : ""} edited</span>
                       </div>
 
                       <div className="flex items-center justify-end gap-2 pt-1">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); }}>Cancel</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setPaxOpen(false); setPaxTid(null); setPaxPrices({}); setPaxDisputePrices({}); setPaxIssuePrices({}); }}>Cancel</Button>
                         <Button size="sm" className="h-7 text-xs gap-1" onClick={() => {
                           if (isSecondaryVendor && paxTid && !vendorIdConfirmed.has(paxTid.tid)) {
                             toast({ title: "Vendor ID not confirmed", description: "Please confirm the Final Vendor ID before applying pax pricing.", variant: "destructive" });
@@ -2393,6 +2477,24 @@ export function DiscrepancySummaryWorkspace({
                           }
                           const customPricesNum: Record<string, number> = {};
                           const affectedBookingIds: string[] = [];
+                          const computeBookingPaxAmtMap = (priceMap: Record<string, string>) => {
+                            const result: Record<string, number> = {};
+                            paxTid!.bookings.forEach(b => {
+                              if (!b.paxBreakdown || b.paxBreakdown.length === 0) return;
+                              let total = 0;
+                              const bookingDate = dateFieldVal === "experienceDate" ? (b.experienceDate || "") : (b.bookingCreationDate || "");
+                              const dtNorm = bookingDate ? normalizeDate(bookingDate) : null;
+                              const dateIso = dtNorm ? dtNorm.toISOString() : "Unknown";
+                              for (const pb of b.paxBreakdown) {
+                                const mappedRowKey = dateToRowKeyMap.get(`${pb.paxType}||${dateIso}`);
+                                if (mappedRowKey && priceMap[mappedRowKey] !== undefined && priceMap[mappedRowKey] !== "") {
+                                  total += (parseFloat(priceMap[mappedRowKey]) || 0) * pb.count;
+                                }
+                              }
+                              if (total > 0) result[b.bookingId] = Math.round(total * 100) / 100;
+                            });
+                            return result;
+                          };
                           paxTid!.bookings.forEach(b => {
                             const total = computeBookingTotal(b);
                             const originalTotal = b.spNetInHo || 0;
@@ -2401,37 +2503,72 @@ export function DiscrepancySummaryWorkspace({
                               affectedBookingIds.push(b.bookingId);
                             }
                           });
-                          if (editedCount === 0 || affectedBookingIds.length === 0) { flash("No prices edited"); return; }
-                          priceOverrideMutation.mutate({ bookingIds: affectedBookingIds, selection: "sp", customPrices: customPricesNum }, {
-                            onSuccess: () => {
-                              setBookingSelections(prev => {
-                                const next = { ...prev };
-                                affectedBookingIds.forEach(id => { next[id] = "custom"; });
-                                return next;
+                          const disputeBookingAmts = computeBookingPaxAmtMap(paxDisputePrices);
+                          const issueBookingAmts = computeBookingPaxAmtMap(paxIssuePrices);
+                          const disputeBookingIds = Object.keys(disputeBookingAmts);
+                          const issueBookingIds = Object.keys(issueBookingAmts);
+                          const hasAnyAction = affectedBookingIds.length > 0 || disputeBookingIds.length > 0 || issueBookingIds.length > 0;
+                          if (!hasAnyAction) { flash("No prices, disputes or issues entered"); return; }
+                          const closeAndReset = () => {
+                            resolve(paxTid!.tid);
+                            flash(`Pax pricing applied for ${paxTid!.tid}`);
+                            setPaxOpen(false);
+                            setPaxTid(null);
+                            setPaxPrices({});
+                            setPaxDisputePrices({});
+                            setPaxIssuePrices({});
+                          };
+                          const applyDisputeAndIssue = () => {
+                            const afterDispute = () => {
+                              if (issueBookingIds.length > 0) {
+                                issueMutation.mutate({ bookingIds: issueBookingIds, description: `Pax pricing issue for ${paxTid!.tid}`, priority: "medium", driTeam: detectedDriTeam || "", discrepancyAmount: issueTotal }, {
+                                  onSuccess: closeAndReset,
+                                  onError: () => { closeAndReset(); toast({ title: "Issue recording failed", description: "Pax pricing saved but issue amounts could not be recorded.", variant: "destructive" }); },
+                                });
+                              } else {
+                                closeAndReset();
+                              }
+                            };
+                            if (disputeBookingIds.length > 0) {
+                              disputeMutation.mutate({ bookingIds: disputeBookingIds, customAmounts: disputeBookingAmts }, {
+                                onSuccess: afterDispute,
+                                onError: () => { afterDispute(); toast({ title: "Dispute recording failed", description: "Pax pricing saved but dispute amounts could not be recorded.", variant: "destructive" }); },
                               });
-                              setBookingCustomPrices(prev => {
-                                const next = { ...prev };
-                                affectedBookingIds.forEach(id => { next[id] = String(customPricesNum[id]); });
-                                return next;
-                              });
-                              setSavedBookings(prev => {
-                                const next = new Set(prev);
-                                affectedBookingIds.forEach(id => next.add(id));
-                                return next;
-                              });
-                              resolve(paxTid!.tid);
-                              flash(`Pax pricing applied for ${paxTid!.tid}`);
-                              setPaxOpen(false);
-                              setPaxTid(null);
-                              setPaxPrices({});
-                            },
-                          });
-                        }} disabled={priceOverrideMutation.isPending} data-testid="apply-pax-pricing">
-                          {priceOverrideMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                            } else {
+                              afterDispute();
+                            }
+                          };
+                          if (affectedBookingIds.length > 0) {
+                            priceOverrideMutation.mutate({ bookingIds: affectedBookingIds, selection: "sp", customPrices: customPricesNum }, {
+                              onSuccess: () => {
+                                setBookingSelections(prev => {
+                                  const next = { ...prev };
+                                  affectedBookingIds.forEach(id => { next[id] = "custom"; });
+                                  return next;
+                                });
+                                setBookingCustomPrices(prev => {
+                                  const next = { ...prev };
+                                  affectedBookingIds.forEach(id => { next[id] = String(customPricesNum[id]); });
+                                  return next;
+                                });
+                                setSavedBookings(prev => {
+                                  const next = new Set(prev);
+                                  affectedBookingIds.forEach(id => next.add(id));
+                                  return next;
+                                });
+                                applyDisputeAndIssue();
+                              },
+                            });
+                          } else {
+                            applyDisputeAndIssue();
+                          }
+                        }} disabled={priceOverrideMutation.isPending || disputeMutation.isPending || issueMutation.isPending} data-testid="apply-pax-pricing">
+                          {(priceOverrideMutation.isPending || disputeMutation.isPending || issueMutation.isPending) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                           Apply Pax Pricing
                         </Button>
                       </div>
                     </div>
+                    </TooltipProvider>
                   );
                 })()}
               </DialogContent>
