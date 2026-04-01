@@ -1166,19 +1166,21 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                     <>
                     <Table className="text-sm table-fixed">
                       <colgroup>
-                        <col className="w-[22%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[12%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[11%]" />
                         <col className="w-[3%]" />
                         <col className="w-[6%]" />
-                        <col className="w-[9%]" />
+                        <col className="w-[14%]" />
                       </colgroup>
                       <TableHeader>
                         <TableRow className="h-8">
                           <TableHead className="py-1.5 text-xs pl-4">Reason</TableHead>
+                          <TableHead className="py-1.5 text-xs">Currency</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">SP Net</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">HO Net</TableHead>
                           <TableHead className="py-1.5 text-xs text-right">Disc. LC</TableHead>
@@ -1208,6 +1210,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     Reconciled
                                   </span>
                                 </TableCell>
+                                <TableCell className="py-1.5 text-xs text-green-700 dark:text-green-400">{row.currency}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-green-700 dark:text-green-400">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-green-700 dark:text-green-400">{formatNumber(row.hoNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-green-700 dark:text-green-400">{formatNumber(row.discrepancyLc)}</TableCell>
@@ -1231,7 +1234,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                               </TableRow>
                               {isExpanded && row.currencyBreakdown?.map(sub => (
                                 <TableRow key={`recon-${sub.currency}`} className="h-8 bg-green-50/20 dark:bg-green-950/10">
-                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
+                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground"></TableCell>
+                                  <TableCell className="py-1 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.hoNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-green-700 dark:text-green-400">{formatNumber(sub.discrepancyLc)}</TableCell>
@@ -1279,6 +1283,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     Already Reconciled
                                   </span>
                                 </TableCell>
+                                <TableCell className="py-1.5 text-xs">{row.currency}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
@@ -1306,7 +1311,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                               </TableRow>
                               {isExpanded && row.currencyBreakdown?.map(sub => (
                                 <TableRow key={`ar-${sub.currency}`} className="h-8 bg-amber-50/20 dark:bg-amber-950/10">
-                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
+                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground"></TableCell>
+                                  <TableCell className="py-1 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.hoNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyLc)}</TableCell>
@@ -1354,6 +1360,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     Cancellations
                                   </span>
                                 </TableCell>
+                                <TableCell className="py-1.5 text-xs text-red-600 dark:text-red-400">{row.currency}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.hoNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono text-red-600 dark:text-red-400">{formatNumber(row.discrepancyLc)}</TableCell>
@@ -1381,7 +1388,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                               </TableRow>
                               {isExpanded && row.currencyBreakdown?.map(sub => (
                                 <TableRow key={`canc-${sub.currency}`} className="h-8 bg-red-50/20 dark:bg-red-950/10">
-                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
+                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground"></TableCell>
+                                  <TableCell className="py-1 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.hoNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs text-red-600 dark:text-red-400">{formatNumber(sub.discrepancyLc)}</TableCell>
@@ -1429,6 +1437,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     {row.reason}
                                   </span>
                                 </TableCell>
+                                <TableCell className="py-1.5 text-xs text-muted-foreground">{row.currency}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
                                 <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
@@ -1456,7 +1465,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                               </TableRow>
                               {isExpanded && row.currencyBreakdown?.map(sub => (
                                 <TableRow key={`${row.reason}-${sub.currency}`} className="h-8 bg-muted/20">
-                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
+                                  <TableCell className="py-1 pl-10 text-xs text-muted-foreground"></TableCell>
+                                  <TableCell className="py-1 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.spNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.hoNet)}</TableCell>
                                   <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyLc)}</TableCell>
@@ -1484,6 +1494,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         })}
                         <TableRow className="h-10 bg-muted/40 border-t-2 font-semibold" data-testid="summary-grand-total-row">
                           <TableCell className="py-2 pl-4 text-xs font-bold">Grand Total</TableCell>
+                          <TableCell className="py-2"></TableCell>
                           <TableCell className="py-2 text-right font-mono text-xs">{formatNumber(enhancedSummary.grandTotal.spNet)}</TableCell>
                           <TableCell className="py-2 text-right font-mono text-xs">{formatNumber(enhancedSummary.grandTotal.hoNet)}</TableCell>
                           <TableCell className="py-2 text-right font-mono text-xs">{formatNumber(enhancedSummary.grandTotal.discrepancyLc)}</TableCell>
@@ -1508,15 +1519,16 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                         </div>
                         <Table className="text-sm table-fixed">
                           <colgroup>
-                            <col className="w-[22%]" />
-                            <col className="w-[12%]" />
-                            <col className="w-[12%]" />
-                            <col className="w-[12%]" />
-                            <col className="w-[12%]" />
-                            <col className="w-[12%]" />
+                            <col className="w-[18%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[11%]" />
                             <col className="w-[3%]" />
                             <col className="w-[6%]" />
-                            <col className="w-[9%]" />
+                            <col className="w-[14%]" />
                           </colgroup>
                           <TableBody>
                             {enhancedSummary.svRows.map((row, index) => {
@@ -1542,6 +1554,7 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                         {row.reason}
                                       </span>
                                     </TableCell>
+                                    <TableCell className="py-1.5 text-xs text-amber-700 dark:text-amber-400">{row.currency}</TableCell>
                                     <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.spNet)}</TableCell>
                                     <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.hoNet)}</TableCell>
                                     <TableCell className="py-1.5 text-right font-mono">{formatNumber(row.discrepancyLc)}</TableCell>
@@ -1571,7 +1584,8 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                   </TableRow>
                                   {isExpanded && row.currencyBreakdown?.map(sub => (
                                     <TableRow key={`sv-${row.reason}-${sub.currency}`} className="h-8 bg-amber-50/20 dark:bg-amber-950/10">
-                                      <TableCell className="py-1 pl-10 text-xs text-muted-foreground">{sub.currency}</TableCell>
+                                      <TableCell className="py-1 pl-10 text-xs text-muted-foreground"></TableCell>
+                                      <TableCell className="py-1 text-xs text-muted-foreground">{sub.currency}</TableCell>
                                       <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.spNet)}</TableCell>
                                       <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.hoNet)}</TableCell>
                                       <TableCell className="py-1 text-right font-mono text-xs">{formatNumber(sub.discrepancyLc)}</TableCell>
