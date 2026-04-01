@@ -139,6 +139,10 @@ interface AmountPayablePanelProps {
   arActiveDisputes?: Set<string>;
   arDisputeAmounts?: Map<string, number>;
   onArDisputeChange?: (newActive: Set<string>, newAmounts: Map<string, number>) => void;
+  externalLocalSelections?: FinalNetSelection;
+  onLocalSelectionsChange?: React.Dispatch<React.SetStateAction<FinalNetSelection>>;
+  externalAmountPaidTotals?: Record<string, number>;
+  onAmountPaidTotalsChange?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 }
 
 export function AmountPayablePanel({
@@ -158,17 +162,24 @@ export function AmountPayablePanel({
   arActiveDisputes: externalArActiveDisputes,
   arDisputeAmounts: externalArDisputeAmounts,
   onArDisputeChange: externalOnArDisputeChange,
+  externalLocalSelections,
+  onLocalSelectionsChange,
+  externalAmountPaidTotals,
+  onAmountPaidTotalsChange,
 }: AmountPayablePanelProps) {
   const [localAdjustments, setLocalAdjustments] = useState<Adjustment[]>(adjustments);
-  const [localSelections, setLocalSelections] = useState<FinalNetSelection>(finalNetSelections);
+  const [internalSelections, setInternalSelections] = useState<FinalNetSelection>(finalNetSelections);
+  const localSelections = externalLocalSelections ?? internalSelections;
+  const setLocalSelections = onLocalSelectionsChange ?? setInternalSelections;
   const [expandedReasons, setExpandedReasons] = useState<Set<string>>(new Set());
   const [expandedTids, setExpandedTids] = useState<Set<string>>(new Set());
-  // Collapsible state for grouped sections
   const [isCancellationsExpanded, setIsCancellationsExpanded] = useState(false);
   const [isAlreadyReconciledExpanded, setIsAlreadyReconciledExpanded] = useState(false);
   const [isArWorkspaceOpen, setIsArWorkspaceOpen] = useState(false);
   const [isAmountPaidExpanded, setIsAmountPaidExpanded] = useState(false);
-  const [amountPaidTotals, setAmountPaidTotals] = useState<Record<string, number>>({});
+  const [internalAmountPaidTotals, setInternalAmountPaidTotals] = useState<Record<string, number>>({});
+  const amountPaidTotals = externalAmountPaidTotals ?? internalAmountPaidTotals;
+  const setAmountPaidTotals = onAmountPaidTotalsChange ?? setInternalAmountPaidTotals;
   const [rawInputValues, setRawInputValues] = useState<Record<string, string>>({});
   const [actionedBookings, setActionedBookings] = useState<Set<string>>(new Set());
   const [disputeAdjEdits, setDisputeAdjEdits] = useState<Record<string, number>>({});
@@ -1381,9 +1392,14 @@ export function AmountPayablePanel({
                 <span className="text-sm font-medium">Reconciled</span>
                 <Badge variant="secondary" className="text-xs">{reconciledBookings.length}</Badge>
               </div>
-              <span className="text-sm font-mono font-semibold" data-testid="text-reconciled-total">
-                {formatCurrency(reconciledTotal)} {currency}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-muted-foreground">
+                  Bal: <span className="font-mono font-semibold text-foreground">{formatCurrency(reconciledBookings.reduce((s, b) => s + (b.spNet - (b.amountPaid || 0)), 0))}</span>
+                </span>
+                <span className="text-sm font-mono font-semibold" data-testid="text-reconciled-total">
+                  {formatCurrency(reconciledTotal)} {currency}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -1420,9 +1436,18 @@ export function AmountPayablePanel({
                         );
                       })()}
                     </div>
-                    <span className="font-mono text-sm">
-                      {formatCurrency(alreadyReconciledTotal)} {currency}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        Bal: <span className="font-mono font-semibold text-foreground">{formatCurrency(alreadyReconciledBookings.reduce((s, b) => {
+                          const d = alreadyReconciledDecisions.get(b.bookingId);
+                          const tap = d?.decision === "pay" ? d.finalAmount : 0;
+                          return s + (tap - (b.amountPaid || 0));
+                        }, 0))}</span>
+                      </span>
+                      <span className="font-mono text-sm">
+                        {formatCurrency(alreadyReconciledTotal)} {currency}
+                      </span>
+                    </div>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1482,9 +1507,14 @@ export function AmountPayablePanel({
                         {cancellationBookings.length}
                       </Badge>
                     </div>
-                    <span className="font-mono text-sm">
-                      {formatCurrency(Math.abs(cancellationsTotal))} {currency}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-muted-foreground">
+                        Bal: <span className="font-mono font-semibold text-foreground">{formatCurrency(cancellationBookings.reduce((s, b) => s + (getFinalNetPrice(b) - (b.amountPaid || 0)), 0))}</span>
+                      </span>
+                      <span className="font-mono text-sm">
+                        {formatCurrency(Math.abs(cancellationsTotal))} {currency}
+                      </span>
+                    </div>
                   </div>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -1674,9 +1704,14 @@ export function AmountPayablePanel({
                               {reasonBookings.length}
                             </Badge>
                           </div>
-                          <span className="font-mono text-sm font-semibold">
-                            {formatCurrency(reasonTotal)} {currency}
-                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-muted-foreground">
+                              Bal: <span className="font-mono font-semibold text-foreground">{formatCurrency(reasonBookings.reduce((s, b) => s + (getFinalNetPrice(b) - (b.amountPaid || 0)), 0))}</span>
+                            </span>
+                            <span className="font-mono text-sm font-semibold">
+                              {formatCurrency(reasonTotal)} {currency}
+                            </span>
+                          </div>
                         </div>
 
                         <CollapsibleContent>
@@ -1932,9 +1967,14 @@ export function AmountPayablePanel({
                             {reasonBookings.length}
                           </Badge>
                         </div>
-                        <span className="font-mono text-sm font-semibold">
-                          {formatCurrency(reasonTotal)} {currency}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-muted-foreground">
+                            Bal: <span className="font-mono font-semibold text-foreground">{formatCurrency(reasonBookings.reduce((s, b) => s + (getFinalNetPrice(b) - (b.amountPaid || 0)), 0))}</span>
+                          </span>
+                          <span className="font-mono text-sm font-semibold">
+                            {formatCurrency(reasonTotal)} {currency}
+                          </span>
+                        </div>
                       </div>
 
                       <CollapsibleContent>
