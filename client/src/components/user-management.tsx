@@ -40,11 +40,12 @@ function AddUserForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"member" | "admin">("member");
+  const [role, setRole] = useState<"researcher" | "admin">("researcher");
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/users", { username, password, role });
+      const email = username.includes("@") ? username : `${username}@headout.com`;
+      const res = await apiRequest("POST", "/api/admin/users", { email, password, firstName: username, lastName: "", role });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to create user");
@@ -52,10 +53,10 @@ function AddUserForm({ onSuccess }: { onSuccess: () => void }) {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setUsername("");
       setPassword("");
-      setRole("member");
+      setRole("researcher");
       toast({ title: "User created", description: `${username} has been added.` });
       onSuccess();
     },
@@ -96,12 +97,12 @@ function AddUserForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
       <div className="space-y-1.5">
         <Label>Role</Label>
-        <Select value={role} onValueChange={(v) => setRole(v as "member" | "admin")}>
+        <Select value={role} onValueChange={(v) => setRole(v as "researcher" | "admin")}>
           <SelectTrigger data-testid="select-new-role">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="member">Member</SelectItem>
+            <SelectItem value="researcher">Researcher</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
           </SelectContent>
         </Select>
@@ -124,52 +125,46 @@ function AddUserForm({ onSuccess }: { onSuccess: () => void }) {
 
 function ResetPasswordForm({ userId, username, onClose }: { userId: string; username: string; onClose: () => void }) {
   const { toast } = useToast();
-  const [newPassword, setNewPassword] = useState("");
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
 
   const resetMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PATCH", `/api/users/${userId}/password`, { newPassword });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to reset password");
-      }
+      const res = await apiRequest("POST", `/api/admin/password-resets/${userId}`);
+      return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Password reset", description: `Password for ${username} has been updated.` });
-      onClose();
+    onSuccess: (data: { temporaryPassword: string }) => {
+      setTempPassword(data.temporaryPassword);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Password reset", description: `Temporary password generated for ${username}.` });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
 
-  return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); resetMutation.mutate(); }}
-      className="flex gap-2 items-end"
-    >
-      <div className="flex-1 space-y-1">
-        <Label htmlFor={`reset-pw-${userId}`} className="text-xs">New password</Label>
-        <Input
-          id={`reset-pw-${userId}`}
-          type="password"
-          placeholder="Min 6 characters"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          autoComplete="new-password"
-          className="h-8 text-sm"
-        />
+  if (tempPassword) {
+    return (
+      <div className="mt-2 space-y-2">
+        <p className="text-xs text-muted-foreground">Temporary password for {username}:</p>
+        <code className="block bg-muted rounded px-2 py-1 text-xs font-mono">{tempPassword}</code>
+        <p className="text-xs text-muted-foreground">Share this securely. User must change it on next login.</p>
+        <Button type="button" size="sm" variant="ghost" onClick={onClose}>Dismiss</Button>
       </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex gap-2">
       <Button
-        type="submit"
         size="sm"
         variant="outline"
-        disabled={newPassword.length < 6 || resetMutation.isPending}
+        onClick={() => resetMutation.mutate()}
+        disabled={resetMutation.isPending}
       >
-        {resetMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+        {resetMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Generate temp password"}
       </Button>
       <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-    </form>
+    </div>
   );
 }
 
@@ -186,21 +181,21 @@ export function UserManagement({ currentUser, open: controlledOpen, onOpenChange
   const { toast } = useToast();
 
   const { data, isLoading } = useQuery<{ users: SafeUser[] }>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/admin/users"],
     enabled: open,
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await apiRequest("DELETE", `/api/users/${userId}`);
+  const updateMutation = useMutation({
+    mutationFn: async ({ userId, updates }: { userId: string; updates: { role?: string; status?: string } }) => {
+      const res = await apiRequest("PUT", `/api/admin/users/${userId}`, updates);
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || "Failed to delete user");
+        throw new Error(d.error || "Failed to update user");
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: "User removed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User updated" });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -209,14 +204,14 @@ export function UserManagement({ currentUser, open: controlledOpen, onOpenChange
 
   const roleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const res = await apiRequest("PATCH", `/api/users/${userId}/role`, { role });
+      const res = await apiRequest("PUT", `/api/admin/users/${userId}`, { role });
       if (!res.ok) {
         const d = await res.json();
         throw new Error(d.error || "Failed to update role");
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -312,7 +307,7 @@ export function UserManagement({ currentUser, open: controlledOpen, onOpenChange
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="member">Member</SelectItem>
+                              <SelectItem value="researcher">Researcher</SelectItem>
                               <SelectItem value="admin">Admin</SelectItem>
                             </SelectContent>
                           </Select>
@@ -339,15 +334,18 @@ export function UserManagement({ currentUser, open: controlledOpen, onOpenChange
                               variant="ghost"
                               className="h-7 w-7 text-destructive hover:text-destructive"
                               onClick={() => {
-                                if (confirm(`Delete user "${user.username}"?`)) {
-                                  deleteMutation.mutate(user.id);
-                                }
+                                const newStatus = user.status === "suspended" ? "approved" : "suspended";
+                                updateMutation.mutate({ userId: user.id, updates: { status: newStatus } });
                               }}
-                              disabled={deleteMutation.isPending}
-                              data-testid={`button-delete-user-${user.id}`}
-                              aria-label={`Delete ${user.username}`}
+                              disabled={updateMutation.isPending}
+                              data-testid={`button-toggle-status-${user.id}`}
+                              aria-label={user.status === "suspended" ? `Approve ${user.username}` : `Suspend ${user.username}`}
                             >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              {user.status === "suspended" ? (
+                                <User className="h-3.5 w-3.5" aria-hidden="true" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              )}
                             </Button>
                           )}
                         </div>

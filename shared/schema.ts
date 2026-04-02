@@ -529,20 +529,47 @@ import { createInsertSchema } from "drizzle-zod";
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(), // bcrypt hash
-  role: text("role").notNull().default("member"), // "admin" | "member"
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  role: text("role").notNull().default("researcher"),
+  status: text("status").notNull().default("approved"),
+  requirePasswordChange: boolean("require_password_change").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
+  email: true,
   password: true,
+  firstName: true,
+  lastName: true,
   role: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type SafeUser = Omit<User, "password">;
+
+// Password reset requests table
+export const passwordResetRequests = pgTable("password_reset_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull(),
+  temporaryPassword: text("temporary_password").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertPasswordResetRequestSchema = createInsertSchema(passwordResetRequests).pick({
+  userId: true,
+  temporaryPassword: true,
+});
+
+export type InsertPasswordResetRequest = z.infer<typeof insertPasswordResetRequestSchema>;
+export type PasswordResetRequest = typeof passwordResetRequests.$inferSelect;
 
 // Reconciliation sessions - main storage for each reconciliation workflow
 export const reconciliationSessions = pgTable("reconciliation_sessions", {

@@ -1,22 +1,38 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage, sessionStorage } from "./storage";
-import { randomUUID } from "crypto";
+import { randomUUID, scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { promisify } from "util";
 import multer from "multer";
 import XLSX from "xlsx-js-style";
 import path from "path";
 import fs from "fs";
-import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { db } from "./db";
-import { users } from "@shared/schema";
+import { users, passwordResetRequests } from "@shared/schema";
 import type { UploadedFile, SheetData, FxRate, SafeUser } from "@shared/schema";
 import { errorBucketRcaMapping, errorBucketOptions } from "@shared/schema";
 import { runReconciliation } from "./reconciliation";
 import { registerExportRoutes, generateIssueWorkingsSheet } from "./export-routes";
 import { formatIndianNumber } from "./export-utils";
 
-// Temporary download route for documentation (no auth required)
+const scryptAsync = promisify(scrypt);
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+  return `${buf.toString("hex")}.${salt}`;
+}
+
+async function verifyPassword(stored: string, supplied: string): Promise<boolean> {
+  const [hashed, salt] = stored.split(".");
+  if (!hashed || !salt) return false;
+  const buf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+  const storedBuf = Buffer.from(hashed, "hex");
+  if (buf.length !== storedBuf.length) return false;
+  return timingSafeEqual(buf, storedBuf);
+}
+
 function registerDownloadRoute(app: Express) {
   app.get("/download/reconciliation-doc", (_req: Request, res: Response) => {
     const filePath = path.resolve("Reconciliation_Logic_Documentation.docx");
@@ -30,50 +46,33 @@ function registerDownloadRoute(app: Express) {
   });
 }
 
-// In-memory token store: token → username
-const authTokens = new Map<string, string>();
-
-// Allowed users for per-user login
-const ALLOWED_USERS = [
-  "Arun Kumar",
-  "Srivarshini",
-  "Sameer",
-  "Neha",
-  "Rohan",
-  "Ebby",
-  "Divya",
-  "Internal Audit",
-  "Kushagra",
-  "Himanshu",
-  "Tanishi",
-];
-
-// Extend Express session type
 declare module "express-session" {
   interface SessionData {
     authenticated?: boolean;
     userId?: string;
-    username?: string;
   }
 }
 
-// Seed first admin user on startup if no users exist
 async function seedInitialAdmin() {
   try {
     const existing = await db.select().from(users).limit(1);
     if (existing.length === 0) {
       const appPassword = process.env.APP_PASSWORD;
       const initialPassword = appPassword || "Headout@2025";
-      const hash = await bcrypt.hash(initialPassword, 12);
+      const hash = await hashPassword(initialPassword);
       await db.insert(users).values({
         username: "admin",
+        email: "admin@headout.com",
         password: hash,
+        firstName: "Admin",
+        lastName: "User",
         role: "admin",
+        status: "approved",
       });
       if (appPassword) {
-        console.log("[auth] Created initial admin user — username: admin, password: (APP_PASSWORD)");
+        console.log("[auth] Created initial admin user — email: admin@headout.com, password: (APP_PASSWORD)");
       } else {
-        console.warn("[auth] Created initial admin user — username: admin, password: Headout@2025 (default — please change immediately)");
+        console.warn("[auth] Created initial admin user — email: admin@headout.com, password: Headout@2025 (default — please change immediately)");
       }
     }
   } catch (err) {
@@ -81,34 +80,24 @@ async function seedInitialAdmin() {
   }
 }
 
-// Returns the username for new per-user allowlist sessions (token or session.username)
-function getTokenUsername(req: Request): string | undefined {
-  const authHeader = req.headers["authorization"];
-  if (authHeader?.startsWith("Bearer ")) {
-    const val = authTokens.get(authHeader.slice(7));
-    if (val) return val;
-  }
-  return req.session?.username;
-}
-
-// Returns the DB user ID for legacy sessions only (session.userId set by old login flow)
-function getTokenUserId(req: Request): string | undefined {
-  return req.session?.userId;
-}
-
-// Auth middleware — protects all /api/* routes except /api/auth/*
-function requireAuth(req: Request, res: Response, next: NextFunction) {
+function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.path.startsWith("/auth/")) return next();
-  // New per-user allowlist sessions
-  if (getTokenUsername(req)) return next();
-  // Legacy sessions with DB user ID
-  if (getTokenUserId(req)) return next();
-  res.status(401).json({ error: "Unauthorized" });
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  db.select({ status: users.status }).from(users).where(eq(users.id, userId)).limit(1).then(([user]) => {
+    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    if (user.status !== "approved") {
+      req.session.destroy(() => {
+        res.status(403).json({ error: "Your account has been suspended" });
+      });
+      return;
+    }
+    next();
+  }).catch(() => res.status(500).json({ error: "Auth check failed" }));
 }
 
-// Admin-only middleware — requires an authenticated DB user with role="admin"
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const userId = getTokenUserId(req);
+function isAdmin(req: Request, res: Response, next: NextFunction) {
+  const userId = req.session?.userId;
   if (!userId) return res.status(403).json({ error: "Admin access required" });
   db.select().from(users).where(eq(users.id, userId)).limit(1).then(([user]) => {
     if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin access required" });
@@ -200,21 +189,18 @@ export async function registerRoutes(
   // ==========================================
 
   app.get("/api/auth/status", async (req, res) => {
-    // New per-user allowlist sessions (token or session.username)
-    const username = getTokenUsername(req);
-    if (username) {
-      return res.set("Cache-Control", "no-store").json({
-        authenticated: true,
-        user: { id: username, username, role: "member", createdAt: "2025-01-01T00:00:00.000Z" },
-      });
-    }
-    // Legacy sessions: cookie-based with a DB user ID
-    const userId = getTokenUserId(req);
+    const userId = req.session?.userId;
     if (userId) {
       try {
         const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
         if (!user) return res.set("Cache-Control", "no-store").json({ authenticated: false });
-        const safeUser: SafeUser = { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+        if (user.status !== "approved") {
+          req.session.destroy(() => {
+            res.set("Cache-Control", "no-store").json({ authenticated: false });
+          });
+          return;
+        }
+        const { password: _, ...safeUser } = user;
         return res.set("Cache-Control", "no-store").json({ authenticated: true, user: safeUser });
       } catch {
         return res.set("Cache-Control", "no-store").json({ authenticated: false });
@@ -223,51 +209,115 @@ export async function registerRoutes(
     return res.set("Cache-Control", "no-store").json({ authenticated: false });
   });
 
-  app.post("/api/auth/login", (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ error: "Username and password are required" });
+  app.get("/api/auth/user", async (req, res) => {
+    const userId = req.session?.userId;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) return res.status(401).json({ error: "Unauthorized" });
+      if (user.status !== "approved") {
+        req.session.destroy(() => {
+          res.status(403).json({ error: "Your account has been suspended" });
+        });
+        return;
+      }
+      const { password: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch user" });
     }
-    const trimmedUsername = username.trim();
-    const appPassword = process.env.APP_PASSWORD;
-    if (!appPassword) {
-      console.error("[auth] APP_PASSWORD is not set");
-      return res.status(500).json({ error: "Server configuration error" });
+  });
+
+  app.post("/api/register", async (req, res) => {
+    const { email, password, firstName, lastName } = req.body;
+    if (!email || !password || !firstName || !lastName) {
+      return res.status(400).json({ error: "Email, password, first name, and last name are required" });
     }
-    const isAllowedUser = ALLOWED_USERS.some(
-      (u) => u.toLowerCase() === trimmedUsername.toLowerCase()
-    );
-    if (!isAllowedUser || password !== appPassword) {
-      return res.status(401).json({ error: "Invalid username or password" });
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail.endsWith("@headout.com")) {
+      return res.status(400).json({ error: "Only @headout.com email addresses are allowed" });
     }
-    const canonicalUsername = ALLOWED_USERS.find(
-      (u) => u.toLowerCase() === trimmedUsername.toLowerCase()
-    )!;
-    const token = randomUUID();
-    authTokens.set(token, canonicalUsername);
-    req.session.username = canonicalUsername;
-    req.session.save(() => {
-      res.json({
-        success: true,
-        token,
-        user: { id: canonicalUsername, username: canonicalUsername, role: "member", createdAt: "2025-01-01T00:00:00.000Z" },
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    try {
+      const existing = await db.select().from(users).where(eq(users.email, trimmedEmail)).limit(1);
+      if (existing.length > 0) {
+        return res.status(409).json({ error: "An account with this email already exists" });
+      }
+      const hash = await hashPassword(password);
+      const username = trimmedEmail.split("@")[0];
+      const [newUser] = await db.insert(users).values({
+        username,
+        email: trimmedEmail,
+        password: hash,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        role: "researcher",
+        status: "approved",
+      }).returning();
+      console.log(`[auth] Registration: ${trimmedEmail} registered as researcher`);
+      req.session.userId = newUser.id;
+      req.session.save(() => {
+        const { password: _, ...safeUser } = newUser;
+        res.json({ success: true, user: safeUser });
       });
-    });
+    } catch (err) {
+      const pgErr = err as { code?: string };
+      if (pgErr.code === "23505") return res.status(409).json({ error: "An account with this email already exists" });
+      console.error("[auth] Registration error:", err);
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail.endsWith("@headout.com")) {
+      return res.status(400).json({ error: "Only @headout.com email addresses are allowed" });
+    }
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, trimmedEmail)).limit(1);
+      if (!user) {
+        console.log(`[auth] Login failed: unknown email ${trimmedEmail}`);
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      if (user.status !== "approved") {
+        console.log(`[auth] Login failed: account suspended for ${trimmedEmail}`);
+        return res.status(403).json({ error: "Your account has been suspended" });
+      }
+      const valid = await verifyPassword(user.password, password);
+      if (!valid) {
+        console.log(`[auth] Login failed: wrong password for ${trimmedEmail}`);
+        return res.status(401).json({ error: "Invalid email or password" });
+      }
+      console.log(`[auth] Login success: ${trimmedEmail} (${user.role})`);
+      req.session.userId = user.id;
+      req.session.save(() => {
+        const { password: _, ...safeUser } = user;
+        res.json({ success: true, user: safeUser });
+      });
+    } catch (err) {
+      console.error("[auth] Login error:", err);
+      res.status(500).json({ error: "Login failed" });
+    }
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    const authHeader = req.headers["authorization"];
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      authTokens.delete(authHeader.slice(7));
+    const userId = req.session?.userId;
+    if (userId) {
+      console.log(`[auth] Logout: userId=${userId}`);
     }
     req.session.destroy(() => {
       res.json({ success: true });
     });
   });
 
-  // Change own password
-  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
-    const userId = getTokenUserId(req);
+  app.post("/api/auth/change-password", isAuthenticated, async (req, res) => {
+    const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) return res.status(400).json({ error: "Both fields required" });
@@ -275,10 +325,13 @@ export async function registerRoutes(
     try {
       const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
       if (!user) return res.status(404).json({ error: "User not found" });
-      const valid = await bcrypt.compare(currentPassword, user.password);
+      const valid = await verifyPassword(user.password, currentPassword);
       if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
-      const hash = await bcrypt.hash(newPassword, 12);
-      await db.update(users).set({ password: hash }).where(eq(users.id, userId));
+      const hash = await hashPassword(newPassword);
+      await db.update(users).set({ password: hash, requirePasswordChange: false, updatedAt: new Date() }).where(eq(users.id, userId));
+      await db.update(passwordResetRequests)
+        .set({ status: "completed", completedAt: new Date() })
+        .where(eq(passwordResetRequests.userId, userId));
       res.json({ success: true });
     } catch (err) {
       console.error("Change password error:", err);
@@ -287,19 +340,25 @@ export async function registerRoutes(
   });
 
   // Apply auth middleware to all subsequent /api/* routes
-  app.use("/api", requireAuth);
+  app.use("/api", isAuthenticated);
 
   // ==========================================
-  // USER MANAGEMENT (admin only)
+  // ADMIN ENDPOINTS (admin only)
   // ==========================================
 
-  app.get("/api/users", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/users", isAdmin, async (_req, res) => {
     try {
       const allUsers = await db.select({
         id: users.id,
         username: users.username,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
         role: users.role,
+        status: users.status,
+        requirePasswordChange: users.requirePasswordChange,
         createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
       }).from(users).orderBy(users.createdAt);
       res.json({ users: allUsers });
     } catch {
@@ -307,64 +366,122 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/users", requireAdmin, async (req, res) => {
-    const { username, password, role } = req.body;
-    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
-    if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
-    const validRole = role === "admin" ? "admin" : "member";
+  app.put("/api/admin/users/:id", isAdmin, async (req, res) => {
+    const { id } = req.params;
+    const requestingUserId = req.session?.userId;
+    const { role, status } = req.body;
+    if (id === requestingUserId && role && role !== "admin") {
+      return res.status(400).json({ error: "Cannot change your own role" });
+    }
+    const updates: { role?: string; status?: string; updatedAt: Date } = { updatedAt: new Date() };
+    if (role && (role === "admin" || role === "researcher")) updates.role = role;
+    if (status && (status === "approved" || status === "suspended")) updates.status = status;
     try {
-      const hash = await bcrypt.hash(password, 12);
+      const result = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+      if (result.length === 0) return res.status(404).json({ error: "User not found" });
+      const { password: _, ...safeUser } = result[0];
+      res.json({ success: true, user: safeUser });
+    } catch {
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  app.get("/api/admin/stats", isAdmin, async (_req, res) => {
+    try {
+      const allUsers = await db.select().from(users);
+      const totalUsers = allUsers.length;
+      const admins = allUsers.filter(u => u.role === "admin").length;
+      const researchers = allUsers.filter(u => u.role === "researcher").length;
+      const approved = allUsers.filter(u => u.status === "approved").length;
+      const suspended = allUsers.filter(u => u.status === "suspended").length;
+      const pendingResets = await db.select().from(passwordResetRequests).where(eq(passwordResetRequests.status, "pending"));
+      res.json({
+        totalUsers,
+        admins,
+        researchers,
+        approved,
+        suspended,
+        pendingPasswordResets: pendingResets.length,
+      });
+    } catch {
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/admin/password-resets", isAdmin, async (req, res) => {
+    try {
+      const statusFilter = (req.query.status as string) || "pending";
+      const query = statusFilter === "all"
+        ? db.select().from(passwordResetRequests).orderBy(passwordResetRequests.createdAt)
+        : db.select().from(passwordResetRequests).where(eq(passwordResetRequests.status, statusFilter)).orderBy(passwordResetRequests.createdAt);
+      const resets = await query;
+      res.json({ resets });
+    } catch {
+      res.status(500).json({ error: "Failed to fetch password resets" });
+    }
+  });
+
+  app.post("/api/admin/users", isAdmin, async (req, res) => {
+    const { email, password, firstName, lastName, role } = req.body;
+    if (!email || !password || !firstName) {
+      return res.status(400).json({ error: "Email, password, and first name are required" });
+    }
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail.endsWith("@headout.com")) {
+      return res.status(400).json({ error: "Only @headout.com email addresses are allowed" });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+    const validRole = role === "admin" ? "admin" : "researcher";
+    try {
+      const existing = await db.select().from(users).where(eq(users.email, trimmedEmail)).limit(1);
+      if (existing.length > 0) {
+        return res.status(409).json({ error: "An account with this email already exists" });
+      }
+      const hash = await hashPassword(password);
+      const username = trimmedEmail.split("@")[0];
       const [newUser] = await db.insert(users).values({
-        username: username.trim(),
+        username,
+        email: trimmedEmail,
         password: hash,
+        firstName: firstName.trim(),
+        lastName: (lastName || "").trim(),
         role: validRole,
-      }).returning({ id: users.id, username: users.username, role: users.role, createdAt: users.createdAt });
-      res.json({ success: true, user: newUser });
-    } catch (err: any) {
-      if (err?.code === "23505") return res.status(409).json({ error: "Username already exists" });
+        status: "approved",
+      }).returning();
+      console.log(`[auth] Admin created user: ${trimmedEmail} as ${validRole}`);
+      const { password: _, ...safeUser } = newUser;
+      res.json({ success: true, user: safeUser });
+    } catch (err) {
+      const pgErr = err as { code?: string };
+      if (pgErr.code === "23505") return res.status(409).json({ error: "An account with this email already exists" });
+      console.error("[auth] Admin create user error:", err);
       res.status(500).json({ error: "Failed to create user" });
     }
   });
 
-  app.delete("/api/users/:id", requireAdmin, async (req, res) => {
-    const { id } = req.params;
-    const requestingUserId = getTokenUserId(req);
-    if (id === requestingUserId) return res.status(400).json({ error: "Cannot delete your own account" });
+  app.post("/api/admin/password-resets/:userId", isAdmin, async (req, res) => {
+    const { userId } = req.params;
     try {
-      const result = await db.delete(users).where(eq(users.id, id)).returning();
-      if (result.length === 0) return res.status(404).json({ error: "User not found" });
-      res.json({ success: true });
-    } catch {
-      res.status(500).json({ error: "Failed to delete user" });
-    }
-  });
-
-  app.patch("/api/users/:id/password", requireAdmin, async (req, res) => {
-    const { id } = req.params;
-    const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
-    try {
-      const hash = await bcrypt.hash(newPassword, 12);
-      const result = await db.update(users).set({ password: hash }).where(eq(users.id, id)).returning();
-      if (result.length === 0) return res.status(404).json({ error: "User not found" });
-      res.json({ success: true });
-    } catch {
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const tempPassword = randomBytes(8).toString("hex");
+      const hash = await hashPassword(tempPassword);
+      await db.update(users).set({ password: hash, requirePasswordChange: true, updatedAt: new Date() }).where(eq(users.id, userId));
+      await db.update(passwordResetRequests)
+        .set({ status: "completed", completedAt: new Date() })
+        .where(eq(passwordResetRequests.userId, userId));
+      await db.insert(passwordResetRequests).values({
+        userId,
+        temporaryPassword: hash,
+        status: "pending",
+      });
+      console.log(`[auth] Admin reset password for user ${user.email}`);
+      res.json({ success: true, temporaryPassword: tempPassword });
+    } catch (err) {
+      console.error("[auth] Password reset error:", err);
       res.status(500).json({ error: "Failed to reset password" });
-    }
-  });
-
-  app.patch("/api/users/:id/role", requireAdmin, async (req, res) => {
-    const { id } = req.params;
-    const { role } = req.body;
-    const requestingUserId = getTokenUserId(req);
-    if (id === requestingUserId) return res.status(400).json({ error: "Cannot change your own role" });
-    if (role !== "admin" && role !== "member") return res.status(400).json({ error: "Invalid role" });
-    try {
-      const result = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
-      if (result.length === 0) return res.status(404).json({ error: "User not found" });
-      res.json({ success: true });
-    } catch {
-      res.status(500).json({ error: "Failed to update role" });
     }
   });
 

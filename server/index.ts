@@ -65,7 +65,7 @@ app.use((req, res, next) => {
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
-  const skipCapture = path.includes("/runs/from-upload") || path.includes("/export") || path.includes("/runs/") && req.method === "GET";
+  const skipCapture = path.includes("/runs/from-upload") || path.includes("/export") || path.includes("/runs/") && req.method === "GET" || path.includes("/password-resets") || path.includes("/auth/login") || path.includes("/register");
   res.json = function (bodyJson, ...args) {
     if (!skipCapture) {
       capturedJsonResponse = bodyJson;

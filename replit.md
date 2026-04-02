@@ -38,6 +38,8 @@ Preferred communication style: Simple, everyday language.
 ### Key Design Decisions
 - **Monorepo with shared types**: Ensures type safety across client and server.
 - **In-memory storage with abstraction**: Allows flexible database integration.
+- **Authentication**: Email/password auth with `crypto.scrypt` + 16-byte salt hashing, `timingSafeEqual` for comparison. Registration restricted to `@headout.com` domain. Sessions stored in PostgreSQL via `connect-pg-simple`, 7-day expiry. Two roles: `researcher` (default) and `admin`. Admin dashboard at `/admin` for user management and password resets.
+- **Auth endpoints**: `POST /api/register`, `POST /api/auth/login` (email-based), `POST /api/auth/logout`, `GET /api/auth/status`, `GET /api/auth/user`, `POST /api/auth/change-password`. Admin: `GET /api/admin/users`, `PUT /api/admin/users/:id`, `GET /api/admin/stats`, `GET /api/admin/password-resets`, `POST /api/admin/password-resets/:userId`.
 - **Multi-step workflow state**: Global state managed explicitly via props for traceability.
 - **Demo data support**: Provides an immediate exploration of features.
 - **UI/UX**: Material Design 3 principles, Inter font for UI, JetBrains Mono for data, CSS custom properties for theming.

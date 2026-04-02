@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
-import { queryClient, apiRequest, clearAuthToken, authFetch, getAuthToken } from "./lib/queryClient";
+import { queryClient, apiRequest } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,6 +22,8 @@ import { ExportPage } from "@/pages/export";
 import { ReconTrackerPage } from "@/pages/recon-tracker";
 import { IssueTrackerPage } from "@/pages/issue-tracker";
 import { LoginPage } from "@/pages/login";
+import { RegisterPage } from "@/pages/register";
+import { AdminPage } from "@/pages/admin";
 import { RetoolPage } from "@/pages/retool";
 import { MockupPreviewPage } from "@/pages/mockup-preview";
 import NotFound from "@/pages/not-found";
@@ -100,7 +102,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
   useEffect(() => {
     async function loadSavedSessions() {
       try {
-        const response = await authFetch("/api/sessions");
+        const response = await fetch("/api/sessions", { credentials: "include" });
         const data = await response.json();
         if (data.sessions && Array.isArray(data.sessions)) {
           const sessionRuns: RunRecord[] = data.sessions.map((session: ReconciliationSession) => ({
@@ -206,8 +208,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
         xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
         
         xhr.open("POST", "/api/upload");
-        const authToken = getAuthToken();
-        if (authToken) xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+        xhr.withCredentials = true;
         xhr.send(formData);
       });
       
@@ -454,7 +455,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
   }, []);
 
   const handleExportZip = useCallback(async () => {
-    const response = await authFetch("/api/export/zip");
+    const response = await fetch("/api/export/zip", { credentials: "include" });
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -473,7 +474,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
 
   const handleExportAnalysisXlsx = useCallback(async () => {
     if (!currentRunId) return;
-    const response = await authFetch(`/api/runs/${currentRunId}/export/analysis`);
+    const response = await fetch(`/api/runs/${currentRunId}/export/analysis`, { credentials: "include" });
     if (!response.ok) throw new Error("Failed to export analysis");
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -487,7 +488,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
 
   const handleExportFinancialXlsx = useCallback(async () => {
     if (!currentRunId) return;
-    const response = await authFetch(`/api/runs/${currentRunId}/export/financial`);
+    const response = await fetch(`/api/runs/${currentRunId}/export/financial`, { credentials: "include" });
     if (!response.ok) throw new Error("Failed to export financial report");
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -501,7 +502,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
 
   const handleExportAnalysisGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
     if (!currentRunId) return {};
-    const response = await authFetch(`/api/runs/${currentRunId}/export-gsheet/analysis`, { method: "POST" });
+    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/analysis`, { method: "POST", credentials: "include" });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "Failed to export to Google Sheets");
@@ -515,7 +516,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
 
   const handleExportFinancialGSheet = useCallback(async (): Promise<{ spreadsheetUrl?: string }> => {
     if (!currentRunId) return {};
-    const response = await authFetch(`/api/runs/${currentRunId}/export-gsheet/financial`, { method: "POST" });
+    const response = await fetch(`/api/runs/${currentRunId}/export-gsheet/financial`, { method: "POST", credentials: "include" });
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.error || "Failed to export to Google Sheets");
@@ -544,7 +545,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full">
-        <AppSidebar />
+        <AppSidebar currentUser={currentUser} />
         <div className="flex flex-col flex-1 min-w-0">
           <TopBar
             runs={runs}
@@ -636,6 +637,11 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
               <Route path="/mockup-preview">
                 <MockupPreviewPage />
               </Route>
+              {currentUser?.role === "admin" && (
+                <Route path="/admin">
+                  <AdminPage />
+                </Route>
+              )}
               <Route path="/retool">
                 <RetoolPage />
               </Route>
@@ -650,6 +656,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
 
 function AuthGate() {
   const [, setLocation] = useLocation();
+  const [showRegister, setShowRegister] = useState(false);
 
   const { data, isLoading } = useQuery<{ authenticated: boolean; user?: SafeUser }>({
     queryKey: ["/api/auth/status"],
@@ -658,7 +665,6 @@ function AuthGate() {
   });
 
   const handleLogout = useCallback(async () => {
-    clearAuthToken();
     await apiRequest("POST", "/api/auth/logout", {});
     await queryClient.invalidateQueries({ queryKey: ["/api/auth/status"] });
     setLocation("/");
@@ -673,7 +679,9 @@ function AuthGate() {
   }
 
   if (!data?.authenticated) {
-    return <LoginPage />;
+    return showRegister 
+      ? <RegisterPage onSwitchToLogin={() => setShowRegister(false)} />
+      : <LoginPage onSwitchToRegister={() => setShowRegister(true)} />;
   }
 
   return <AppContent onLogout={handleLogout} currentUser={data?.user} />;

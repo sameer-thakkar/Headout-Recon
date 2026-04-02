@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ClipboardCheck,
   MonitorDot,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -19,6 +20,7 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import type { SafeUser } from "@shared/schema";
 
 const navItems = [
   { title: "Home", url: "/", icon: Home },
@@ -28,8 +30,17 @@ const navItems = [
   { title: "Retool", url: "/retool", icon: MonitorDot },
 ];
 
-export function AppSidebar() {
+const adminNavItems = [
+  { title: "Admin", url: "/admin", icon: ShieldCheck },
+];
+
+interface AppSidebarProps {
+  currentUser?: SafeUser | null;
+}
+
+export function AppSidebar({ currentUser }: AppSidebarProps) {
   const [location] = useLocation();
+  const isAdmin = currentUser?.role === "admin";
 
   return (
     <Sidebar>
@@ -71,6 +82,32 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {adminNavItems.map((item) => {
+                  const isActive = location.startsWith(item.url);
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        <Link href={item.url}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         <p className="text-xs text-muted-foreground">v1.0.0</p>

@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { apiRequest, setAuthToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Lock, Loader2, User } from "lucide-react";
+import { Lock, Loader2, Mail } from "lucide-react";
 
-export function LoginPage() {
+interface LoginPageProps {
+  onSwitchToRegister?: () => void;
+}
+
+export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
   const [, setLocation] = useLocation();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -19,17 +23,16 @@ export function LoginPage() {
     setError("");
     setIsLoading(true);
     try {
-      const res = await apiRequest("POST", "/api/auth/login", { username: username.trim(), password });
-      const data = await res.json();
+      const res = await apiRequest("POST", "/api/auth/login", { email: email.trim(), password });
       if (!res.ok) {
+        const data = await res.json();
         setError(data.error || "Sign in failed");
         return;
       }
-      if (data.token) setAuthToken(data.token);
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/status"] });
       setLocation("/");
-    } catch {
-      setError("Sign in failed. Please try again.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Sign in failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -50,24 +53,24 @@ export function LoginPage() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-base">Sign in</CardTitle>
-            <CardDescription>Enter your username and password to continue</CardDescription>
+            <CardDescription>Enter your email and password to continue</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="email">Email</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                   <Input
-                    id="username"
-                    data-testid="input-username"
-                    type="text"
-                    placeholder="Enter username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    id="email"
+                    data-testid="input-email"
+                    type="email"
+                    placeholder="you@headout.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="pl-9"
                     autoFocus
-                    autoComplete="username"
+                    autoComplete="email"
                   />
                 </div>
               </div>
@@ -92,7 +95,7 @@ export function LoginPage() {
                 data-testid="button-signin"
                 type="submit"
                 className="w-full"
-                disabled={isLoading || !username || !password}
+                disabled={isLoading || !email || !password}
               >
                 {isLoading ? (
                   <>
@@ -104,6 +107,21 @@ export function LoginPage() {
                 )}
               </Button>
             </form>
+            {onSwitchToRegister && (
+              <div className="mt-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Don't have an account?{" "}
+                  <button
+                    type="button"
+                    data-testid="link-register"
+                    className="text-primary hover:underline font-medium cursor-pointer"
+                    onClick={onSwitchToRegister}
+                  >
+                    Register
+                  </button>
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
