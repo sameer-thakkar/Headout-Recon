@@ -1,14 +1,16 @@
 // Google Sheets Integration for Replit Connector
-// Reference: connection:conn_google-sheet_01KFFK1XE9BPHCVTTGT37ACG3D
+// Reference: connection:conn_google-sheet_01KN727Y87FRP06KC67S3EDN6B
 
 import { google } from 'googleapis';
 
 let connectionSettings: any;
 
 async function getAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
+  if (connectionSettings && connectionSettings.settings?.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
     return connectionSettings.settings.access_token;
   }
+  
+  connectionSettings = null;
   
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME
   const xReplitToken = process.env.REPL_IDENTITY 
@@ -18,7 +20,7 @@ async function getAccessToken() {
     : null;
 
   if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+    throw new Error('X-Replit-Token not found for repl/depl');
   }
 
   connectionSettings = await fetch(
@@ -26,12 +28,12 @@ async function getAccessToken() {
     {
       headers: {
         'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
+        'X-Replit-Token': xReplitToken
       }
     }
   ).then(res => res.json()).then(data => data.items?.[0]);
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
 
   if (!connectionSettings || !accessToken) {
     throw new Error('Google Sheet not connected');
