@@ -1,0 +1,112 @@
+PRD: Authentication & RBAC System
+1. Overview
+A secure, internal-only authentication system for corporate applications with role-based access control. Designed for organizations requiring domain-restricted access with admin oversight capabilities.
+
+2. Goals
+
+Secure email/password authentication restricted to corporate domain
+Session-based auth with 1-week persistence
+Two-tier role system (researcher/admin)
+Comprehensive audit logging for security compliance
+Admin dashboard for user and system management
+
+
+3. User Roles & Permissions
+RolePermissionsresearcher (default)Create/view research, generate content, manage own annotations, view shared documentsadminAll researcher permissions + manage users, process password resets, view system metrics, retry failed jobs, adjust rate limits, export audit logs
+
+4. Authentication Flow
+4.1 Registration
+POST /api/register
+Body: { email, password, firstName, lastName }Validate email ends with @headout.com (or your domain)
+Check for duplicate email → 400 if exists
+Hash password using crypto.scrypt + 16-byte random salt
+Store as hash.salt format
+
+Auto-assign role: researcher, status: approved
+Auto-login on success, return user object
+4.2 Login
+POST /api/login
+Body: { email, password }
+Domain validation → 400 if invalid
+Passport local strategy authentication
+Create session, set secure cookie
+Log success/failure event
+Return user object or 401
+4.3 Logout
+POST /api/logout
+Destroy session
+Log logout event
+Always return success
+4.4 Get Current User
+GET /api/auth/user
+Returns authenticated user details or 401
+
+
+5. Session Management
+SettingValueTTL7 daysStorePostgreSQL (connect-pg-simple)Cookie: httpOnlytrueCookie: securetrue (production)Cookie: sameSitelaxTrust Proxytrue (for load balancers)
+Session monitoring: Background job (every 5 min) logs expired sessions.
+
+6. Database Schema
+Users Table
+CREATE TABLE users (
+ id SERIAL PRIMARY KEY,
+ email VARCHAR(255) UNIQUE NOT NULL,
+ password TEXT NOT NULL,
+ first_name VARCHAR(100),
+ last_name VARCHAR(100),
+ role VARCHAR(50) DEFAULT 'researcher',
+ status VARCHAR(50) DEFAULT 'approved',
+ require_password_change BOOLEAN DEFAULT false,
+ created_at TIMESTAMP DEFAULT NOW(),
+ updated_at TIMESTAMP DEFAULT NOW()
+);Sessions Table
+CREATE TABLE sessions (
+ sid VARCHAR PRIMARY KEY,
+ sess JSONB NOT NULL,
+ expire TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_sessions_expire ON sessions(expire);Password Reset Requests (optional)
+CREATE TABLE password_reset_requests (
+ id SERIAL PRIMARY KEY,
+ user_id INTEGER REFERENCES users(id),
+ temporary_password TEXT,
+ status VARCHAR(50) DEFAULT 'pending',
+ created_at TIMESTAMP DEFAULT NOW(),
+ completed_at TIMESTAMP
+);
+
+7. Middleware
+// Requires authenticated user
+function isAuthenticated(req, res, next) {
+ if (req.isAuthenticated()) return next();
+ res.status(401).json({ message: "Unauthorized" });
+}
+
+// Requires admin role
+function isAdmin(req, res, next) {
+ if (req.isAuthenticated() && req.user?.role === "admin") return next();
+ res.status(403).json({ message: "Admin access required" });
+}Usage:
+app.get("/api/research", isAuthenticated, handler);
+app.get("/api/admin/users", isAuthenticated, isAdmin, handler);
+
+8. Security Requirements
+RequirementImplementationPassword hashingcrypto.scrypt with random 16-byte saltPassword comparisoncrypto.timingSafeEqualSession secretEnvironment variable SESSION_SECRETHTTPSEnforce via secure cookies in productionAudit loggingLog all auth events with timestamp, IP, user agent
+
+9. Admin Endpoints
+EndpointMethodDescription/api/admin/usersGETList all users/api/admin/users/:idPUTUpdate user role/status/api/admin/statsGETSystem statistics/api/admin/password-resetsGETPending reset requests/api/admin/password-resets/:idPOSTProcess reset request
+
+10. Error Handling
+ScenarioResponseInvalid email domain400: "Email must be from @company.com domain"Duplicate registration400: "User already exists"Invalid credentials401: "Invalid credentials"Not authenticated401: "Unauthorized"Not admin403: "Admin access required"Session store error503: Graceful error
+
+11. Frontend Integration
+Poll GET /api/auth/user on app load
+Handle 401 by redirecting to login
+Use credentials: 'include' for all fetch calls
+
+Show/hide admin UI based on user.role
+
+
+12. Environment Variables
+SESSION_SECRET=<random-32-char-string>
+DATABASE_URL=<postgres-connection-string>
