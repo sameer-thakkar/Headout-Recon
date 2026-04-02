@@ -55,6 +55,131 @@ function registerDownloadRoute(app: Express) {
       res.status(404).send("File not found");
     }
   });
+
+  app.get("/download/logic-doc-gsheet", async (_req: Request, res: Response) => {
+    try {
+      const { getUncachableGoogleSheetClient } = await import("./google-sheets");
+      const sheets = await getUncachableGoogleSheetClient();
+      const filePath = path.resolve("Headout_Recon_Automation_Logic_Doc.md");
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Doc file not found" });
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      const lines = content.split("\n");
+      const rows: string[][] = [];
+      let currentSection = "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === "---") continue;
+
+        if (trimmed.startsWith("# ")) {
+          currentSection = trimmed.replace(/^#+\s*/, "");
+          rows.push([currentSection, "", ""]);
+          rows.push(["", "", ""]);
+        } else if (trimmed.startsWith("## ")) {
+          currentSection = trimmed.replace(/^#+\s*/, "");
+          rows.push(["", "", ""]);
+          rows.push([currentSection, "", ""]);
+        } else if (trimmed.startsWith("### ")) {
+          rows.push([trimmed.replace(/^#+\s*/, ""), "", ""]);
+        } else if (trimmed.startsWith("|") && !trimmed.includes("---")) {
+          const cells = trimmed.split("|").filter(c => c.trim()).map(c => c.trim().replace(/\*\*/g, ""));
+          rows.push(cells.length >= 3 ? cells.slice(0, 3) : [...cells, ...Array(3 - cells.length).fill("")]);
+        } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+          rows.push(["  " + trimmed.replace(/^[-*]\s*/, "").replace(/\*\*/g, ""), "", ""]);
+        } else if (trimmed.startsWith("```")) {
+          continue;
+        } else {
+          rows.push([trimmed.replace(/\*\*/g, ""), "", ""]);
+        }
+      }
+
+      const createResponse = await sheets.spreadsheets.create({
+        requestBody: {
+          properties: { title: "Headout Recon Automation - Logic Documentation" },
+          sheets: [{ properties: { title: "Documentation", gridProperties: { rowCount: rows.length + 10, columnCount: 5 } } }],
+        },
+      });
+
+      const spreadsheetId = createResponse.data.spreadsheetId!;
+      const spreadsheetUrl = createResponse.data.spreadsheetUrl!;
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: "Documentation!A1",
+        valueInputOption: "RAW",
+        requestBody: { values: rows },
+      });
+
+      const formatRequests: any[] = [];
+      const sheetId = createResponse.data.sheets![0].properties!.sheetId!;
+
+      rows.forEach((row, i) => {
+        const text = row[0] || "";
+        const isMainHeader = lines.some(l => l.trim() === `# ${text}`) || (i === 0);
+        const isSectionHeader = lines.some(l => l.trim() === `## ${text}`);
+        const isSubHeader = lines.some(l => l.trim() === `### ${text}`);
+        const isTableHeader = text === "Route" || text === "Line" || text === "Reason" || text === "Role" || text === "Layer" || text === "Table" || text === "Feature" || text === "Endpoint" || text === "Sheet" || text === "Priority";
+
+        if (isMainHeader || isSectionHeader) {
+          formatRequests.push({
+            repeatCell: {
+              range: { sheetId, startRowIndex: i, endRowIndex: i + 1, startColumnIndex: 0, endColumnIndex: 5 },
+              cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: isMainHeader ? 16 : 13 }, backgroundColor: { red: 0.9, green: 0.93, blue: 1 } } },
+              fields: "userEnteredFormat(textFormat,backgroundColor)",
+            },
+          });
+        } else if (isSubHeader) {
+          formatRequests.push({
+            repeatCell: {
+              range: { sheetId, startRowIndex: i, endRowIndex: i + 1, startColumnIndex: 0, endColumnIndex: 5 },
+              cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 11 } } },
+              fields: "userEnteredFormat(textFormat)",
+            },
+          });
+        } else if (isTableHeader) {
+          formatRequests.push({
+            repeatCell: {
+              range: { sheetId, startRowIndex: i, endRowIndex: i + 1, startColumnIndex: 0, endColumnIndex: 5 },
+              cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+              fields: "userEnteredFormat(textFormat,backgroundColor)",
+            },
+          });
+        }
+      });
+
+      formatRequests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: "COLUMNS", startIndex: 0, endIndex: 1 },
+          properties: { pixelSize: 500 },
+          fields: "pixelSize",
+        },
+      });
+      formatRequests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: "COLUMNS", startIndex: 1, endIndex: 2 },
+          properties: { pixelSize: 300 },
+          fields: "pixelSize",
+        },
+      });
+      formatRequests.push({
+        updateDimensionProperties: {
+          range: { sheetId, dimension: "COLUMNS", startIndex: 2, endIndex: 3 },
+          properties: { pixelSize: 400 },
+          fields: "pixelSize",
+        },
+      });
+
+      if (formatRequests.length > 0) {
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: formatRequests } });
+      }
+
+      res.json({ url: spreadsheetUrl });
+    } catch (err: any) {
+      console.error("[export] Logic doc GSheet error:", err);
+      res.status(500).json({ error: err.message || "Failed to create Google Sheet" });
+    }
+  });
 }
 
 declare module "express-session" {
