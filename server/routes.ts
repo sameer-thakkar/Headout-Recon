@@ -44,6 +44,17 @@ function registerDownloadRoute(app: Express) {
       res.status(404).send("File not found");
     }
   });
+
+  app.get("/download/logic-doc", (_req: Request, res: Response) => {
+    const filePath = path.resolve("Headout_Recon_Automation_Logic_Doc.md");
+    if (fs.existsSync(filePath)) {
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename=Headout_Recon_Automation_Logic_Doc.md");
+      res.sendFile(filePath);
+    } else {
+      res.status(404).send("File not found");
+    }
+  });
 }
 
 declare module "express-session" {
