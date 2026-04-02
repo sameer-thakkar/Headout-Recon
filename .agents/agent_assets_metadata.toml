@@ -12,3 +12,9 @@ id = "YgkItD5mcXJglfIVuul7k"
 uri = "file://Headout_Recon_Automation_Logic_Doc.md"
 type = "text"
 title = "Headout Recon Automation — Complete Logic Documentation"
+
+[[outputs]]
+id = "E7WzJOlZ65QJXigRQLLLi"
+uri = "file://Headout_Recon_Automation_Logic_Doc.docx"
+type = "word_document"
+title = "Headout Recon Automation — Complete Logic Documentation (.docx)"
