@@ -6,3 +6,9 @@ id = "7QFdogSbQFaZSEM2fitd4"
 uri = "file://Reconciliation_Logic_Documentation.docx"
 type = "word_document"
 title = "Reconciliation Logic — Complete Documentation"
+
+[[outputs]]
+id = "YgkItD5mcXJglfIVuul7k"
+uri = "file://Headout_Recon_Automation_Logic_Doc.md"
+type = "text"
+title = "Headout Recon Automation — Complete Logic Documentation"
