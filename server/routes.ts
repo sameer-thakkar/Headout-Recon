@@ -339,6 +339,36 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/auth/request-password-reset", async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    const trimmedEmail = email.trim().toLowerCase();
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, trimmedEmail)).limit(1);
+      if (user) {
+        const existing = await db.select().from(passwordResetRequests)
+          .where(eq(passwordResetRequests.userId, user.id))
+          .then(rows => rows.filter(r => r.status === "pending"));
+        if (existing.length === 0) {
+          await db.insert(passwordResetRequests).values({
+            userId: user.id,
+            userEmail: user.email,
+            status: "pending",
+          });
+          console.log(`[auth] Password reset requested for ${trimmedEmail}`);
+        } else {
+          console.log(`[auth] Duplicate password reset request for ${trimmedEmail} (already pending)`);
+        }
+      } else {
+        console.log(`[auth] Password reset requested for unknown email ${trimmedEmail}`);
+      }
+      res.json({ success: true, message: "If an account with that email exists, a password reset request has been submitted for review." });
+    } catch (err) {
+      console.error("[auth] Password reset request error:", err);
+      res.status(500).json({ error: "Failed to submit request" });
+    }
+  });
+
   // Apply auth middleware to all subsequent /api/* routes
   app.use("/api", isAuthenticated);
 
@@ -421,6 +451,55 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/password-reset-request/:requestId/process", isAdmin, async (req, res) => {
+    const { requestId } = req.params;
+    const adminId = req.session?.userId;
+    try {
+      const [request] = await db.select().from(passwordResetRequests).where(eq(passwordResetRequests.id, requestId)).limit(1);
+      if (!request) return res.status(404).json({ error: "Request not found" });
+      if (request.status !== "pending") return res.status(400).json({ error: "Request has already been processed" });
+      const [user] = await db.select().from(users).where(eq(users.id, request.userId)).limit(1);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      const tempPassword = randomBytes(8).toString("hex");
+      const hash = await hashPassword(tempPassword);
+      await db.update(users).set({ password: hash, requirePasswordChange: true, updatedAt: new Date() }).where(eq(users.id, user.id));
+      await db.update(passwordResetRequests).set({
+        status: "completed",
+        temporaryPassword: hash,
+        processedBy: adminId,
+        processedAt: new Date(),
+        completedAt: new Date(),
+      }).where(eq(passwordResetRequests.id, requestId));
+      console.log(`[auth] Admin approved password reset for ${user.email}`);
+      res.json({ success: true, temporaryPassword: tempPassword });
+    } catch (err) {
+      console.error("[auth] Password reset approval error:", err);
+      res.status(500).json({ error: "Failed to process password reset" });
+    }
+  });
+
+  app.post("/api/admin/password-reset-request/:requestId/reject", isAdmin, async (req, res) => {
+    const { requestId } = req.params;
+    const adminId = req.session?.userId;
+    const { notes } = req.body || {};
+    try {
+      const [request] = await db.select().from(passwordResetRequests).where(eq(passwordResetRequests.id, requestId)).limit(1);
+      if (!request) return res.status(404).json({ error: "Request not found" });
+      if (request.status !== "pending") return res.status(400).json({ error: "Request has already been processed" });
+      await db.update(passwordResetRequests).set({
+        status: "rejected",
+        adminNotes: notes || null,
+        processedBy: adminId,
+        processedAt: new Date(),
+      }).where(eq(passwordResetRequests.id, requestId));
+      console.log(`[auth] Admin rejected password reset request ${requestId}`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[auth] Password reset rejection error:", err);
+      res.status(500).json({ error: "Failed to reject password reset" });
+    }
+  });
+
   app.post("/api/admin/users", isAdmin, async (req, res) => {
     const { email, password, firstName, lastName, role } = req.body;
     if (!email || !password || !firstName) {
@@ -461,29 +540,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/password-resets/:userId", isAdmin, async (req, res) => {
-    const { userId } = req.params;
-    try {
-      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-      if (!user) return res.status(404).json({ error: "User not found" });
-      const tempPassword = randomBytes(8).toString("hex");
-      const hash = await hashPassword(tempPassword);
-      await db.update(users).set({ password: hash, requirePasswordChange: true, updatedAt: new Date() }).where(eq(users.id, userId));
-      await db.update(passwordResetRequests)
-        .set({ status: "completed", completedAt: new Date() })
-        .where(eq(passwordResetRequests.userId, userId));
-      await db.insert(passwordResetRequests).values({
-        userId,
-        temporaryPassword: hash,
-        status: "pending",
-      });
-      console.log(`[auth] Admin reset password for user ${user.email}`);
-      res.json({ success: true, temporaryPassword: tempPassword });
-    } catch (err) {
-      console.error("[auth] Password reset error:", err);
-      res.status(500).json({ error: "Failed to reset password" });
-    }
-  });
 
   // ==========================================
   // NEW API ENDPOINTS (per specification)

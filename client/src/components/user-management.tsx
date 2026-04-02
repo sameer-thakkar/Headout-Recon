@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Trash2, KeyRound, Loader2, Shield, User } from "lucide-react";
+import { Users, Plus, Trash2, Loader2, Shield, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { SafeUser } from "@shared/schema";
 
@@ -123,50 +123,6 @@ function AddUserForm({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-function ResetPasswordForm({ userId, username, onClose }: { userId: string; username: string; onClose: () => void }) {
-  const { toast } = useToast();
-  const [tempPassword, setTempPassword] = useState<string | null>(null);
-
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/admin/password-resets/${userId}`);
-      return res.json();
-    },
-    onSuccess: (data: { temporaryPassword: string }) => {
-      setTempPassword(data.temporaryPassword);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      toast({ title: "Password reset", description: `Temporary password generated for ${username}.` });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    },
-  });
-
-  if (tempPassword) {
-    return (
-      <div className="mt-2 space-y-2">
-        <p className="text-xs text-muted-foreground">Temporary password for {username}:</p>
-        <code className="block bg-muted rounded px-2 py-1 text-xs font-mono">{tempPassword}</code>
-        <p className="text-xs text-muted-foreground">Share this securely. User must change it on next login.</p>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose}>Dismiss</Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-2 flex gap-2">
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => resetMutation.mutate()}
-        disabled={resetMutation.isPending}
-      >
-        {resetMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Generate temp password"}
-      </Button>
-      <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-    </div>
-  );
-}
 
 interface UserManagementDialogProps extends UserManagementProps {
   open?: boolean;
@@ -177,7 +133,6 @@ export function UserManagement({ currentUser, open: controlledOpen, onOpenChange
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
-  const [resetPasswordFor, setResetPasswordFor] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data, isLoading } = useQuery<{ users: SafeUser[] }>({
@@ -283,15 +238,6 @@ export function UserManagement({ currentUser, open: controlledOpen, onOpenChange
                             <Badge variant="secondary" className="text-xs">you</Badge>
                           )}
                         </div>
-                        {resetPasswordFor === user.id && (
-                          <div className="mt-2">
-                            <ResetPasswordForm
-                              userId={user.id}
-                              username={user.username}
-                              onClose={() => setResetPasswordFor(null)}
-                            />
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell>
                         {user.id === currentUser.id ? (
@@ -318,16 +264,6 @@ export function UserManagement({ currentUser, open: controlledOpen, onOpenChange
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7"
-                            onClick={() => setResetPasswordFor(resetPasswordFor === user.id ? null : user.id)}
-                            data-testid={`button-reset-password-${user.id}`}
-                            aria-label={`Reset password for ${user.username}`}
-                          >
-                            <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
-                          </Button>
                           {user.id !== currentUser.id && (
                             <Button
                               size="icon"

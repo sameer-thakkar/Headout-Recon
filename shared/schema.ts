@@ -557,15 +557,19 @@ export type SafeUser = Omit<User, "password">;
 export const passwordResetRequests = pgTable("password_reset_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
-  temporaryPassword: text("temporary_password").notNull(),
+  userEmail: text("user_email").notNull(),
+  temporaryPassword: text("temporary_password"),
   status: text("status").notNull().default("pending"),
+  processedBy: varchar("processed_by"),
+  adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
+  processedAt: timestamp("processed_at"),
 });
 
 export const insertPasswordResetRequestSchema = createInsertSchema(passwordResetRequests).pick({
   userId: true,
-  temporaryPassword: true,
+  userEmail: true,
 });
 
 export type InsertPasswordResetRequest = z.infer<typeof insertPasswordResetRequestSchema>;
