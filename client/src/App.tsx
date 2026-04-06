@@ -45,7 +45,6 @@ import type {
 import { requiredFields, optionalFields, headerAliases } from "@shared/schema";
 
 const CURRENT_RUN_ID_KEY = "headout-recon-current-run-id";
-const SAVED_SESSIONS_KEY = "headout-recon-saved-sessions";
 
 function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentUser?: SafeUser | null }) {
   
@@ -61,14 +60,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
   const [status, setStatus] = useState<RunStatus>("idle");
   const [lastFxRefresh, setLastFxRefresh] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [savedSessionIds, setSavedSessionIds] = useState<Set<string>>(() => {
-    try {
-      const raw = localStorage.getItem(SAVED_SESSIONS_KEY);
-      return raw ? new Set(JSON.parse(raw)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  const [savedSessionIds, setSavedSessionIds] = useState<Set<string>>(new Set());
   const [lastExportTimestamp, setLastExportTimestamp] = useState<string | null>(null);
   const [isReconciliationFinalized, setIsReconciliationFinalized] = useState(false);
   const [analysisGSheetUrl, setAnalysisGSheetUrl] = useState<string | null>(null);
@@ -118,6 +110,11 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
             error: session.error,
           }));
           setRuns(sessionRuns);
+
+          const bookmarkedIds = new Set<string>(
+            data.sessions.filter((s: ReconciliationSession) => s.bookmarked).map((s: ReconciliationSession) => s.id)
+          );
+          setSavedSessionIds(bookmarkedIds);
           
           // If we have a currentRunId from localStorage, set status based on the session
           if (currentRunId) {
@@ -404,8 +401,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
     }
   }, [mappings, uploadedFiles, results]);
 
-  // Toggle save session in localStorage
-  const toggleSaveSession = useCallback((runId: string) => {
+  const toggleSaveSession = useCallback(async (runId: string) => {
     setSavedSessionIds(prev => {
       const next = new Set(prev);
       if (next.has(runId)) {
@@ -413,11 +409,23 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
       } else {
         next.add(runId);
       }
-      try {
-        localStorage.setItem(SAVED_SESSIONS_KEY, JSON.stringify(Array.from(next)));
-      } catch {}
       return next;
     });
+    try {
+      await apiRequest("PATCH", `/api/sessions/${runId}/bookmark`);
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+    } catch (error) {
+      console.error("Failed to toggle bookmark:", error);
+      setSavedSessionIds(prev => {
+        const reverted = new Set(prev);
+        if (reverted.has(runId)) {
+          reverted.delete(runId);
+        } else {
+          reverted.add(runId);
+        }
+        return reverted;
+      });
+    }
   }, []);
 
   // FX refresh handler

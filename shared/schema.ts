@@ -594,6 +594,7 @@ export const reconciliationSessions = pgTable("reconciliation_sessions", {
   spData: jsonb("sp_data"), // SheetData
   // Run result (stored as JSON for simplicity)
   runResult: jsonb("run_result"), // RunResult - full reconciliation results
+  bookmarked: boolean("bookmarked").notNull().default(false),
 });
 
 export const insertReconciliationSessionSchema = createInsertSchema(reconciliationSessions).omit({

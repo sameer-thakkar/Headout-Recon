@@ -621,6 +621,7 @@ export interface ISessionStorage extends IStorage {
   getSession(id: string): Promise<ReconciliationSession | undefined>;
   getSessions(): Promise<ReconciliationSession[]>;
   updateSession(id: string, updates: Partial<ReconciliationSession>): Promise<ReconciliationSession | undefined>;
+  toggleBookmark(id: string): Promise<ReconciliationSession | undefined>;
   deleteSession(id: string): Promise<boolean>;
   
   // Save full session data (files, results)
@@ -691,6 +692,7 @@ export class DatabaseStorage implements ISessionStorage {
         hoData: sql`null`.as("ho_data"),
         spData: sql`null`.as("sp_data"),
         runResult: sql`null`.as("run_result"),
+        bookmarked: reconciliationSessions.bookmarked,
       })
       .from(reconciliationSessions)
       .orderBy(desc(reconciliationSessions.createdAt));
@@ -700,6 +702,17 @@ export class DatabaseStorage implements ISessionStorage {
     const result = await db
       .update(reconciliationSessions)
       .set(updates)
+      .where(eq(reconciliationSessions.id, id))
+      .returning();
+    return result[0];
+  }
+
+  async toggleBookmark(id: string): Promise<ReconciliationSession | undefined> {
+    const session = await this.getSession(id);
+    if (!session) return undefined;
+    const result = await db
+      .update(reconciliationSessions)
+      .set({ bookmarked: !session.bookmarked })
       .where(eq(reconciliationSessions.id, id))
       .returning();
     return result[0];

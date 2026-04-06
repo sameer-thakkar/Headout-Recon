@@ -30,6 +30,7 @@ interface ReconSession {
   totalDiscrepancy?: number;
   bookingCount?: number;
   hoFileName?: string;
+  bookmarked?: boolean;
 }
 
 interface ReconTrackerPageProps {
@@ -48,8 +49,9 @@ export function ReconTrackerPage({ runId, savedSessionIds, onToggleSave }: Recon
   const allSessions = sessionsData?.sessions || [];
 
   const savedSessions = useMemo(() => {
-    if (!savedSessionIds || savedSessionIds.size === 0) return [];
-    return allSessions.filter((s) => savedSessionIds.has(s.id));
+    return allSessions.filter((s) =>
+      savedSessionIds ? savedSessionIds.has(s.id) : s.bookmarked
+    );
   }, [allSessions, savedSessionIds]);
 
   const filteredSessions = useMemo(() => {

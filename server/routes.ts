@@ -3001,6 +3001,20 @@ export async function registerRoutes(
   });
 
   // Rename a session
+  app.patch("/api/sessions/:id/bookmark", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const session = await sessionStorage.toggleBookmark(id);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+      res.json({ session });
+    } catch (error) {
+      console.error("Toggle bookmark error:", error);
+      res.status(500).json({ error: "Failed to toggle bookmark" });
+    }
+  });
+
   app.patch("/api/sessions/:id/rename", async (req, res) => {
     try {
       const { id } = req.params;
