@@ -47,6 +47,7 @@ const CancellationsWorkspace = lazy(() =>
   import("@/components/cancellations-workspace").then(m => ({ default: m.CancellationsWorkspace }))
 );
 import { AlreadyReconciledWorkspace } from "@/components/already-reconciled-workspace";
+import { ActioningProgressBar } from "@/components/actioning-progress-bar";
 import type { ArWorkspaceBooking } from "@/components/already-reconciled-workspace";
 import type { UploadedFile, OverallSummaryRow, DiscrepancyAnalysisRow, PrimaryRow, FxData } from "@shared/schema";
 
@@ -184,6 +185,15 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
   const { data: discrepancyData, isLoading: isDiscrepancyLoading } = useQuery<{ analysisRows: DiscrepancyAnalysisRow[] }>({
     queryKey: ["/api/runs", currentRunId, "discrepancy-analysis", selectedReason],
     enabled: !!currentRunId && !!selectedReason && isModalOpen,
+  });
+
+  const { data: actioningProgress } = useQuery<{
+    overall: { total: number; actioned: number };
+    byReason: Record<string, { total: number; actioned: number }>;
+  }>({
+    queryKey: ["/api/runs", currentRunId, "actioning-progress"],
+    enabled: !!currentRunId,
+    refetchInterval: false,
   });
 
   // Use initialRunResult if available, otherwise fall back to query result
@@ -1188,6 +1198,12 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                 <CardContent className="pt-0">
                   {hasResults ? (
                     <>
+                    {actioningProgress && actioningProgress.overall.total > 0 && (
+                      <ActioningProgressBar
+                        actioned={actioningProgress.overall.actioned}
+                        total={actioningProgress.overall.total}
+                      />
+                    )}
                     <Table className="text-sm table-fixed">
                       <colgroup>
                         <col className="w-[18%]" />
@@ -1326,7 +1342,20 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     </Tooltip>
                                   )}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                                <TableCell className="py-1.5 text-right">
+                                  <div className="flex flex-col items-end gap-0.5">
+                                    <span>{row.countBid}</span>
+                                    {actioningProgress?.byReason["Already Reconciled"] && (
+                                      <ActioningProgressBar
+                                        actioned={actioningProgress.byReason["Already Reconciled"].actioned}
+                                        total={actioningProgress.byReason["Already Reconciled"].total}
+                                        label="Already Reconciled"
+                                        barColorClass="bg-amber-500"
+                                        size="sm"
+                                      />
+                                    )}
+                                  </div>
+                                </TableCell>
                                 <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
                                   <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setIsAlreadyReconciledDetailModalOpen(true)} data-testid="manage-btn-already-reconciled">
                                     Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
@@ -1403,7 +1432,20 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     </Tooltip>
                                   )}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                                <TableCell className="py-1.5 text-right">
+                                  <div className="flex flex-col items-end gap-0.5">
+                                    <span>{row.countBid}</span>
+                                    {actioningProgress?.byReason["Cancellations"] && (
+                                      <ActioningProgressBar
+                                        actioned={actioningProgress.byReason["Cancellations"].actioned}
+                                        total={actioningProgress.byReason["Cancellations"].total}
+                                        label="Cancellations"
+                                        barColorClass="bg-red-500"
+                                        size="sm"
+                                      />
+                                    )}
+                                  </div>
+                                </TableCell>
                                 <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
                                   <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => setIsCancellationsModalOpen(true)} data-testid="manage-btn-cancellations">
                                     Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
@@ -1480,7 +1522,19 @@ export function UploadPage({ onFilesUploaded, onLoadDemo, uploadedFiles, current
                                     </Tooltip>
                                   )}
                                 </TableCell>
-                                <TableCell className="py-1.5 text-right">{row.countBid}</TableCell>
+                                <TableCell className="py-1.5 text-right">
+                                  <div className="flex flex-col items-end gap-0.5">
+                                    <span>{row.countBid}</span>
+                                    {actioningProgress?.byReason[row.reason] && (
+                                      <ActioningProgressBar
+                                        actioned={actioningProgress.byReason[row.reason].actioned}
+                                        total={actioningProgress.byReason[row.reason].total}
+                                        label={row.reason}
+                                        size="sm"
+                                      />
+                                    )}
+                                  </div>
+                                </TableCell>
                                 <TableCell className="py-1.5 pr-4 text-right" onClick={e => e.stopPropagation()}>
                                   <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => handleReasonClick(row.reason)} data-testid={`manage-btn-${row.reason}`}>
                                     Manage <ChevronRight className="h-3.5 w-3.5 ml-0.5" />

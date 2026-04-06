@@ -124,6 +124,7 @@ export interface DisputeOverride {
 export interface PriceOverride {
   totalAmountPayable: number;
   selection?: "ho" | "sp";
+  explicit?: boolean;
 }
 
 export class MemStorage implements IStorage {

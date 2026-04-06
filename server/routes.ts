@@ -3021,5 +3021,82 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/runs/:runId/actioning-progress", async (req, res) => {
+    try {
+      const { runId } = req.params;
+      const result = await storage.getRunResult(runId);
+      if (!result) {
+        return res.status(404).json({ error: "Run result not found" });
+      }
+
+      const priceOverrides = await storage.getPriceOverrides(runId);
+      const disputes = await storage.getDisputes(runId);
+      const disputeBookingIds = new Set(disputes.map(d => d.bookingId));
+
+      const arReasons = new Set(["Already Reconciled-Same BE", "Already Reconciled-Different BE"]);
+
+      const isCancellationReason = (reason: string): boolean => {
+        return reason.startsWith("Cancelled-") || reason.startsWith("Cancellation-") || reason.startsWith("Cancellation ");
+      };
+
+      const allRows = [...result.primaryRows, ...result.secondaryVendorRows];
+      const tidsByReason = new Map<string, Set<string>>();
+      const bookingsByTidReason = new Map<string, string[]>();
+
+      for (const row of allRows) {
+        if (row.reason === "Reconciled") continue;
+        let normalizedReason: string;
+        if (arReasons.has(row.reason)) {
+          normalizedReason = "Already Reconciled";
+        } else if (isCancellationReason(row.reason)) {
+          normalizedReason = "Cancellations";
+        } else {
+          normalizedReason = row.reason;
+        }
+        const tid = row.tid || row.bookingId;
+        if (!tidsByReason.has(normalizedReason)) tidsByReason.set(normalizedReason, new Set());
+        tidsByReason.get(normalizedReason)!.add(tid);
+
+        const key = `${normalizedReason}::${tid}`;
+        if (!bookingsByTidReason.has(key)) bookingsByTidReason.set(key, []);
+        bookingsByTidReason.get(key)!.push(row.bookingId);
+      }
+
+      const isTidActioned = (reason: string, tid: string): boolean => {
+        const key = `${reason}::${tid}`;
+        const bookingIds = bookingsByTidReason.get(key) || [];
+        return bookingIds.some(bid => {
+          const override = priceOverrides[bid];
+          return (override && override.explicit === true) || disputeBookingIds.has(bid);
+        });
+      };
+
+      const byReason: Record<string, { total: number; actioned: number }> = {};
+      const globalTids = new Set<string>();
+      const globalActionedTids = new Set<string>();
+
+      for (const [reason, tids] of tidsByReason) {
+        let actioned = 0;
+        for (const tid of tids) {
+          globalTids.add(tid);
+          const isActioned = isTidActioned(reason, tid);
+          if (isActioned) {
+            actioned++;
+            globalActionedTids.add(tid);
+          }
+        }
+        byReason[reason] = { total: tids.size, actioned };
+      }
+
+      res.json({
+        overall: { total: globalTids.size, actioned: globalActionedTids.size },
+        byReason,
+      });
+    } catch (error) {
+      console.error("Actioning progress error:", error);
+      res.status(500).json({ error: "Failed to compute actioning progress" });
+    }
+  });
+
   return httpServer;
 }

@@ -450,20 +450,21 @@ export function DiscrepancySummaryWorkspace({
   const priceOverrideMutation = useMutation({
     mutationFn: async ({ bookingIds, selection, customPrices }: { bookingIds: string[]; selection: "ho" | "sp"; customPrices?: Record<string, number> }) => {
       if (!runId) throw new Error("No active run");
-      const overrides: Record<string, { totalAmountPayable: number; selection: "ho" | "sp" }> = {};
+      const overrides: Record<string, { totalAmountPayable: number; selection: "ho" | "sp"; explicit: boolean }> = {};
       bookingIds.forEach(id => {
         if (customPrices && customPrices[id] !== undefined) {
-          overrides[id] = { totalAmountPayable: Math.max(0, customPrices[id]), selection };
+          overrides[id] = { totalAmountPayable: Math.max(0, customPrices[id]), selection, explicit: true };
         } else {
           const row = allRows.find(r => r.bookingId === id);
           const amt = selection === "ho" ? (row?.hoNet || 0) : (row?.spNetInHo || 0);
-          overrides[id] = { totalAmountPayable: Math.max(0, amt), selection };
+          overrides[id] = { totalAmountPayable: Math.max(0, amt), selection, explicit: true };
         }
       });
       await apiRequest("POST", "/api/price-overrides", { runId, overrides });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/runs", runId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
     },
   });
 
@@ -484,6 +485,7 @@ export function DiscrepancySummaryWorkspace({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/disputes", runId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
     },
   });
 
@@ -508,6 +510,7 @@ export function DiscrepancySummaryWorkspace({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/issues", runId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
     },
   });
 
@@ -833,6 +836,7 @@ export function DiscrepancySummaryWorkspace({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/disputes", runId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
     },
   });
 

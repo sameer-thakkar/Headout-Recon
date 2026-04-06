@@ -375,7 +375,9 @@ export function AmountPayablePanel({
         overrides[b.bookingId] = { totalAmountPayable: Math.max(0, pricePayable), selection: sel };
       }
       if (Object.keys(overrides).length > 0) {
-        apiRequest("POST", "/api/price-overrides", { runId, overrides }).catch(console.error);
+        apiRequest("POST", "/api/price-overrides", { runId, overrides }).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
+        }).catch(console.error);
       }
     }, 1000);
     return () => clearTimeout(timer);
@@ -1148,6 +1150,7 @@ export function AmountPayablePanel({
       }
       
       await queryClient.invalidateQueries({ queryKey: [`/api/disputes/${runId}`] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
       
       setOriginalDisputes(new Map(disputeAmounts));
     } catch (error) {
@@ -1232,6 +1235,7 @@ export function AmountPayablePanel({
 
       setSelectedIssues(new Set());
       await queryClient.invalidateQueries({ queryKey: [`/api/issues/${runId}`] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
     } catch (error) {
       console.error("Failed to log issues:", error);
       toast({

@@ -202,6 +202,7 @@ export function AlreadyReconciledWorkspace({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/issues", runId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/runs", runId, "actioning-progress"] });
       toast({ title: "Issue logged", description: "Issue created in tracker." });
     },
     onError: () => {
@@ -394,6 +395,10 @@ export function AlreadyReconciledWorkspace({
                       const d = decisions.get(b.bookingId);
                       return !d || (d.decision === "pay" && d.finalAmount === 0);
                     });
+                    const tidActioned = tidGroup.bookings.some(b => {
+                      const d = decisions.get(b.bookingId);
+                      return (d && (d.decision === "dont_pay" || d.finalAmount > 0 || d.reason)) || activeDisputes.has(b.bookingId);
+                    });
 
                     return (
                       <div key={tidKey} className="border-t">
@@ -405,7 +410,7 @@ export function AlreadyReconciledWorkspace({
                           data-testid={`ar-ws-tid-${tidKey}`}
                         >
                           <div className="flex items-center">
-                            {isTidExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                            {tidActioned ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : isTidExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                           </div>
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span className="font-mono text-sm font-medium text-primary truncate" title={tidGroup.tid}>{tidGroup.tid}</span>
