@@ -1,5 +1,12 @@
 import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition, forwardRef, useImperativeHandle } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, CheckCircle2, X, Search, Download } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, CheckCircle2, X, Search, Download, FileSpreadsheet } from "lucide-react";
+import { SiGooglesheets } from "react-icons/si";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -2220,6 +2227,7 @@ export function PurchaseReconciliationPanel({
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [gSheetUrl, setGSheetUrl] = useState<string | null>(null);
+  useEffect(() => { setGSheetUrl(null); }, [runId]);
   
   // Track bookings that have had issues logged (to suppress warning)
   const [loggedIssues, setLoggedIssues] = useState<Set<string>>(new Set());
@@ -2435,29 +2443,20 @@ export function PurchaseReconciliationPanel({
     }
     try {
       setIsExporting(true);
-      toast({ title: "Generating export...", description: "Please wait while the export files are being prepared" });
-      const [analysisResponse, financialResponse] = await Promise.all([
-        fetch(`/api/runs/${runId}/export/analysis`),
-        fetch(`/api/runs/${runId}/export/financial`),
-      ]);
-      if (!analysisResponse.ok || !financialResponse.ok) {
-        const errData = !financialResponse.ok ? await financialResponse.json().catch(() => null) : null;
+      toast({ title: "Generating export\u2026", description: "Please wait while the export file is being prepared" });
+      const financialResponse = await fetch(`/api/runs/${runId}/export/financial`);
+      if (!financialResponse.ok) {
+        const errData = await financialResponse.json().catch(() => null);
         throw new Error(errData?.error || "Failed to generate export");
       }
       const timestamp = new Date().toISOString().slice(0, 10);
-      const analysisBlob = await analysisResponse.blob();
-      const analysisUrl = window.URL.createObjectURL(analysisBlob);
-      const a1 = document.createElement("a");
-      a1.href = analysisUrl;
-      a1.download = `reconciliation_analysis_${timestamp}.xlsx`;
-      document.body.appendChild(a1); a1.click(); window.URL.revokeObjectURL(analysisUrl); document.body.removeChild(a1);
       const financialBlob = await financialResponse.blob();
       const financialUrl = window.URL.createObjectURL(financialBlob);
-      const a2 = document.createElement("a");
-      a2.href = financialUrl;
-      a2.download = `financial_report_${timestamp}.xlsx`;
-      document.body.appendChild(a2); a2.click(); window.URL.revokeObjectURL(financialUrl); document.body.removeChild(a2);
-      toast({ title: "Export complete", description: "Your reconciliation reports have been downloaded" });
+      const a = document.createElement("a");
+      a.href = financialUrl;
+      a.download = `financial_report_${timestamp}.xlsx`;
+      document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(financialUrl); document.body.removeChild(a);
+      toast({ title: "Export complete", description: "Your reconciliation report has been downloaded" });
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to generate export file";
       toast({ title: "Export failed", description: msg, variant: "destructive" });
@@ -2477,7 +2476,7 @@ export function PurchaseReconciliationPanel({
     }
     try {
       setIsExporting(true);
-      toast({ title: "Creating Google Sheets...", description: "Please wait while the spreadsheet is being created" });
+      toast({ title: "Creating Google Sheet\u2026", description: "Please wait while the spreadsheet is being created" });
       const response = await authFetch(`/api/runs/${runId}/export-gsheet/financial`, { method: "POST" });
       if (!response.ok) {
         const errData = await response.json().catch(() => null);
@@ -3310,25 +3309,34 @@ export function PurchaseReconciliationPanel({
         </Button>
         {isConfirmed && (
           <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              size="sm"
-              onClick={handleExportExcel}
-              disabled={isExporting}
-              data-testid="button-export-excel-purchase-reco"
-            >
-              {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-              Export Excel
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleExportGSheet}
-              disabled={isExporting}
-              data-testid="button-export-gsheet-purchase-reco"
-            >
-              {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-              Export Google Sheets
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={isExporting} data-testid="button-export-report-dropdown-purchase-reco">
+                  {isExporting ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Exporting…
+                    </span>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4 mr-2" />
+                      Export Report
+                      <ChevronDown className="h-4 w-4 ml-2" />
+                    </>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportExcel} data-testid="menu-export-excel-purchase-reco">
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportGSheet} data-testid="menu-export-gsheet-purchase-reco">
+                  <SiGooglesheets className="h-4 w-4 mr-2" />
+                  Google Sheets
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {gSheetUrl && (
               <a
                 href={gSheetUrl}
