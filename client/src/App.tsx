@@ -637,7 +637,7 @@ function AppContent({ onLogout, currentUser }: { onLogout?: () => void; currentU
               </Route>
 
               <Route path="/recon-tracker">
-                <ReconTrackerPage runId={currentRunId} savedSessionIds={savedSessionIds} onToggleSave={toggleSaveSession} />
+                <ReconTrackerPage runId={currentRunId} savedSessionIds={savedSessionIds} onToggleSave={toggleSaveSession} onLoadSession={handleLoadSession} />
               </Route>
               <Route path="/issue-tracker">
                 <IssueTrackerPage runId={currentRunId} />

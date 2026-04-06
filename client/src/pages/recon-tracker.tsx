@@ -12,7 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ClipboardCheck, Search, Calendar, Building2, DollarSign, Bookmark, BookmarkCheck, BookmarkX } from "lucide-react";
+import { ClipboardCheck, Search, Calendar, Building2, DollarSign, Bookmark, BookmarkCheck, BookmarkX, ExternalLink } from "lucide-react";
+import { useLocation } from "wouter";
 import {
   Tooltip,
   TooltipContent,
@@ -37,10 +38,12 @@ interface ReconTrackerPageProps {
   runId: string | null;
   savedSessionIds?: Set<string>;
   onToggleSave?: (sessionId: string) => void;
+  onLoadSession?: (session: ReconSession) => void;
 }
 
-export function ReconTrackerPage({ runId, savedSessionIds, onToggleSave }: ReconTrackerPageProps) {
+export function ReconTrackerPage({ runId, savedSessionIds, onToggleSave, onLoadSession }: ReconTrackerPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [, setLocation] = useLocation();
 
   const { data: sessionsData, isLoading } = useQuery<{ sessions: ReconSession[] }>({
     queryKey: ["/api/sessions"],
@@ -161,7 +164,13 @@ export function ReconTrackerPage({ runId, savedSessionIds, onToggleSave }: Recon
                 {filteredSessions.map((session) => (
                   <TableRow
                     key={session.id}
-                    className={session.id === runId ? "bg-primary/5" : ""}
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors ${session.id === runId ? "bg-primary/5" : ""}`}
+                    onClick={() => {
+                      if (onLoadSession && session.status === "done") {
+                        onLoadSession(session as any);
+                        setLocation("/discrepancy-analysis");
+                      }
+                    }}
                     data-testid={`row-session-${session.id}`}
                   >
                     <TableCell>
