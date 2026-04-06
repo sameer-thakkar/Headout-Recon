@@ -8,15 +8,21 @@ export function extractBillingEntityAndTicketId(
   let ticketId = "";
 
   if (hoData && hoData.rows.length > 0) {
-    const firstHo = hoData.rows[0] as Record<string, unknown>;
-    const raw = firstHo["billingEntityName"] || firstHo["Billing Entity Name"] || firstHo["billing_entity_name"] || firstHo["BE Name"] || firstHo["beName"] || "";
-    billingEntityName = String(raw).trim();
+    for (const row of hoData.rows) {
+      const r = row as Record<string, unknown>;
+      const raw = r["billingEntityName"] || r["Billing Entity Name"] || r["billing_entity_name"] || r["BE Name"] || r["beName"] || "";
+      const val = String(raw).trim();
+      if (val) { billingEntityName = val; break; }
+    }
   }
 
   if (spData && spData.rows.length > 0) {
-    const firstSp = spData.rows[0] as Record<string, unknown>;
-    const raw = firstSp["ticketId"] || firstSp["Ticket ID"] || firstSp["ticket_id"] || firstSp["Ticket Id"] || firstSp["ticketid"] || firstSp["TicketID"] || "";
-    ticketId = String(raw).trim();
+    for (const row of spData.rows) {
+      const r = row as Record<string, unknown>;
+      const raw = r["ticketId"] || r["Ticket ID"] || r["ticket_id"] || r["Ticket Id"] || r["ticketid"] || r["TicketID"] || "";
+      const val = String(raw).trim();
+      if (val && val !== "-" && val !== "—") { ticketId = val; break; }
+    }
   }
 
   if (ticketId === "-" || ticketId === "—") ticketId = "";
