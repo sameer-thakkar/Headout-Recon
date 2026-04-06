@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, Fragment, useCallback, useEffect, memo, useTransition, forwardRef, useImperativeHandle } from "react";
-import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, CheckCircle2, X, Search, Download, FileSpreadsheet } from "lucide-react";
+import { Calculator, TrendingUp, TrendingDown, ArrowRight, Minus, Plus, Wallet, Loader2, AlertCircle, ChevronDown, ChevronRight, FileWarning, AlertTriangle, Check, CheckCircle2, X, Search, Download, FileSpreadsheet, ExternalLink } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import {
   DropdownMenu,
@@ -3338,15 +3338,21 @@ export function PurchaseReconciliationPanel({
               </DropdownMenuContent>
             </DropdownMenu>
             {gSheetUrl && (
-              <a
-                href={gSheetUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary underline underline-offset-2 hover:opacity-80 font-medium"
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
                 data-testid="link-gsheet-purchase-reco"
               >
-                Open Google Sheet →
-              </a>
+                <a
+                  href={gSheetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  Open Sheet
+                </a>
+              </Button>
             )}
           </div>
         )}

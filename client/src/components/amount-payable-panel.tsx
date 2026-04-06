@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef, Fragment } from "react";
-import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, CheckCircle2, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, FileSpreadsheet, Loader2 } from "lucide-react";
+import { Plus, Trash2, Calculator, ChevronDown, ChevronRight, AlertTriangle, Check, CheckCircle2, X, Eye, FileWarning, Download, Pencil, RotateCcw, XCircle, CreditCard, Search, FileSpreadsheet, Loader2, ExternalLink } from "lucide-react";
 import { SiGooglesheets } from "react-icons/si";
 import {
   DropdownMenu,
@@ -2665,15 +2665,21 @@ export function AmountPayablePanel({
               </DropdownMenuContent>
             </DropdownMenu>
             {gSheetUrl && (
-              <a
-                href={gSheetUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary underline underline-offset-2 hover:opacity-80 font-medium"
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
                 data-testid="link-gsheet-amount-payable"
               >
-                Open Google Sheet →
-              </a>
+                <a
+                  href={gSheetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  Open Sheet
+                </a>
+              </Button>
             )}
           </div>
         )}
