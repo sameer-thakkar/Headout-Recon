@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { extractBillingEntityAndTicketId, buildSessionName } from "./naming-utils";
 import type {
   RunRecord,
   UploadedFile,
@@ -737,7 +738,9 @@ export class DatabaseStorage implements ISessionStorage {
 
   // Upload methods - store data in session
   async createUpload(file: UploadedFile, hoData: SheetData | null, spData: SheetData | null): Promise<UploadRecord> {
-    const session = await this.createSession(file.name || "Unnamed Session");
+    const { billingEntityName, ticketId } = extractBillingEntityAndTicketId(hoData, spData);
+    const sessionName = buildSessionName(billingEntityName, ticketId, file.name || "Unnamed Session");
+    const session = await this.createSession(sessionName);
     
     await this.saveSessionData(session.id, {
       hoData,

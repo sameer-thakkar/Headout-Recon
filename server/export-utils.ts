@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+export { extractBillingEntityAndTicketId, buildSessionName, buildExportName, sanitizeFilename } from "./naming-utils";
 
 /**
  * Sanitize a sheet name for Excel compatibility.

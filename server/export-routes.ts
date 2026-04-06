@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import XLSX from "xlsx-js-style";
 import { storage } from "./storage";
-import { formatIndianNumber, formatDateValue, getUniqueSheetName, sanitizeSheetName, getExportData, getExcelExportData } from "./export-utils";
+import { formatIndianNumber, formatDateValue, getUniqueSheetName, sanitizeSheetName, getExportData, getExcelExportData, extractBillingEntityAndTicketId, buildExportName, sanitizeFilename } from "./export-utils";
 import { getUncachableGoogleSheetClient, getUncachableGoogleDriveClient } from "./google-sheets";
 
 const CANCELLATION_CONDITIONS: Record<string, { cancellable: string; spNet: string; hoNet: string; cancellationInsurance: string; chargeLoss: string }> = {
@@ -996,7 +996,8 @@ export function registerExportRoutes(app: Express) {
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-      const filename = `discrepancy_analysis_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      const { billingEntityName: benAnalysis, ticketId: tidAnalysis } = extractBillingEntityAndTicketId(data.upload?.hoData, data.upload?.spData);
+      const filename = sanitizeFilename(buildExportName(benAnalysis, tidAnalysis, "Discrepancy Analysis")) + ".xlsx";
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
@@ -1844,7 +1845,8 @@ export function registerExportRoutes(app: Express) {
 
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-      const filename = `reconciliation_report_${runId.substring(0, 8)}_${new Date().toISOString().split("T")[0]}.xlsx`;
+      const { billingEntityName: benFinancial, ticketId: tidFinancial } = extractBillingEntityAndTicketId(data.upload?.hoData, data.upload?.spData);
+      const filename = sanitizeFilename(buildExportName(benFinancial, tidFinancial, "Financial Export")) + ".xlsx";
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.send(buffer);
@@ -2400,7 +2402,8 @@ export function registerExportRoutes(app: Express) {
         sheetDefs.push({ properties: { title: name } });
       }
 
-      const spreadsheetTitle = `Discrepancy Analysis - ${new Date().toISOString().split("T")[0]}`;
+      const { billingEntityName: gsBenAnalysis, ticketId: gsTidAnalysis } = extractBillingEntityAndTicketId(exportData.upload?.hoData, exportData.upload?.spData);
+      const spreadsheetTitle = buildExportName(gsBenAnalysis, gsTidAnalysis, "Discrepancy Analysis");
       const createResponse = await sheets.spreadsheets.create({
         requestBody: {
           properties: { title: spreadsheetTitle },
@@ -3288,7 +3291,8 @@ export function registerExportRoutes(app: Express) {
         { properties: { title: exportData.upload?.hoData?.name || "RECONCILIATION_REPORT" } },
       ];
 
-      const spreadsheetTitle = `Reconciliation Report - ${new Date().toISOString().split("T")[0]}`;
+      const { billingEntityName: gsBenFinancial, ticketId: gsTidFinancial } = extractBillingEntityAndTicketId(exportData.upload?.hoData, exportData.upload?.spData);
+      const spreadsheetTitle = buildExportName(gsBenFinancial, gsTidFinancial, "Financial Export");
       const createResponse = await sheets.spreadsheets.create({
         requestBody: {
           properties: { title: spreadsheetTitle },
