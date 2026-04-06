@@ -1,6 +1,4 @@
 // Google Sheets Integration for Replit Connector
-// Reference: connection:conn_google-sheet_01KN727Y87FRP06KC67S3EDN6B
-
 import { google } from 'googleapis';
 
 let connectionSettings: any;
@@ -23,15 +21,20 @@ async function getAccessToken() {
     throw new Error('X-Replit-Token not found for repl/depl');
   }
 
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-sheet',
+  const rawResponse = await fetch(
+    'https://' + hostname + '/api/v2/connection?include_secrets=true',
     {
       headers: {
         'Accept': 'application/json',
         'X-Replit-Token': xReplitToken
       }
     }
-  ).then(res => res.json()).then(data => data.items?.[0]);
+  );
+  const data = await rawResponse.json();
+  
+  connectionSettings = data.items?.find(
+    (item: any) => item.connector_name === 'google-sheet'
+  );
 
   const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
 
